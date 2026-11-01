@@ -18,6 +18,7 @@ import {
 } from "react-icons/io5";
 import { toast } from "react-toastify";
 import AuthStatus from "./AuthStatus";
+import { env } from "../config/env";
 
 const ModernPostCreator = ({ type = "post", postId, parentId, closeModal }) => {
   const { register, handleSubmit, reset, watch, setValue, formState: { errors } } = useForm();
@@ -65,7 +66,7 @@ const ModernPostCreator = ({ type = "post", postId, parentId, closeModal }) => {
     try {
       const token = getAuthToken();
 
-      const response = await fetch(`${import.meta.env.VITE_APP_BACKEND_URL}${endpoints.ai_generate_content}`, {
+      const response = await fetch(`${env.backendUrl}${endpoints.ai_generate_content}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -126,7 +127,7 @@ const ModernPostCreator = ({ type = "post", postId, parentId, closeModal }) => {
         return;
       }
 
-      const response = await fetch(`${import.meta.env.VITE_APP_BACKEND_URL}${endpoints.ai_analyze_content}`, {
+      const response = await fetch(`${env.backendUrl}${endpoints.ai_analyze_content}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -411,7 +412,7 @@ const ModernPostCreator = ({ type = "post", postId, parentId, closeModal }) => {
       }
       
       const token = getAuthToken();
-      const response = await fetch(`${import.meta.env.VITE_APP_BACKEND_URL}${endpoint}`, {
+      const response = await fetch(`${env.backendUrl}${endpoint}`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,

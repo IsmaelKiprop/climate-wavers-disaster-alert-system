@@ -1,0 +1,127 @@
+# Backend compute for Climate Wavers.
+# Database and file storage live on Supabase. The frontend lives on Vercel.
+
+services:
+  - type: redis
+    name: climate-wavers-redis
+    plan: starter
+    ipAllowList: []
+
+  - type: web
+    name: climate-wavers-api
+    runtime: docker
+    rootDir: backend-new
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health/
+    envVars:
+      - key: DEBUG
+        value: "False"
+      - key: ALLOW_ALL_ORIGINS
+        value: "False"
+      - key: STORAGE_BACKEND
+        value: supabase
+      - key: REDIS
+        fromService:
+          type: redis
+          name: climate-wavers-redis
+          property: connectionString
+      - key: SECRET_KEY
+        sync: false
+      - key: FERNET_KEY
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: ALLOWED_HOSTS
+        sync: false
+      - key: BASE_URL
+        sync: false
+      - key: BACKEND_HOST
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+      - key: ALLOWED_ORIGINS
+        sync: false
+      - key: CSRF_TRUSTED_ORIGINS
+        sync: false
+      - key: AWS_ACCESS_KEY_ID
+        sync: false
+      - key: AWS_SECRET_ACCESS_KEY
+        sync: false
+      - key: AWS_STORAGE_BUCKET_NAME
+        value: media
+      - key: AWS_S3_ENDPOINT_URL
+        sync: false
+      - key: AWS_S3_REGION_NAME
+        value: us-east-1
+      - key: AMQP_URL
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+
+  - type: web
+    name: climate-wavers-response
+    runtime: docker
+    rootDir: response_system
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /status
+    envVars:
+      - key: PORT
+        value: "3004"
+      - key: CORS_ORIGINS
+        sync: false
+      - key: AMQP_URL
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: ANALYSIS_MODEL_URL
+        sync: false
+      - key: RECOGNITION_MODEL_URL
+        sync: false
+
+  - type: web
+    name: climate-wavers-notifications
+    runtime: docker
+    rootDir: notification_service
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /status
+    envVars:
+      - key: PORT
+        value: "3000"
+      - key: AMQP_URL
+        sync: false
+      - key: SERVER_PORT
+        value: "3000"
+      - key: SERVER_HOST
+        sync: false
+      - key: SERVER_PROTOCOL
+        value: https
+      - key: SERVER_SECRET
+        sync: false
+      - key: MAIL_USER
+        sync: false
+      - key: MAIL_PASS
+        sync: false
+      - key: MAIL_HOST
+        value: smtp.gmail.com
+      - key: MAIL_PORT
+        value: "587"
+      - key: MAIL_SERVICE
+        value: gmail
+
+  - type: web
+    name: climate-wavers-models
+    runtime: docker
+    rootDir: models
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /status
+    envVars:
+      - key: API_KEY
+        sync: false
+      - key: MODEL_HOST
+        value: 0.0.0.0
+      - key: MODEL_PORT
+        value: "5000"
+      - key: CORS_ORIGINS
+        value: "*"

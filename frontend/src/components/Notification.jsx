@@ -5,6 +5,7 @@ import { getAuthToken } from "../utils/factory";
 import { useNotifications } from "../context/NotificationContext";
 import { Link } from "react-router-dom";
 import { MdArrowBack } from "react-icons/md";
+import { wsHttpUrl } from "../config/env";
 
 const Notification = () => {
   const [notifications, setNotifications] = useState([]);
@@ -45,7 +46,7 @@ const Notification = () => {
         console.log('Attempting WebSocket connection...');
         
         // Use the new WebSocket-like endpoint
-        const wsUrl = `${import.meta.env.VITE_APP_BACKEND_URL || 'http://127.0.0.1:8000'}/api/v1/ws/notifications/?token=${token}`;
+        const wsUrl = wsHttpUrl(`/api/v1/ws/notifications/?token=${token}`);
         console.log('WebSocket URL:', wsUrl);
         
         const response = await fetch(wsUrl);

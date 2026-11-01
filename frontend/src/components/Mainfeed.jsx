@@ -7,9 +7,10 @@ import Createcomment from "./Createcomment";
 import ModernPostCreator from "./ModernPostCreator";
 import { getLocation } from "../utils/location";
 import { useEffect, useState } from "react";
+import { env } from "../config/env";
 
 const Mainfeed = () => {
-  const BACKENDURL = import.meta.env.VITE_APP_BACKEND_URL;
+  const BACKENDURL = env.backendUrl;
   const accessToken = getAuthToken();
   const [useModernPostCreator, setUseModernPostCreator] = useState(true);
   

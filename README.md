@@ -68,16 +68,19 @@ That reduces catastrophic risk from AI misuse or failure modes in crisis context
      └────────────────┘  └──────────────────┘  └────────────────────┘
 ```
 
-| Service | Path | Port (local) | Role |
+| Service | Path | Port (local) | Live host |
 |---|---|---|---|
-| Frontend | `frontend/` | `5173` | User-facing web app |
-| Backend | `backend-new/` | `8000` | Auth, disasters, campaigns, APIs |
-| Backend worker | `backend-new/` | — | Async / AMQP worker |
-| Models | `models/` | `5000` | Recognition + magnitude analysis |
-| Response system | `response_system/` | `3004` | LLM chat, alert text, recommendations |
-| Notification | `notification_service/` | `3000` | Outbound notifications |
-| Redis | Docker | `6379` | Cache / Channels |
-| RabbitMQ | Docker | `5672` / `15672` | Message bus |
+| Frontend | `frontend/` | `5173` | Vercel |
+| Backend | `backend-new/` | `8000` | Render / Railway / Fly (Django) |
+| Database + media | env `DATABASE_URL` / `STORAGE_BACKEND` | — | Supabase |
+| Backend worker | `backend-new/` | — | Same compute host |
+| Models | `models/` | `5000` | Optional compute service |
+| Response system | `response_system/` | `3004` | Optional compute service |
+| Notification | `notification_service/` | `3000` | Optional compute service |
+| Redis | Docker | `6379` | Render Redis / Upstash |
+| RabbitMQ | Docker | `5672` / `15672` | CloudAMQP |
+
+Service URLs are env-driven. See [PRODUCTION_DEPLOYMENT.md](./PRODUCTION_DEPLOYMENT.md) to put the stack on Vercel + Supabase.
 
 ---
 

@@ -31,7 +31,16 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(helmet());
 app.use(morgan("combined"));
-app.use(cors("*"));
+const allowedOrigins = (process.env.CORS_ORIGINS || "*")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+app.use(
+  cors({
+    origin: allowedOrigins.includes("*") ? true : allowedOrigins,
+    credentials: true,
+  })
+);
 app.use(express.static(path.join(__dirname, "views")));
 
 //status endpoint

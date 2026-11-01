@@ -12,6 +12,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from django.core.files.storage import default_storage
 from django.core.files.base import ContentFile
+from django.conf import settings
 import json
 import re
 import os
@@ -1178,8 +1179,10 @@ class FileUploadViewSet(viewsets.ViewSet):
             if hasattr(default_storage, 'url'):
                 file_url = default_storage.url(saved_path)
             else:
-                # Fallback for development
                 file_url = f"/media/{saved_path}"
+
+            if file_url.startswith("/") and getattr(settings, "BACKEND_HOST", ""):
+                file_url = f"{settings.BACKEND_HOST.rstrip('/')}{file_url}"
             
             return Response({
                 'success': True,

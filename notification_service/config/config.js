@@ -63,15 +63,15 @@ const validateResult = Joi.object({
         service: Joi.string().required()
     }),
     firebaseConfig: Joi.object({
-        apiKey: Joi.string().required(),
-        authDomain: Joi.string().required(),
-        projectId: Joi.string().required(),
-        storageBucket: Joi.string().required(),
-        messagingSenderId: Joi.string().required(),
-        appId: Joi.string().required(),
-        measurementId: Joi.string().required(),
-    })
-}).validate(config)
+        apiKey: Joi.string().allow("", null).optional(),
+        authDomain: Joi.string().allow("", null).optional(),
+        projectId: Joi.string().allow("", null).optional(),
+        storageBucket: Joi.string().allow("", null).optional(),
+        messagingSenderId: Joi.string().allow("", null).optional(),
+        appId: Joi.string().allow("", null).optional(),
+        measurementId: Joi.string().allow("", null).optional(),
+    }).optional()
+}).validate(config, { abortEarly: false })
 
 if(validateResult.error){
     throw Error(validateResult.error.message)

@@ -17,9 +17,14 @@ Including another URLconf
 # auth urls.py
 
 from django.contrib import admin
+from django.http import JsonResponse
 from django.urls import path, include
 from django.conf.urls.static import static
 from django.conf import settings
+
+
+def health(_request):
+    return JsonResponse({"status": "ok", "service": "climate-wavers-api"})
 
 from drf_spectacular.views import (
     SpectacularAPIView,
@@ -28,6 +33,7 @@ from drf_spectacular.views import (
 )
 
 urlpatterns = [
+    path("health/", health, name="health"),
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path("api/doc/", SpectacularRedocView.as_view(url_name="schema"),
          name="schema-redoc"),
@@ -45,5 +51,6 @@ if settings.DEBUG:
     urlpatterns += static(settings.STATIC_URL,
                           document_root=settings.STATIC_ROOT)
 
+if settings.DEBUG or not getattr(settings, "USE_S3_STORAGE", False):
     urlpatterns += static(settings.MEDIA_URL,
                           document_root=settings.MEDIA_ROOT)

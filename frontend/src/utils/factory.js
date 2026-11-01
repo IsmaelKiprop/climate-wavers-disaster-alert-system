@@ -4,14 +4,15 @@ import en from "javascript-time-ago/locale/en";
 import { client } from "../api";
 import { endpoints } from "./endpoints";
 import axios from 'axios';
+import { dummyUser, dummyCampaigns } from "./dummies";
+import { ipinfoKey, ipinfoUrl } from "../config/ipinfo.config";
+import { env } from "../config/env";
 
 // Global flag to track if locale has been added
 if (!window.timeAgoLocaleAdded) {
   TimeAgo.addDefaultLocale(en);
   window.timeAgoLocaleAdded = true;
 }
-import { dummyUser, dummyCampaigns } from "./dummies";
-import { ipinfoKey, ipinfoUrl } from "../config/ipinfo.config";
 
 // Create TimeAgo instance after locale is registered
 const timeAgo = new TimeAgo("en-US");
@@ -21,7 +22,7 @@ export const getCampaigns = () => {
 };
 
 export const getUser = () => {
-  const backendStatus = import.meta.env.VITE_APP_BACKEND_STATUS === "true";
+  const backendStatus = env.backendEnabled;
   if (!backendStatus) {
     return dummyUser;
   }

@@ -15,7 +15,8 @@ import logging
 
 app = Flask(__name__)
 app.config['JSONIFY_PRETTYPRINT_REGULAR'] = True
-cors = CORS(app, resources={r"/api/v1/*": {"origins": "*"}})
+_cors_origins = [origin.strip() for origin in os.getenv("CORS_ORIGINS", "*").split(",") if origin.strip()]
+cors = CORS(app, resources={r"/api/v1/*": {"origins": _cors_origins if "*" not in _cors_origins else "*"}})
 
 @app.route("/api/v1/analysis/inference", methods=['POST'], strict_slashes=False)
 def magnitude_analysis():
@@ -42,6 +43,10 @@ def disaster_recognition():
         return jsonify({'error': 'Failed to process image'}), 500
     return jsonify({"inference": result})
     
+
+@app.route("/status", strict_slashes=False)
+def status():
+    return jsonify({"status": "OK"})
 
 @app.route("/api/v1/analysis/status", strict_slashes=False)
 def analysis_status():

@@ -8,8 +8,9 @@ import PropTypes from "prop-types";
 import { getLocation } from "../utils/factory";
 import { uploadFiles } from "../services/upload.service";
 import axios from 'axios'
+import { chatbotApiUrl } from '../config/env'
 
-const apiUrl = import.meta.env.VITE_APP_CHATBOT_URL + '/api/v1/disasters'
+const apiUrl = chatbotApiUrl('/api/v1/disasters')
 
 const CreateReport = ({ closeModal, showRecommendation}) => {
   const { register, handleSubmit, setValue } = useForm();

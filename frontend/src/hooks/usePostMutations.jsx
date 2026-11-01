@@ -3,9 +3,10 @@ import axios from "axios";
 import Cookies from "js-cookie";
 import { getAuthToken } from "../utils/factory";
 import { useState } from "react";
+import { env } from "../config/env";
 
 export const usePostMutations = () => {
-  const BACKENDURL = import.meta.env.VITE_APP_BACKEND_URL;
+  const BACKENDURL = env.backendUrl;
   const accessToken = getAuthToken();
   const queryClient = useQueryClient();
   const [posttype, setType] = useState("");

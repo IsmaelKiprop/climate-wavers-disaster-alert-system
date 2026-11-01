@@ -4,10 +4,10 @@ import Menu from "../components/Menu";
 import Createcomment from "../components/Createcomment";
 import { useEffect, useState } from "react";
 import axios from "axios";
+import { env, chatbotApiUrl } from "../config/env";
 
-// Use fallback URL if environment variable is not set
-const apiUrl = import.meta.env.VITE_APP_CHATBOT_URL 
-  ? import.meta.env.VITE_APP_CHATBOT_URL + "/api/v1/disasters"
+const apiUrl = env.chatbotUrl
+  ? chatbotApiUrl("/api/v1/disasters")
   : "/api/v1/disasters";
 
 const DisasterPage = () => {
@@ -16,7 +16,7 @@ const DisasterPage = () => {
   const [disaster, setDisaster] = useState();
   useEffect(() => {
     // Check if we have the external API URL configured
-    if (!import.meta.env.VITE_APP_CHATBOT_URL) {
+    if (!env.chatbotUrl) {
       console.log('VITE_APP_CHATBOT_URL not configured, using mock data');
       // Use mock data when external API is not available
       const mockDisaster = {

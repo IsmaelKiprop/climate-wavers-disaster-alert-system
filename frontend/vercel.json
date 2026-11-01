@@ -1,6 +1,7 @@
 {
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
+  "framework": "vite",
   "headers": [
     {
       "source": "/(.*)",
@@ -43,74 +44,6 @@
     }
   ],
   "rewrites": [
-    {
-      "source": "/api/v1/auth/google",
-      "destination": "https://oauth.climatewavers.me/api/v1/auth/google"
-    },
-    {
-      "source": "/api/v1/auth/new-google",
-      "destination": "https://oauth.climatewavers.me/api/v1/auth/new-google"
-    },
-    {
-      "source": "/api/v1/auth/facebook",
-      "destination": "https://oauth.climatewavers.me/api/v1/auth/facebook"
-    },
-    {
-      "source": "/api/v1/auth/linkedin",
-      "destination": "https://oauth.climatewavers.me/api/v1/auth/linkedin"
-    },
-    {
-      "source": "/api/v1/auth/github",
-      "destination": "https://oauth.climatewavers.me/api/v1/auth/github"
-    },
-    {
-      "source": "/api/v1/auth/google/(.*)",
-      "destination": "https://oauth.climatewavers.me/api/v1/auth/google/$1"
-    },
-    {
-      "source": "/api/v1/auth/github/(.*)",
-      "destination": "https://oauth.climatewavers.me/api/v1/auth/github/$1"
-    },
-    {
-      "source": "/api/v1/auth/linkedin/(.*)",
-      "destination": "https://oauth.climatewavers.me/api/v1/auth/linkedin/$1"
-    },
-    {
-      "source": "/api/v1/auth/facebook/(.*)",
-      "destination": "https://oauth.climatewavers.me/api/v1/auth/facebook/$1"
-    },
-    {
-      "source": "/api/v1/auth/(.*)",
-      "destination": "https://climatewavers-backend-w8bw.onrender.com/api/v1/auth/$1"
-    },
-    {
-      "source": "/api/v1/chats/(.*)",
-      "destination": "https://climate-wavers-iyvx.onrender.com/api/v1/chats/$1"
-    },
-    {
-      "source": "/api/v1/disasters/(.*)",
-      "destination": "https://climate-wavers-iyvx.onrender.com/api/v1/disasters/$1"
-    },
-    {
-      "source": "/api/v1/disasters",
-      "destination": "https://climate-wavers-iyvx.onrender.com/api/v1/disasters"
-    },
-    {
-      "source": "/api/v1/chats",
-      "destination": "https://climate-wavers-iyvx.onrender.com/api/v1/chats"
-    },
-    {
-      "source": "/api/v1/posts/(.*)",
-      "destination": "https://climate-wavers-iyvx.onrender.com/api/v1/posts/$1"
-    },
-    {
-      "source": "/api/v1/(.*)",
-      "destination": "https://climatewavers-backend-w8bw.onrender.com/api/v1/$1"
-    },
-    {
-      "source": "/media/(.*)",
-      "destination": "https://climatewavers-backend-w8bw.onrender.com/media/$1"
-    },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

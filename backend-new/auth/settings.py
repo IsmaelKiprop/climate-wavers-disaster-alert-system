@@ -11,9 +11,12 @@ environ.Env.read_env(os.path.join(BASE_DIR, ".env"))
 
 SECRET_KEY = env("SECRET_KEY")
 DEBUG = env.bool("DEBUG", default=False)
-ALLOWED_HOSTS = env.list("ALLOWED_HOSTS")
+ALLOWED_HOSTS = env.list(
+    "ALLOWED_HOSTS",
+    default=["localhost", "127.0.0.1", ".onrender.com", ".railway.app", ".fly.dev"],
+)
 
-BASE_URL = env("BASE_URL")
+BASE_URL = env("BASE_URL", default="http://127.0.0.1:8000")
 
 INSTALLED_APPS = [
     "unfold",
@@ -32,25 +35,34 @@ INSTALLED_APPS = [
     "rest_framework",
     "corsheaders",
     "channels",
+    "storages",
     'templatetags.filter'
 ]
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
-    'whitenoise.middleware.WhiteNoiseMiddleware',
+    "whitenoise.middleware.WhiteNoiseMiddleware",
+    "corsheaders.middleware.CorsMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    "corsheaders.middleware.CorsMiddleware",
 ]
 
-
-CORS_ORIGIN_ALLOW_ALL = True
+FRONTEND_URL = env("FRONTEND_URL", default="http://localhost:5173")
 CORS_ALLOW_CREDENTIALS = True
-FRONTEND_URL = env("FRONTEND_URL")
+CORS_ALLOWED_ORIGINS = env.list(
+    "ALLOWED_ORIGINS",
+    default=["http://localhost:5173", "http://127.0.0.1:5173"],
+)
+CORS_ALLOW_ALL_ORIGINS = env.bool("ALLOW_ALL_ORIGINS", default=DEBUG)
+CORS_ALLOWED_ORIGIN_REGEXES = env.list(
+    "CORS_ORIGIN_REGEXES",
+    default=[r"^https://.*\.vercel\.app$"],
+)
+CORS_ORIGIN_ALLOW_ALL = CORS_ALLOW_ALL_ORIGINS
 
 ROOT_URLCONF = "auth.urls"
 
@@ -77,24 +89,32 @@ TEMPLATES = [
 WSGI_APPLICATION = "auth.wsgi.application"
 ASGI_APPLICATION = "auth.asgi.application"
 
-# Database configuration with fallback to SQLite
-
-    # Fallback to SQLite for development
-DATABASES = {
+# Database: Supabase / any Postgres via DATABASE_URL, otherwise SQLite
+DATABASE_URL = env("DATABASE_URL", default=None)
+if DATABASE_URL:
+    DATABASES = {"default": env.db("DATABASE_URL")}
+    uses_supabase_pooler = (
+        "pooler.supabase.com" in DATABASE_URL or ":6543" in DATABASE_URL
+    )
+    ssl_required = env.bool(
+        "DB_SSL_REQUIRE",
+        default=("supabase.co" in DATABASE_URL or uses_supabase_pooler),
+    )
+    if ssl_required:
+        DATABASES["default"].setdefault("OPTIONS", {})
+        DATABASES["default"]["OPTIONS"]["sslmode"] = "require"
+    if env.bool("DB_DISABLE_SERVER_SIDE_CURSORS", default=uses_supabase_pooler):
+        DATABASES["default"]["DISABLE_SERVER_SIDE_CURSORS"] = True
+        DATABASES["default"]["CONN_MAX_AGE"] = 0
+    else:
+        DATABASES["default"]["CONN_MAX_AGE"] = env.int("DB_CONN_MAX_AGE", default=60)
+else:
+    DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.sqlite3",
             "NAME": env("SQLITE_PATH", default=os.path.join(BASE_DIR, "db.sqlite3")),
         }
     }
-
-SSLMODE = env.bool("SSLMODE", default=False)
-if SSLMODE:
-    DATABASES["default"]["OPTIONS"] = {
-        "sslmode": "require",
-    }
-
-CORS_ALLOWED_ORIGINS = env.list("ALLOWED_ORIGINS")
-CORS_ALLOW_ALL_ORIGINS = env.bool("ALLOW_ALL_ORIGINS")
 
 AUTH_USER_MODEL = "api.User"
 
@@ -152,28 +172,77 @@ AMQP_URL = env("AMQP_URL", default=None)
 # Static files (CSS, JavaScript, Images)
 STATIC_URL = "/static/"
 STATIC_ROOT = os.path.join(BASE_DIR, "static")
-# Media settings
 MEDIA_URL = "/media/"
 MEDIA_ROOT = os.path.join(BASE_DIR, "media")
 
-# Backend host for media URLs (for production deployment)
-BACKEND_HOST = env("BACKEND_HOST", default="http://127.0.0.1:8000")
+# Public origin of this API (used to build absolute media URLs)
+BACKEND_HOST = env("BACKEND_HOST", default=BASE_URL)
+
+# Storage: local disk, or S3-compatible (Supabase Storage)
+STORAGE_BACKEND = env("STORAGE_BACKEND", default="local")
+USE_S3_STORAGE = STORAGE_BACKEND in ("s3", "supabase")
+
+if USE_S3_STORAGE:
+    AWS_ACCESS_KEY_ID = env("AWS_ACCESS_KEY_ID")
+    AWS_SECRET_ACCESS_KEY = env("AWS_SECRET_ACCESS_KEY")
+    AWS_STORAGE_BUCKET_NAME = env("AWS_STORAGE_BUCKET_NAME", default="media")
+    AWS_S3_ENDPOINT_URL = env("AWS_S3_ENDPOINT_URL", default=None)
+    AWS_S3_REGION_NAME = env("AWS_S3_REGION_NAME", default="us-east-1")
+    AWS_S3_ADDRESSING_STYLE = env("AWS_S3_ADDRESSING_STYLE", default="path")
+    AWS_S3_FILE_OVERWRITE = False
+    AWS_DEFAULT_ACL = None
+    AWS_QUERYSTRING_AUTH = env.bool("AWS_QUERYSTRING_AUTH", default=False)
+    AWS_S3_CUSTOM_DOMAIN = env("AWS_S3_CUSTOM_DOMAIN", default=None)
+    STORAGES = {
+        "default": {"BACKEND": "storages.backends.s3boto3.S3Boto3Storage"},
+        "staticfiles": {
+            "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"
+            if not DEBUG
+            else "django.contrib.staticfiles.storage.StaticFilesStorage"
+        },
+    }
+    if AWS_S3_CUSTOM_DOMAIN:
+        MEDIA_URL = f"https://{AWS_S3_CUSTOM_DOMAIN.rstrip('/')}/"
+    elif AWS_S3_ENDPOINT_URL:
+        MEDIA_URL = f"{AWS_S3_ENDPOINT_URL.rstrip('/')}/{AWS_STORAGE_BUCKET_NAME}/"
+else:
+    STORAGES = {
+        "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+        "staticfiles": {
+            "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"
+            if not DEBUG
+            else "django.contrib.staticfiles.storage.StaticFilesStorage"
+        },
+    }
 
 WHITENOISE_USE_FINDERS = True
 WHITENOISE_ALLOW_ALL_ORIGINS = True
-WHITENOISE_STATIC_PREFIX = MEDIA_URL
-
-if not DEBUG:
-    STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 FERNET_KEY = env("FERNET_KEY").encode()
-# Make sure to encode the key
-CSRF_TRUSTED_ORIGINS = env("CSRF_TRUSTED_ORIGINS"),
+CSRF_TRUSTED_ORIGINS = env.list(
+    "CSRF_TRUSTED_ORIGINS",
+    default=["http://localhost:5173", "http://127.0.0.1:5173"],
+)
 
-MALE_AVATAR = env("MALE_AVATAR")
-FEMALE_AVATAR = env("FEMALE_AVATAR")
+MALE_AVATAR = env(
+    "MALE_AVATAR",
+    default="https://ui-avatars.com/api/?name=M&background=0D8ABC&color=fff",
+)
+FEMALE_AVATAR = env(
+    "FEMALE_AVATAR",
+    default="https://ui-avatars.com/api/?name=F&background=E91E63&color=fff",
+)
+
+# Required when the API sits behind Render / Railway / Fly / Vercel proxies
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+USE_X_FORWARDED_HOST = env.bool("USE_X_FORWARDED_HOST", default=True)
+SECURE_SSL_REDIRECT = env.bool("SECURE_SSL_REDIRECT", default=False)
+SESSION_COOKIE_SECURE = env.bool("SESSION_COOKIE_SECURE", default=not DEBUG)
+CSRF_COOKIE_SECURE = env.bool("CSRF_COOKIE_SECURE", default=not DEBUG)
+SESSION_COOKIE_SAMESITE = env("SESSION_COOKIE_SAMESITE", default="Lax")
+CSRF_COOKIE_SAMESITE = env("CSRF_COOKIE_SAMESITE", default="Lax")
 
 # Determine if SSL is required (for production)
 REDIS_USE_SSL = env.bool("REDIS_USE_SSL", default=False)

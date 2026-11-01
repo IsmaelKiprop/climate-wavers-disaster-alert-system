@@ -9,6 +9,7 @@ import { IoSend, IoHappyOutline, IoLocationOutline, IoCloseOutline, IoVideocamOu
 import { MdVideocam, MdImage } from "react-icons/md";
 import { toast } from "react-toastify";
 import EmojiPicker from "emoji-picker-react";
+import { env } from "../config/env";
 
 const Createcomment = ({ type, postId, parentId, button = "reply" }) => {
   const { register, handleSubmit, reset, formState: { errors }, watch, setValue } = useForm();
@@ -217,7 +218,7 @@ const Createcomment = ({ type, postId, parentId, button = "reply" }) => {
     
     try {
       const token = getAuthToken();
-      const response = await fetch(`${import.meta.env.VITE_APP_BACKEND_URL}${endpoint}`, {
+      const response = await fetch(`${env.backendUrl}${endpoint}`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,

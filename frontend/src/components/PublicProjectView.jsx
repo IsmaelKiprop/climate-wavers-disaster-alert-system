@@ -4,6 +4,7 @@ import { FaTree, FaLeaf, FaSeedling, FaGlobe, FaHeart, FaMapMarkerAlt, FaUsers, 
 import { endpoints } from '../utils/endpoints';
 import SocialShare from './SocialShare';
 import ProjectSEO from './ProjectSEO';
+import { env } from '../config/env';
 
 // Global cache to prevent multiple API calls across the entire app
 const globalProjectCache = new Map();
@@ -49,7 +50,7 @@ const PublicProjectView = () => {
         }
 
         // Fetch from API (both development and production)
-        const baseURL = import.meta.env.DEV ? "http://127.0.0.1:8000" : (import.meta.env.VITE_APP_BACKEND_URL || "http://127.0.0.1:8000");
+        const baseURL = env.backendUrl;
         
         // Try public endpoint first (if it exists)
         let response;

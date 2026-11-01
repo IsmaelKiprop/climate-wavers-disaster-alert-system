@@ -10,6 +10,7 @@ import { toast } from "react-toastify";
 import EmojiPicker from "emoji-picker-react";
 import { IoSend, IoCloseSharp, IoLocationOutline, IoHappyOutline, IoVideocamOutline, IoImageOutline, IoSparklesOutline } from "react-icons/io5";
 import { MdEmojiEmotions, MdLocationOn, MdVideocam, MdImage, MdAutoAwesome } from "react-icons/md";
+import { env } from "../config/env";
 
 export default function Createpost({ type, postId, parentId, closeModal }) {
   const { register, handleSubmit, reset, watch, setValue } = useForm();
@@ -434,7 +435,7 @@ export default function Createpost({ type, postId, parentId, closeModal }) {
       }
       
       const token = getAuthToken();
-      const response = await fetch(`${import.meta.env.VITE_APP_BACKEND_URL}${endpoint}`, {
+      const response = await fetch(`${env.backendUrl}${endpoint}`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,

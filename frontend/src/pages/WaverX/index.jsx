@@ -11,8 +11,9 @@ import {
 import WaverxLeftBar from "./LeftSideBar";
 import { FiMenu } from "react-icons/fi";
 import { WaverXBotPageSEO } from "../../components/SEOComponents";
+import { chatbotApiUrl } from "../../config/env";
 
-const chatbot = `${import.meta.env.VITE_APP_CHATBOT_URL}/api/v1`;
+const chatbot = chatbotApiUrl("/api/v1");
 
 const WaverXChatPage = () => {
   const [chats, setChats] = useState([]);

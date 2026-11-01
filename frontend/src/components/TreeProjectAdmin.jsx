@@ -3,6 +3,7 @@ import { toast } from 'react-toastify';
 import { FaTree, FaMapMarkerAlt, FaUsers, FaDollarSign, FaCheckCircle, FaTimesCircle, FaEdit, FaTrash, FaPlus } from 'react-icons/fa';
 import { endpoints } from '../utils/endpoints';
 import { getAuthToken } from '../utils/factory';
+import { apiUrl, mediaUrl } from '../config/env';
 
 // Helper function to get cookies
 const getCookie = (name) => {
@@ -118,7 +119,7 @@ const TreeProjectAdmin = () => {
       if (!token) return;
 
       // Use the auth user endpoint to get current user data
-      const response = await fetch(`${endpoints.user}`, {
+      const response = await fetch(apiUrl(endpoints.user), {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -152,7 +153,7 @@ const TreeProjectAdmin = () => {
         if (localToken) {
           console.log('Admin Dashboard - Using localStorage token as fallback');
           // Use localStorage token as fallback
-          const response = await fetch(endpoints.tree_projects, {
+          const response = await fetch(apiUrl(endpoints.tree_projects), {
             headers: {
               'Authorization': `Bearer ${localToken}`,
               'Content-Type': 'application/json'
@@ -179,7 +180,7 @@ const TreeProjectAdmin = () => {
         return;
       }
 
-      const response = await fetch(endpoints.tree_projects, {
+      const response = await fetch(apiUrl(endpoints.tree_projects), {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -216,7 +217,7 @@ const TreeProjectAdmin = () => {
         const localToken = localStorage.getItem('token');
         if (localToken) {
           console.log('Admin Dashboard Stats - Using localStorage token as fallback');
-          const response = await fetch(endpoints.tree_projects_stats, {
+          const response = await fetch(apiUrl(endpoints.tree_projects_stats), {
             headers: {
               'Authorization': `Bearer ${localToken}`,
               'Content-Type': 'application/json'
@@ -232,7 +233,7 @@ const TreeProjectAdmin = () => {
         return;
       }
 
-      const response = await fetch(endpoints.tree_projects_stats, {
+      const response = await fetch(apiUrl(endpoints.tree_projects_stats), {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -257,9 +258,9 @@ const TreeProjectAdmin = () => {
     setLoading(true);
 
     try {
-      const url = editingProject 
+      const url = apiUrl(editingProject 
         ? `${endpoints.tree_projects}${editingProject.id}/`
-        : endpoints.tree_projects;
+        : endpoints.tree_projects);
       
       const method = editingProject ? 'PUT' : 'POST';
       
@@ -353,7 +354,7 @@ const TreeProjectAdmin = () => {
         return;
       }
 
-      const response = await fetch(`${endpoints.tree_projects}${projectId}/`, {
+      const response = await fetch(apiUrl(`${endpoints.tree_projects}${projectId}/`), {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -384,7 +385,7 @@ const TreeProjectAdmin = () => {
       console.log('Verifying project:', projectId);
       console.log('API endpoint:', `${endpoints.tree_projects}${projectId}/verify/`);
 
-      const response = await fetch(`${endpoints.tree_projects}${projectId}/verify/`, {
+      const response = await fetch(apiUrl(`${endpoints.tree_projects}${projectId}/verify/`), {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -485,7 +486,7 @@ Thank you for your understanding! 🌱
       formData.append('folder', 'tree-projects');
 
       // Upload to your media service
-      const response = await fetch('/api/v1/upload/', {
+      const response = await fetch(apiUrl('/api/v1/upload/'), {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${getAuthToken()}`
@@ -498,7 +499,7 @@ Thank you for your understanding! 🌱
         const fileUrl = result.url || result.secure_url;
         
         // Convert relative URL to absolute URL for preview
-        const absoluteUrl = fileUrl.startsWith('/') ? `http://localhost:8000${fileUrl}` : fileUrl;
+        const absoluteUrl = mediaUrl(fileUrl);
         
         // Update form data with the uploaded URL
         setFormData(prev => ({
@@ -541,7 +542,7 @@ Thank you for your understanding! 🌱
         formData.append('file', file);
         formData.append('folder', 'tree-projects/gallery');
 
-        return fetch('/api/v1/upload/', {
+        return fetch(apiUrl('/api/v1/upload/'), {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${getAuthToken()}`
@@ -557,7 +558,7 @@ Thank you for your understanding! 🌱
 
       const results = await Promise.all(uploadPromises);
       const urls = results.map(result => result.url || result.secure_url);
-      const absoluteUrls = urls.map(url => url.startsWith('/') ? `http://localhost:8000${url}` : url);
+      const absoluteUrls = urls.map(url => mediaUrl(url));
 
       // Update form data with all uploaded URLs
       setFormData(prev => ({
@@ -826,7 +827,7 @@ Thank you for your understanding! 🌱
                            <p className="text-sm text-gray-600 mb-1">Preview:</p>
                            <div className="relative inline-block">
                              <img 
-                               src={formData.organization_logo.startsWith('/') ? `http://localhost:8000${formData.organization_logo}` : formData.organization_logo} 
+                               src={mediaUrl(formData.organization_logo)} 
                                alt="Organization Logo Preview" 
                                className="w-20 h-20 object-cover rounded-md border border-gray-300"
                                onError={(e) => {
@@ -982,7 +983,7 @@ Thank you for your understanding! 🌱
                            <p className="text-sm text-gray-600 mb-1">Preview:</p>
                            <div className="relative inline-block">
                              <img 
-                               src={formData.cover_image.startsWith('/') ? `http://localhost:8000${formData.cover_image}` : formData.cover_image} 
+                               src={mediaUrl(formData.cover_image)} 
                                alt="Cover Image Preview" 
                                className="w-32 h-20 object-cover rounded-md border border-gray-300"
                                onError={(e) => {
@@ -1058,7 +1059,7 @@ Thank you for your understanding! 🌱
                           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
                             {formData.gallery.map((url, index) => {
                               const isVideo = url.match(/\.(mp4|webm|ogg|avi|mov)$/i);
-                              const displayUrl = url.startsWith('/') ? `http://localhost:8000${url}` : url;
+                              const displayUrl = mediaUrl(url);
                               return (
                                 <div key={index} className="relative group">
                                   {isVideo ? (

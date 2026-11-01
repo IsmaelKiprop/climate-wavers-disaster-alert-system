@@ -1,279 +1,182 @@
-# Production Deployment Guide
+# Live hosting: Vercel + Supabase + compute
 
-## Backend Configuration
+Climate Wavers is several services, not one app. Supabase cannot run Django, Node, or Flask. Use it for **Postgres and file storage**. Put the React app on **Vercel**. Run the APIs on a container host such as **Render**, Railway, or Fly.io.
 
-### Environment Variables
+```
+Browser
+   │
+   ▼
+Vercel  (frontend/)
+   │  VITE_APP_BACKEND_URL
+   │  VITE_APP_CHATBOT_URL
+   ▼
+Django API  (backend-new/)     Node response  (response_system/)
+   │                                │
+   ├── DATABASE_URL ──────────────► Supabase Postgres
+   ├── STORAGE_BACKEND=supabase ──► Supabase Storage
+   └── optional AMQP / Redis ─────► CloudAMQP / Redis
+```
 
-Create a `.env` file in the backend directory with the following variables:
+| Piece | Host | Why |
+|---|---|---|
+| Web UI | Vercel | Vite static build |
+| Auth, posts, campaigns, admin | Render / Railway / Fly | Django + Channels |
+| Chat / disaster text | Same compute host | Node `response_system` |
+| Emails | Same compute host | Node `notification_service` |
+| Image / magnitude models | Same compute host (optional) | Flask `models` |
+| Database | Supabase | Managed Postgres |
+| Uploaded media | Supabase Storage | S3-compatible bucket |
+
+You can go live with **Vercel + Django + Supabase** only. Chatbot, mail, and ML stay optional until their env vars are set.
+
+---
+
+## 1. Supabase (database + storage)
+
+1. Create a project at [supabase.com](https://supabase.com).
+2. **Database** → **Connection string** → Session pooler (port `5432`). Copy it as `DATABASE_URL`.
+3. **Storage** → create a public bucket named `media`.
+4. **Project Settings** → **Storage** / S3 credentials. You need:
+   - `AWS_ACCESS_KEY_ID`
+   - `AWS_SECRET_ACCESS_KEY`
+   - `AWS_S3_ENDPOINT_URL=https://<PROJECT_REF>.storage.supabase.co/storage/v1/s3`
+   - `AWS_STORAGE_BUCKET_NAME=media`
+   - `AWS_S3_REGION_NAME` (shown in the dashboard)
+
+Use the session pooler for Django migrations. The transaction pooler (port `6543`) also works; the app disables server-side cursors automatically.
+
+---
+
+## 2. Django API (compute host)
+
+Render is already described in `render.yaml`. Railway and Fly work with the same Docker image in `backend-new/`.
+
+Generate secrets once:
 
 ```bash
-# Backend Configuration
-BACKEND_HOST=https://your-domain.com
+python -c "import secrets; print(secrets.token_urlsafe(64))"
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
+
+Set these on the API service:
+
+```bash
 DEBUG=False
-SECRET_KEY=your-secret-key-here
+SECRET_KEY=<generated>
+FERNET_KEY=<generated>
+DATABASE_URL=postgresql://postgres.<ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres
+DB_SSL_REQUIRE=True
 
-# Database (if using PostgreSQL)
-DATABASE_URL=postgresql://user:password@localhost:5432/dbname
+ALLOWED_HOSTS=your-api.onrender.com
+BASE_URL=https://your-api.onrender.com
+BACKEND_HOST=https://your-api.onrender.com
+FRONTEND_URL=https://your-app.vercel.app
 
-# Media Storage (if using cloud storage)
-AWS_ACCESS_KEY_ID=your-aws-key
-AWS_SECRET_ACCESS_KEY=your-aws-secret
-AWS_STORAGE_BUCKET_NAME=your-bucket-name
+ALLOWED_ORIGINS=https://your-app.vercel.app
+ALLOW_ALL_ORIGINS=False
+CSRF_TRUSTED_ORIGINS=https://your-app.vercel.app,https://your-api.onrender.com
+CORS_ORIGIN_REGEXES=^https://.*\.vercel\.app$
+
+STORAGE_BACKEND=supabase
+AWS_ACCESS_KEY_ID=...
+AWS_SECRET_ACCESS_KEY=...
+AWS_STORAGE_BUCKET_NAME=media
+AWS_S3_ENDPOINT_URL=https://<PROJECT_REF>.storage.supabase.co/storage/v1/s3
 AWS_S3_REGION_NAME=us-east-1
-
-# CORS Settings
-ALLOWED_ORIGINS=https://your-frontend-domain.com,https://www.your-frontend-domain.com
-CORS_ALLOW_ALL_ORIGINS=False
-
-# CSRF Settings
-CSRF_TRUSTED_ORIGINS=https://your-domain.com,https://your-frontend-domain.com
 ```
 
-### Django Settings for Production
+Health check: `GET https://your-api.onrender.com/health/` should return `{"status":"ok"}`.
 
-The backend is already configured to handle production URLs through the `BACKEND_HOST` environment variable.
+The container runs migrations on boot (`entrypoint.sh`).
 
-### Media Files in Production
+---
 
-#### Option 1: Local Storage (Simple)
-- Media files are served directly by Django
-- Set `BACKEND_HOST=https://your-domain.com`
-- Ensure your web server (nginx/Apache) serves media files
+## 3. Frontend (Vercel)
 
-#### Option 2: Cloud Storage (Recommended)
-For better performance and scalability, use cloud storage:
-
-1. Install required packages:
-```bash
-pip install boto3 django-storages
-```
-
-2. Update `settings.py`:
-```python
-# Add to INSTALLED_APPS
-INSTALLED_APPS = [
-    # ... existing apps
-    'storages',
-]
-
-# Cloud storage configuration
-if not DEBUG:
-    DEFAULT_FILE_STORAGE = 'storages.backends.s3boto3.S3Boto3Storage'
-    AWS_ACCESS_KEY_ID = env('AWS_ACCESS_KEY_ID')
-    AWS_SECRET_ACCESS_KEY = env('AWS_SECRET_ACCESS_KEY')
-    AWS_STORAGE_BUCKET_NAME = env('AWS_STORAGE_BUCKET_NAME')
-    AWS_S3_REGION_NAME = env('AWS_S3_REGION_NAME', 'us-east-1')
-    AWS_S3_CUSTOM_DOMAIN = f'{AWS_STORAGE_BUCKET_NAME}.s3.amazonaws.com'
-    MEDIA_URL = f'https://{AWS_S3_CUSTOM_DOMAIN}/media/'
-```
-
-3. Update the `FileUploadViewSet` to handle cloud storage:
-```python
-# In core/views.py, update the URL generation
-if hasattr(default_storage, 'url'):
-    file_url = default_storage.url(saved_path)
-    # For cloud storage, the URL is already complete
-    if not file_url.startswith('http'):
-        # Only construct full URL for local storage
-        backend_host = settings.BACKEND_HOST
-        file_url = f"{backend_host}{file_url}"
-else:
-    # Fallback for development
-    file_url = f"/media/{saved_path}"
-    backend_host = settings.BACKEND_HOST
-    file_url = f"{backend_host}{file_url}"
-```
-
-## Frontend Configuration
-
-### Environment Variables
-
-Create a `.env` file in the frontend directory:
+1. Import the GitHub repo in Vercel.
+2. Set **Root Directory** to `frontend`.
+3. Framework: Vite. Build: `npm run build`. Output: `dist`.
+4. Add Production env vars from `frontend/.env.production.example`:
 
 ```bash
-# Backend URL
-VITE_APP_BACKEND_URL=https://your-backend-domain.com
+VITE_APP_BACKEND_URL=https://your-api.onrender.com
 VITE_APP_BACKEND_STATUS=true
-
-# Domain (for cookies)
-VITE_DOMAIN=your-frontend-domain.com
+VITE_APP_CHATBOT_URL=https://your-response.onrender.com
+VITE_DOMAIN=your-app.vercel.app
+VITE_SITE_URL=https://your-app.vercel.app
 ```
 
-### Build and Deploy
+Leave `VITE_APP_CHATBOT_URL` empty until the response service is live. Disaster pages fall back to mock data.
 
-1. Build the frontend:
-```bash
-npm run build
-```
+Vite bakes `VITE_*` values at **build** time. Change them, then redeploy.
 
-2. Deploy the `dist` folder to your hosting service (Vercel, Netlify, etc.)
+`frontend/src/config/env.js` is the only place the UI reads service URLs. Do not hardcode hosts in components.
 
-## Web Server Configuration
+---
 
-### Nginx Configuration
+## 4. Optional services
 
-```nginx
-server {
-    listen 80;
-    server_name your-domain.com;
-    
-    # Backend API
-    location /api/ {
-        proxy_pass http://127.0.0.1:8000;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-    
-    # Media files (if using local storage)
-    location /media/ {
-        alias /path/to/your/project/media/;
-        expires 1y;
-        add_header Cache-Control "public, immutable";
-    }
-    
-    # Static files
-    location /static/ {
-        alias /path/to/your/project/static/;
-        expires 1y;
-        add_header Cache-Control "public, immutable";
-    }
-    
-    # Frontend (if serving from same domain)
-    location / {
-        root /path/to/frontend/dist;
-        try_files $uri $uri/ /index.html;
-    }
-}
-```
+Each service reads its own `.env.example`. Point them at each other with public HTTPS URLs.
 
-### Apache Configuration
-
-```apache
-<VirtualHost *:80>
-    ServerName your-domain.com
-    
-    # Backend API
-    ProxyPreserveHost On
-    ProxyPass /api/ http://127.0.0.1:8000/api/
-    ProxyPassReverse /api/ http://127.0.0.1:8000/api/
-    
-    # Media files
-    Alias /media/ /path/to/your/project/media/
-    <Directory /path/to/your/project/media/>
-        Require all granted
-    </Directory>
-    
-    # Frontend
-    DocumentRoot /path/to/frontend/dist
-    <Directory /path/to/frontend/dist>
-        Require all granted
-        FallbackResource /index.html
-    </Directory>
-</VirtualHost>
-```
-
-## Docker Deployment
-
-### Backend Dockerfile
-
-```dockerfile
-FROM python:3.11-slim
-
-WORKDIR /app
-
-COPY requirements.txt .
-RUN pip install -r requirements.txt
-
-COPY . .
-
-EXPOSE 8000
-
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "auth.wsgi:application"]
-```
-
-### Frontend Dockerfile
-
-```dockerfile
-FROM node:18-alpine as builder
-
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci
-
-COPY . .
-RUN npm run build
-
-FROM nginx:alpine
-COPY --from=builder /app/dist /usr/share/nginx/html
-COPY nginx.conf /etc/nginx/nginx.conf
-```
-
-### Docker Compose
-
-```yaml
-version: '3.8'
-
-services:
-  backend:
-    build: ./backend-new
-    ports:
-      - "8000:8000"
-    environment:
-      - BACKEND_HOST=https://your-domain.com
-      - DEBUG=False
-    volumes:
-      - ./media:/app/media
-
-  frontend:
-    build: ./frontend
-    ports:
-      - "80:80"
-    depends_on:
-      - backend
-```
-
-## Security Considerations
-
-1. **HTTPS**: Always use HTTPS in production
-2. **CORS**: Configure CORS properly for your domains
-3. **CSRF**: Set up CSRF protection
-4. **Media Security**: Consider using signed URLs for sensitive media
-5. **Rate Limiting**: Implement rate limiting for API endpoints
-6. **Authentication**: Use secure JWT tokens with proper expiration
-
-## Monitoring and Logging
-
-1. Set up logging for the Django application
-2. Monitor file uploads and storage usage
-3. Set up error tracking (Sentry, etc.)
-4. Monitor API performance
-
-## Testing Production Setup
-
-1. Test file uploads with different file types and sizes
-2. Verify media URLs are accessible
-3. Test CORS configuration
-4. Verify HTTPS redirects
-5. Test API endpoints with proper authentication
-
-## Troubleshooting
-
-### Common Issues
-
-1. **Media files not loading**: Check `BACKEND_HOST` environment variable
-2. **CORS errors**: Verify `ALLOWED_ORIGINS` configuration
-3. **File upload failures**: Check file size limits and storage permissions
-4. **HTTPS issues**: Ensure SSL certificates are properly configured
-
-### Debug Commands
+### Response system (chat + disasters)
 
 ```bash
-# Check environment variables
-python manage.py shell -c "from django.conf import settings; print(settings.BACKEND_HOST)"
-
-# Test media URL generation
-python manage.py shell -c "from django.core.files.storage import default_storage; print(default_storage.url('test.jpg'))"
+PORT=3004
+CORS_ORIGINS=https://your-app.vercel.app
+OPENAI_API_KEY=...
+AMQP_URL=amqps://user:pass@host/vhost
+ANALYSIS_MODEL_URL=https://your-models.onrender.com/api/v1/analysis
+RECOGNITION_MODEL_URL=https://your-models.onrender.com/api/v1/recognition
 ```
 
+### Notifications
+
+Needs SMTP plus `AMQP_URL`. Firebase is optional.
+
+### Models
+
+```bash
+API_KEY=...
+```
+
+Then set `ANALYSIS_MODEL_URL` and `RECOGNITION_MODEL_URL` on the response service.
+
+### Redis / RabbitMQ
+
+- Redis: Render Redis, Upstash, or Railway Redis → `REDIS`
+- RabbitMQ: CloudAMQP → `AMQP_URL` on Django, response, and notifications
+
+Without Redis, Django Channels uses in-memory (single instance only).
+Without RabbitMQ, email and AI post ingest stay idle.
+
+---
+
+## 5. After the first deploy
+
+1. Open the Vercel URL. Signup / login should hit the Django API.
+2. Upload an image. The returned URL should be on Supabase Storage.
+3. Confirm Django admin at `https://your-api.onrender.com/admin/`.
+4. If the browser blocks requests, the Vercel origin is missing from `ALLOWED_ORIGINS`.
+5. Redeploy Vercel after any `VITE_*` change.
+
+---
+
+## Local development still works
+
+```bash
+cp backend-new/.env.example backend-new/.env
+cp frontend/.env.example frontend/.env
+docker compose up -d
+```
+
+Leave `DATABASE_URL` empty to keep SQLite locally. The same codebase talks to Supabase in production when `DATABASE_URL` is set.
+
+---
+
+## Security
+
+- `DEBUG=False` in production
+- HTTPS only
+- Do not commit `.env` files
+- Rotate `SECRET_KEY` and `FERNET_KEY` if they ever leak
+- Keep `ALLOW_ALL_ORIGINS=False` once the Vercel domain is known

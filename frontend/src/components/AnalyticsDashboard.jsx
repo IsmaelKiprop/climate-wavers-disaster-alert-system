@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import { apiUrl } from '../config/env';
 
 const AnalyticsDashboard = () => {
   const [analytics, setAnalytics] = useState(null);
@@ -13,7 +14,7 @@ const AnalyticsDashboard = () => {
   const fetchAnalytics = async () => {
     try {
       setLoading(true);
-      const response = await axios.get(`http://127.0.0.1:8000/api/v1/analytics/?days=${timeRange}`);
+      const response = await axios.get(apiUrl(`/api/v1/analytics/?days=${timeRange}`));
       setAnalytics(response.data);
     } catch (error) {
       console.error('Error fetching analytics:', error);

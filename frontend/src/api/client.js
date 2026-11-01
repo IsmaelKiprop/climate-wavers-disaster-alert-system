@@ -4,6 +4,7 @@ import Cookies from "js-cookie";
 import { getAuthToken } from "../utils/factory";
 import { dummyUser, dummyPost } from "../utils/dummies";
 import Swal from "sweetalert2";
+import { env } from "../config/env";
 
 class Client {
   constructor(baseURL, domain) {
@@ -124,7 +125,7 @@ class Client {
 
     try {
       let response;
-      const backendStatus = import.meta.env.VITE_APP_BACKEND_STATUS === "true";
+      const backendStatus = env.backendEnabled;
       
       console.log('API Request:', { method, endpoint, backendStatus });
       if (!backendStatus && endpoint.endsWith("login/")) {
@@ -200,13 +201,6 @@ class Client {
   }
 }
 
-// Use relative URLs in development to leverage Vite proxy
-const isDevelopment = import.meta.env.DEV;
-const baseURL = isDevelopment ? "" : (import.meta.env.VITE_APP_BACKEND_URL || "http://127.0.0.1:8000");
-
-const client = new Client(
-  baseURL,
-  import.meta.env.VITE_DOMAIN || "localhost"
-);
+const client = new Client(env.backendUrl, env.domain);
 
 export default client;
