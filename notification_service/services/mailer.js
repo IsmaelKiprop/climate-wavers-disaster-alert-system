@@ -25,7 +25,7 @@ class Mailer{
             ...config.mail
         })
         // this.from_address = config.mail.auth.user
-        this.from_address = "tester@gmail.com"
+        this.from_address = process.env.MAIL_FROM || config.mail.auth.user
     }
 
     loadTemplate(path, data){

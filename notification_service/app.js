@@ -14,6 +14,6 @@ useQueue(channels.verification, controller.sendVerification);
 
 app.get("/status", (req, res)=>res.status(200).send("OK"))
 
-app.listen(port, () => {
+app.listen(port, "0.0.0.0", () => {
   console.log(`Server is running on port ${port}`);
 });

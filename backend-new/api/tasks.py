@@ -33,8 +33,9 @@ def send_message(queue_name, message):
     :param queue_name: The name of the queue to send the message to.
     :param message: The message to be sent.
     """
-    # Connect to RabbitMQ
-    print(settings.AMQP_URL)
+    if not settings.AMQP_URL:
+        raise RuntimeError("AMQP_URL is not set; email queue is unavailable")
+
     connection = pika.BlockingConnection(pika.URLParameters(settings.AMQP_URL))
     channel = connection.channel()
 

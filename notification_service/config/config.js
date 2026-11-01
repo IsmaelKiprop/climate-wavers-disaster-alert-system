@@ -9,10 +9,10 @@ const amqp = {
 }
 
 const server = {
-    port: process.env.SERVER_PORT,
-    host: process.env.SERVER_HOST,
-    protocol: process.env.SERVER_PROTOCOL,
-    secret: process.env.SERVER_SECRET
+    port: process.env.SERVER_PORT || process.env.PORT || "3000",
+    host: process.env.SERVER_HOST || "0.0.0.0",
+    protocol: process.env.SERVER_PROTOCOL || "https",
+    secret: process.env.SERVER_SECRET || "change-me-server-secret"
 }
 
 
