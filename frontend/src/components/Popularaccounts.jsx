@@ -47,22 +47,11 @@ const Popularaccounts = () => {
           )}
         </div>
         
-        {/* Loading State */}
-        {isLoading && (
+        {error && displayUsers.length === 0 ? (
           <div className="px-3 pb-3">
-            <div className="text-sm text-gray-500 text-center">Loading popular accounts...</div>
+            <p className="text-sm text-muted">We could not load accounts.</p>
           </div>
-        )}
-        
-        {/* Error State */}
-        {error && (
-          <div className="px-3 pb-3">
-            <div className="text-sm text-red-500 text-center">Failed to load accounts</div>
-          </div>
-        )}
-        
-        {/* Users List */}
-        {!isLoading && !error && Array.isArray(displayUsers) && (
+        ) : (
           <div className="space-y-1">
             {displayUsers.map((user) => (
               <Accountcard key={user.id} user={user} />

@@ -13,19 +13,31 @@ import { endpoints } from "../utils/endpoints";
 import { client } from "../api";
 import { getUser, setUser } from "../utils/factory";
 
+const seedOwnProfile = (userId) => {
+  const me = getUser() || {};
+  if (!userId || String(me.id) !== String(userId)) return {};
+  if (me.first_name || me.profile_picture || me.username) return me;
+  if (me.full_name) {
+    const parts = String(me.full_name).trim().split(/\s+/);
+    return { ...me, first_name: parts[0] || "", last_name: parts.slice(1).join(" ") };
+  }
+  return me;
+};
+
 const Profile = () => {
   const { userId } = useParams();
-  const [profile, setProfile] = useState({});
-  const [feed, setFeed] = useState({});
   const navigate = useNavigate();
+  const me = getUser() || {};
+  const [profile, setProfile] = useState(() => seedOwnProfile(userId));
+  const [feed, setFeed] = useState({});
   const [isFollow, setIsFollow] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const me = getUser();
 
   const {
     error,
     isFetched,
     data: user,
+    user: loadedUser,
   } = useProfile({
     user_id: userId,
   });
@@ -54,47 +66,40 @@ const Profile = () => {
   ];
 
   useEffect(() => {
-    if (isFetched) {
-      console.log("Profile data received:", user);
-      console.log("User data:", user.user);
-      console.log("Profile picture:", user.user?.profile_picture);
-      console.log("Profile pic:", user.user?.profile_pic);
-      console.log("Picture:", user.user?.picture);
-      console.log("Cover image:", user.user?.cover);
-      console.log("Posts data:", user.posts);
-      console.log("Comments data:", user.comments);
-      setProfile(user.user);
-      setIsFollow(user.user?.is_following)
-      const feeds = {
-        post: user.posts,
-        comments: user.comments,
-        reposts: user.repost,
-        bookmarks: user.bookmarks,
-        likes: user.reactions,
-        polls: user.polls,
-      };
-      console.log("Feeds data:", feeds);
-      setFeed(feeds);
+    const nextUser = user?.user || loadedUser;
+    if (nextUser?.id) {
+      setProfile((prev) => ({ ...prev, ...nextUser }));
+      setIsFollow(Boolean(nextUser.is_following));
     }
-
-    if (error) {
+    if (user) {
+      setFeed({
+        post: user.posts || [],
+        comments: user.comments || [],
+        reposts: user.repost || [],
+        bookmarks: user.bookmarks || [],
+        likes: user.reactions || [],
+        polls: user.polls || [],
+      });
+    }
+    if (error && !nextUser?.id) {
       toast.dismiss();
-      toast.error("An error occurred while fetching profile");
+      toast.error("We could not load this profile.");
     }
-  }, [isFetched, error, user]);
+  }, [isFetched, error, user, loadedUser]);
+
+  const isOwnProfile = String(me.id || "") === String(profile?.id || userId || "");
+  const avatarSrc = profile?.profile_picture || profile?.profile_pic || profile?.picture || "";
+  const coverSrc = profile?.cover || profile?.cover_image || "";
+  const displayName = [profile?.first_name, profile?.last_name].filter(Boolean).join(" ") || profile?.username || "";
 
   const handleProfilePictureClick = (event) => {
     event.stopPropagation();
-    if (user?.user?.id === me.id) {
-      navigate("/uploadphoto");
-    }
+    if (isOwnProfile) navigate("/uploadphoto");
   };
 
   const handleCoverPhotoClick = (e) => {
     e.preventDefault();
-    if (user?.user?.id === me.id) {
-      navigate("/uploadcover");
-    }
+    if (isOwnProfile) navigate("/uploadcover");
   };
 
   const handleProfileUpdate = (updatedUser) => {
@@ -170,11 +175,9 @@ const Profile = () => {
         {/* Cover Image Section */}
         <div className="relative h-64 md:h-80 lg:h-96 overflow-hidden">
           <div
-            className="w-full h-full bg-cover bg-center bg-gradient-to-r from-teal-400 via-blue-500 to-purple-600 cursor-pointer transition-all duration-300 hover:scale-105"
+            className="w-full h-full bg-cover bg-center bg-background cursor-pointer"
           style={{
-            backgroundImage: `url(${
-              profile?.cover ? `${profile.cover}` : "/environ.jpeg"
-            })`,
+            backgroundImage: `url(${coverSrc || "/environment.jpg"})`,
           }}
             onClick={(e) => handleCoverPhotoClick(e)}
           >
@@ -185,41 +188,29 @@ const Profile = () => {
           {/* Profile Picture */}
           <div className="absolute -bottom-2 md:-bottom-4 left-4 md:left-8">
             <div className="relative group">
-              {console.log("Rendering profile picture:", profile?.profile_picture, "profile_pic:", profile?.profile_pic, "picture:", profile?.picture)}
-              {(() => {
-                const imageSrc = profile?.profile_picture || profile?.profile_pic || profile?.picture;
-                console.log("Final image source:", imageSrc);
-                
-                if (imageSrc) {
-                  return (
+              {avatarSrc ? (
                     <img
-                      src={imageSrc}
-                      className="w-24 h-24 md:w-32 md:h-32 lg:w-36 lg:h-36 rounded-full border-4 border-white shadow-2xl cursor-pointer transition-all duration-300 hover:scale-105"
-            alt="Profile"
+                      src={avatarSrc}
+                      className="w-24 h-24 md:w-32 md:h-32 lg:w-36 lg:h-36 object-cover border-4 border-white shadow-2xl cursor-pointer"
+                      alt=""
+                      style={{ borderRadius: "50%" }}
+                      fetchPriority="high"
                       onClick={handleProfilePictureClick}
                       onError={(e) => {
-                        console.log("Profile picture failed to load, using fallback");
                         e.target.src = "/avatar.png";
                       }}
-                      onLoad={() => {
-                        console.log("Profile picture loaded successfully");
-                      }}
                     />
-                  );
-                } else {
-                  console.log("No profile picture available, showing default avatar");
-                  return (
-                    <div 
-                      className="w-24 h-24 md:w-32 md:h-32 lg:w-36 lg:h-36 rounded-full border-4 border-white shadow-2xl cursor-pointer transition-all duration-300 hover:scale-105 bg-gradient-to-br from-teal-400 to-blue-500 flex items-center justify-center"
+                  ) : (
+                    <div
+                      className="w-24 h-24 md:w-32 md:h-32 lg:w-36 lg:h-36 border-4 border-white shadow-2xl cursor-pointer bg-primary text-primary-foreground flex items-center justify-center"
+                      style={{ borderRadius: "50%" }}
                       onClick={handleProfilePictureClick}
                     >
-                      <span className="text-white text-2xl md:text-3xl lg:text-4xl font-bold">
-                        {profile?.first_name?.charAt(0)?.toUpperCase() || profile?.username?.charAt(0)?.toUpperCase() || "U"}
+                      <span className="text-2xl md:text-3xl lg:text-4xl font-bold">
+                        {displayName.charAt(0)?.toUpperCase() || ""}
                       </span>
                     </div>
-                  );
-                }
-              })()}
+                  )}
               <div className="absolute inset-0 rounded-full bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-all duration-300 flex items-center justify-center">
                 <IoCamera className="text-white opacity-0 group-hover:opacity-100 transition-opacity duration-300" size={24} />
               </div>
@@ -246,41 +237,28 @@ const Profile = () => {
                   <div className="flex items-center gap-3">
                     <div>
                       <h1 className="text-2xl md:text-3xl lg:text-4xl font-bold text-gray-900 mb-1">
-                        {profile?.first_name} {profile?.last_name}
+                        {displayName || "Profile"}
                       </h1>
                       <p className="text-lg text-gray-500 font-medium">
-                        @{profile?.username}
+                        {profile?.username ? `@${profile.username}` : ""}
                       </p>
                     </div>
                   </div>
                   
                   {/* Action Button */}
                   <div className="flex-shrink-0">
-                    {me.id !== profile?.id ? (
-        <button
-          onClick={() => {
-            setIsFollow(!isFollow);
-            handleFollow(profile?.id);
-          }}
-                        className={`px-6 py-3 rounded-full font-semibold text-sm transition-all duration-200 flex items-center gap-2 ${
-                          isFollow
-                            ? "bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200"
-                            : "bg-teal-500 text-white hover:bg-teal-600 shadow-lg hover:shadow-xl"
-                        }`}
-        >
-          {isFollow ? "Following" : "Follow"}
-        </button>
-                    ) : (
+                    {isOwnProfile ? (
                       <div className="flex gap-3">
                         <button
-                          onClick={() => window.location.href = '/app/my-certificates'}
+                          type="button"
+                          onClick={() => navigate("/app/my-certificates")}
                           className="bg-green-500 text-white px-6 py-3 rounded-full font-semibold text-sm hover:bg-green-600 transition-all duration-200 flex items-center gap-2 shadow-lg hover:shadow-xl"
                         >
                           <IoLeaf size={18} />
                           My Certificates
                         </button>
-                        
                         <button
+                          type="button"
                           onClick={() => setIsEditModalOpen(true)}
                           className="bg-teal-500 text-white px-6 py-3 rounded-full font-semibold text-sm hover:bg-teal-600 transition-all duration-200 flex items-center gap-2 shadow-lg hover:shadow-xl"
                         >
@@ -288,7 +266,22 @@ const Profile = () => {
                           Edit Profile
                         </button>
                       </div>
-      )}
+                    ) : profile?.id ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsFollow(!isFollow);
+                          handleFollow(profile?.id);
+                        }}
+                        className={`px-6 py-3 rounded-full font-semibold text-sm transition-all duration-200 flex items-center gap-2 ${
+                          isFollow
+                            ? "bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200"
+                            : "bg-teal-500 text-white hover:bg-teal-600 shadow-lg hover:shadow-xl"
+                        }`}
+                      >
+                        {isFollow ? "Following" : "Follow"}
+                      </button>
+                    ) : null}
       </div>
                 </div>
 

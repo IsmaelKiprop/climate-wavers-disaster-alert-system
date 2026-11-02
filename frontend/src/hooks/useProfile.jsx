@@ -1,33 +1,51 @@
 import { useQuery } from "@tanstack/react-query";
 import { client } from "../api";
 import { endpoints } from "../utils/endpoints";
-import { getAuthToken } from "../utils/factory";
+import { getUser } from "../utils/factory";
 
-export const useProfile = ({user_id}) => {
-    const url = endpoints.profile
-    const fetchProfile = async () => {
-        console.log("Fetching profile for user_id:", user_id, "Type:", typeof user_id);
-        console.log("URL:", url);
-        console.log("Auth token:", getAuthToken());
-        
-        // Ensure user_id is an integer
-        const userIdInt = parseInt(user_id);
-        console.log("Converted user_id to integer:", userIdInt);
-        
-        const res = await client.run("post", url, {user_id: userIdInt}, true);
-        console.log("Profile API Response:", res);
-        console.log("Posts data:", res?.posts);
-        console.log("Comments data:", res?.comments);
-        console.log("Reposts data:", res?.repost);
-        console.log("Bookmarks data:", res?.bookmarks);
-        console.log("Reactions data:", res?.reactions);
-        console.log("Polls data:", res?.polls);
-        return res;
-      };
+const seedUser = (userId) => {
+  const me = getUser();
+  if (!me || !userId) return undefined;
+  if (String(me.id) === String(userId)) return me;
+  return undefined;
+};
 
+export const useProfile = ({ user_id }) => {
+  const seed = seedUser(user_id);
 
-return useQuery({
-    queryKey: ["profile"],
-    queryFn: fetchProfile,
+  const details = useQuery({
+    queryKey: ["profile", String(user_id || "")],
+    queryFn: async () => client.run("get", `${endpoints.users}${user_id}/`, {}, true),
+    enabled: Boolean(user_id),
+    placeholderData: seed,
+    staleTime: 30000,
+    gcTime: 300000,
+    retry: 1,
   });
-}
+
+  const activity = useQuery({
+    queryKey: ["profile-activity", String(user_id || "")],
+    queryFn: async () =>
+      client.run("post", endpoints.profile, { user_id: Number(user_id) || user_id }, true),
+    enabled: Boolean(user_id),
+    staleTime: 15000,
+    gcTime: 300000,
+    retry: 1,
+  });
+
+  const user = activity.data?.user || details.data || seed || null;
+
+  return {
+    error: details.error || activity.error,
+    isFetched: details.isFetched || Boolean(user),
+    isLoading: details.isLoading && !user,
+    data: activity.data
+      ? activity.data
+      : user
+        ? { user, posts: [], comments: [], repost: [], bookmarks: [], reactions: [], polls: [] }
+        : undefined,
+    user,
+    activity: activity.data,
+    activityLoading: activity.isLoading,
+  };
+};
