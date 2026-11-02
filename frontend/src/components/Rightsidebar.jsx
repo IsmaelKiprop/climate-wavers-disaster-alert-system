@@ -1,15 +1,13 @@
-import Communityselector from './Communityselector'
-import Popularaccounts from './Popularaccounts'
+import Communityselector from "./Communityselector";
+import Popularaccounts from "./Popularaccounts";
 
 const Rightsidebar = () => {
   return (
-    <div className='w-full h-full bg-white'>
-      <div className="p-4 space-y-6">
-        <Communityselector />
-        <Popularaccounts />
-      </div>
+    <div className="h-full p-4 space-y-6">
+      <Communityselector />
+      <Popularaccounts />
     </div>
-  )
-}
+  );
+};
 
-export default Rightsidebar
+export default Rightsidebar;

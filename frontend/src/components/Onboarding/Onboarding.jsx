@@ -1,44 +1,44 @@
-import { NavLink, Link } from "react-router-dom";
+import { Link } from "react-router-dom";
 import PropTypes from "prop-types";
 
 const Onboarding = ({ content, current, next, prev, bot }) => {
+  const cards = content.filter((msg) => !msg.view);
+
   return (
-    <div className="grid  bg-[#264653] h-[100vh] w-[100%] text-white">
-      <div className="flex max-sm:mt-4 absolute gap-x-2 text-xl right-0 p-4">
-        <Link to={prev}>
-          <img alt="" src={"/arrow-right.png"} />
+    <section className="min-h-[calc(100dvh-8rem)] flex flex-col">
+      <div className="flex items-center justify-between gap-3 text-sm">
+        <Link to={prev || "/onboarding"} className="text-muted hover:text-foreground">
+          Back
         </Link>
-        <span>Prev</span>
-        <span>{current}/8</span>
-        <span>Skip</span>
-        <Link to={"/login"}>
-          <img alt="" src={"/skip.png"} className="" />
+        <p className="text-muted">{current}/8</p>
+        <Link to="/app" className="text-muted hover:text-foreground">
+          Skip
         </Link>
       </div>
-      <div className="flex relative md:left-[30%] md:top-24 max-sm:items-center bottom-12 gap-4">
-        <div className="flex flex-col  relative max-sm:top-[35%] top-20 right">
-          <img alt="" src={`/${bot}.png`} className="w-[100%]" />
-          <img alt="" src={"/Ellipse.png"} className="w-[80%] ml-[10%]" />
-        </div>
-        <div className="flex flex-col max-sm:w-full relative max-sm:top-24 max-sm:pr-4 gap-y-4  text-start text-xl leading-6 font-serif">
-          {content.map((msg) => (
-            <div
-              key={msg?.title}
-              className={msg?.view ? "bg-[#2F4F4F] md:hidden px-2 border-0 py-4 rounded-2xl shadow-md  md:max-w-[40%]  max-sm:w-[70vw]" : "bg-[#2F4F4F] px-2 hidden md:grid border-0 py-4 rounded-2xl shadow-md  md:max-w-[40%] "}
-            >
-              <span className="font-bold w-full">{msg?.title}</span>
-              <br/>{msg.message}
-            </div>
-          ))}
+
+      <div className="flex-1 flex flex-col lg:flex-row items-center justify-center gap-8 lg:gap-12 py-8">
+        <figure className="w-full max-w-[220px] sm:max-w-[260px]">
+          <img src={`/${bot}.png`} alt="" className="w-full h-auto" />
+        </figure>
+
+        <div className="w-full max-w-md space-y-3">
+          <div className="space-y-2">
+            {cards.map((msg) => (
+              <article key={msg.title} className="border border-border bg-surface px-4 py-4">
+                <h2 className="text-base font-semibold">{msg.title}</h2>
+                <p className="mt-2 text-sm text-muted leading-relaxed">{msg.message}</p>
+              </article>
+            ))}
+          </div>
+          <Link
+            to={next || "/app"}
+            className="inline-flex items-center justify-center w-full sm:w-auto min-w-[160px] px-5 py-3 bg-primary text-primary-foreground text-sm font-medium hover:bg-primary-dark"
+          >
+            {next ? "Continue" : "Open the app"}
+          </Link>
         </div>
       </div>
-      <NavLink
-        to={next || "/login"}
-        className="bg-linear  md:w-[20%] w-[60vw] h-16 relative self-end md:left-[63%] left-[36%] md:bottom-24 bottom-32 text-2xl text-center pt-4 rounded-[35px]"
-      >
-        {next ? "Next" : "Get started"}
-      </NavLink>
-    </div>
+    </section>
   );
 };
 

@@ -1,21 +1,46 @@
-import { NavLink } from "react-router-dom"
+import { Link } from "react-router-dom";
 
 const Welcome = () => {
-    return <div className="grid  h-[100vh] w-[100%] px-2 text-white">
-        <NavLink to={"/login"} className="border-2 bg-gray-300 md:w-[15%] w-24 h-12 text-center text-2xl pt-2 ml-2  md:mt-4 mt-8 rounded-xl capitalize">cancel</NavLink>
-        <div className="flex place-content-center gap-x-1">
-            <div className="flex flex-col pt-8 relative left-12">
-            <img src={"/waverbot1.png"} className="w-[80%]"/>
-            <img src={"/Ellipse.png"} className="w-[80%] " />
-            </div>
-            <div className="flex flex-col gap-8 text-start">
-                <span className="bg-[#2F4F4F] content-center px-2 border-2 rounded-2xl shadow-md min-h-20 max-w-[100%]">Hello there welcome to Climate Wavers</span>
-                <span className="bg-[#2F4F4F]  content-center px-2 border-2 rounded-2xl shadow-md min-h-20  max-w-[100%]">My name is WaverX.<br/> Your Real time AI assistant here in Climate Waver</span>
-                <span className="bg-[#2F4F4F]  content-center px-2 border-2 rounded-2xl shadow-md min-h-20 w-[70%]  max-w-[100%]">Lets get you started</span>
-            </div>
-        </div>
-        <NavLink to={"/onboarding/home"} className="bg-linear border-2 w-[30%] max-sm:w-44 md:h-20 h-12 relative left-[53%] bottom-20 text-2xl text-center md:pt-4 pt-2 md:rounded-[35px] rounded-md">Let&apos;s Go</NavLink>
-    </div>
-}
+  return (
+    <section className="min-h-[calc(100dvh-8rem)] flex flex-col">
+      <div className="flex justify-end">
+        <Link
+          to="/app"
+          className="inline-flex items-center px-3 py-2 text-sm font-medium border border-border bg-surface hover:bg-background"
+        >
+          Skip
+        </Link>
+      </div>
 
-export default Welcome
+      <div className="flex-1 flex flex-col lg:flex-row items-center justify-center gap-8 lg:gap-12 py-8">
+        <figure className="w-full max-w-[240px] sm:max-w-[280px]">
+          <img src="/waverbot1.png" alt="WaverX, the Climate Wavers assistant" className="w-full h-auto" />
+        </figure>
+
+        <div className="w-full max-w-md space-y-3">
+          <p className="text-sm text-muted">WaverX</p>
+          <h1 className="text-2xl sm:text-3xl font-semibold leading-tight">Welcome to Climate Wavers</h1>
+          <div className="space-y-2">
+            <p className="bg-primary text-primary-foreground px-4 py-3 text-sm leading-relaxed">
+              Hello. Welcome to Climate Wavers.
+            </p>
+            <p className="bg-primary text-primary-foreground px-4 py-3 text-sm leading-relaxed">
+              I am WaverX, the assistant for live alerts and community reports.
+            </p>
+            <p className="bg-primary text-primary-foreground px-4 py-3 text-sm leading-relaxed">
+              Let me show you around.
+            </p>
+          </div>
+          <Link
+            to="/onboarding/home"
+            className="inline-flex items-center justify-center w-full sm:w-auto min-w-[160px] px-5 py-3 bg-primary text-primary-foreground text-sm font-medium hover:bg-primary-dark"
+          >
+            Let&apos;s go
+          </Link>
+        </div>
+      </div>
+    </section>
+  );
+};
+
+export default Welcome;

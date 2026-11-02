@@ -1,12 +1,9 @@
-import Menu from "./Menu";
+import AppNav from "../app/AppNav";
 
 const Leftsidebar = () => {
-
   return (
-    <div className=" md:fixed w-[25%] hidden md:block h-[100vh] py-6">
-
-      <Menu />
-      
+    <div className="h-full p-4">
+      <AppNav />
     </div>
   );
 };
