@@ -99,6 +99,8 @@ const Signup = () => {
           "Hazard reports after you confirm your email",
           "Official Climate Wavers tree campaigns in Nairobi",
         ]}
+        panelImage="/emergency-response-sm.jpg"
+        panelImageAlt="Homes behind an emergency barrier during flooding"
         footerNote="Built with FlowOps Africa in Nairobi. Verify first. Send second."
       >
         <form onSubmit={handleSubmit(onSubmit, onInvalid)} noValidate>

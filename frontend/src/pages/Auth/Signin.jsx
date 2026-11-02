@@ -49,6 +49,8 @@ const Signin = () => {
           "File a hazard report from the field",
           "Track official Nairobi tree campaigns",
         ]}
+        panelImage="/community-respond-sm.jpg"
+        panelImageAlt="Crews working a burned structure after a fire"
       >
         <form onSubmit={handleSubmit(onSubmit)} noValidate>
           <AuthField id="email" label="Email" error={errors.email && "Enter your email"}>

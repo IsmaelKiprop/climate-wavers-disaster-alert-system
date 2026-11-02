@@ -7,6 +7,8 @@ const AuthLayout = ({
   panelTitle = "Verify first. Send second.",
   panelBody = "Climate Wavers publishes live USGS and NASA events. FlowOps Africa in Nairobi is building the safeguards so AI does not amplify rumor as fact.",
   panelItems,
+  panelImage = "/emergency-response-sm.jpg",
+  panelImageAlt = "Homes behind an emergency barrier during flooding",
   footerNote = "Live official feeds. Human review before high-impact send.",
   align = "center",
 }) => {
@@ -14,7 +16,7 @@ const AuthLayout = ({
 
   return (
     <div className="min-h-[100dvh] bg-background flex">
-      <aside className="hidden lg:flex w-[42%] xl:w-[460px] shrink-0 bg-primary text-primary-foreground flex-col justify-between p-10 xl:p-12">
+      <aside className="hidden lg:flex w-[42%] xl:w-[480px] shrink-0 bg-primary text-primary-foreground flex-col p-8 xl:p-10 min-h-[100dvh]">
         <div>
           <Link to="/" className="flex items-center gap-3 text-primary-foreground">
             <img
@@ -25,29 +27,45 @@ const AuthLayout = ({
             />
             <span className="text-lg font-semibold">Climate Wavers</span>
           </Link>
-          <div className="mt-14 xl:mt-16">
-            <h1 className="text-3xl xl:text-4xl font-semibold leading-tight max-w-md">
+          <div className="mt-8 xl:mt-10">
+            <h1 className="text-3xl xl:text-[2.15rem] font-semibold leading-tight max-w-md">
               {panelTitle}
             </h1>
-            <p className="mt-4 text-base leading-relaxed text-primary-foreground/90 max-w-md">
+            <p className="mt-3 text-sm xl:text-base leading-relaxed text-primary-foreground/90 max-w-md">
               {panelBody}
             </p>
-            {panelItems?.length ? (
-              <ul className="mt-8 space-y-3.5 max-w-md">
-                {panelItems.map((item) => (
-                  <li key={item} className="flex gap-3 text-sm leading-relaxed">
-                    <span
-                      className="mt-1.5 h-[5px] w-[5px] shrink-0 bg-primary-foreground"
-                      aria-hidden="true"
-                    />
-                    <span>{item}</span>
-                  </li>
-                ))}
-              </ul>
-            ) : null}
           </div>
         </div>
-        <p className="text-sm text-primary-foreground/80">{footerNote}</p>
+
+        <figure
+          className="relative flex-1 min-h-[220px] my-6 overflow-hidden bg-primary-dark"
+          style={{ borderRadius: 5 }}
+        >
+          <img
+            src={panelImage}
+            alt={panelImageAlt}
+            className="absolute inset-0 w-full h-full object-cover"
+            width="960"
+            height="640"
+          />
+        </figure>
+
+        <div>
+          {panelItems?.length ? (
+            <ul className="space-y-3 max-w-md">
+              {panelItems.map((item) => (
+                <li key={item} className="flex gap-3 text-sm leading-relaxed">
+                  <span
+                    className="mt-1.5 h-[5px] w-[5px] shrink-0 bg-primary-foreground"
+                    aria-hidden="true"
+                  />
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          <p className="mt-6 text-sm text-primary-foreground/80">{footerNote}</p>
+        </div>
       </aside>
 
       <main
