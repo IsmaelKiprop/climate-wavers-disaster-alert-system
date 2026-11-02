@@ -47,6 +47,6 @@ app.use((err, req, res, next) => {
 app.listen(port, "0.0.0.0", () => {
   console.log(`Server is running on port ${port}`);
   console.log(
-    `mail: render=${Boolean(process.env.RENDER)} resend=${Boolean(process.env.RESEND_API_KEY)}`
+    `mail: smtp host=${process.env.MAIL_HOST || "smtp.gmail.com"} user=${Boolean(process.env.MAIL_USER)}`
   )
 });

@@ -4,8 +4,6 @@ import ejs from "ejs"
 import path from "path"
 
 const __dirname = process.cwd()
-const ON_RENDER = Boolean(process.env.RENDER)
-const FORCE_SMTP = process.env.FORCE_SMTP === "true"
 
 export const mailTypes = {
     custom: "custom",
@@ -20,25 +18,6 @@ const getPath = fileName =>{
     return path.join(__dirname, `/templates/${fileName}.ejs`)
 }
 
-function httpsFromAddress() {
-    const from = process.env.MAIL_FROM || config.mail.auth.user || ""
-    const lowered = from.toLowerCase()
-    if (
-        !from ||
-        lowered.includes("gmail.com") ||
-        lowered.includes("yahoo.") ||
-        lowered.includes("outlook.") ||
-        lowered.includes("hotmail.")
-    ) {
-        return "Climate Wavers <hello@flowops.africa>"
-    }
-    return from
-}
-
-if (ON_RENDER && !process.env.RESEND_API_KEY) {
-    console.log("WARNING: Gmail SMTP is blocked on Render (CONN timeout). Set RESEND_API_KEY or verification mail will fail.")
-}
-
 class Mailer{
     constructor(){
         this.from_address = process.env.MAIL_FROM || config.mail.auth.user
@@ -48,66 +27,31 @@ class Mailer{
         return ejs.renderFile(path, data)
     }
 
-    _transport(port, secure) {
+    _transport(options) {
         return nodemailer.createTransport({
             host: process.env.MAIL_HOST || "smtp.gmail.com",
-            port,
-            secure,
             family: 4,
             auth: {
                 user: process.env.MAIL_USER,
                 pass: process.env.MAIL_PASS,
             },
-            connectionTimeout: 8000,
-            greetingTimeout: 8000,
-            socketTimeout: 12000,
+            connectionTimeout: 12000,
+            greetingTimeout: 12000,
+            socketTimeout: 15000,
             tls: { minVersion: "TLSv1.2" },
+            ...options,
         })
-    }
-
-    async _sendResend(email, html, subject) {
-        const key = process.env.RESEND_API_KEY
-        if (!key) {
-            throw new Error("RESEND_API_KEY is not set")
-        }
-        const response = await fetch("https://api.resend.com/emails", {
-            method: "POST",
-            headers: {
-                Authorization: `Bearer ${key}`,
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-                from: httpsFromAddress(),
-                to: [email],
-                subject,
-                html,
-            }),
-            signal: AbortSignal.timeout(12000),
-        })
-        if (!response.ok) {
-            const detail = await response.text()
-            throw new Error(`resend ${response.status}: ${detail}`)
-        }
     }
 
     async sendMail(email, html, subject="Climate Wavers"){
-        try {
-            await this._sendResend(email, html, subject)
-            return
-        } catch (error) {
-            console.log(`mail resend skipped or failed: ${error}`)
-        }
-        if (ON_RENDER && !FORCE_SMTP) {
-            throw new Error("SMTP is blocked on Render. Set RESEND_API_KEY.")
-        }
         const attempts = [
             { port: 465, secure: true },
-            { port: Number(process.env.MAIL_PORT) || 587, secure: false },
+            { port: Number(process.env.MAIL_PORT) || 587, secure: false, requireTLS: true },
         ]
         let lastError
         for (const attempt of attempts) {
             try {
-                const transporter = this._transport(attempt.port, attempt.secure)
+                const transporter = this._transport(attempt)
                 await transporter.sendMail({
                     to: email,
                     from: this.from_address,
@@ -115,13 +59,11 @@ class Mailer{
                     subject,
                 })
                 transporter.close()
+                console.log(`mail smtp ${attempt.port} sent to ${email}`)
                 return
             } catch (error) {
                 lastError = error
                 console.log(`mail smtp ${attempt.port} failed: ${error}`)
-                if (error?.code === "ETIMEDOUT" || error?.command === "CONN") {
-                    throw new Error("SMTP connection timed out. Set RESEND_API_KEY.")
-                }
             }
         }
         throw lastError || new Error("mail send failed")

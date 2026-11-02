@@ -1,6 +1,5 @@
 import json
 import logging
-import os
 import socket
 import ssl
 import urllib.error
@@ -100,60 +99,12 @@ def _post_notification(payload):
         },
         method="POST",
     )
-    with urllib.request.urlopen(request, timeout=18, context=ctx) as response:
+    with urllib.request.urlopen(request, timeout=28, context=ctx) as response:
         if response.status >= 400:
             raise RuntimeError(f"notification service returned {response.status}")
 
 
-def _on_render():
-    return bool(os.environ.get("RENDER"))
-
-
-def _https_from_address():
-    from_email = settings.DEFAULT_FROM_EMAIL or settings.EMAIL_HOST_USER or ""
-    lowered = from_email.lower()
-    if (
-        not from_email
-        or "gmail.com" in lowered
-        or "yahoo." in lowered
-        or "outlook." in lowered
-        or "hotmail." in lowered
-    ):
-        return "Climate Wavers <hello@flowops.africa>"
-    return from_email
-
-
-def _send_resend(queue_name, payload):
-    key = getattr(settings, "RESEND_API_KEY", "") or ""
-    if not key:
-        raise RuntimeError("RESEND_API_KEY is not set")
-    email = payload.get("email")
-    subject, body = _mail_copy(queue_name, payload)
-    from_email = _https_from_address()
-    request = urllib.request.Request(
-        "https://api.resend.com/emails",
-        data=json.dumps(
-            {
-                "from": from_email,
-                "to": [email],
-                "subject": subject,
-                "text": body,
-            }
-        ).encode("utf-8"),
-        headers={
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {key}",
-        },
-        method="POST",
-    )
-    with urllib.request.urlopen(request, timeout=12, context=_ssl_context()) as response:
-        if response.status >= 400:
-            raise RuntimeError(f"resend returned {response.status}")
-
-
 def _send_smtp(queue_name, payload):
-    if _on_render() and os.environ.get("FORCE_SMTP") != "true":
-        raise RuntimeError("SMTP is blocked on Render. Set RESEND_API_KEY.")
     if not settings.EMAIL_HOST_USER or not settings.EMAIL_HOST_PASSWORD:
         raise RuntimeError("SMTP is not configured")
     email = payload.get("email")
@@ -173,7 +124,7 @@ def _send_smtp(queue_name, payload):
                     password=settings.EMAIL_HOST_PASSWORD,
                     use_tls=attempt["use_tls"],
                     use_ssl=attempt["use_ssl"],
-                    timeout=8,
+                    timeout=12,
                 )
                 EmailMessage(
                     subject=subject,
@@ -191,22 +142,22 @@ def _send_smtp(queue_name, payload):
 
 def send_message(queue_name, message):
     """
-    Deliver an email via the notifications HTTP API, then SMTP.
-    AMQP is last because a queued message is not a sent email.
+    Deliver an email over SMTP. Django sends directly when MAIL_USER is set.
+    Otherwise the notifications service sends with its Gmail SMTP credentials.
     """
     payload = json.loads(message) if isinstance(message, str) else message
     errors = []
 
     try:
-        _send_resend(queue_name, payload)
-        print(f" [x] Sent {queue_name} via Resend")
+        _send_smtp(queue_name, payload)
+        print(f" [x] Sent {queue_name} via SMTP")
         return
     except Exception as exc:
-        errors.append(f"resend: {exc}")
-        if "RESEND_API_KEY is not set" in str(exc):
-            logger.info("Resend skipped: no API key")
+        errors.append(f"smtp: {exc}")
+        if "not configured" in str(exc):
+            logger.info("SMTP skipped: %s", exc)
         else:
-            logger.exception("Resend HTTP failed")
+            logger.exception("SMTP send failed")
 
     try:
         _post_notification({"type": queue_name, **payload})
@@ -215,14 +166,6 @@ def send_message(queue_name, message):
     except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, RuntimeError, Exception) as exc:
         errors.append(f"http: {exc}")
         logger.exception("Notification HTTP failed")
-
-    try:
-        _send_smtp(queue_name, payload)
-        print(f" [x] Sent {queue_name} via SMTP")
-        return
-    except Exception as exc:
-        errors.append(f"smtp: {exc}")
-        logger.exception("SMTP send failed")
 
     if settings.AMQP_URL:
         try:
