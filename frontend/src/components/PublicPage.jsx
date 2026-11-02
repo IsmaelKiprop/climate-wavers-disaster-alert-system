@@ -25,8 +25,8 @@ export default function PublicPage({ title, description, wide = false, children 
           {children}
         </div>
         <footer className="bg-[#2F4F4F] text-white mt-auto">
-          <div className="max-w-6xl mx-auto px-4 sm:px-6 py-12 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
-            <div className="sm:col-span-2">
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 py-12 grid grid-cols-2 lg:grid-cols-4 gap-6 sm:gap-8">
+            <div className="col-span-2">
               <div className="flex items-center gap-3 mb-4">
                 <img alt="" src="/logo.jpg" className="h-8 w-auto" />
                 <p className="font-semibold">{SITE.name}</p>
@@ -35,7 +35,7 @@ export default function PublicPage({ title, description, wide = false, children 
                 Live USGS and NASA monitoring from Nairobi. Verify disaster alerts. Do not amplify them.
               </p>
             </div>
-            <div>
+            <div className="min-w-0">
               <h2 className="font-semibold mb-3">Information</h2>
               <ul className="space-y-2 text-sm">
                 {FOOTER_INFORMATION.map((item) => (
@@ -45,7 +45,7 @@ export default function PublicPage({ title, description, wide = false, children 
                 ))}
               </ul>
             </div>
-            <div>
+            <div className="min-w-0">
               <h2 className="font-semibold mb-3">Services</h2>
               <ul className="space-y-2 text-sm">
                 {FOOTER_SERVICES.map((item) => (

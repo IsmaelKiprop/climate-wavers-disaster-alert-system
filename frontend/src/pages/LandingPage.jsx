@@ -798,9 +798,9 @@ const LandingPage = () => {
             </div>
           </div>
           
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 md:gap-12">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 sm:gap-8 md:gap-12">
             {/* Company Info */}
-            <div className="col-span-1 sm:col-span-2 lg:col-span-2">
+            <div className="col-span-2">
               <div className="flex flex-col sm:flex-row items-start sm:items-center mb-4 md:mb-6">
                 <img alt="logo" src="/logo.jpg" className="h-8 md:h-10 w-auto mr-0 sm:mr-4 mb-2 sm:mb-0" />
                 <h3 className="text-xl md:text-2xl lg:text-3xl font-bold text-[#067d83]">Climate Wavers</h3>
@@ -869,7 +869,7 @@ const LandingPage = () => {
         </div>
 
             {/* Information */}
-            <div>
+            <div className="min-w-0">
               <h4 className="text-base md:text-lg font-semibold mb-3 md:mb-4 text-white">Information</h4>
               <ul className="space-y-2">
                 <li><Link to="/traffic-report" className="text-gray-300 hover:text-[#067d83] transition-colors text-sm md:text-base">Traffic Report</Link></li>
@@ -880,7 +880,7 @@ const LandingPage = () => {
         </div>
 
             {/* Services */}
-            <div>
+            <div className="min-w-0">
               <h4 className="text-base md:text-lg font-semibold mb-3 md:mb-4 text-white">Services</h4>
               <ul className="space-y-2">
                 <li><Link to="/about" className="text-gray-300 hover:text-[#067d83] transition-colors text-sm md:text-base">About Us</Link></li>
