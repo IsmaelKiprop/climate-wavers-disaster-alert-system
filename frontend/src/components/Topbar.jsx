@@ -27,7 +27,7 @@ const Topbar = () => {
     location.pathname.startsWith("/app") ||
     location.pathname.startsWith("/onboarding") ||
     location.pathname.startsWith("/campaigns") ||
-    location.pathname === "/disasters";
+    location.pathname.startsWith("/disasters");
 
   useEffect(() => {
     const handleUserUpdate = () => setUser(getUser());

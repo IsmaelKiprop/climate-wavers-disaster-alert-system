@@ -1,8 +1,13 @@
 import { Link } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
 import { FOOTER_INFORMATION, FOOTER_SERVICES, SITE } from "../config/site";
+import { getAuthToken } from "../utils/factory";
 
 export default function PublicPage({ title, description, wide = false, children }) {
+  const signedIn = Boolean(getAuthToken());
+  const homeTo = signedIn ? "/app" : "/";
+  const homeLabel = signedIn ? "Dashboard" : "Home";
+
   return (
     <>
       <Helmet>
@@ -12,12 +17,12 @@ export default function PublicPage({ title, description, wide = false, children 
       <main className="min-h-[100dvh] bg-background text-foreground flex flex-col overflow-x-hidden">
         <header className="bg-surface border-b border-border">
           <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between gap-3">
-            <Link to="/" className="flex items-center min-w-0">
+            <Link to={homeTo} className="flex items-center min-w-0">
               <img alt="" src="/logo.jpg" className="h-8 w-auto mr-3" />
               <span className="font-semibold text-primary truncate">{SITE.name}</span>
             </Link>
-            <Link to="/" className="h-11 px-4 inline-flex items-center bg-primary text-primary-foreground shrink-0">
-              Home
+            <Link to={homeTo} className="h-11 px-4 inline-flex items-center bg-primary text-primary-foreground shrink-0">
+              {homeLabel}
             </Link>
           </div>
         </header>

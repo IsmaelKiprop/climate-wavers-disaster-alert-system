@@ -1,8 +1,14 @@
 import { Link, useLocation, useParams } from "react-router-dom";
 import { useEffect, useState } from "react";
+import { Helmet } from "react-helmet-async";
 import PublicPage from "../components/PublicPage";
+import Topbar from "../components/Topbar";
+import DashboardSidebar from "../components/DashboardSidebar";
+import Menu from "../components/Menu";
+import Footer from "../components/FooterBar";
 import { disasterTypeFallback, fetchDisaster, getCachedDisaster } from "../utils/apiData";
 import { getAuthToken } from "../utils/factory";
+import { SITE } from "../config/site";
 
 const DisasterPage = () => {
   const { disasterId } = useParams();
@@ -70,13 +76,10 @@ const DisasterPage = () => {
         ? `${Number(disaster.latitude).toFixed(4)}, ${Number(disaster.longitude).toFixed(4)}`
         : "";
 
-  return (
-    <PublicPage
-      title={title}
-      description={disaster?.details || disaster?.description || "Live disaster report from Climate Wavers."}
-    >
+  const report = (
+    <>
       <Link to={signedIn ? "/disasters" : "/"} className="text-sm text-primary">
-        {signedIn ? "Back to disasters" : "Back to home"}
+        {signedIn ? "Back to alerts" : "Back to home"}
       </Link>
       {loading ? (
         <p className="mt-6 text-muted">Loading report...</p>
@@ -127,7 +130,7 @@ const DisasterPage = () => {
               </div>
             ) : null}
           </dl>
-          <h2 className="mt-6 text-primary font-medium">Description</h2>
+          <h2 className="mt-6 font-medium">Description</h2>
           <p className="mt-2 text-sm sm:text-base whitespace-pre-wrap">
             {disaster?.details || disaster?.description || "No description has been published for this report yet."}
           </p>
@@ -143,11 +146,44 @@ const DisasterPage = () => {
           ) : null}
           {!signedIn ? (
             <p className="mt-6 text-sm text-muted">
-              <Link to="/login" className="text-primary">Sign in</Link> to open the full alerts list, comment, and use community tools.
+              <Link to="/login" className="text-primary">Sign in</Link> to open the full alerts list and community tools.
             </p>
           ) : null}
         </>
       )}
+    </>
+  );
+
+  if (signedIn) {
+    return (
+      <div className="min-h-[100dvh] bg-background flex flex-col overflow-x-hidden">
+        <Helmet>
+          <title>{title} | {SITE.name}</title>
+        </Helmet>
+        <header className="sticky top-0 z-50 bg-navbar border-b border-border">
+          <Topbar />
+        </header>
+        <div className="flex flex-1 min-h-0">
+          <DashboardSidebar>
+            <Menu />
+          </DashboardSidebar>
+          <main className="flex-1 min-w-0 px-4 sm:px-6 py-5 pb-24 md:pb-8">
+            <div className="max-w-3xl">{report}</div>
+          </main>
+        </div>
+        <div className="md:hidden">
+          <Footer />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <PublicPage
+      title={title}
+      description={disaster?.details || disaster?.description || "Live disaster report from Climate Wavers."}
+    >
+      {report}
     </PublicPage>
   );
 };
