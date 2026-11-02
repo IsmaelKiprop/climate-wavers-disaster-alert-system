@@ -99,9 +99,16 @@ def _post_notification(payload):
         },
         method="POST",
     )
-    with urllib.request.urlopen(request, timeout=30, context=ctx) as response:
-        if response.status >= 400:
-            raise RuntimeError(f"notification service returned {response.status}")
+    try:
+        with urllib.request.urlopen(request, timeout=30, context=ctx) as response:
+            body = response.read().decode("utf-8", errors="replace")
+            logger.info("Notification SMTP ok status=%s body=%s", response.status, body[:500])
+            if response.status >= 400:
+                raise RuntimeError(f"notification service returned {response.status}: {body[:500]}")
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="replace")
+        logger.error("Notification SMTP HTTP %s: %s", exc.code, body[:1000])
+        raise RuntimeError(f"notification service returned {exc.code}: {body[:500]}") from exc
 
 
 def _send_smtp(queue_name, payload):
@@ -136,7 +143,12 @@ def _send_smtp(queue_name, payload):
             return
         except Exception as exc:
             last_error = exc
-            logger.warning("SMTP %s failed: %s", attempt["port"], exc)
+            logger.warning(
+                "SMTP %s failed type=%s error=%s",
+                attempt["port"],
+                type(exc).__name__,
+                exc,
+            )
     raise last_error or RuntimeError("SMTP send failed")
 
 

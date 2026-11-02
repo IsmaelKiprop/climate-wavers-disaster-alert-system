@@ -18,6 +18,30 @@ const getPath = fileName =>{
     return path.join(__dirname, `/templates/${fileName}.ejs`)
 }
 
+function mailMeta() {
+    return {
+        host: process.env.MAIL_HOST || "smtp.gmail.com",
+        userSet: Boolean(process.env.MAIL_USER),
+        passSet: Boolean(process.env.MAIL_PASS),
+        fromSet: Boolean(process.env.MAIL_FROM || process.env.MAIL_USER),
+    }
+}
+
+function describeError(error) {
+    if (!error) return { message: "unknown error" }
+    return {
+        message: String(error.message || error),
+        code: error.code || null,
+        command: error.command || null,
+        response: error.response || null,
+        responseCode: error.responseCode || null,
+        syscall: error.syscall || null,
+        errno: error.errno || null,
+        address: error.address || null,
+        port: error.port || null,
+    }
+}
+
 class Mailer{
     constructor(){
         this.from_address = process.env.MAIL_FROM || config.mail.auth.user
@@ -43,13 +67,50 @@ class Mailer{
         })
     }
 
+    async _tryPort(attempt) {
+        const started = Date.now()
+        const result = {
+            port: attempt.port,
+            secure: Boolean(attempt.secure),
+            ok: false,
+            ms: 0,
+        }
+        try {
+            const transporter = this._transport(attempt)
+            await transporter.verify()
+            result.ok = true
+            result.ms = Date.now() - started
+            transporter.close()
+            console.log(`mail smtp probe ${JSON.stringify({ ...mailMeta(), ...result })}`)
+            return result
+        } catch (error) {
+            result.ms = Date.now() - started
+            result.error = describeError(error)
+            console.log(`mail smtp probe ${JSON.stringify({ ...mailMeta(), ...result })}`)
+            return result
+        }
+    }
+
+    async diagnose() {
+        const attempts = [
+            { port: 465, secure: true },
+            { port: Number(process.env.MAIL_PORT) || 587, secure: false, requireTLS: true },
+        ]
+        const probes = []
+        for (const attempt of attempts) {
+            probes.push(await this._tryPort(attempt))
+        }
+        return { ...mailMeta(), probes }
+    }
+
     async sendMail(email, html, subject="Climate Wavers"){
         const attempts = [
             { port: 465, secure: true },
             { port: Number(process.env.MAIL_PORT) || 587, secure: false, requireTLS: true },
         ]
-        let lastError
+        const failures = []
         for (const attempt of attempts) {
+            const started = Date.now()
             try {
                 const transporter = this._transport(attempt)
                 await transporter.sendMail({
@@ -59,14 +120,27 @@ class Mailer{
                     subject,
                 })
                 transporter.close()
-                console.log(`mail smtp ${attempt.port} sent to ${email}`)
+                console.log(`mail smtp sent ${JSON.stringify({
+                    ...mailMeta(),
+                    port: attempt.port,
+                    ms: Date.now() - started,
+                    toHost: String(email).split("@")[1] || "",
+                })}`)
                 return
             } catch (error) {
-                lastError = error
-                console.log(`mail smtp ${attempt.port} failed: ${error}`)
+                const failure = {
+                    port: attempt.port,
+                    secure: Boolean(attempt.secure),
+                    ms: Date.now() - started,
+                    error: describeError(error),
+                }
+                failures.push(failure)
+                console.log(`mail smtp failed ${JSON.stringify({ ...mailMeta(), ...failure })}`)
             }
         }
-        throw lastError || new Error("mail send failed")
+        const err = new Error("mail send failed")
+        err.smtp = { ...mailMeta(), failures }
+        throw err
     }
 
     async sendCustom(email, data){
