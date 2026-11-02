@@ -8,6 +8,8 @@ import { useState, useEffect, useMemo, useRef, lazy, Suspense } from "react";
 import { Link } from "react-router-dom";
 import { LandingPageSEO } from "../components/SEOComponents";
 import { SITE } from "../config/site";
+import { client } from "../api";
+import { endpoints } from "../utils/endpoints";
 import { fetchDisasters, fetchTreeStats, mapDisasterForMap, buildLiveCharts, formatTimeAgo } from "../utils/apiData";
 
 const LeafletMap = lazy(() => import("../components/LeafletMap"));
@@ -57,6 +59,9 @@ const LandingPage = () => {
   const [showDonationModal, setShowDonationModal] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [updateEmail, setUpdateEmail] = useState("");
+  const [updateStatus, setUpdateStatus] = useState("");
+  const [updateMessage, setUpdateMessage] = useState("");
+  const [updateBusy, setUpdateBusy] = useState(false);
   const firstHeroRef = useRef(null);
 
   useEffect(() => {
@@ -193,15 +198,40 @@ const LandingPage = () => {
     setHeroReady(true);
   };
 
-  const onSubscribe = (event) => {
+  const onSubscribe = async (event) => {
     event.preventDefault();
     const email = updateEmail.trim();
     if (!email) return;
-    const subject = encodeURIComponent("Subscribe me to Climate Wavers updates");
-    const body = encodeURIComponent(
-      `Please add ${email} to Climate Wavers updates.\n\nSent from the site footer.`
-    );
-    window.location.href = `mailto:${SITE.emails.hello}?subject=${subject}&body=${body}`;
+    setUpdateBusy(true);
+    setUpdateStatus("");
+    setUpdateMessage("");
+    try {
+      const result = await client.run(
+        "post",
+        endpoints.newsletter,
+        { email, source: "footer" },
+        false,
+        false,
+        false,
+        false
+      );
+      setUpdateStatus("success");
+      setUpdateMessage(result?.message || "You're on the Climate Wavers update list.");
+      setUpdateEmail("");
+    } catch (error) {
+      const apiMessage =
+        error?.response?.data?.email?.[0] ||
+        error?.response?.data?.detail ||
+        error?.response?.data?.message;
+      setUpdateStatus("error");
+      setUpdateMessage(
+        typeof apiMessage === "string"
+          ? apiMessage
+          : "Could not subscribe. Try again in a moment."
+      );
+    } finally {
+      setUpdateBusy(false);
+    }
   };
 
   return (
@@ -873,7 +903,7 @@ const LandingPage = () => {
               <form onSubmit={onSubscribe} className="mb-6 md:mb-8">
                 <h4 className="text-base md:text-lg font-semibold mb-2 text-white">Stay Updated</h4>
                 <p className="text-sm text-white/75 mb-3">
-                  There is no mailing list product yet. Subscribe opens an email to {SITE.emails.hello}.
+                  We email live USGS and NASA notes and campaign news. This is not a government siren.
                 </p>
                 <div className="flex flex-col sm:flex-row gap-2 md:gap-3">
                   <label htmlFor="footer-update-email" className="sr-only">
@@ -887,12 +917,25 @@ const LandingPage = () => {
                     value={updateEmail}
                     onChange={(event) => setUpdateEmail(event.target.value)}
                     placeholder="Enter your email address"
-                    className="min-h-11 flex-1 px-3 md:px-4 py-2 md:py-3 bg-secondary border border-white/20 text-white placeholder:text-white/50 text-sm md:text-base"
+                    disabled={updateBusy}
+                    className="min-h-11 flex-1 px-3 md:px-4 py-2 md:py-3 bg-secondary border border-white/20 text-white placeholder:text-white/50 text-sm md:text-base disabled:opacity-60"
                   />
-                  <button type="submit" className="bg-primary hover:bg-primary-dark text-primary-foreground px-4 md:px-6 py-2 md:py-3 text-sm md:text-base min-h-11">
-                    Subscribe
+                  <button
+                    type="submit"
+                    disabled={updateBusy}
+                    className="bg-primary hover:bg-primary-dark text-primary-foreground px-4 md:px-6 py-2 md:py-3 text-sm md:text-base min-h-11 disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    {updateBusy ? "Subscribing..." : "Subscribe"}
                   </button>
                 </div>
+                {updateMessage ? (
+                  <p
+                    role="status"
+                    className="mt-2 text-sm text-white"
+                  >
+                    {updateMessage}
+                  </p>
+                ) : null}
               </form>
 
               {/* Social Links */}

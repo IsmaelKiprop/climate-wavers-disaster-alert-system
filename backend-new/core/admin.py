@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Post, Poll, PollVote, Comment, Reaction, Repost, View, Follow, Bookmark, Notification
+from .models import Post, Poll, PollVote, Comment, Reaction, Repost, View, Follow, Bookmark, Notification, NewsletterSubscriber
 from unfold.admin import ModelAdmin
 
 class PostAdmin(ModelAdmin):
@@ -40,4 +40,12 @@ admin.site.register(View)
 admin.site.register(Follow)
 admin.site.register(Bookmark)
 admin.site.register(Notification)
+
+class NewsletterSubscriberAdmin(ModelAdmin):
+    list_display = ("email", "source", "is_active", "created_at")
+    list_filter = ("is_active", "source")
+    search_fields = ("email",)
+    ordering = ("-created_at",)
+
+admin.site.register(NewsletterSubscriber, NewsletterSubscriberAdmin)
 

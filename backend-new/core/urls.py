@@ -12,6 +12,7 @@ from .views import (
     verify_payment
 )
 from .ai_views import generate_content, analyze_content, generate_hashtags
+from .newsletter import NewsletterSubscribeView
 
 
 # Initialize the default router
@@ -39,6 +40,7 @@ urlpatterns = [
     # Include all the router URLs
     path('', include(router.urls)),
     path("status/", status_view, name='status'),
+    path("newsletter/", NewsletterSubscribeView.as_view(), name="newsletter-subscribe"),
     path('notifications/', NotificationListView.as_view(),
          name='notification_list'),
     path('notifications/mark-read/', MarkNotificationsAsReadView.as_view(),
