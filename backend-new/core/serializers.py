@@ -83,15 +83,34 @@ class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = "__all__"
+        extra_kwargs = {
+            "password": {"write_only": True},
+        }
+
+
+class PostAuthorSerializer(serializers.ModelSerializer):
+    profile_picture = serializers.ReadOnlyField()
+
+    class Meta:
+        model = User
+        fields = (
+            "id",
+            "username",
+            "first_name",
+            "last_name",
+            "email",
+            "profile_picture",
+            "profile_pic",
+        )
 
 
 class PostSerializer(serializers.ModelSerializer):
-    total_comments = serializers.IntegerField(read_only=True)
-    total_reactions = serializers.IntegerField(read_only=True)
-    total_views = serializers.IntegerField(read_only=True)
-    total_reposts = serializers.IntegerField(read_only=True)
-    total_bookmarks = serializers.IntegerField(read_only=True)
-    user = UserSerializer(read_only=True)
+    total_comments = serializers.IntegerField(read_only=True, default=0)
+    total_reactions = serializers.IntegerField(read_only=True, default=0)
+    total_views = serializers.IntegerField(read_only=True, default=0)
+    total_reposts = serializers.IntegerField(read_only=True, default=0)
+    total_bookmarks = serializers.IntegerField(read_only=True, default=0)
+    user = PostAuthorSerializer(read_only=True)
     is_reacted = serializers.SerializerMethodField()
     is_bookmarked = serializers.SerializerMethodField()
     is_reposted = serializers.SerializerMethodField()
@@ -102,19 +121,33 @@ class PostSerializer(serializers.ModelSerializer):
     audio = serializers.FileField(required=False, allow_null=True)
     location = serializers.CharField(required=False, allow_blank=True, allow_null=True)
 
+    def _annotated_flag(self, obj, field_name):
+        if field_name not in obj.__dict__:
+            return None
+        return bool(obj.__dict__.get(field_name))
+
     def get_is_reacted(self, obj):
+        annotated = self._annotated_flag(obj, "is_reacted")
+        if annotated is not None:
+            return annotated
         user = self.get_user_from_context()
         if user and user.is_authenticated:
             return obj.reactions.filter(user=user).exists()
         return False
 
     def get_is_bookmarked(self, obj):
+        annotated = self._annotated_flag(obj, "is_bookmarked")
+        if annotated is not None:
+            return annotated
         user = self.get_user_from_context()
         if user and user.is_authenticated:
             return obj.bookmarks.filter(user=user).exists()
         return False
 
     def get_is_reposted(self, obj):
+        annotated = self._annotated_flag(obj, "is_reposted")
+        if annotated is not None:
+            return annotated
         user = self.get_user_from_context()
         if user and user.is_authenticated:
             return obj.reposts.filter(user=user).exists()

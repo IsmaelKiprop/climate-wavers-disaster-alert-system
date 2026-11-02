@@ -107,10 +107,14 @@ class Client {
 
     const token = getAuthToken();
 
+    const methodName = String(method || "get").toLowerCase();
     const config = {
       withCredentials: authheaders,
-      data: data,
     };
+
+    if (data != null && methodName !== "get" && methodName !== "head") {
+      config.data = data;
+    }
 
     if (authheaders) {
       config.headers = {

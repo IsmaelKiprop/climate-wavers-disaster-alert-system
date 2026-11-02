@@ -1,18 +1,24 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import PropTypes from "prop-types";
 import Posts from "./Posts";
 import Pagination from "./Pagination";
 import { toast } from "react-toastify";
 import { useFetchPosts } from "../hooks/useFetchPosts";
 import { usePostMutations } from "../hooks/usePostMutations";
-import { usePagination } from "../hooks/usePagination";
 
 const Postcomponent = ({ type, postId, comment, itemsPerPage = 10 }) => {
-  const { data: posts, error } = useFetchPosts({
+  const [currentPage, setCurrentPage] = useState(1);
+  const { data, error, isLoading, isFetching, refetch } = useFetchPosts({
     type,
     postId,
     comment,
+    page: currentPage,
+    pageSize: itemsPerPage,
   });
+
+  const posts = data?.results || [];
+  const totalItems = data?.count || 0;
+  const totalPages = Math.max(1, Math.ceil(totalItems / itemsPerPage));
 
   const {
     likeMutation,
@@ -23,26 +29,23 @@ const Postcomponent = ({ type, postId, comment, itemsPerPage = 10 }) => {
     unsaveMutation,
   } = usePostMutations();
 
-  // Use pagination hook
-  const {
-    currentPage,
-    totalPages,
-    totalItems,
-    paginatedData,
-    goToPage,
-  } = usePagination(posts || [], itemsPerPage);
-
   useEffect(() => {
     if (error) {
       toast.dismiss();
-      toast.error("An error occurred while fetching posts");
+      toast.error("We could not load posts. Please try again.");
     }
   }, [error]);
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(1);
+    }
+  }, [currentPage, totalPages]);
 
   return (
     <div className="space-y-6">
       <Posts
-        posts={paginatedData}
+        posts={posts}
         type={type}
         postId={postId}
         unlike={unlikeMutation}
@@ -51,15 +54,17 @@ const Postcomponent = ({ type, postId, comment, itemsPerPage = 10 }) => {
         unrepost={unrepostMutation}
         save={saveMutation}
         unsave={unsaveMutation}
+        isLoading={isLoading || (isFetching && posts.length === 0)}
+        isError={Boolean(error)}
+        onRetry={() => refetch()}
       />
-      
-      {/* Pagination */}
+
       {totalPages > 1 && (
         <div className="mt-8">
           <Pagination
             currentPage={currentPage}
             totalPages={totalPages}
-            onPageChange={goToPage}
+            onPageChange={setCurrentPage}
             totalItems={totalItems}
             itemsPerPage={itemsPerPage}
             className="justify-center"
@@ -74,6 +79,7 @@ Postcomponent.propTypes = {
   type: PropTypes.string,
   comment: PropTypes.string,
   postId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+  itemsPerPage: PropTypes.number,
 };
 
 export default Postcomponent;

@@ -1,5 +1,5 @@
 from rest_framework import viewsets
-from django.db.models import Count, Q
+from django.db.models import Count, Q, Exists, OuterRef, Value, BooleanField
 from django.contrib.contenttypes.models import ContentType
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -102,8 +102,9 @@ class MarkNotificationsAsReadView(generics.UpdateAPIView):
 
 # ViewSet for Post model
 class PostViewSet(viewsets.ModelViewSet):
-    queryset = Post.objects.all().order_by("-created_at")
+    queryset = Post.objects.select_related("user").order_by("-created_at")
     serializer_class = PostSerializer
+    pagination_class = PostPagination
     permission_classes = []  # Allow public access for trending and posts
 
     def perform_create(self, serializer):
@@ -153,19 +154,35 @@ class PostViewSet(viewsets.ModelViewSet):
         """
         Override get_queryset to add annotations for comment, reaction, view, and repost counts.
         """
-        # Get the ContentType for Post
-        # post_content_type = ContentType.objects.get_for_model(Post)
+        queryset = super().get_queryset().select_related("user")
 
-        queryset = super().get_queryset()
-
-        # Annotate the queryset with counts
         queryset = queryset.annotate(
             total_comments=Count("comments", distinct=True),
             total_reactions=Count("reactions", distinct=True),
-            total_views=Count("views",  distinct=True),
-            total_reposts=Count("reposts",  distinct=True),
-            total_bookmarks=Count("bookmarks",  distinct=True),
+            total_views=Count("views", distinct=True),
+            total_reposts=Count("reposts", distinct=True),
+            total_bookmarks=Count("bookmarks", distinct=True),
         )
+
+        user = getattr(self.request, "user", None)
+        if user is not None and user.is_authenticated:
+            queryset = queryset.annotate(
+                is_reacted=Exists(
+                    Reaction.objects.filter(post_id=OuterRef("pk"), user=user)
+                ),
+                is_bookmarked=Exists(
+                    Bookmark.objects.filter(post_id=OuterRef("pk"), user=user)
+                ),
+                is_reposted=Exists(
+                    Repost.objects.filter(post_id=OuterRef("pk"), user=user)
+                ),
+            )
+        else:
+            queryset = queryset.annotate(
+                is_reacted=Value(False, output_field=BooleanField()),
+                is_bookmarked=Value(False, output_field=BooleanField()),
+                is_reposted=Value(False, output_field=BooleanField()),
+            )
         return queryset
 
     @action(detail=False, methods=["get"])

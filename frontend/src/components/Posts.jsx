@@ -23,40 +23,23 @@ const Posts = ({
   unrepost,
   save,
   unsave,
+  isLoading = false,
+  isError = false,
+  onRetry,
 }) => {
   const navigate = useNavigate();
   const [isCommentModalOpen, setIsCommentModalOpen] = useState(false);
   const [commentId, setCommentId] = useState("");
   const [openMenuId, setOpenMenuId] = useState(null);
   const menuRef = useRef(null);
-  const [localPosts, setLocalPosts] = useState(() => {
-    // Get posts from localStorage if available
-    try {
-    const storedPosts = localStorage.getItem("posts");
-      if (storedPosts) {
-        const parsed = JSON.parse(storedPosts);
-        return Array.isArray(parsed) ? parsed.filter(post => post && post.id) : [];
-      }
-      return [];
-    } catch (error) {
-      console.error('Error parsing stored posts:', error);
-      return [];
-    }
-  });
+  const [localPosts, setLocalPosts] = useState([]);
 
-  // Update localPosts whenever posts prop changes
   useEffect(() => {
-    if (posts && Array.isArray(posts) && posts.length > 0) {
-      // Filter out any invalid posts
-      const validPosts = posts.filter(post => post && post.id);
-      setLocalPosts(validPosts);
-    } else if (posts && typeof posts === 'string') {
-      // Handle case where posts is a string (error message)
-      console.warn('Posts prop is a string:', posts);
+    if (!Array.isArray(posts)) {
       setLocalPosts([]);
-    } else if (!posts) {
-      setLocalPosts([]);
+      return;
     }
+    setLocalPosts(posts.filter((post) => post && post.id));
   }, [posts]);
 
   // Posts data is managed by the database, no localStorage needed
@@ -241,6 +224,62 @@ const Posts = ({
   const toggleMenu = (postId) => {
     setOpenMenuId(openMenuId === postId ? null : postId);
   };
+
+  if (isLoading && localPosts.length === 0) {
+    return (
+      <div className="space-y-4 max-w-4xl mx-auto" aria-busy="true" aria-live="polite">
+        <p className="sr-only">Loading posts</p>
+        {[0, 1, 2].map((item) => (
+          <div key={item} className="border border-border bg-surface p-4">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="h-10 w-10 shrink-0 bg-background" />
+              <div className="flex-1 space-y-2">
+                <div className="h-3 w-36 bg-background" />
+                <div className="h-3 w-24 bg-background" />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <div className="h-3 w-full bg-background" />
+              <div className="h-3 w-4/5 bg-background" />
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  if (isError && localPosts.length === 0) {
+    return (
+      <div className="max-w-4xl mx-auto border border-border bg-surface p-8 text-center">
+        <p className="text-foreground font-medium">We could not load posts</p>
+        <p className="mt-2 text-sm text-muted">Check your connection and try again.</p>
+        {onRetry ? (
+          <button
+            type="button"
+            onClick={onRetry}
+            className="mt-4 inline-flex min-h-11 items-center justify-center px-4 bg-primary text-primary-foreground text-sm font-medium hover:bg-primary-dark"
+          >
+            Try again
+          </button>
+        ) : null}
+      </div>
+    );
+  }
+
+  if (!isLoading && localPosts.length === 0) {
+    return (
+      <div className="max-w-4xl mx-auto border border-border bg-surface p-8 text-center">
+        <p className="text-foreground font-medium">
+          {type === "comments" ? "No comments yet" : "No posts yet"}
+        </p>
+        <p className="mt-2 text-sm text-muted">
+          {type === "comments"
+            ? "Be the first to share a comment on this post."
+            : "Share a climate action update to start the feed."}
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
@@ -563,19 +602,7 @@ const Posts = ({
             </div>
           </div>
         ))
-      ) : (
-        <div className="flex items-center justify-center py-16">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#067d83] mx-auto mb-6"></div>
-            <p className="text-gray-600 text-base font-medium">
-              {type === "post" ? "Loading posts..." : "Loading..."}
-            </p>
-            <p className="text-gray-400 text-sm mt-2">
-              Please wait while we fetch the latest content
-            </p>
-          </div>
-        </div>
-      )}
+      ) : null}
     </div>
   );
 };
@@ -590,6 +617,9 @@ Posts.propTypes = {
   unrepost: PropTypes.object.isRequired,
   save: PropTypes.object.isRequired,
   unsave: PropTypes.object.isRequired,
+  isLoading: PropTypes.bool,
+  isError: PropTypes.bool,
+  onRetry: PropTypes.func,
 };
 
 export default Posts;

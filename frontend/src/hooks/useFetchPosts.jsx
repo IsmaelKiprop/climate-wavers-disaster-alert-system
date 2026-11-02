@@ -1,44 +1,56 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { client } from "../api";
 import { endpoints } from "../utils/endpoints";
 
-export const useFetchPosts = ({ type, postId, comment }) => {
+const emptyPage = { results: [], count: 0, next: null, previous: null };
+
+const normalizePostsResponse = (res) => {
+  if (Array.isArray(res)) {
+    return {
+      results: res.filter((item) => item && item.id),
+      count: res.length,
+      next: null,
+      previous: null,
+    };
+  }
+
+  if (res && Array.isArray(res.results)) {
+    return {
+      results: res.results.filter((item) => item && item.id),
+      count: typeof res.count === "number" ? res.count : res.results.length,
+      next: res.next ?? null,
+      previous: res.previous ?? null,
+    };
+  }
+
+  return emptyPage;
+};
+
+export const useFetchPosts = ({ type, postId, comment, page = 1, pageSize = 10 }) => {
   let url;
   if (postId && type === "comments" && !comment) {
     url = `${endpoints.comments}?post=${postId}`;
   } else if (comment && type === "comments") {
     url = `${endpoints.comments}?parent=${comment}`;
   } else if (type === "post") {
-    url = `${endpoints.post}`;
+    url = `${endpoints.post}?page=${page}&page_size=${pageSize}`;
   }
 
   const fetchPosts = async () => {
-    try {
-      const res = await client.run("get", url, {}, true);
-      // Ensure we return an array
-      if (Array.isArray(res)) {
-        return res;
-      } else if (typeof res === 'string') {
-        console.warn('API returned string instead of array:', res);
-        return [];
-      } else {
-        console.warn('API returned unexpected data type:', typeof res, res);
-        return [];
-      }
-    } catch (error) {
-      console.error('Error fetching posts:', error);
-      return [];
-    }
+    const res = await client.run("get", url, null, true);
+    return normalizePostsResponse(res);
   };
 
   return useQuery({
-    queryKey: ["post", postId, comment],
+    queryKey: ["post", type, postId, comment, page, pageSize],
     queryFn: fetchPosts,
-    refetchInterval: 300000, // Refetch every 5 minutes to reduce API load
-    refetchIntervalInBackground: false, // Don't refetch when tab is not active
-    staleTime: 120000, // Consider data stale after 2 minutes
-    cacheTime: 600000, // Keep in cache for 10 minutes
-    retry: 2, // Retry twice on failure
-    retryDelay: 3000, // Wait 3 seconds before retry
+    enabled: Boolean(url),
+    placeholderData: keepPreviousData,
+    refetchInterval: 300000,
+    refetchIntervalInBackground: false,
+    staleTime: 60000,
+    gcTime: 600000,
+    retry: 1,
+    retryDelay: 1500,
   });
 };
