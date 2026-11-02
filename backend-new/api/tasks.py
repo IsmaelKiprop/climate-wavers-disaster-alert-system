@@ -64,8 +64,11 @@ def _send_smtp(queue_name, payload):
     email = payload.get("email")
     data = payload.get("data") or {}
     if queue_name == "verification":
-        subject = "Email Verification"
-        body = f"Your Climate Wavers verification code is {data.get('code')}."
+        subject = "Your Climate Wavers verification code"
+        body = (
+            f"Your Climate Wavers verification code is {data.get('code')}.\n\n"
+            "Enter this code on the verify email page. It replaces any earlier code."
+        )
     elif queue_name == "forget_password":
         subject = "Forget Password"
         body = f"Reset your Climate Wavers password: {data.get('url')}"
@@ -86,20 +89,11 @@ def _send_smtp(queue_name, payload):
 
 def send_message(queue_name, message):
     """
-    Deliver an email via AMQP, the notifications HTTP API, or SMTP.
+    Deliver an email via the notifications HTTP API, then SMTP.
+    AMQP is last because a queued message is not a sent email.
     """
     payload = json.loads(message) if isinstance(message, str) else message
     errors = []
-
-    if settings.AMQP_URL:
-        try:
-            body = message if isinstance(message, str) else json.dumps(payload)
-            _publish_amqp(queue_name, body)
-            print(f" [x] Sending data to {queue_name} queue")
-            return
-        except Exception as exc:
-            errors.append(f"amqp: {exc}")
-            logger.exception("AMQP publish failed")
 
     try:
         _post_notification({"type": queue_name, **payload})
@@ -117,6 +111,16 @@ def send_message(queue_name, message):
         errors.append(f"smtp: {exc}")
         logger.exception("SMTP send failed")
 
+    if settings.AMQP_URL:
+        try:
+            body = message if isinstance(message, str) else json.dumps(payload)
+            _publish_amqp(queue_name, body)
+            print(f" [x] Queued {queue_name} on AMQP after direct send failed")
+            return
+        except Exception as exc:
+            errors.append(f"amqp: {exc}")
+            logger.exception("AMQP publish failed")
+
     raise RuntimeError("Email delivery failed: " + "; ".join(errors))
 
 
@@ -128,6 +132,7 @@ def send_activation_email(email):
     """
     otp_code = generate_otp()
     user = User.objects.get(email=email)
+    OneTimePassword.objects.filter(user=user).delete()
     otp_instance = OneTimePassword(user=user, code=otp_code)
     otp_instance.code = otp_instance.encrypt_code(otp_code)
     otp_instance.save()

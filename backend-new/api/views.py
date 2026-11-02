@@ -62,7 +62,11 @@ class VerifyUserEmail(GenericAPIView):
         email = request.data.get("email")
 
         try:
-            user_code_obj = OneTimePassword.objects.get(user__email=email)
+            user_code_obj = (
+                OneTimePassword.objects.filter(user__email=email).order_by("-id").first()
+            )
+            if not user_code_obj:
+                raise OneTimePassword.DoesNotExist
             decrypted_code = user_code_obj.decrypt_code(user_code_obj.code)
 
             if decrypted_code == otp_code:
@@ -86,6 +90,40 @@ class VerifyUserEmail(GenericAPIView):
                 {"message": "No OTP found for this user."},
                 status=status.HTTP_404_NOT_FOUND,
             )
+
+
+class ResendVerificationView(GenericAPIView):
+    def post(self, request):
+        email = (request.data.get("email") or "").strip().lower()
+        if not email:
+            return Response(
+                {"email": ["Enter your email."]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            return Response(
+                {"message": "If that email has an account, we sent a new code."},
+                status=status.HTTP_200_OK,
+            )
+        if user.is_verified:
+            return Response(
+                {"message": "This email is already verified. Sign in."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            send_activation_email(user.email)
+        except Exception as exc:
+            print(f"Resend verification failed: {exc}")
+            return Response(
+                {"message": "Could not send the code. Try again in a moment."},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+        return Response(
+            {"message": "A new 6-digit code was sent to your email."},
+            status=status.HTTP_200_OK,
+        )
 
 
 class LoginUserView(GenericAPIView):

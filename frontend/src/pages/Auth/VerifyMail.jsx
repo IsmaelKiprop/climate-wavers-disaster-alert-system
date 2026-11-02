@@ -1,77 +1,96 @@
 import { useState } from "react";
-import IconButton from "@mui/material/IconButton";
-import TextField from "@mui/material/TextField";
-import OutlinedInput from "@mui/material/OutlinedInput";
-import InputLabel from "@mui/material/InputLabel";
-import InputAdornment from "@mui/material/InputAdornment";
-import FormControl from "@mui/material/FormControl";
-import Visibility from "@mui/icons-material/Visibility";
-import VisibilityOff from "@mui/icons-material/VisibilityOff";
+import { Link, useNavigate } from "react-router-dom";
+import Cookies from "js-cookie";
+import { client } from "../../api";
+import { endpoints } from "../../utils/endpoints";
+import AuthLayout, { AuthField, authButtonClass, fieldInputClass } from "../../components/AuthLayout";
 
 const VerifyMail = () => {
-  const [showPassword, setShowPassword] = useState(false);
+  const navigate = useNavigate();
+  const [email, setEmail] = useState(Cookies.get("email") || "");
+  const [isDisabled, setIsDisabled] = useState(false);
+  const [statusMessage, setStatusMessage] = useState("");
+  const [statusKind, setStatusKind] = useState("");
 
-  const handleClickShowPassword = () => setShowPassword((show) => !show);
-
-  const handleMouseDownPassword = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault();
+    const value = email.trim().toLowerCase();
+    if (!value) return;
+    try {
+      setIsDisabled(true);
+      setStatusMessage("");
+      const result = await client.run(
+        "post",
+        endpoints.resendVerification,
+        { email: value },
+        false,
+        {
+          info: "Sending a new code",
+          success: "If that email has an account, we sent a new code.",
+          error: "Could not send the code. Try again later.",
+        },
+        false,
+        true
+      );
+      Cookies.set("email", value);
+      setStatusKind("success");
+      setStatusMessage(result?.message || "Check your inbox and spam folder for a 6-digit code.");
+      navigate("/emailcode");
+    } catch (error) {
+      const apiMessage = error?.response?.data?.message;
+      setStatusKind("error");
+      setStatusMessage(
+        typeof apiMessage === "string"
+          ? apiMessage
+          : "Could not send the code. Try again in a moment."
+      );
+    } finally {
+      setIsDisabled(false);
+    }
   };
 
   return (
-    <div className="lg:h-[100vh] md:h-[100vh] flex justify-between">
-      <div className="bg-[#2F4F4F] h-[100vh] lg:w-[50%] md:w-[50%] hidden md:flex justify-center ">
-        <div className="self-end">
-          <img src="../../../HandsShow1.png" alt="" />
-        </div>
-      </div>
-      <div className="w-[100%] lg:w-[30%] md:w-[40%] py-8 lg:px-16 md:px-16 px-6 mx-auto mt-16 text-center">
-        <h1 className="lg:text-[40px] md:text-[40px] text-[24px] text-[#2F4F4F] font-serif font-bold  mb-4">
-          Verify Your Account
-        </h1>
-        <p className="lg:text-[24px] md:text-[24px] text-[18px] mb-10 font-serif">
-          Input Email to verify your account
-        </p>
-        <TextField
-          id="outlined-basic"
-          label="Email"
-          sx={{ m: 1, width: "100%" }}
-          variant="outlined"
-          color="success"
-        />
-        <FormControl
-          sx={{ m: 1, width: "100%" }}
-          variant="outlined"
-          color="success"
-        >
-          <InputLabel htmlFor="outlined-adornment-password">
-            Password
-          </InputLabel>
-          <OutlinedInput
-            id="outlined-adornment-password"
-            type={showPassword ? "text" : "password"}
-            endAdornment={
-              <InputAdornment position="end">
-                <IconButton
-                  aria-label="toggle password visibility"
-                  onClick={handleClickShowPassword}
-                  onMouseDown={handleMouseDownPassword}
-                  edge="end"
-                >
-                  {showPassword ? <VisibilityOff /> : <Visibility />}
-                </IconButton>
-              </InputAdornment>
-            }
-            label="Password"
+    <AuthLayout
+      title="Resend verification code"
+      subtitle="We'll email a new 6-digit code. Check spam if the first message did not arrive."
+      panelTitle="Confirm it is you"
+      panelBody="Verification keeps fake accounts out of community alerts."
+      panelImage="/environment-sm.jpg"
+      panelImageAlt="Waste and pollution the tree campaigns work against"
+      panelItems={[
+        "Use the same email you signed up with",
+        "A new code replaces any earlier code",
+        "Then enter it on the verify page",
+      ]}
+    >
+      <form onSubmit={handleSubmit} noValidate>
+        <AuthField id="email" label="Email">
+          <input
+            id="email"
+            type="email"
+            autoComplete="email"
+            required
+            className={fieldInputClass(false)}
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
           />
-        </FormControl>
-        <a href="#" className="underline text-[#001F3F]">
-          Resend in 60, sec
-        </a>
-        <button className="bg-[#2F4F4F] rounded-md text-white py-4 w-[100%] m-2 mt-24">
-          Confirm
+        </AuthField>
+        {statusMessage ? (
+          <p role="status" className="mb-4 text-sm text-muted">
+            {statusMessage}
+          </p>
+        ) : null}
+        <button type="submit" className={authButtonClass} disabled={isDisabled}>
+          {isDisabled ? "Sending..." : "Send a new code"}
         </button>
-      </div>
-    </div>
+      </form>
+      <p className="mt-6 text-sm text-center text-muted">
+        Already have a code?{" "}
+        <Link to="/emailcode" className="text-primary font-medium hover:text-primary-dark">
+          Enter it here
+        </Link>
+      </p>
+    </AuthLayout>
   );
 };
 

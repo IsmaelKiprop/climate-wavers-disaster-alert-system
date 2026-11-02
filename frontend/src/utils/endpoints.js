@@ -6,6 +6,7 @@ export const endpoints = {
     "passwordreset": "/api/v1/auth/set-new-password/",
     "verifyresetrequest": "/api/v1/auth/password-reset-confirm/",
     "emailcode": "/api/v1/auth/verify-email/",
+    "resendVerification": "/api/v1/auth/resend-verification/",
     "post": "/api/v1/post/",
     "comments": "/api/v1/comments/",
     "follow": "/api/v1/follows/",
