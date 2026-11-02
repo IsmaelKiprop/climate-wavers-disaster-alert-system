@@ -31,6 +31,9 @@ const DISASTER_COVERS = {
   earthquake: "/ai-disaster.jpg",
   wildfire: "/community-respond.jpg",
   flood: "/emergency-response.jpg",
+  floods: "/emergency-response.jpg",
+  flooding: "/emergency-response.jpg",
+  flash_flood: "/emergency-response.jpg",
   storm: "/ai-disaster.jpg",
   hurricane: "/ai-disaster.jpg",
   typhoon: "/ai-disaster.jpg",
@@ -43,8 +46,14 @@ const DISASTER_COVERS = {
   other: "/disaster.png",
 };
 
+export function toHttpsUrl(url) {
+  if (!url || typeof url !== "string") return url;
+  return url.replace(/^http:\/\//i, "https://");
+}
+
 export function disasterCoverImage(type) {
   const key = String(type || "other").toLowerCase().replace(/\s+/g, "_");
+  if (key.includes("flood")) return DISASTER_COVERS.flood;
   return DISASTER_COVERS[key] || DISASTER_COVERS.other;
 }
 
@@ -66,8 +75,12 @@ export function mapDisaster(disaster) {
   const suppliedImages = []
     .concat(disaster.images || disaster.gallery || [])
     .concat(disaster.cover_image ? [disaster.cover_image] : [])
-    .filter(Boolean);
+    .filter(Boolean)
+    .map(toHttpsUrl);
   const cover = suppliedImages[0] || disasterCoverImage(disasterType);
+  const startRaw = disaster.startDate || disaster.start_date;
+  const startDate =
+    typeof startRaw === "number" ? new Date(startRaw).toISOString() : startRaw;
 
   return {
     id: disaster.id,
@@ -76,7 +89,7 @@ export function mapDisaster(disaster) {
     country: disaster.country || "",
     disasterType,
     status: disaster.status || "monitoring",
-    startDate: disaster.startDate || disaster.start_date,
+    startDate,
     details: disaster.details || disaster.description || "",
     images: suppliedImages.length ? suppliedImages : [cover],
     image: cover,
@@ -88,7 +101,7 @@ export function mapDisaster(disaster) {
     description: disaster.description || disaster.details || "",
     location: [disaster.city, disaster.region, disaster.country].filter(Boolean).join(", "),
     lastUpdated: disaster.updated_at || disaster.last_updated || disaster.start_date || disaster.startDate,
-    source: disaster.source || disaster.official_source || "",
+    source: disaster.source || disaster.official_source || (String(disaster.status).toLowerCase() === "unconfirmed" ? "Community report" : ""),
     sourceUrl: disaster.sourceUrl || disaster.source_url || disaster.url || disaster.link || "",
     coordinates:
       Number.isFinite(lat) && Number.isFinite(lng)
@@ -247,34 +260,63 @@ async function fetchPublicLiveDisasters() {
   return [...usgs, ...eonet].filter((item) => item.id);
 }
 
-export async function fetchDisasters() {
+async function fetchOfficialDisasters() {
   const urls = [];
   if (env.backendUrl) {
     urls.push(apiUrl("/api/v1/disasters/live/"));
     urls.push(apiUrl("/api/v1/disasters/"));
   }
-  if (env.chatbotUrl) {
-    urls.push(chatbotApiUrl("/api/v1/disasters"));
-  }
-
-  const publicPromise = fetchPublicLiveDisasters();
-  const apiPromise = (async () => {
-    for (const url of urls) {
-      try {
-        const response = await axios.get(url, { timeout: 4000 });
-        const list = unwrapList(response.data).map(mapDisaster);
-        if (list.length) return list;
-      } catch {
-        // Try the next source, then fall back to public feeds.
-      }
+  for (const url of urls) {
+    try {
+      const response = await axios.get(url, { timeout: 4000 });
+      const list = unwrapList(response.data).map(mapDisaster);
+      if (list.length) return list;
+    } catch {
+      // Try the next official source.
     }
-    return [];
-  })();
+  }
+  return [];
+}
 
-  const [fromApi, fromPublic] = await Promise.all([apiPromise, publicPromise]);
-  const list = fromApi.length ? fromApi : fromPublic;
+async function fetchCommunityReports() {
+  if (!env.chatbotUrl) return [];
+  try {
+    const response = await axios.get(chatbotApiUrl("/api/v1/disasters"), { timeout: 8000 });
+    return unwrapList(response.data).map(mapDisaster);
+  } catch {
+    return [];
+  }
+}
+
+function mergeDisasters(...lists) {
+  const byId = new Map();
+  lists.flat().forEach((item) => {
+    if (!item?.id || byId.has(String(item.id))) return;
+    byId.set(String(item.id), item);
+  });
+  return [...byId.values()];
+}
+
+export async function fetchDisasters() {
+  const [fromOfficial, fromCommunity, fromPublic] = await Promise.all([
+    fetchOfficialDisasters(),
+    fetchCommunityReports(),
+    fetchPublicLiveDisasters(),
+  ]);
+  const list = mergeDisasters(fromCommunity, fromOfficial, fromPublic);
   cacheDisasters(list);
   return list;
+}
+
+export function prependCachedDisaster(disaster) {
+  const mapped = mapDisaster(disaster);
+  try {
+    const existing = JSON.parse(sessionStorage.getItem(DISASTER_CACHE_KEY) || "[]");
+    cacheDisasters([mapped, ...existing]);
+  } catch {
+    cacheDisasters([mapped]);
+  }
+  return mapped;
 }
 
 const DISASTER_CACHE_KEY = "cw_live_disasters";

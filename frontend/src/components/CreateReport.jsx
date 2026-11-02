@@ -5,18 +5,22 @@ import { useEffect, useState } from "react";
 import { BsImageAlt } from "react-icons/bs";
 import { Slider } from "@mui/material";
 import PropTypes from "prop-types";
+import { useQueryClient } from "@tanstack/react-query";
 import { getLocation } from "../utils/factory";
 import { uploadFiles } from "../services/upload.service";
+import { prependCachedDisaster } from "../utils/apiData";
 import axios from 'axios'
 import { chatbotApiUrl } from '../config/env'
 
 const apiUrl = chatbotApiUrl('/api/v1/disasters')
 
-const CreateReport = ({ closeModal, showRecommendation}) => {
+const CreateReport = ({ closeModal, showRecommendation, onSubmitted }) => {
   const { register, handleSubmit, setValue } = useForm();
 
+  const queryClient = useQueryClient();
   const [imagePreview, setImagePreview] = useState(null);
   const [isDisabled, setIsDisabled] = useState(false);
+  const [submitError, setSubmitError] = useState("");
   const [magnitude, setMagnitude] = useState(0);
   const [fileList, setFileList] = useState([]);
 
@@ -32,15 +36,23 @@ const CreateReport = ({ closeModal, showRecommendation}) => {
 
   const onSubmit = async (data) => {
     setIsDisabled(true);
+    setSubmitError("");
     try {
-      const images = await uploadFiles(fileList);
-      const status = "unconfirmed"
-      const reportData = { ...data, images, magnitude, status };
-      const {data: resData} = await axios.post(apiUrl, reportData);
-      closeModal();
-      return resData
+      const images = fileList.length ? await uploadFiles(fileList) : [];
+      const reportData = { ...data, images, magnitude, status: "unconfirmed" };
+      const { data: resData } = await axios.post(apiUrl, reportData);
+      if (resData?.disaster) {
+        prependCachedDisaster(resData.disaster);
+        queryClient.invalidateQueries({ queryKey: ["liveDisasters"] });
+      }
+      onSubmitted?.(resData);
+      showRecommendation?.(resData?.recommendation);
+      closeModal?.();
+      return resData;
     } catch (error) {
       console.error("Error submitting report:", error);
+      setSubmitError("We could not submit the report. Please try again.");
+      return null;
     } finally {
       setIsDisabled(false);
     }
@@ -85,16 +97,7 @@ const CreateReport = ({ closeModal, showRecommendation}) => {
           }}
           noValidate
           autoComplete="off"
-          onSubmit={handleSubmit(async(data)=>{
-            try {
-              
-            const {recommendation} = await onSubmit(data)
-            console.log({data, recommendation})
-            showRecommendation(recommendation)
-            } catch (error) {
-              console.error("create report failed")
-            }
-          })}
+          onSubmit={handleSubmit(onSubmit)}
         >
           <div className="justify-between gap-x-2 flex w-full">
             <TextField
@@ -171,13 +174,10 @@ const CreateReport = ({ closeModal, showRecommendation}) => {
               )}
             </label>
           </div>
+          {submitError ? <p className="text-sm text-destructive">{submitError}</p> : null}
           <button
             type="submit"
-            className={
-              isDisabled
-                ? "blur-[1px] bg-[#2F4F4F] rounded-md w-[80%] text-white py-4"
-                : "bg-[#2F4F4F] rounded-md w-[80%] text-white py-4"
-            }
+            className="bg-primary text-primary-foreground w-[80%] py-4 disabled:opacity-60"
             disabled={isDisabled}
           >
             {isDisabled ? "Reporting..." : "Report Disaster"}
@@ -190,6 +190,8 @@ const CreateReport = ({ closeModal, showRecommendation}) => {
 
 CreateReport.propTypes = {
   closeModal: PropTypes.func,
+  showRecommendation: PropTypes.func,
+  onSubmitted: PropTypes.func,
 };
 
 export default CreateReport;

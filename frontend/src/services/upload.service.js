@@ -62,7 +62,11 @@ export const uploadFiles = async (fileList) => {
 
     try {
         const responses = await Promise.all(promises);
-        return responses.map((response) => response.data.url);
+        return responses.map((response) => {
+            const payload = response.data || {};
+            const url = payload.secure_url || payload.url || "";
+            return String(url).replace(/^http:\/\//i, "https://");
+        }).filter(Boolean);
     } catch (error) {
         console.error("Error uploading files:", error);
         console.error("Error details:", error.response?.data);

@@ -1,73 +1,47 @@
-import { useEffect, useState } from "react";
-import { formatRecommendation } from "../utils/factory";
+import { Link } from "react-router-dom";
+import { safetyStepsFor } from "../utils/safetyGuidance";
+import { toHttpsUrl } from "../utils/apiData";
 
-const AiReportAnalyse = ({ isWaiting, recommendation }) => {
-  const [status, setStatus] = useState("Thanks for submitting the report");
-  const [step, setStep] = useState(0);
-  const [aiSafety, setAiSafety] = useState(false);
-
-  const openSafety = () => {
-    setAiSafety(true);
-  };
-
-  useEffect(() => {
-    if (step < 3) {
-      const timer = setTimeout(() => {
-        if (!isWaiting) {
-          clearTimeout(timer);
-          setStatus(
-            "Your report has been received, please checkout safety recommendations below while we broadcast the alert. Thanks and stay safe"
-          );
-          console.log({ recommendation });
-          return;
-        }
-        if (step === 0) {
-          setStatus("Getting your location");
-        } else if (step === 1) {
-          setStatus("Analyzing the image to confirm disaster type");
-        } else if (step === 2) {
-          setStatus("Analyzing your report. Please wait for a moment...");
-
-          setTimeout(() => {}, 1000); // Close the modal after 1 second
-        }
-        setStep(step + 1);
-      }, 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [step, isWaiting, recommendation]);
+const AiReportAnalyse = ({ disaster, recommendation }) => {
+  const type = disaster?.disasterType || disaster?.type || "";
+  const steps = safetyStepsFor(type);
+  const image = toHttpsUrl(disaster?.images?.[0] || disaster?.image || "");
+  const title = [disaster?.region, disaster?.country].filter(Boolean).join(", ") || "Community report";
 
   return (
-    <div className="relative">
-      <div className={aiSafety ? "hidden": "grid"}>
-      <h1 className={`text-xl text-center w-[85%] font-semibold font-serif`}>
-        {status}
-      </h1>
-      <div className={` flex items-end justify-center`}>
-        <img
-          src="/logo.jpg"
-          alt="WaverX"
-          className={` mt-8 h-48 ${isWaiting && "animate-rotate-smooth"}`}
-        />
-      </div>
-      <button className="bg-[#2F4F4F] rounded-md md:w-[15%] h-12 w-[50%] px-2 relative md:left-12 mt-4 left-4  text-white" onClick={openSafety}>
-        Safety first
-      </button>
-      </div>
-      {aiSafety && (
-        <div
-        className="text-left max-h-[90%] w-[90%] overflow-y-auto"
-         
+    <div className="max-h-[80vh] overflow-y-auto p-1">
+      <p className="text-xs uppercase tracking-wide text-muted">Report received</p>
+      <h2 className="mt-1 text-lg font-semibold">
+        Your {String(type || "disaster").toLowerCase()} report is logged as unconfirmed
+      </h2>
+      <p className="mt-2 text-sm text-muted">
+        {title}. Climate Wavers will not broadcast this as a confirmed event until source, location, and a human review check out.
+      </p>
+
+      {image ? (
+        <img src={image} alt="" className="mt-4 w-full h-40 object-cover border border-border bg-background" />
+      ) : null}
+
+      <h3 className="mt-5 font-medium">What to do now</h3>
+      <ol className="mt-2 space-y-2 text-sm">
+        {steps.map((step) => (
+          <li key={step} className="border border-border bg-surface p-3">
+            {step}
+          </li>
+        ))}
+      </ol>
+      {recommendation ? <p className="sr-only">{recommendation}</p> : null}
+
+      {disaster?.id ? (
+        <Link
+          to={`/disasters/${encodeURIComponent(disaster.id)}`}
+          className="mt-5 inline-flex min-h-11 items-center px-4 bg-primary text-primary-foreground text-sm font-medium hover:bg-primary-dark"
         >
-          {recommendation && (
-            <div
-              dangerouslySetInnerHTML={{
-                __html: formatRecommendation(recommendation),
-              }}
-            ></div>
-          )}
-        </div>
-      )}
+          View this report
+        </Link>
+      ) : null}
     </div>
   );
 };
+
 export default AiReportAnalyse;

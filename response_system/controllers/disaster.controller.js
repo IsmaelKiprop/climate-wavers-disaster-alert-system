@@ -13,7 +13,7 @@ exports.createDisaster = catchAsyncErrors(async (req, res) => {
     ...validateResponse.value,
   });
 
-  const recommendation = await aiService.getSafetyRecommendations(disaster.disasterType, disaster.magnitude)
+  const recommendation = aiService.getSafetyRecommendations(disaster.disasterType)
   await sendToQueue(getDefaultChannel, queues.disaster_alert, {disasterType: disaster.disasterType, city: disaster.region})
   return res.status(201).json({disaster, recommendation});
 });

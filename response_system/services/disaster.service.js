@@ -26,7 +26,9 @@ class DisasterService{
 
     async getById(id){
         const doc = await fbService.getById(disasterCollection, id)
-        return doc.data()
+        const data = typeof doc?.data === "function" ? doc.data() : doc
+        if (!data) return null
+        return { ...data, id: doc.id || id }
     }
 
     async createDisaster(obj){
