@@ -5,13 +5,31 @@ import Subscription from "./subscription.js"
 class Controller{
 
     async sendDisasterAlert(d){
-        const data = d
+        const data = d?.data || d
         if(!data)return
         const validationErr = mailDataValidator.validateDisasterAlertEmailData(data)?.error
-        if(validationErr)return
-        const dataList = await Subscription.find({city: data?.city?.toLowerCase()})
+        if(validationErr){
+            console.log(validationErr)
+            return
+        }
+        const city = String(data.city || "").toLowerCase()
+        let dataList = []
+        if (city) {
+            try {
+                dataList = await Subscription.find({city})
+            } catch (error) {
+                console.log(`subscription lookup failed: ${error}`)
+            }
+        }
+        const extra = [].concat(data.emails || [], data.email ? [data.email] : [])
+        extra.forEach((email) => {
+            if (email && !dataList.some((row) => row.email === email)) {
+                dataList.push({ email })
+            }
+        })
+        if (!dataList.length) return
         const mailData = {city: data.city, type: data.disasterType}
-        await Promise.all(dataList.map((d)=>{mailer.sendDisasterAlert(d.email, mailData, `${data.disasterType} Alert`)}))
+        await Promise.all(dataList.map((row) => mailer.sendDisasterAlert(row.email, mailData, `${data.disasterType} Alert`)))
     }
 
     async sendCustom(d){

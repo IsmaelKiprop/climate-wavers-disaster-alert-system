@@ -72,8 +72,8 @@ const Topbar = () => {
         </button>
 
         {isModalOpen ? (
-          <Modal closeFn={() => setIsModalOpen(false)}>
-            <Report closeModal={() => setIsModalOpen(false)} />
+          <Modal title="Report disaster" closeFn={() => setIsModalOpen(false)}>
+            <Report />
           </Modal>
         ) : null}
 

@@ -1,196 +1,184 @@
-import { useForm } from "react-hook-form";
-import Box from "@mui/material/Box";
-import TextField from "@mui/material/TextField";
 import { useEffect, useState } from "react";
-import { BsImageAlt } from "react-icons/bs";
-import { Slider } from "@mui/material";
 import PropTypes from "prop-types";
 import { useQueryClient } from "@tanstack/react-query";
 import { getLocation } from "../utils/factory";
 import { uploadFiles } from "../services/upload.service";
 import { prependCachedDisaster } from "../utils/apiData";
-import axios from 'axios'
-import { chatbotApiUrl } from '../config/env'
+import { recognizeReportImage } from "../utils/vision";
+import axios from "axios";
+import { chatbotApiUrl } from "../config/env";
 
-const apiUrl = chatbotApiUrl('/api/v1/disasters')
+const apiUrl = chatbotApiUrl("/api/v1/disasters");
 
-const CreateReport = ({ closeModal, showRecommendation, onSubmitted }) => {
-  const { register, handleSubmit, setValue } = useForm();
+const TYPES = ["Floods", "Earthquake", "Wildfire", "Storm", "Drought", "Landslide", "Other"];
 
+const CreateReport = ({ onSubmitted }) => {
   const queryClient = useQueryClient();
-  const [imagePreview, setImagePreview] = useState(null);
-  const [isDisabled, setIsDisabled] = useState(false);
-  const [submitError, setSubmitError] = useState("");
-  const [magnitude, setMagnitude] = useState(0);
-  const [fileList, setFileList] = useState([]);
-
-  const handleImageChange = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      setFileList(Array.from(e.target.files));
-      setImagePreview(URL.createObjectURL(file));
-    } else {
-      setImagePreview(null);
-    }
-  };
-
-  const onSubmit = async (data) => {
-    setIsDisabled(true);
-    setSubmitError("");
-    try {
-      const images = fileList.length ? await uploadFiles(fileList) : [];
-      const reportData = { ...data, images, magnitude, status: "unconfirmed" };
-      const { data: resData } = await axios.post(apiUrl, reportData);
-      if (resData?.disaster) {
-        prependCachedDisaster(resData.disaster);
-        queryClient.invalidateQueries({ queryKey: ["liveDisasters"] });
-      }
-      onSubmitted?.(resData);
-      showRecommendation?.(resData?.recommendation);
-      closeModal?.();
-      return resData;
-    } catch (error) {
-      console.error("Error submitting report:", error);
-      setSubmitError("We could not submit the report. Please try again.");
-      return null;
-    } finally {
-      setIsDisabled(false);
-    }
-  };
-
-  const severity = [
-    {
-      value: 0,
-      label: "Mild",
-    },
-    {
-      value: 5,
-      label: "Moderate",
-    },
-    {
-      value: 10,
-      label: "Severe",
-    },
-  ];
-
-  const [locationInfo, setLocationInfo] = useState();
+  const [region, setRegion] = useState("");
+  const [country, setCountry] = useState("");
+  const [disasterType, setDisasterType] = useState("Floods");
+  const [details, setDetails] = useState("");
+  const [magnitude, setMagnitude] = useState(5);
+  const [file, setFile] = useState(null);
+  const [preview, setPreview] = useState("");
+  const [vision, setVision] = useState(null);
+  const [visionStatus, setVisionStatus] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    getLocation().then(res => {
-      setLocationInfo(res);
-      setValue('region', res?.city);
-      setValue('country', res?.country);
+    getLocation().then((info) => {
+      if (info?.city) setRegion((current) => current || info.city);
+      if (info?.country) setCountry((current) => current || info.country);
     });
-  }, [setValue]);
+  }, []);
+
+  const onFile = async (event) => {
+    const next = event.target.files?.[0];
+    if (!next) return;
+    setFile(next);
+    setPreview(URL.createObjectURL(next));
+    setVision(null);
+    setVisionStatus("Computer vision is reading this photo...");
+    try {
+      const result = await recognizeReportImage(next);
+      setVision(result);
+      if (result.suggestedType) setDisasterType(result.suggestedType);
+      setVisionStatus(result.inference || "Photo analyzed.");
+    } catch (err) {
+      setVisionStatus(err.message || "Computer vision could not read this photo. You can still submit.");
+    }
+  };
+
+  const onSubmit = async (event) => {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      const images = file ? await uploadFiles([file]) : [];
+      const { data } = await axios.post(apiUrl, {
+        region,
+        country,
+        disasterType,
+        details,
+        magnitude,
+        status: "unconfirmed",
+        images,
+      });
+      if (data?.disaster) {
+        prependCachedDisaster(data.disaster);
+        queryClient.invalidateQueries({ queryKey: ["liveDisasters"] });
+      }
+      onSubmitted?.({
+        ...data,
+        vision: data.vision || vision,
+      });
+    } catch (err) {
+      console.error(err);
+      setError("We could not submit the report. Please try again.");
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
-    <div className="md:mb-12  h-[90vh] w-[90vw] md:w-[100%] md:h-[100%] px-12 ">
-      <h1 className="lg:text-[40px] md:text-[40px] text-[24px] text-primary font-bold font-serif text-[#2F4F4F] md:text-center text-start md:mb-8 mb-2">
-        Report Disaster
-      </h1>
-      <div className="grid place-content-center">
-        <Box
-          component="form"
-          className="md:w-full w-[70vw]"
-          sx={{
-            "& > :not(style)": { m: 1, width: "100%" },
-          }}
-          noValidate
-          autoComplete="off"
-          onSubmit={handleSubmit(onSubmit)}
-        >
-          <div className="justify-between gap-x-2 flex w-full">
-            <TextField
-              id="outlined-basic"
-              label="City/Region"
-              variant="outlined"
-              color="success"
-              className="w-[50%]"
-              sx={{ width: "100" }}
-              {...register("region", { required: "City/Region is required" })}
-              defaultValue={locationInfo?.city}
-            />
-            <TextField
-              id="outlined-basic"
-              label="Country"
-              variant="outlined"
-              color="success"
-              className="w-[50%]"
-              sx={{ width: "100" }}
-              {...register("country", { required: "Country is required" })}
-              defaultValue={locationInfo?.country}
-            />
-          </div>
-          <TextField
-            id="outlined-basic"
-            label="Type of disaster"
-            variant="outlined"
-            color="success"
-            sx={{ width: "50" }}
-            {...register("disasterType", { required: "Type of disaster is required" })}
+    <form className="p-4 sm:p-5 space-y-4" onSubmit={onSubmit}>
+      <p className="text-sm text-muted">
+        Reports stay unconfirmed until they are reviewed. Computer vision reads the photo, then we send alerts for that city.
+      </p>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <label className="block text-sm">
+          <span className="font-medium">City / region</span>
+          <input
+            className="mt-1 h-11 w-full px-3 border border-border bg-background"
+            value={region}
+            onChange={(event) => setRegion(event.target.value)}
+            required
           />
-          <div className="px-1">
-            <h3 className="text-xl w-[35vw] text-start">Situation</h3>
-            <Slider
-              aria-label="Custom marks"
-              defaultValue={0}
-              step={1}
-              sx={{ m: 1, width: "100" }}
-              valueLabelDisplay="auto"
-              marks={severity}
-              min={0}
-              max={10}
-              color="success"
-              onChange={(e) => setMagnitude(e.target.value)}
-            />
-          </div>
-          <TextField
-            id="outlined-details"
-            label="Details"
-            sx={{ m: 2, width: "100" }}
-            variant="outlined"
-            multiline
-            rows={4}
-            color="success"
-            {...register("details", { required: "Please describe the ongoing incident" })}
+        </label>
+        <label className="block text-sm">
+          <span className="font-medium">Country</span>
+          <input
+            className="mt-1 h-11 w-full px-3 border border-border bg-background"
+            value={country}
+            onChange={(event) => setCountry(event.target.value)}
+            required
           />
-          <div className="bg-gray-200 w-[40%] rounded-lg h-[30vh] mb-6 flex justify-center items-center">
-            <input
-              accept="image/*"
-              id="upload-profile-image"
-              type="file"
-              hidden
-              onChange={handleImageChange}
-            />
-            <label htmlFor="upload-profile-image">
-              {imagePreview ? (
-                <img
-                  src={imagePreview}
-                  alt="Preview"
-                  className="w-[100%] rounded-lg h-[30vh] py-2 flex justify-center"
-                />
-              ) : (
-                <BsImageAlt className="text-6xl text-gray-700" />
-              )}
-            </label>
-          </div>
-          {submitError ? <p className="text-sm text-destructive">{submitError}</p> : null}
-          <button
-            type="submit"
-            className="bg-primary text-primary-foreground w-[80%] py-4 disabled:opacity-60"
-            disabled={isDisabled}
-          >
-            {isDisabled ? "Reporting..." : "Report Disaster"}
-          </button>
-        </Box>
+        </label>
       </div>
-    </div>
+
+      <label className="block text-sm">
+        <span className="font-medium">Disaster type</span>
+        <select
+          className="mt-1 h-11 w-full px-3 border border-border bg-background"
+          value={disasterType}
+          onChange={(event) => setDisasterType(event.target.value)}
+        >
+          {TYPES.map((type) => (
+            <option key={type} value={type}>
+              {type}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <label className="block text-sm">
+        <span className="font-medium">What is happening</span>
+        <textarea
+          className="mt-1 w-full min-h-[96px] p-3 border border-border bg-background"
+          value={details}
+          onChange={(event) => setDetails(event.target.value)}
+          required
+        />
+      </label>
+
+      <label className="block text-sm">
+        <span className="font-medium">Severity: {magnitude}/10</span>
+        <input
+          type="range"
+          min="0"
+          max="10"
+          value={magnitude}
+          onChange={(event) => setMagnitude(Number(event.target.value))}
+          className="mt-2 w-full"
+        />
+      </label>
+
+      <div>
+        <label className="block text-sm font-medium mb-2" htmlFor="report-photo">
+          Photo
+        </label>
+        <input
+          id="report-photo"
+          type="file"
+          accept="image/*"
+          capture="environment"
+          onChange={onFile}
+          className="block w-full text-sm"
+        />
+        {preview ? (
+          <img src={preview} alt="Report preview" className="mt-3 w-full h-40 object-cover border border-border bg-background" />
+        ) : (
+          <p className="mt-2 text-sm text-muted">Add a photo so computer vision can classify the scene.</p>
+        )}
+        {visionStatus ? <p className="mt-2 text-sm text-foreground">{visionStatus}</p> : null}
+      </div>
+
+      {error ? <p className="text-sm text-destructive">{error}</p> : null}
+
+      <button
+        type="submit"
+        disabled={busy}
+        className="w-full min-h-11 bg-primary text-primary-foreground font-medium hover:bg-primary-dark disabled:opacity-60"
+      >
+        {busy ? "Submitting report..." : "Submit report"}
+      </button>
+    </form>
   );
 };
 
 CreateReport.propTypes = {
-  closeModal: PropTypes.func,
-  showRecommendation: PropTypes.func,
   onSubmitted: PropTypes.func,
 };
 

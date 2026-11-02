@@ -91,6 +91,14 @@ services:
         value: https://climate-wavers-models.onrender.com/api/v1/analysis
       - key: RECOGNITION_MODEL_URL
         value: https://climate-wavers-models.onrender.com/api/v1/recognition
+      - key: NOTIFICATION_SERVICE_URL
+        value: https://climate-wavers-notifications.onrender.com
+      - key: DJANGO_API_URL
+        value: https://climate-wavers-api.onrender.com
+      - key: NOTIFICATION_SECRET
+        sync: false
+      - key: SERVER_SECRET
+        sync: false
 
   - type: web
     name: climate-wavers-notifications

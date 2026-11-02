@@ -5,6 +5,7 @@ function trimSlash(url = "") {
 const isDev = import.meta.env.DEV;
 const PRODUCTION_API = "https://climate-wavers-api.onrender.com";
 const PRODUCTION_CHATBOT = "https://climate-wavers-response.onrender.com";
+const PRODUCTION_MODELS = "https://climate-wavers-models.onrender.com";
 
 const backendUrl = trimSlash(
   import.meta.env.VITE_APP_BACKEND_URL || (isDev ? "" : PRODUCTION_API)
@@ -21,6 +22,7 @@ export const env = {
     (typeof window !== "undefined" ? window.location.hostname : "localhost"),
   backendUrl,
   chatbotUrl,
+  modelsUrl: trimSlash(import.meta.env.VITE_APP_MODELS_URL || PRODUCTION_MODELS),
   siteUrl: trimSlash(
     import.meta.env.VITE_SITE_URL ||
       (typeof window !== "undefined" && window.location.hostname !== "localhost"

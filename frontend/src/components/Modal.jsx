@@ -2,28 +2,23 @@ import { IoCloseSharp } from "react-icons/io5";
 import PropTypes from "prop-types";
 import ReactDOM from "react-dom";
 
-const Modal = ({ children, closeFn }) => {
+const Modal = ({ children, closeFn, title = "Create Post" }) => {
   return ReactDOM.createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/50"
       onClick={closeFn}
     >
       <div
-        className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden animate-in zoom-in-95 duration-200"
-        onClick={(e) => e.stopPropagation()}
+        className="bg-surface border border-border w-full sm:max-w-lg max-h-[92dvh] overflow-hidden flex flex-col"
+        onClick={(event) => event.stopPropagation()}
       >
-        <div className="flex items-center justify-between p-6 border-b border-gray-100">
-          <h2 className="text-xl font-semibold text-gray-900">Create Post</h2>
-          <button
-            className="p-2 hover:bg-gray-100 rounded-full transition-colors duration-200"
-            onClick={closeFn}
-          >
-            <IoCloseSharp size={24} className="text-gray-500" />
+        <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-border">
+          <h2 className="text-base font-semibold">{title}</h2>
+          <button type="button" className="p-2 hover:bg-background" onClick={closeFn} aria-label="Close">
+            <IoCloseSharp size={20} />
           </button>
         </div>
-        <div className="overflow-y-auto max-h-[calc(90vh-80px)]">
-          {children}
-        </div>
+        <div className="overflow-y-auto min-h-0 flex-1">{children}</div>
       </div>
     </div>,
     document.body
@@ -33,5 +28,7 @@ const Modal = ({ children, closeFn }) => {
 Modal.propTypes = {
   children: PropTypes.node,
   closeFn: PropTypes.func,
+  title: PropTypes.string,
 };
+
 export default Modal;

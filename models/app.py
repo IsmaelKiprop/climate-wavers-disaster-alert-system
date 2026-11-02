@@ -2,6 +2,7 @@
 """ Flask Application """
 import os
 import tempfile
+import urllib.request
 from os import environ
 from flask import Flask, jsonify, request, make_response
 from flask_cors import CORS
@@ -32,29 +33,49 @@ def magnitude_analysis():
         return jsonify({"error": result}), 502
     return jsonify(result)
 
+def _save_recognition_image():
+    if "image" in request.files:
+        image_file = request.files["image"]
+        suffix = os.path.splitext(image_file.filename or "")[1] or ".jpg"
+        handle, image_path = tempfile.mkstemp(suffix=suffix)
+        os.close(handle)
+        image_file.save(image_path)
+        quantized = request.form.get("quantized", "false").lower() == "true"
+        return image_path, quantized
+
+    payload = request.get_json(silent=True) or {}
+    image_url = (payload.get("imageUrl") or payload.get("url") or "").strip()
+    if not image_url:
+        return None, False
+    image_url = image_url.replace("http://", "https://", 1)
+    handle, image_path = tempfile.mkstemp(suffix=".jpg")
+    os.close(handle)
+    req = urllib.request.Request(image_url, headers={"User-Agent": "ClimateWavers/1.0"})
+    with urllib.request.urlopen(req, timeout=20) as response:
+        with open(image_path, "wb") as out:
+            out.write(response.read())
+    return image_path, bool(payload.get("quantized"))
+
+
 @app.route('/api/v1/recognition/inference', methods=['POST'])
 def disaster_recognition():
-    if 'image' not in request.files:
+    image_path, quantized = _save_recognition_image()
+    if not image_path:
         return jsonify({'error': 'No image file provided'}), 400
-    
-    image_file = request.files['image']
-    suffix = os.path.splitext(image_file.filename or "")[1] or ".jpg"
-    handle, image_path = tempfile.mkstemp(suffix=suffix)
-    os.close(handle)
-    image_file.save(image_path)
-    
-    quantized = request.form.get('quantized', 'false').lower() == 'true'
-    
+
     try:
         result = inference(image_path, quantized)
     except FileNotFoundError as exc:
         return jsonify({"error": str(exc)}), 503
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 502
     finally:
         if os.path.exists(image_path):
             os.remove(image_path)
     if result is None:
         return jsonify({'error': 'Failed to process image'}), 500
-    return jsonify({"inference": result})
+    label = str(result).replace("AI detected ", "").strip()
+    return jsonify({"inference": result, "label": label})
     
 
 @app.route("/status", strict_slashes=False)

@@ -2,9 +2,9 @@ const catchAsyncErrors = require("../lib/catchAsync");
 const validator = require("../services/validator.service");
 const disasterService = require("../services/disaster.service");
 const aiService = require("../services/ai.service");
-const { sendToQueue } = require("../lib/amqp");
-const { getDefaultChannel } = require("../config/channels");
-const queues = require("../constants/queues");
+const { recognizeDisasterImage } = require("../helpers/recognize_image");
+const { triggerDisasterAlert } = require("../helpers/trigger_alert");
+
 exports.createDisaster = catchAsyncErrors(async (req, res) => {
   const validateResponse = validator.validateCreateDisasterPayload(req.body);
   if (validateResponse.error)
@@ -13,9 +13,39 @@ exports.createDisaster = catchAsyncErrors(async (req, res) => {
     ...validateResponse.value,
   });
 
-  const recommendation = aiService.getSafetyRecommendations(disaster.disasterType)
-  await sendToQueue(getDefaultChannel, queues.disaster_alert, {disasterType: disaster.disasterType, city: disaster.region})
-  return res.status(201).json({disaster, recommendation});
+  let vision = null;
+  const imageUrl = Array.isArray(disaster.images) ? disaster.images[0] : disaster.images;
+  if (imageUrl) {
+    vision = await recognizeDisasterImage(imageUrl);
+    if (vision) {
+      try {
+        await disasterService.updateOne(disaster.id, {
+          vision: vision.inference,
+          visionLabel: vision.label,
+        });
+        disaster.vision = vision.inference;
+        disaster.visionLabel = vision.label;
+        if (!disaster.disasterType && vision.suggestedType) {
+          disaster.disasterType = vision.suggestedType;
+        }
+      } catch (error) {
+        console.log(`vision save failed: ${error.message}`);
+      }
+    }
+  }
+
+  const recommendation = aiService.getSafetyRecommendations(
+    disaster.disasterType || vision?.suggestedType
+  );
+  const alert = await triggerDisasterAlert({
+    city: disaster.region,
+    country: disaster.country,
+    disasterType: disaster.disasterType || vision?.suggestedType || "disaster",
+    details: disaster.details,
+    id: disaster.id,
+    vision,
+  });
+  return res.status(201).json({ disaster, recommendation, vision, alert });
 });
 
 exports.getDisasters = catchAsyncErrors(async (req, res) => {
