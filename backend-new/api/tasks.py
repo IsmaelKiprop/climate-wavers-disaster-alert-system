@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 import socket
 import ssl
 import urllib.error
@@ -104,13 +105,31 @@ def _post_notification(payload):
             raise RuntimeError(f"notification service returned {response.status}")
 
 
+def _on_render():
+    return bool(os.environ.get("RENDER"))
+
+
+def _https_from_address():
+    from_email = settings.DEFAULT_FROM_EMAIL or settings.EMAIL_HOST_USER or ""
+    lowered = from_email.lower()
+    if (
+        not from_email
+        or "gmail.com" in lowered
+        or "yahoo." in lowered
+        or "outlook." in lowered
+        or "hotmail." in lowered
+    ):
+        return "Climate Wavers <beth.t@example.com>"
+    return from_email
+
+
 def _send_resend(queue_name, payload):
     key = getattr(settings, "RESEND_API_KEY", "") or ""
     if not key:
         raise RuntimeError("RESEND_API_KEY is not set")
     email = payload.get("email")
     subject, body = _mail_copy(queue_name, payload)
-    from_email = settings.DEFAULT_FROM_EMAIL or settings.EMAIL_HOST_USER
+    from_email = _https_from_address()
     request = urllib.request.Request(
         "https://api.resend.com/emails",
         data=json.dumps(
@@ -133,6 +152,8 @@ def _send_resend(queue_name, payload):
 
 
 def _send_smtp(queue_name, payload):
+    if _on_render() and os.environ.get("FORCE_SMTP") != "true":
+        raise RuntimeError("SMTP is blocked on Render. Set RESEND_API_KEY.")
     if not settings.EMAIL_HOST_USER or not settings.EMAIL_HOST_PASSWORD:
         raise RuntimeError("SMTP is not configured")
     email = payload.get("email")

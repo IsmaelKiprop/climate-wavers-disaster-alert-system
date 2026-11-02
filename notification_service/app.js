@@ -6,7 +6,7 @@ import express from "express";
 
 const app = express();
 const port = process.env.PORT || 3000;
-app.use(express.json())
+app.use(express.json({ limit: "256kb" }))
 
 useQueue(channels.custom_mail, controller.sendCustom);
 useQueue(channels.disaster_alert, controller.sendDisasterAlert);
@@ -37,6 +37,16 @@ app.post("/api/v1/mail", async (req, res) => {
   }
 })
 
+app.use((err, req, res, next) => {
+  if (err instanceof SyntaxError && "body" in err) {
+    return res.status(400).json({ error: "invalid json" })
+  }
+  return next(err)
+})
+
 app.listen(port, "0.0.0.0", () => {
   console.log(`Server is running on port ${port}`);
+  console.log(
+    `mail: render=${Boolean(process.env.RENDER)} resend=${Boolean(process.env.RESEND_API_KEY)}`
+  )
 });

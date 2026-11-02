@@ -4,7 +4,8 @@ import ejs from "ejs"
 import path from "path"
 
 const __dirname = process.cwd()
-
+const ON_RENDER = Boolean(process.env.RENDER)
+const FORCE_SMTP = process.env.FORCE_SMTP === "true"
 
 export const mailTypes = {
     custom: "custom",
@@ -17,6 +18,25 @@ export const mailTypes = {
 
 const getPath = fileName =>{
     return path.join(__dirname, `/templates/${fileName}.ejs`)
+}
+
+function httpsFromAddress() {
+    const from = process.env.MAIL_FROM || config.mail.auth.user || ""
+    const lowered = from.toLowerCase()
+    if (
+        !from ||
+        lowered.includes("gmail.com") ||
+        lowered.includes("yahoo.") ||
+        lowered.includes("outlook.") ||
+        lowered.includes("hotmail.")
+    ) {
+        return "Climate Wavers <beth.t@example.com>"
+    }
+    return from
+}
+
+if (ON_RENDER && !process.env.RESEND_API_KEY) {
+    console.log("WARNING: Gmail SMTP is blocked on Render (CONN timeout). Set RESEND_API_KEY or verification mail will fail.")
 }
 
 class Mailer{
@@ -57,7 +77,7 @@ class Mailer{
                 "Content-Type": "application/json",
             },
             body: JSON.stringify({
-                from: this.from_address,
+                from: httpsFromAddress(),
                 to: [email],
                 subject,
                 html,
@@ -76,6 +96,9 @@ class Mailer{
             return
         } catch (error) {
             console.log(`mail resend skipped or failed: ${error}`)
+        }
+        if (ON_RENDER && !FORCE_SMTP) {
+            throw new Error("SMTP is blocked on Render. Set RESEND_API_KEY.")
         }
         const attempts = [
             { port: 465, secure: true },
@@ -96,6 +119,9 @@ class Mailer{
             } catch (error) {
                 lastError = error
                 console.log(`mail smtp ${attempt.port} failed: ${error}`)
+                if (error?.code === "ETIMEDOUT" || error?.command === "CONN") {
+                    throw new Error("SMTP connection timed out. Set RESEND_API_KEY.")
+                }
             }
         }
         throw lastError || new Error("mail send failed")
