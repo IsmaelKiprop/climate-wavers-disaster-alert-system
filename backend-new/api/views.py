@@ -117,7 +117,9 @@ class ResendVerificationView(GenericAPIView):
         except Exception as exc:
             print(f"Resend verification failed: {exc}")
             return Response(
-                {"message": "Could not send the code. Try again in a moment."},
+                {
+                    "message": "Could not send the code. Check spam, then try again in a minute."
+                },
                 status=status.HTTP_502_BAD_GATEWAY,
             )
         return Response(

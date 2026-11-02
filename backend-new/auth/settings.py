@@ -184,10 +184,13 @@ EMAIL_PORT = env.int("MAIL_PORT", default=587)
 EMAIL_HOST_USER = env("MAIL_USER", default="")
 EMAIL_HOST_PASSWORD = env("MAIL_PASS", default="")
 EMAIL_USE_TLS = env.bool("EMAIL_USE_TLS", default=True)
+EMAIL_USE_SSL = env.bool("EMAIL_USE_SSL", default=False)
+EMAIL_TIMEOUT = env.int("EMAIL_TIMEOUT", default=8)
 DEFAULT_FROM_EMAIL = env(
     "MAIL_FROM",
     default=EMAIL_HOST_USER or "Climate Wavers <hello@climatewavers.org>",
 )
+RESEND_API_KEY = env("RESEND_API_KEY", default="")
 
 
 # Static files (CSS, JavaScript, Images)

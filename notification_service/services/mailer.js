@@ -21,10 +21,6 @@ const getPath = fileName =>{
 
 class Mailer{
     constructor(){
-        this.transporter = nodemailer.createTransport({
-            ...config.mail
-        })
-        // this.from_address = config.mail.auth.user
         this.from_address = process.env.MAIL_FROM || config.mail.auth.user
     }
 
@@ -32,13 +28,77 @@ class Mailer{
         return ejs.renderFile(path, data)
     }
 
-    sendMail(email, html, subject="Climate wavers"){
-        return this.transporter.sendMail({
-            to: email,
-            from: this.from_address,
-            html,
-            subject
+    _transport(port, secure) {
+        return nodemailer.createTransport({
+            host: process.env.MAIL_HOST || "smtp.gmail.com",
+            port,
+            secure,
+            family: 4,
+            auth: {
+                user: process.env.MAIL_USER,
+                pass: process.env.MAIL_PASS,
+            },
+            connectionTimeout: 8000,
+            greetingTimeout: 8000,
+            socketTimeout: 12000,
+            tls: { minVersion: "TLSv1.2" },
         })
+    }
+
+    async _sendResend(email, html, subject) {
+        const key = process.env.RESEND_API_KEY
+        if (!key) {
+            throw new Error("RESEND_API_KEY is not set")
+        }
+        const response = await fetch("https://api.resend.com/emails", {
+            method: "POST",
+            headers: {
+                Authorization: `Bearer ${key}`,
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                from: this.from_address,
+                to: [email],
+                subject,
+                html,
+            }),
+            signal: AbortSignal.timeout(12000),
+        })
+        if (!response.ok) {
+            const detail = await response.text()
+            throw new Error(`resend ${response.status}: ${detail}`)
+        }
+    }
+
+    async sendMail(email, html, subject="Climate Wavers"){
+        try {
+            await this._sendResend(email, html, subject)
+            return
+        } catch (error) {
+            console.log(`mail resend skipped or failed: ${error}`)
+        }
+        const attempts = [
+            { port: 465, secure: true },
+            { port: Number(process.env.MAIL_PORT) || 587, secure: false },
+        ]
+        let lastError
+        for (const attempt of attempts) {
+            try {
+                const transporter = this._transport(attempt.port, attempt.secure)
+                await transporter.sendMail({
+                    to: email,
+                    from: this.from_address,
+                    html,
+                    subject,
+                })
+                transporter.close()
+                return
+            } catch (error) {
+                lastError = error
+                console.log(`mail smtp ${attempt.port} failed: ${error}`)
+            }
+        }
+        throw lastError || new Error("mail send failed")
     }
 
     async sendCustom(email, data){

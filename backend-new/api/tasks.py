@@ -1,11 +1,14 @@
 import json
 import logging
+import socket
+import ssl
 import urllib.error
 import urllib.request
+from contextlib import contextmanager
 
 import pika
 from django.conf import settings
-from django.core.mail import EmailMessage
+from django.core.mail import EmailMessage, get_connection
 
 from .models import User, OneTimePassword
 from .utils import generate_otp
@@ -40,10 +43,53 @@ def _publish_amqp(queue_name, message):
     connection.close()
 
 
+@contextmanager
+def _force_ipv4():
+    original = socket.getaddrinfo
+
+    def ipv4_only(host, port, family=0, type=0, proto=0, flags=0):
+        return original(host, port, socket.AF_INET, type, proto, flags)
+
+    socket.getaddrinfo = ipv4_only
+    try:
+        yield
+    finally:
+        socket.getaddrinfo = original
+
+
+def _ssl_context():
+    try:
+        return ssl.create_default_context()
+    except Exception:
+        return ssl._create_unverified_context()
+
+
+def _mail_copy(queue_name, payload):
+    data = payload.get("data") or {}
+    if queue_name == "verification":
+        return (
+            "Your Climate Wavers verification code",
+            (
+                f"Your Climate Wavers verification code is {data.get('code')}.\n\n"
+                "Enter this code on the verify email page. It replaces any earlier code."
+            ),
+        )
+    if queue_name == "forget_password":
+        return ("Forget Password", f"Reset your Climate Wavers password: {data.get('url')}")
+    if queue_name == "onboarding":
+        return ("Welcome Aboard", "Welcome to Climate Wavers. Verify first. Send second.")
+    return ("Climate Wavers", data.get("content") or "A message from Climate Wavers.")
+
+
 def _post_notification(payload):
     base = (settings.NOTIFICATION_SERVICE_URL or "").rstrip("/")
     if not base:
         raise RuntimeError("NOTIFICATION_SERVICE_URL is not set")
+    ctx = _ssl_context()
+    try:
+        urllib.request.urlopen(urllib.request.Request(f"{base}/status"), timeout=8, context=ctx)
+    except Exception:
+        logger.warning("Notification service wake-up ping failed")
     request = urllib.request.Request(
         f"{base}/api/v1/mail",
         data=json.dumps(payload).encode("utf-8"),
@@ -53,38 +99,73 @@ def _post_notification(payload):
         },
         method="POST",
     )
-    with urllib.request.urlopen(request, timeout=20) as response:
+    with urllib.request.urlopen(request, timeout=18, context=ctx) as response:
         if response.status >= 400:
             raise RuntimeError(f"notification service returned {response.status}")
+
+
+def _send_resend(queue_name, payload):
+    key = getattr(settings, "RESEND_API_KEY", "") or ""
+    if not key:
+        raise RuntimeError("RESEND_API_KEY is not set")
+    email = payload.get("email")
+    subject, body = _mail_copy(queue_name, payload)
+    from_email = settings.DEFAULT_FROM_EMAIL or settings.EMAIL_HOST_USER
+    request = urllib.request.Request(
+        "https://api.resend.com/emails",
+        data=json.dumps(
+            {
+                "from": from_email,
+                "to": [email],
+                "subject": subject,
+                "text": body,
+            }
+        ).encode("utf-8"),
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {key}",
+        },
+        method="POST",
+    )
+    with urllib.request.urlopen(request, timeout=12, context=_ssl_context()) as response:
+        if response.status >= 400:
+            raise RuntimeError(f"resend returned {response.status}")
 
 
 def _send_smtp(queue_name, payload):
     if not settings.EMAIL_HOST_USER or not settings.EMAIL_HOST_PASSWORD:
         raise RuntimeError("SMTP is not configured")
     email = payload.get("email")
-    data = payload.get("data") or {}
-    if queue_name == "verification":
-        subject = "Your Climate Wavers verification code"
-        body = (
-            f"Your Climate Wavers verification code is {data.get('code')}.\n\n"
-            "Enter this code on the verify email page. It replaces any earlier code."
-        )
-    elif queue_name == "forget_password":
-        subject = "Forget Password"
-        body = f"Reset your Climate Wavers password: {data.get('url')}"
-    elif queue_name == "onboarding":
-        subject = "Welcome Aboard"
-        body = "Welcome to Climate Wavers. Verify first. Send second."
-    else:
-        subject = "Climate Wavers"
-        body = data.get("content") or "A message from Climate Wavers."
-    message = EmailMessage(
-        subject=subject,
-        body=body,
-        from_email=settings.DEFAULT_FROM_EMAIL,
-        to=[email],
-    )
-    message.send(fail_silently=False)
+    subject, body = _mail_copy(queue_name, payload)
+    last_error = None
+    attempts = [
+        {"port": 465, "use_ssl": True, "use_tls": False},
+        {"port": 587, "use_ssl": False, "use_tls": True},
+    ]
+    for attempt in attempts:
+        try:
+            with _force_ipv4():
+                connection = get_connection(
+                    host=settings.EMAIL_HOST or "smtp.gmail.com",
+                    port=attempt["port"],
+                    username=settings.EMAIL_HOST_USER,
+                    password=settings.EMAIL_HOST_PASSWORD,
+                    use_tls=attempt["use_tls"],
+                    use_ssl=attempt["use_ssl"],
+                    timeout=8,
+                )
+                EmailMessage(
+                    subject=subject,
+                    body=body,
+                    from_email=settings.DEFAULT_FROM_EMAIL or settings.EMAIL_HOST_USER,
+                    to=[email],
+                    connection=connection,
+                ).send(fail_silently=False)
+            return
+        except Exception as exc:
+            last_error = exc
+            logger.warning("SMTP %s failed: %s", attempt["port"], exc)
+    raise last_error or RuntimeError("SMTP send failed")
 
 
 def send_message(queue_name, message):
@@ -94,6 +175,17 @@ def send_message(queue_name, message):
     """
     payload = json.loads(message) if isinstance(message, str) else message
     errors = []
+
+    try:
+        _send_resend(queue_name, payload)
+        print(f" [x] Sent {queue_name} via Resend")
+        return
+    except Exception as exc:
+        errors.append(f"resend: {exc}")
+        if "RESEND_API_KEY is not set" in str(exc):
+            logger.info("Resend skipped: no API key")
+        else:
+            logger.exception("Resend HTTP failed")
 
     try:
         _post_notification({"type": queue_name, **payload})
@@ -116,7 +208,6 @@ def send_message(queue_name, message):
             body = message if isinstance(message, str) else json.dumps(payload)
             _publish_amqp(queue_name, body)
             print(f" [x] Queued {queue_name} on AMQP after direct send failed")
-            return
         except Exception as exc:
             errors.append(f"amqp: {exc}")
             logger.exception("AMQP publish failed")

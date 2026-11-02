@@ -25,6 +25,9 @@ class Client {
       if (error.response.status === 404 && error.config?.url?.includes('/post/')) {
         return false;
       }
+      if (error.response.status >= 500) {
+        return false;
+      }
       
       let errorMessages = [];
 

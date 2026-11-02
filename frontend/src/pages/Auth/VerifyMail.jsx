@@ -24,11 +24,7 @@ const VerifyMail = () => {
         endpoints.resendVerification,
         { email: value },
         false,
-        {
-          info: "Sending a new code",
-          success: "If that email has an account, we sent a new code.",
-          error: "Could not send the code. Try again later.",
-        },
+        false,
         false,
         true
       );
@@ -76,7 +72,10 @@ const VerifyMail = () => {
           />
         </AuthField>
         {statusMessage ? (
-          <p role="status" className="mb-4 text-sm text-muted">
+          <p
+            role="status"
+            className={`mb-4 text-sm ${statusKind === "error" ? "text-destructive" : "text-muted"}`}
+          >
             {statusMessage}
           </p>
         ) : null}
