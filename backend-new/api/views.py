@@ -73,14 +73,21 @@ class VerifyUserEmail(GenericAPIView):
                 user = user_code_obj.user
                 if not user.is_verified:
                     user.is_verified = True
-                    user.save()
-                    return Response(
-                        {"message": "Account email verified successfully."},
-                        status=status.HTTP_200_OK,
-                    )
+                    user.save(update_fields=["is_verified"])
+                tokens = user.tokens()
                 return Response(
-                    {"message": "User already verified."},
-                    status=status.HTTP_400_BAD_REQUEST,
+                    {
+                        "message": "Account email verified successfully.",
+                        "id": user.id,
+                        "email": user.email,
+                        "username": user.username,
+                        "first_name": user.first_name,
+                        "last_name": user.last_name,
+                        "full_name": user.get_full_name,
+                        "access_token": str(tokens.get("access")),
+                        "refresh_token": str(tokens.get("refresh")),
+                    },
+                    status=status.HTTP_200_OK,
                 )
             return Response(
                 {"message": "Invalid passcode."}, status=status.HTTP_400_BAD_REQUEST

@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import Cookies from "js-cookie";
 import { client } from "../api";
 import { endpoints } from "../utils/endpoints";
@@ -7,8 +7,10 @@ import { endpoints } from "../utils/endpoints";
 const withAuth = (WrappedComponent) => {
   const WithAuth = (props) => {
     const navigate = useNavigate();
+    const location = useLocation();
     const token = Cookies.get("accessToken");
     const raw = Cookies.get("user");
+    const next = `/login?redirect=${encodeURIComponent(location.pathname + location.search)}`;
 
     useEffect(() => {
       if (!raw && token) {
@@ -18,12 +20,12 @@ const withAuth = (WrappedComponent) => {
             Cookies.set("user", JSON.stringify(user));
           })
           .catch(() => {
-            navigate("/login"); // Redirect to login on error
+            navigate(next);
           });
       } else if (!token) {
-        navigate("/login"); // Redirect to login if no token
+        navigate(next);
       }
-    }, [raw, token, navigate]);
+    }, [raw, token, navigate, next]);
 
     if (!raw && !token) return null; // Avoid rendering if the user is not authenticated
 

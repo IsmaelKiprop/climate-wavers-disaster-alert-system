@@ -33,7 +33,7 @@ const EmailCode = () => {
           success: "Email verified. Welcome to Climate Wavers.",
           error: "Invalid or expired code.",
         },
-        false,
+        true,
         false
       );
       navigate("/onboarding");
