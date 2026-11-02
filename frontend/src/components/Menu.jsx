@@ -79,7 +79,7 @@ const Menu = ({ setIsOpen }) => {
         </NavLink>
 
         <NavLink
-          to={`/app/${user.id}/profile`}
+          to={user?.id ? `/app/${user.id}/profile` : "/login"}
           className={({ isActive }) => getNavLinkClassName(isActive)}
           end
         >
@@ -130,7 +130,7 @@ const Menu = ({ setIsOpen }) => {
           className={({ isActive }) => getNavLinkClassName(isActive)}
         >
           {({ isActive }) => (
-            <div className="w-[200%] flex">
+            <div className="flex items-center">
               {isActive ? (
                 <MdCampaign className="mr-3" size={20} color="#067d83" />
               ) : (
@@ -145,7 +145,7 @@ const Menu = ({ setIsOpen }) => {
           className={({ isActive }) => getNavLinkClassName(isActive)}
         >
           {({ isActive }) => (
-            <div className="w-[200%] flex">
+            <div className="flex items-center">
               {isActive ? (
                 <RiAlarmWarningFill
                   className="mr-3"
@@ -191,7 +191,7 @@ const Menu = ({ setIsOpen }) => {
       {/* Post btn */}
       <button
         // to={"./createpost"}
-        className="text-xl text-center font-semibold bg-[#067d83] text-white shadow-xl self-center shadow-white-300 w-[80%] max-sm:w-[80%] py-4 rounded-3xl mb-4"
+        className="text-center font-semibold bg-primary text-primary-foreground self-center w-[80%] py-3 mb-4"
         onClick={() => {
           setIsModalOpen(true);
         }}

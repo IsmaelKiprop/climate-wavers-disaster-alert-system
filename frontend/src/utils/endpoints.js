@@ -21,5 +21,6 @@ export const endpoints = {
     "tree_projects": "/api/v1/tree-projects/",
     "tree_projects_stats": "/api/v1/tree-projects/stats/",
     "tree_projects_african": "/api/v1/tree-projects/african_projects/",
-    "treeProjectDonations": "/api/v1/tree-project-donations/"
+    "treeProjectDonations": "/api/v1/tree-project-donations/",
+    "disasters": "/api/v1/disasters/"
 }

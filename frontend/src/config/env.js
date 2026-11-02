@@ -23,7 +23,9 @@ export const env = {
   chatbotUrl,
   siteUrl: trimSlash(
     import.meta.env.VITE_SITE_URL ||
-      (typeof window !== "undefined" ? window.location.origin : "")
+      (typeof window !== "undefined" && window.location.hostname !== "localhost"
+        ? window.location.origin
+        : "https://climatewavers.org")
   ),
 };
 

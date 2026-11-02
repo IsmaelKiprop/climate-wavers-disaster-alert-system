@@ -1,63 +1,61 @@
 import PropTypes from "prop-types";
 import { Link } from "react-router-dom";
 
-const status = {
-  ongoing: "text-[#FF4D4D]", // Bright red for ongoing disasters (high urgency)
-  alert: "text-[#FFA500]", // Orange for alerts (warning status)
-  past: "text-[#434343]", // Gray for past disasters (resolved)
+const statusClass = {
+  ongoing: "text-destructive",
+  alert: "text-warning",
+  warning: "text-warning",
+  past: "text-muted",
+  resolved: "text-muted",
+  contained: "text-muted",
 };
 
 const Disasters = ({ disasters }) => {
-  // Handle undefined or null disasters array
-  if (!disasters || !Array.isArray(disasters)) {
+  if (!disasters || !Array.isArray(disasters) || disasters.length === 0) {
     return (
-      <div className="flex flex-col w-full">
-        <div className="py-4">
-          <p className="text-gray-500">No disaster data available</p>
-        </div>
+      <div className="py-6 text-muted text-sm">
+        No disaster reports match this view yet. New alerts from the live feed will appear here.
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col w-full">
+    <div className="flex flex-col w-full min-w-0">
       {disasters.map((disaster) => {
-        const date = new Date(disaster.startDate);
-        const formattedDate = date.toLocaleDateString('en-US', {
-          year: 'numeric',
-          month: 'long',
-          day: 'numeric',
-        });
-        return <div key={disaster.id} className="py-4">
-          <div >
-            <Link to={`/disasters/${disaster.id}`} className="flex justify-between">
-              {" "}
-              <h2 className="capitalize font-bold text-[#067d83] md:text-2xl text-xl">
-                {disaster.region + ", " + disaster.country}: {disaster.disasterType} - {formattedDate}
+        const formattedDate = disaster.startDate
+          ? new Date(disaster.startDate).toLocaleDateString("en-US", {
+              year: "numeric",
+              month: "long",
+              day: "numeric",
+            })
+          : "";
+        return (
+          <article key={disaster.id} className="py-4 border-b border-border min-w-0">
+            <Link to={`/disasters/${encodeURIComponent(disaster.id)}`} className="flex justify-between gap-3 items-start">
+              <h2 className="capitalize font-semibold text-primary text-base sm:text-xl min-w-0">
+                {disaster.name || disaster.title || [disaster.region, disaster.country].filter(Boolean).join(", ") || disaster.disasterType}
+                {formattedDate ? ` (${formattedDate})` : ""}
               </h2>
-            
-            <button className="border-2 w-fit hidden md:flex rounded-md py-2 shadow-md text-center border-gray-400 px-2">View details</button>
+              <span className="hidden md:inline border border-border px-3 py-2 text-sm shrink-0">
+                View details
+              </span>
             </Link>
-          </div>
-          <div className="md:flex w-[100vw] capitalize gap-x-4 max-sm:gap-x-2 text-xl md:px-2 font-serif">
-            <p className={status[disaster.status]}>
-              <span className="font-semibold text-[#434343] capitalize">Status: </span>
-              {disaster.status? disaster.status: "undetermined"}
-            </p>
-            <p>
-              <span className="font-semibold text-[#434343]">
-                Disaster Type:{" "}
-              </span>
-              {disaster.disasterType}
-            </p>
-            <p>
-              <span className="font-semibold text-[#434343]">
-                Affected Country:{" "}
-              </span>
-              {disaster.country}
-            </p>
-          </div>
-        </div>
+            <div className="mt-2 flex flex-col sm:flex-row sm:flex-wrap gap-x-4 gap-y-1 text-sm">
+              <p className={statusClass[disaster.status] || "text-foreground"}>
+                <span className="font-medium text-foreground">Status: </span>
+                {disaster.status || "undetermined"}
+              </p>
+              <p>
+                <span className="font-medium text-foreground">Type: </span>
+                {disaster.disasterType}
+              </p>
+              <p>
+                <span className="font-medium text-foreground">Country: </span>
+                {disaster.country}
+              </p>
+            </div>
+          </article>
+        );
       })}
     </div>
   );

@@ -161,10 +161,10 @@ const Search = ({ isOpen, onClose }) => {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-start justify-center pt-20">
+    <div className="fixed inset-0 bg-black/50 z-[70] flex items-start justify-center pt-4 sm:pt-16 px-2">
       <div 
         ref={searchRef}
-        className="bg-white rounded-xl shadow-2xl w-full max-w-4xl mx-4 max-h-[80vh] overflow-hidden"
+        className="bg-surface border border-border w-full max-w-3xl max-h-[90dvh] overflow-hidden"
       >
         {/* Search Header */}
         <div className="p-4 border-b border-gray-200">

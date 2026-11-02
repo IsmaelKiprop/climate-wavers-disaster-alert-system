@@ -7,6 +7,7 @@ from .views import (
     status_view, websocket_notifications, search_posts, search_users, 
     search_hashtags, search_trending, global_search,
     TreeProjectViewSet, TreeProjectUpdateViewSet, TreeProjectDonationViewSet,
+    DisasterViewSet,
     FileUploadViewSet, verify_paystack_payment, paystack_webhook, mark_certificate_downloaded,
     verify_payment
 )
@@ -28,6 +29,7 @@ router.register(r'views', ViewViewSet)
 router.register(r'follows', FollowViewSet)
 router.register(r'bookmark', BookmarkViewSet)
 router.register(r'tree-projects', TreeProjectViewSet)
+router.register(r'disasters', DisasterViewSet)
 router.register(r'tree-project-updates', TreeProjectUpdateViewSet)
 router.register(r'tree-project-donations', TreeProjectDonationViewSet)
 router.register(r'upload', FileUploadViewSet, basename='upload')

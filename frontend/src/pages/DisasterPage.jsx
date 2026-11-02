@@ -1,117 +1,153 @@
-import { useParams } from "react-router-dom";
-import Topbar from "../components/Topbar";
-import Menu from "../components/Menu";
-import Createcomment from "../components/Createcomment";
+import { Link, useLocation, useParams } from "react-router-dom";
 import { useEffect, useState } from "react";
-import axios from "axios";
-import { env, chatbotApiUrl } from "../config/env";
-
-const apiUrl = env.chatbotUrl
-  ? chatbotApiUrl("/api/v1/disasters")
-  : "/api/v1/disasters";
+import PublicPage from "../components/PublicPage";
+import { fetchDisaster, getCachedDisaster } from "../utils/apiData";
+import { getAuthToken } from "../utils/factory";
 
 const DisasterPage = () => {
   const { disasterId } = useParams();
+  const location = useLocation();
+  const decodedId = decodeURIComponent(disasterId || "");
+  const signedIn = Boolean(getAuthToken());
+  const seeded =
+    location.state?.disaster && String(location.state.disaster.id) === String(decodedId)
+      ? location.state.disaster
+      : getCachedDisaster(decodedId);
+  const [disaster, setDisaster] = useState(seeded);
+  const [loading, setLoading] = useState(!seeded);
+  const [error, setError] = useState("");
 
-  const [disaster, setDisaster] = useState();
   useEffect(() => {
-    // Check if we have the external API URL configured
-    if (!env.chatbotUrl) {
-      console.log('VITE_APP_CHATBOT_URL not configured, using mock data');
-      // Use mock data when external API is not available
-      const mockDisaster = {
-        id: disasterId,
-        region: "California",
-        country: "USA",
-        disasterType: "Wildfire",
-        status: "ongoing",
-        startDate: "2024-01-15T00:00:00Z",
-        description: "Large wildfire affecting multiple counties in California"
-      };
-      setDisaster(mockDisaster);
-      return;
+    let active = true;
+    const nextSeeded =
+      location.state?.disaster && String(location.state.disaster.id) === String(decodedId)
+        ? location.state.disaster
+        : getCachedDisaster(decodedId);
+    if (nextSeeded) {
+      setDisaster(nextSeeded);
+      setLoading(false);
+      setError("");
+    } else {
+      setLoading(true);
     }
-    
-    axios
-      .get(apiUrl + "/" + disasterId)
-      .then((res) => {
-        const { data } = res;
+
+    fetchDisaster(decodedId)
+      .then((data) => {
+        if (!active) return;
         setDisaster(data);
+        setError("");
       })
-      .catch((err) => {
-        console.log('Error fetching disaster details:', err);
-        // Fallback to mock data
-        const mockDisaster = {
-          id: disasterId,
-          region: "California",
-          country: "USA",
-          disasterType: "Wildfire",
-          status: "ongoing",
-          startDate: "2024-01-15T00:00:00Z",
-          description: "Large wildfire affecting multiple counties in California"
-        };
-        setDisaster(mockDisaster);
+      .catch(() => {
+        if (!active) return;
+        if (!nextSeeded) {
+          setDisaster(null);
+          setError("We could not load this disaster report.");
+        }
+      })
+      .finally(() => {
+        if (active) setLoading(false);
       });
-  }, [disasterId]);
+    return () => {
+      active = false;
+    };
+  }, [decodedId, location.state]);
+
+  const title =
+    disaster?.name ||
+    disaster?.title ||
+    [disaster?.region, disaster?.country].filter(Boolean).join(", ") ||
+    "Disaster report";
+  const typeLabel = String(disaster?.disasterType || disaster?.type || "alert").replace(/_/g, " ");
+  const lastUpdated = disaster?.lastUpdated
+    ? new Date(disaster.lastUpdated).toLocaleString()
+    : disaster?.startDate
+      ? new Date(disaster.startDate).toLocaleString()
+      : "";
+  const coords =
+    disaster?.coordinates?.lat != null && disaster?.coordinates?.lng != null
+      ? `${Number(disaster.coordinates.lat).toFixed(4)}, ${Number(disaster.coordinates.lng).toFixed(4)}`
+      : disaster?.latitude != null && disaster?.longitude != null
+        ? `${Number(disaster.latitude).toFixed(4)}, ${Number(disaster.longitude).toFixed(4)}`
+        : "";
 
   return (
-    <div className="w-full overflow-hidden">
-      <div className="md:pb-20 pb-10">
-        <Topbar />
-      </div>
-
-      <div className="flex w-full md:py-0 py-8">
-        <div className="w-[20%] fixed border-r-2 h-full hidden md:flex ">
-          <Menu />
+    <PublicPage
+      title={title}
+      description={disaster?.details || disaster?.description || "Live disaster report from Climate Wavers."}
+    >
+      <Link to={signedIn ? "/disasters" : "/"} className="text-sm text-primary">
+        {signedIn ? "Back to disasters" : "Back to home"}
+      </Link>
+      {loading ? (
+        <p className="mt-6 text-muted">Loading report...</p>
+      ) : error ? (
+        <div className="mt-6 border border-border bg-surface p-5">
+          <p className="font-medium">{error}</p>
         </div>
-        <div className="px-4 py-4 md:pl-[21%] grid gap-y-4">
-          <h2 className="capitalize font-bold  md:text-2xl text-xl">
-            {disaster?.region}, {disaster?.country}: {disaster?.disasterType} -{" "}
-            {disaster?.startDate && formatDate(disaster.startDate)}
-          </h2>
-          <h3 className="capitalize text-[#067d83] md:text-xl font-semibold">
-            Description
-          </h3>
-          <div
-            className="md:text-xl text-md font-serif"
-            style={{ whiteSpace: "pre-wrap" }}
-          >
-            {disaster?.details}
-          </div>
-          <img
-            alt="disaster_image"
-            className="border-2 shadow-md rounded-md"
-            src={
-              disaster?.images?.length
-                ? disaster.images[0]
-                : "/placeholde-disaster-img.jpg"
-            }
-          />
-          <h4 className="py-2 font-semibold text-[#067d83] text-xl">
-            Comments
-          </h4>
-
-          <div className=" md:border-2 border-b-2 border-t-0 self-center rounded-lg shadow-xl shadow-white h-40 py-4 ">
-            <Createcomment
-              type={"comments"}
-              button={"comment"}
-            />
-          </div>
-         
-        </div>
-      </div>
-    </div>
+      ) : (
+        <>
+          <p className="mt-4 text-xs font-semibold uppercase tracking-wide text-muted">
+            {disaster?.severity || "Alert"} {disaster?.source ? `· ${disaster.source}` : ""}
+          </p>
+          <h1 className="mt-1 font-semibold text-xl sm:text-2xl">{title}</h1>
+          <p className="mt-2 text-sm text-muted capitalize">{typeLabel}</p>
+          <dl className="mt-4 grid gap-2 text-sm">
+            {disaster?.location ? (
+              <div>
+                <dt className="font-medium text-foreground">Location</dt>
+                <dd className="text-muted">{disaster.location}</dd>
+              </div>
+            ) : null}
+            {coords ? (
+              <div>
+                <dt className="font-medium text-foreground">Coordinates</dt>
+                <dd className="text-muted">{coords}</dd>
+              </div>
+            ) : null}
+            {lastUpdated ? (
+              <div>
+                <dt className="font-medium text-foreground">Last updated</dt>
+                <dd className="text-muted">{lastUpdated}</dd>
+              </div>
+            ) : disaster?.startDate ? (
+              <div>
+                <dt className="font-medium text-foreground">Started</dt>
+                <dd className="text-muted">{formatDate(disaster.startDate)}</dd>
+              </div>
+            ) : null}
+          </dl>
+          <h2 className="mt-6 text-primary font-medium">Description</h2>
+          <p className="mt-2 text-sm sm:text-base whitespace-pre-wrap">
+            {disaster?.details || disaster?.description || "No description has been published for this report yet."}
+          </p>
+          {disaster?.sourceUrl ? (
+            <a
+              href={disaster.sourceUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-4 inline-flex h-11 items-center px-4 bg-primary text-primary-foreground"
+            >
+              Official source
+            </a>
+          ) : null}
+          {!signedIn ? (
+            <p className="mt-6 text-sm text-muted">
+              <Link to="/login" className="text-primary">Sign in</Link> to open the full alerts list, comment, and use community tools.
+            </p>
+          ) : null}
+        </>
+      )}
+    </PublicPage>
   );
 };
 
 function formatDate(d) {
   const date = new Date(d);
-  const formattedDate = date.toLocaleDateString("en-US", {
+  return date.toLocaleDateString("en-US", {
     year: "numeric",
     month: "long",
     day: "numeric",
   });
-  return formattedDate;
 }
 
 export default DisasterPage;

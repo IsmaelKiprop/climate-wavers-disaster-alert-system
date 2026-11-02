@@ -5,8 +5,8 @@ import { logout } from "../utils/factory";
 
 const Mobilemenu = ({ setIsOpen }) => {
   return (
-    <div className="bg-white backdrop-blur-3xl bg-opacity-100 fixed top-0 left-0 md:w-[25vw] w-[75vw] h-[100vh] z-10  max-h-screen ">
-      <div className="top-0 left-0 h-[100vh]  w-[100%] border-r-[1px] rounded-3xl border-gray-200">
+    <div className="bg-surface fixed top-0 left-0 w-[min(80vw,320px)] h-[100dvh] z-[60] overflow-y-auto border-r border-border">
+      <div className="h-full w-full">
         <div className="flex justify-between items-center p-4 border-b border-gray-200">
           <h2 className="text-lg font-semibold text-[#2F4F4F]">Menu</h2>
           <div className="flex items-center gap-3">

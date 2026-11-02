@@ -6,34 +6,28 @@ import Footer from "./FooterBar";
 
 const SharedLayout = () => {
   return (
-    <div className="bg-gray-50 text-[#111111] min-h-screen flex flex-col">
-      {/* Fixed Header */}
-      <div className="sticky top-0 z-50 bg-white shadow-sm border-b border-gray-200">
+    <div className="bg-background text-foreground min-h-[100dvh] flex flex-col overflow-x-hidden">
+      <header className="sticky top-0 z-50 bg-navbar border-b border-border">
         <Topbar />
-      </div>
-      
-      {/* Main Content Area */}
+      </header>
+
       <div className="flex flex-1 relative">
-        {/* Left Sidebar - Sticky and Scrollable */}
-        <div className="w-[20%] hidden md:block bg-white border-r border-gray-200 fixed left-0 top-16 h-[calc(100vh-4rem)] overflow-y-auto z-40">
+        <aside className="hidden md:block w-[220px] lg:w-[240px] bg-sidebar border-r border-border sticky top-16 h-[calc(100dvh-4rem)] overflow-y-auto shrink-0">
           <Leftsidebar />
-        </div>
-        
-        {/* Main Content - Scrollable with sidebar offset */}
-        <div className="flex-1 overflow-y-auto bg-gray-50 md:ml-[20%] lg:mr-[20%]">
-          <div className="max-w-4xl mx-auto px-4 pt-20 pb-6 min-h-screen">
+        </aside>
+
+        <main className="flex-1 min-w-0 overflow-x-hidden">
+          <div className="max-w-4xl mx-auto px-3 sm:px-4 py-4 pb-24 md:pb-8">
             <Outlet />
           </div>
-        </div>
-        
-        {/* Right Sidebar - Sticky and Scrollable */}
-        <div className="w-[20%] hidden lg:block bg-white border-l border-gray-200 fixed right-0 top-16 h-[calc(100vh-4rem)] overflow-y-auto z-40">
+        </main>
+
+        <aside className="hidden xl:block w-[240px] bg-sidebar border-l border-border sticky top-16 h-[calc(100dvh-4rem)] overflow-y-auto shrink-0">
           <Rightsidebar />
-        </div>
+        </aside>
       </div>
-      
-      {/* Mobile Footer */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-gray-200">
+
+      <div className="md:hidden">
         <Footer />
       </div>
     </div>

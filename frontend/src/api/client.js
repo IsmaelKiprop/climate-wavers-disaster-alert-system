@@ -2,7 +2,6 @@ import axios from "axios";
 import { toast } from "react-toastify";
 import Cookies from "js-cookie";
 import { getAuthToken } from "../utils/factory";
-import { dummyUser, dummyPost } from "../utils/dummies";
 import Swal from "sweetalert2";
 import { env } from "../config/env";
 
@@ -125,28 +124,11 @@ class Client {
 
     try {
       let response;
-      const backendStatus = env.backendEnabled;
-      
-      console.log('API Request:', { method, endpoint, backendStatus });
-      if (!backendStatus && endpoint.endsWith("login/")) {
-        if (
-          data.email === dummyUser.email &&
-          data.password === dummyUser.password
-        ) {
-          response = { data: dummyUser };
-        }
-      } else if (
-        !backendStatus &&
-        (endpoint.endsWith("post/") || endpoint.endsWith("comments/"))
-      ) {
-        response = { data: dummyPost };
-      } else {
-        try {
-          response = await client({...config, method, url: endpoint});
-        } catch (axiosError) {
-          console.error('Axios request failed:', axiosError);
-          throw new Error(`Request failed: ${axiosError.message || 'Unknown error'}`);
-        }
+      try {
+        response = await client({...config, method, url: endpoint});
+      } catch (axiosError) {
+        console.error('Axios request failed:', axiosError);
+        throw axiosError;
       }
       
       console.log('API Response:', { response, hasData: !!response?.data });

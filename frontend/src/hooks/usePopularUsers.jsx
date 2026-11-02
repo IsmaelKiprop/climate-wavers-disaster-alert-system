@@ -1,37 +1,18 @@
 import { useQuery } from '@tanstack/react-query';
+import { client } from '../api';
 import { endpoints } from '../utils/endpoints';
+import { unwrapList } from '../utils/apiData';
 
 const usePopularUsers = () => {
   return useQuery({
     queryKey: ['popularUsers'],
     queryFn: async () => {
-      const response = await fetch(endpoints.users);
-      if (!response.ok) {
-        throw new Error('Failed to fetch popular users');
-      }
-      const data = await response.json();
-      
-      // Ensure we return an array
-      if (Array.isArray(data)) {
-        return data;
-      } else if (data && Array.isArray(data.results)) {
-        return data.results;
-      } else {
-        console.warn('API returned non-array data:', data);
-        return [];
-      }
+      const data = await client.run("get", endpoints.users, {}, true);
+      return unwrapList(data);
     },
-    refetchInterval: 300000, // 5 minutes
-    staleTime: 120000, // 2 minutes
-    cacheTime: 600000, // 10 minutes
-    retry: 3,
-    retryDelay: 1000,
-    refetchOnWindowFocus: true,
-    refetchOnMount: true,
-    onError: (error) => {
-      console.error('Error fetching popular users:', error);
-      return [];
-    }
+    refetchInterval: 300000,
+    staleTime: 120000,
+    retry: 1,
   });
 };
 

@@ -10,6 +10,8 @@ import { getAuthToken, getUser } from '../utils/factory';
 import { useExchangeRate } from '../hooks/useExchangeRate';
 import ProjectCard from './ProjectCard';
 import { client } from '../api';
+import { apiUrl } from '../config/env';
+import { unwrapList } from '../utils/apiData';
 
 const PlantTree = () => {
   const [selectedTree, setSelectedTree] = useState(null);
@@ -45,7 +47,7 @@ const PlantTree = () => {
 
         // Fetch user's tree donations from the database
         const token = getAuthToken();
-        const response = await fetch(`${endpoints.treeProjectDonations}?donor=${user.id}`, {
+        const response = await fetch(`${apiUrl(endpoints.treeProjectDonations)}?donor=${user.id}`, {
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
@@ -126,13 +128,13 @@ const PlantTree = () => {
         headers['Authorization'] = `Bearer ${token}`;
       }
       
-      const response = await fetch(endpoints.tree_projects_african, {
+      const response = await fetch(apiUrl(endpoints.tree_projects_african), {
         headers
       });
       
       if (response.ok) {
         const data = await response.json();
-        setAfricanProjects(Array.isArray(data) ? data : []);
+        setAfricanProjects(unwrapList(data));
       } else {
         console.error('Failed to fetch African projects');
         setAfricanProjects([]);
@@ -186,7 +188,7 @@ const PlantTree = () => {
   };
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 py-8">
+    <main className="min-h-screen bg-background py-6 sm:py-8">
       {/* SEO for shared project pages */}
       {selectedProject && <ProjectSEO project={selectedProject} />}
       

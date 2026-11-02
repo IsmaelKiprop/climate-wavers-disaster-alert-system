@@ -1,25 +1,22 @@
-const Campaign = ({ campaign, id }) => {
+const Campaign = ({ campaign }) => {
   return (
-    <div className=" w-[100%] border-8 border-[#DFDFDF]  shadow-xl ">
+    <article className="w-full bg-surface border border-border overflow-hidden h-full">
       <div
-        className="bg-cover h-[40vh] w-[100%] flex px-2 flex-col justify-end"
-        style={{ backgroundImage: `url(${campaign.image})` }}
+        className="bg-cover bg-center h-48 w-full flex flex-col justify-end p-3"
+        style={{ backgroundImage: `url(${campaign.image || "/logo.jpg"})` }}
       >
-        <h1 className="text-white text-start leading-5 font-bold text-lg">
-          {campaign.title}
-        </h1>
-        <p className="text-white leading-4  text-start text-sm">
-          {campaign.details}
-        </p>
-        <h3 className="text-[#10FFE2] text-start py-2 font-bold">
-          ${campaign.raised}/${campaign.amount}
-        </h3>
+        <div className="bg-black/70 p-3 text-white">
+          <h2 className="font-semibold text-base leading-5">{campaign.title}</h2>
+          <p className="mt-1 text-xs leading-4 line-clamp-2">{campaign.details}</p>
+        </div>
       </div>
-      <div className="grid grid-cols-2 ">
-        <div className="border-4 border-[#2A9D8F] "></div>
-        <div className="border-4 border-white"></div>
+      <div className="p-3 flex items-center justify-between text-sm">
+        <span className="text-muted">{campaign.city ? `${campaign.city}, ${campaign.country}` : campaign.country}</span>
+        <span className="font-medium text-primary">
+          ${Number(campaign.raised || 0).toLocaleString()} / ${Number(campaign.amount || 0).toLocaleString()}
+        </span>
       </div>
-    </div>
+    </article>
   );
 };
 

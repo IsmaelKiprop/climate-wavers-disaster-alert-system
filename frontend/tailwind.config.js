@@ -8,6 +8,29 @@ export default {
         'climate-green': '#067d83',
         'climate-green-dark': '#055a5f',
         'climate-green-light': '#0a9ca3',
+        primary: {
+          DEFAULT: 'var(--color-primary)',
+          foreground: 'var(--color-primary-foreground)',
+          dark: 'var(--color-primary-dark)',
+        },
+        secondary: {
+          DEFAULT: 'var(--color-secondary)',
+          foreground: 'var(--color-secondary-foreground)',
+        },
+        background: 'var(--color-background)',
+        surface: 'var(--color-surface)',
+        foreground: 'var(--color-foreground)',
+        muted: 'var(--color-muted)',
+        border: 'var(--color-border)',
+        destructive: 'var(--color-destructive)',
+        warning: 'var(--color-warning)',
+        success: 'var(--color-success)',
+      },
+      borderRadius: {
+        DEFAULT: '5px',
+        sm: '5px',
+        md: '5px',
+        lg: '5px',
       },
       backgroundImage: {
         "radial-gradient":

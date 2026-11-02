@@ -1,145 +1,67 @@
 import { NavLink } from "react-router-dom";
-import { getUser } from "../utils/factory";
 import { MdOutlineCampaign, MdCampaign } from "react-icons/md";
 import { RiAlarmWarningFill, RiAlarmWarningLine } from "react-icons/ri";
-import { IoNotifications, IoNotificationsOutline } from "react-icons/io5";
-import { useState, useEffect } from "react";
+
+const itemClass = "flex flex-col items-center justify-center min-w-0 flex-1 py-2 text-[10px] text-muted";
 
 const Footer = () => {
-  const [user, setUser] = useState(getUser())
-
-  useEffect(() => {
-    setUser(getUser())
-  }, [])
-
-  const activeStyle = {};
-
   return (
-    <div className="flex w-full">
-      {/* Menu */}
-      <div
-        className="list-none w-[100%] px-2 fixed z-30 bg-white bottom-0 text-base
-        flex justify-between items-center"
-      >
-        <NavLink
-          to={"/app"}
-          className="flex items-center py-2 lg:px-8  max-sm:text-xl"
-          style={({ isActive }) => {
-            return isActive ? activeStyle : null;
-          }}
-          end
-        >
-          {({ isActive }) => (
-            <img
-              alt=""
-              src={isActive ? "../../home.png" : "../../home.svg"}
-              className="w-[30px] h-[30px] object-contain"
-            />
-          )}
-        </NavLink>
-        <NavLink
-          className="flex items-center py-2 lg:px-8  max-sm:text-xl"
-          to={"/app/community"}
-          style={({ isActive }) => {
-            return isActive ? activeStyle : null;
-          }}
-          end
-        >
-          {({ isActive }) => (
-            <img
-              alt=""
-              src={isActive ? "../../people1.png" : "../../people.png"}
-              className="w-[30px] h-[30px] object-contain"
-            />
-          )}
-        </NavLink>
-
-        <NavLink
-          className="flex items-center py-2 lg:px-8  max-sm:text-xl"
-          to={`/app/${user.id}/profile`}
-          style={({ isActive }) => {
-            return isActive ? activeStyle : null;
-          }}
-          end
-        >
-          {({ isActive }) => (
-            <img
-              alt=""
-              src={isActive ? "../../profile1.png" : "../../profile.png"}
-              className="w-[30px] h-[30px] object-contain"
-            />
-          )}
-        </NavLink>
-       
-        <NavLink
-          className="flex items-center py-2  lg:px-8  max-sm:text-xl"
-          to={`/app/plant-tree`}
-          style={({ isActive }) => {
-            return isActive ? activeStyle : null;
-          }}
-          end
-        >
-          {({ isActive }) => (
-            <img
-              alt=""
-              src={isActive ? "../../tree1.svg" : "../../tree.svg"}
-              className="w-[30px] h-[30px] object-contain"
-            />
-          )}
-        </NavLink>
-        <NavLink
-          className="flex items-center py-2  lg:px-8  max-sm:text-xl"
-          to={"/campaigns"}
-          style={({ isActive }) => (isActive ? activeStyle : null)}
-        >
-          {({ isActive }) =>
-            isActive ? (
-              <MdCampaign className="w-[38px]" size={35} color="#067d83" />
-            ) : (
-              <MdOutlineCampaign className="w-[38px]" size={35} color="#434343"/>
-            )
-          }
-        </NavLink>
-        <NavLink
-          className="flex items-center py-2 lg:px-8  max-sm:text-xl"
-          to={`/disasters`}
-          style={({ isActive }) => (isActive ? activeStyle : null)}
-        >
-            {({ isActive }) =>
-              isActive ? (
-                <RiAlarmWarningFill
-                  className="w-[30px]"
-                  size={35}
-                  color="#EA4335"
-                />
-              ) : (
-                <RiAlarmWarningLine
-                  className="w-[30px] "
-                  size={35}
-                  color="#434343"
-                />
-              )
-            }
-        </NavLink>
-        <NavLink
-          className="flex items-center py-2 lg:px-8  max-sm:text-xl"
-          to={"/app/notifications"}
-          style={({ isActive }) => {
-            return isActive ? activeStyle : null;
-          }}
-          end
-        >
-          {({ isActive }) => (
-            isActive ? (
-              <IoNotifications className="w-[30px] h-[30px]" size={30} color="#067d83" />
-            ) : (
-              <IoNotificationsOutline className="w-[30px] h-[30px]" size={30} color="#434343" />
-            )
-          )}
-        </NavLink>
-       
-      </div>
-    </div>
+    <nav className="fixed z-30 bg-navbar border-t border-border bottom-0 left-0 right-0 h-16 flex items-stretch px-1 pb-[env(safe-area-inset-bottom)]">
+      <NavLink to="/app" end className={itemClass}>
+        {({ isActive }) => (
+          <>
+            <img alt="" src={isActive ? "/home.png" : "/home.svg"} className="w-6 h-6 object-contain" />
+            <span className={isActive ? "text-primary" : ""}>Home</span>
+          </>
+        )}
+      </NavLink>
+      <NavLink to="/app/community" className={itemClass}>
+        {({ isActive }) => (
+          <>
+            <img alt="" src={isActive ? "/people1.png" : "/people.png"} className="w-6 h-6 object-contain" />
+            <span className={isActive ? "text-primary" : ""}>Community</span>
+          </>
+        )}
+      </NavLink>
+      <NavLink to="/app/plant-tree" className={itemClass}>
+        {({ isActive }) => (
+          <>
+            <img alt="" src={isActive ? "/tree1.svg" : "/tree.svg"} className="w-6 h-6 object-contain" />
+            <span className={isActive ? "text-primary" : ""}>Trees</span>
+          </>
+        )}
+      </NavLink>
+      <NavLink to="/campaigns" className={itemClass}>
+        {({ isActive }) =>
+          isActive ? (
+            <>
+              <MdCampaign size={22} color="#067d83" />
+              <span className="text-primary">Campaigns</span>
+            </>
+          ) : (
+            <>
+              <MdOutlineCampaign size={22} color="#434343" />
+              <span>Campaigns</span>
+            </>
+          )
+        }
+      </NavLink>
+      <NavLink to="/disasters" className={itemClass}>
+        {({ isActive }) =>
+          isActive ? (
+            <>
+              <RiAlarmWarningFill size={22} color="#EA4335" />
+              <span className="text-primary">Alerts</span>
+            </>
+          ) : (
+            <>
+              <RiAlarmWarningLine size={22} color="#434343" />
+              <span>Alerts</span>
+            </>
+          )
+        }
+      </NavLink>
+    </nav>
   );
 };
 

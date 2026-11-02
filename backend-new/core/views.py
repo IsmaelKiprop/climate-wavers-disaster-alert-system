@@ -4,7 +4,7 @@ from django.contrib.contenttypes.models import ContentType
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework import status
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from django.contrib.auth import get_user_model
 from django.http import Http404
 from django.http import JsonResponse
@@ -17,6 +17,7 @@ import json
 import re
 import os
 import uuid
+import requests
 from datetime import datetime
 from .models import (
     Notification,
@@ -32,6 +33,7 @@ from .models import (
     TreeProject,
     TreeProjectUpdate,
     TreeProjectDonation,
+    Disaster,
 )
 from .serializers import (
     NotificationSerializer,
@@ -52,6 +54,7 @@ from .serializers import (
     TreeProjectUpdateCreateSerializer,
     TreeProjectDonationSerializer,
     TreeProjectDonationCreateSerializer,
+    DisasterSerializer,
 )
 from rest_framework import generics, status
 from rest_framework.response import Response
@@ -957,6 +960,11 @@ class TreeProjectViewSet(viewsets.ModelViewSet):
     queryset = TreeProject.objects.all()
     serializer_class = TreeProjectSerializer
     permission_classes = [IsAuthenticated]
+
+    def get_permissions(self):
+        if self.action in ['list', 'retrieve', 'african_projects', 'stats']:
+            return [AllowAny()]
+        return [IsAuthenticated()]
     
     def get_serializer_class(self):
         if self.action == 'create':
@@ -1084,7 +1092,7 @@ class TreeProjectViewSet(viewsets.ModelViewSet):
         
         return Response({"message": "Project verified successfully"})
     
-    @action(detail=False, methods=['get'])
+    @action(detail=False, methods=['get'], permission_classes=[AllowAny])
     def stats(self, request):
         """
         Get global tree project statistics
@@ -1113,6 +1121,73 @@ class TreeProjectViewSet(viewsets.ModelViewSet):
             'total_funds_raised': total_funds_raised,
             'country_breakdown': list(country_stats)
         })
+
+
+class DisasterViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = Disaster.objects.all().order_by('-start_date')
+    serializer_class = DisasterSerializer
+    permission_classes = [AllowAny]
+
+    @action(detail=False, methods=['get'], permission_classes=[AllowAny])
+    def live(self, request):
+        """Proxy live USGS and NASA EONET events for the public map and charts."""
+        events = []
+        try:
+            usgs = requests.get(
+                "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/4.5_week.geojson",
+                timeout=20,
+            )
+            if usgs.ok:
+                for feature in usgs.json().get("features", []):
+                    props = feature.get("properties") or {}
+                    coords = (feature.get("geometry") or {}).get("coordinates") or []
+                    mag = props.get("mag") or 0
+                    events.append({
+                        "id": feature.get("id"),
+                        "title": props.get("title"),
+                        "disaster_type": "earthquake",
+                        "severity": "catastrophic" if mag >= 7 else "high" if mag >= 6 else "moderate",
+                        "status": "ongoing",
+                        "country": (props.get("place") or "").split(",")[-1].strip(),
+                        "region": props.get("place") or "",
+                        "latitude": coords[1] if len(coords) > 1 else None,
+                        "longitude": coords[0] if coords else None,
+                        "description": props.get("title"),
+                        "start_date": datetime.utcfromtimestamp((props.get("time") or 0) / 1000).isoformat() if props.get("time") else None,
+                        "official_source": "USGS",
+                    })
+        except Exception:
+            pass
+        try:
+            eonet = requests.get(
+                "https://eonet.gsfc.nasa.gov/api/v3/events?status=open&limit=80",
+                timeout=20,
+            )
+            if eonet.ok:
+                for item in eonet.json().get("events", []):
+                    geos = item.get("geometry") or []
+                    geo = geos[-1] if geos else {}
+                    coords = geo.get("coordinates") or []
+                    lng = lat = None
+                    if geo.get("type") == "Point" and len(coords) >= 2:
+                        lng, lat = coords[0], coords[1]
+                    category = ((item.get("categories") or [{}])[0]).get("id") or "other"
+                    events.append({
+                        "id": item.get("id"),
+                        "title": item.get("title"),
+                        "disaster_type": category,
+                        "severity": "high",
+                        "status": "ongoing",
+                        "region": item.get("title"),
+                        "latitude": lat,
+                        "longitude": lng,
+                        "description": item.get("description") or item.get("title"),
+                        "start_date": geo.get("date"),
+                        "official_source": "NASA EONET",
+                    })
+        except Exception:
+            pass
+        return Response(events)
 
 
 class TreeProjectUpdateViewSet(viewsets.ModelViewSet):

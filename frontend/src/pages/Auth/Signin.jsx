@@ -1,155 +1,94 @@
 import { useState } from "react";
-import signinBg from "../../assets/signin.svg";
-import Box from "@mui/material/Box";
-import IconButton from "@mui/material/IconButton";
-import TextField from "@mui/material/TextField";
-import OutlinedInput from "@mui/material/OutlinedInput";
-import InputLabel from "@mui/material/InputLabel";
-import InputAdornment from "@mui/material/InputAdornment";
-import FormControl from "@mui/material/FormControl";
-import Visibility from "@mui/icons-material/Visibility";
-import VisibilityOff from "@mui/icons-material/VisibilityOff";
-import { NavLink, useNavigate } from "react-router-dom";
-import { client } from "../../api";
+import { Link, NavLink, useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
+import { client } from "../../api";
 import { endpoints } from "../../utils/endpoints";
-import ArrowBackIcon from "@mui/icons-material/ArrowBack";
-import Cookies from "js-cookie";
 import { LoginPageSEO } from "../../components/SEOComponents";
+import AuthLayout, { AuthField, authButtonClass, authInputClass } from "../../components/AuthLayout";
 
 const Signin = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [isDisabled, setIsDisabled] = useState(false);
-
-  const handleClickShowPassword = () => setShowPassword((show) => !show);
-
-  const handleMouseDownPassword = (event) => {
-    event.preventDefault();
-  };
-  const { register, handleSubmit, reset } = useForm();
+  const { register, handleSubmit, formState: { errors } } = useForm();
   const navigate = useNavigate();
-  
-  // Get redirect URL from query params
-  const urlParams = new URLSearchParams(window.location.search);
-  const redirectTo = urlParams.get('redirect') || '/app';
-
-  const toastMsg = {
-    info: "Signing In",
-    error: "Login failed. Please make sure the email and password are correct.",
-  };
+  const redirectTo = new URLSearchParams(window.location.search).get("redirect") || "/app";
 
   const onSubmit = async (data) => {
     try {
       setIsDisabled(true);
       await client.run(
         "post",
-        endpoints?.signin,
+        endpoints.signin,
         data,
         false,
-        toastMsg,
+        {
+          info: "Signing in",
+          error: "Login failed. Check your email and password.",
+        },
         true,
         false
       );
-      reset();
-      setIsDisabled(false);
       navigate(redirectTo);
     } catch (error) {
-      setIsDisabled(false);
       console.log("Login failed:", error);
+    } finally {
+      setIsDisabled(false);
     }
   };
+
   return (
     <>
       <LoginPageSEO />
-      <div className="lg:h-[100vh] md:h-[100vh] md:flex justify-between">
-      <div
-        className="w-[100%] lg:w-[50%] md:w-[50%] bg-cover border-r-1 shadow-xl bg-center hidden lg:flex md:flex"
-        style={{ backgroundImage: `url(${signinBg})` }}
-      ></div>
-      <div className="w-[100%] lg:w-[30%] md:w-[40%] p-8 m-auto md:pt-1 pt-[200px]">
-        <div className="md:hidden absolute top-0 py-8">
-          <img alt="logo" src="/Vector.png"></img>
-        </div>
-        <div className="flex items-center mb-4">
-          <NavLink to="/" className="flex items-center text-[#067d83] hover:text-[#055a5f] transition-colors">
-            <ArrowBackIcon className="mr-2" />
-            <span className="text-sm font-medium">Back to Home</span>
-          </NavLink>
-        </div>
-        <h1 className="lg:text-[40px] md:text-[40px] text-[24px] text-[#067d83] font-bold font-serif text-center mb-8">
-          Sign In
-        </h1>
-        <div className="md:px-1 px-4">
-        <Box
-          component="form"
-          sx={{
-            "& > :not(style)": { m: 1, width: "100%" },
-          }}
-          noValidate
-          autoComplete="off"
-        >
-          <TextField
-            id="outlined-basic"
-            label="Email"
-            variant="outlined"
-            placeholder="mercia@gmail.com"
-            color="success"
-            {...register("email", { required: true, maxLength: 50 })}
-          />
-          <FormControl
-            sx={{ m: 1, width: "25ch" }}
-            variant="outlined"
-            color="success"
-          >
-            <InputLabel htmlFor="outlined-adornment-password">
-              Password
-            </InputLabel>
-            <OutlinedInput
-              {...register("password", { required: true, maxLength: 50 })}
-              id="outlined-adornment-password"
-              type={showPassword ? "text" : "password"}
-              endAdornment={
-                <InputAdornment position="end">
-                  <IconButton
-                    aria-label="toggle password visibility"
-                    onClick={handleClickShowPassword}
-                    onMouseDown={handleMouseDownPassword}
-                    edge="end"
-                  >
-                    {showPassword ? <VisibilityOff /> : <Visibility />}
-                  </IconButton>
-                </InputAdornment>
-              }
-              label="Password"
+      <AuthLayout
+        title="Sign in"
+        subtitle="Use your Climate Wavers account to view alerts, reports, and campaigns."
+        panelTitle="Sign in to the response workspace"
+        panelBody="Monitor alerts, report hazards, and coordinate community response in one place."
+      >
+        <form onSubmit={handleSubmit(onSubmit)} noValidate>
+          <AuthField id="email" label="Email" error={errors.email && "Email is required"}>
+            <input
+              id="email"
+              type="email"
+              autoComplete="email"
+              className={authInputClass}
+              {...register("email", { required: true, maxLength: 80 })}
             />
-          </FormControl>
-          <NavLink to="/forgotpassword" className="text-gray-400 text-[14px]">
-            Forgot Password?
-          </NavLink>
-          <button
-            onClick={handleSubmit(onSubmit)}
-            className={
-              isDisabled
-                ? "blur-[1px] bg-[#067d83] text-white py-4 rounded-md font-serif"
-                : "bg-[#067d83] text-white py-4 rounded-md font-serif"
-            }
-            disabled={isDisabled}
-          >
-            {isDisabled ? "Processing..." : "Sign In"}
-          </button>
-          <div className="flex justify-center items-center flex-col text-center">
-            <NavLink to="/signup">
-              Don&apos;t have an account?{" "}
-              <span className="text-xl px-2 font-[700] font-serif text-[#067d83]">
-                Sign Up
-              </span>{" "}
+          </AuthField>
+          <AuthField id="password" label="Password" error={errors.password && "Password is required"}>
+            <div className="relative">
+              <input
+                id="password"
+                type={showPassword ? "text" : "password"}
+                autoComplete="current-password"
+                className={`${authInputClass} pr-16`}
+                {...register("password", { required: true, maxLength: 80 })}
+              />
+              <button
+                type="button"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted"
+                onClick={() => setShowPassword((value) => !value)}
+              >
+                {showPassword ? "Hide" : "Show"}
+              </button>
+            </div>
+          </AuthField>
+          <div className="mb-5 text-right">
+            <NavLink to="/forgotpassword" className="text-sm text-primary hover:text-primary-dark">
+              Forgot password?
             </NavLink>
           </div>
-        </Box>
-        </div>
-
-      </div>
-      </div>
+          <button type="submit" className={authButtonClass} disabled={isDisabled}>
+            {isDisabled ? "Signing in..." : "Sign in"}
+          </button>
+        </form>
+        <p className="mt-6 text-sm text-center text-muted">
+          No account yet?{" "}
+          <Link to="/signup" className="text-primary font-medium hover:text-primary-dark">
+            Sign up
+          </Link>
+        </p>
+      </AuthLayout>
     </>
   );
 };

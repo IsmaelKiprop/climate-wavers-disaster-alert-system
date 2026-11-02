@@ -2,110 +2,100 @@
 @tailwind components;
 @tailwind utilities;
 
-
-/* :root {
-  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
-
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
-
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+:root {
+  --color-primary: #067d83;
+  --color-primary-foreground: #ffffff;
+  --color-primary-dark: #055a5f;
+  --color-secondary: #2f4f4f;
+  --color-secondary-foreground: #ffffff;
+  --color-background: #f6f7f7;
+  --color-surface: #ffffff;
+  --color-surface-elevated: #ffffff;
+  --color-foreground: #111111;
+  --color-muted: #6b7280;
+  --color-border: #e5e7eb;
+  --color-input: #e5e7eb;
+  --color-destructive: #b42318;
+  --color-success: #067d83;
+  --color-warning: #b45309;
+  --color-info: #067d83;
+  --color-focus: #067d83;
+  --color-sidebar: #ffffff;
+  --color-navbar: #ffffff;
+  --color-scrollbar-thumb: #e5e7eb;
+  --color-scrollbar-track: #f6f7f7;
+  --radius: 5px;
 }
 
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
-a:hover {
-  color: #535bf2;
+
+html,
+body,
+#root {
+  min-height: 100%;
+  min-height: 100dvh;
 }
 
 body {
   margin: 0;
-  display: flex;
-  place-items: center;
-  min-width: 320px;
-  min-height: 100vh;
+  background: var(--color-background);
+  color: var(--color-foreground);
+  overflow-x: hidden;
+  font-family: Montserrat, system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 
-h1 {
-  font-size: 3.2em;
-  line-height: 1.1;
+#root {
+  overflow-x: clip;
 }
 
-button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  background-color: #1a1a1a;
-  cursor: pointer;
-  transition: border-color 0.25s;
-}
-button:hover {
-  border-color: #646cff;
-}
-button:focus,
-button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
+img,
+video {
+  max-width: 100%;
 }
 
-@media (prefers-color-scheme: light) {
-  :root {
-    color: #213547;
-    background-color: #ffffff;
-  }
-  a:hover {
-    color: #747bff;
-  }
-  button {
-    background-color: #f9f9f9;
-  }
+* {
+  box-sizing: border-box;
 }
- */
 
- body::-webkit-scrollbar {
-  display: none;
+input,
+button,
+textarea,
+select {
+  border-radius: var(--radius);
 }
+
+*:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+html {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-scrollbar-thumb) var(--color-scrollbar-track);
+}
+
 ::-webkit-scrollbar {
-  display: none;
- }
- 
- ::-webkit-scrollbar-track {
-  display: none;
- }
- 
- ::-webkit-scrollbar-thumb {
-  display: none;
- }
- 
-@keyframes rotate-smooth {
-  0% {
-    transform: rotate(0deg);
-  }
-  25% {
-    transform: rotate(10deg);
-  }
-  50% {
-    transform: rotate(0deg);
-  }
-  75% {
-    transform: rotate(-10deg);
-  }
-  100% {
-    transform: rotate(0deg);
-  }
+  width: 1px;
+  height: 1px;
 }
 
-.animate-rotate-smooth {
-  animation: rotate-smooth 2s infinite ease-in-out;
+::-webkit-scrollbar-track {
+  background: var(--color-scrollbar-track);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-scrollbar-thumb);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

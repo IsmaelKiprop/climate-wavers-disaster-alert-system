@@ -4,163 +4,126 @@ import Topbar from "../components/Topbar";
 import Menu from "../components/Menu";
 import Footer from "../components/FooterBar";
 import Pagination from "../components/Pagination";
-import { useEffect, useState } from "react";
-import axios from "axios";
+import { useEffect, useMemo, useState } from "react";
 import { DisastersPageSEO } from "../components/SEOComponents";
 import { usePagination } from "../hooks/usePagination";
-import { env, chatbotApiUrl } from "../config/env";
-
-const apiUrl = env.chatbotUrl
-  ? chatbotApiUrl("/api/v1/disasters")
-  : "/api/v1/disasters";
+import { fetchDisasters } from "../utils/apiData";
 
 const DisasterPage = () => {
   const [allDisasters, setAllDisasters] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [query, setQuery] = useState("");
   const itemsPerPage = 15;
 
-  useEffect(() => {
+  const loadDisasters = () => {
     setLoading(true);
-    
-    // Check if we have the external API URL configured
-    if (!env.chatbotUrl) {
-      console.log('VITE_APP_CHATBOT_URL not configured, using mock data');
-      // Use mock data when external API is not available
-      const mockDisasters = [
-        {
-          id: 1,
-          region: "California",
-          country: "USA",
-          disasterType: "Wildfire",
-          status: "ongoing",
-          startDate: "2024-01-15T00:00:00Z"
-        },
-        {
-          id: 2,
-          region: "Queensland",
-          country: "Australia",
-          disasterType: "Flood",
-          status: "alert",
-          startDate: "2024-01-10T00:00:00Z"
-        },
-        {
-          id: 3,
-          region: "Sicily",
-          country: "Italy",
-          disasterType: "Earthquake",
-          status: "past",
-          startDate: "2024-01-05T00:00:00Z"
-        }
-      ];
-      
-      setAllDisasters(mockDisasters);
-      setLoading(false);
-      return;
-    }
-    
-    axios.get(apiUrl)
-      .then((res) => {
-        const { data } = res;
-        setAllDisasters(data?.data || []);
+    fetchDisasters()
+      .then((data) => {
+        setAllDisasters(data);
+        setError("");
       })
-      .catch((error) => {
-        console.error('Error fetching disasters:', error);
-        console.log('Using fallback mock data');
-        
-        // Fallback to mock data on API error
-        const mockDisasters = [
-          {
-            id: 1,
-            region: "California",
-            country: "USA",
-            disasterType: "Wildfire",
-            status: "ongoing",
-            startDate: "2024-01-15T00:00:00Z"
-          },
-          {
-            id: 2,
-            region: "Queensland",
-            country: "Australia",
-            disasterType: "Flood",
-            status: "alert",
-            startDate: "2024-01-10T00:00:00Z"
-          }
-        ];
-        
-        setAllDisasters(mockDisasters);
+      .catch(() => {
+        setAllDisasters([]);
+        setError("We could not load disaster reports. Please try again.");
       })
-      .finally(() => {
-        setLoading(false);
-      });
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    loadDisasters();
   }, []);
 
-  // Use pagination hook
+  const filtered = useMemo(() => {
+    const term = query.trim().toLowerCase();
+    if (!term) return allDisasters;
+    return allDisasters.filter((disaster) =>
+      [disaster.region, disaster.country, disaster.disasterType, disaster.status, disaster.details]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(term)
+    );
+  }, [allDisasters, query]);
+
   const {
     currentPage,
     totalPages,
     totalItems,
     paginatedData,
     goToPage,
-  } = usePagination(allDisasters, itemsPerPage);
+  } = usePagination(filtered, itemsPerPage);
 
   return (
     <>
       <DisastersPageSEO />
-      <div className="w-full overflow-hidden">
-      <div className="md:pb-20 pb-12">
-        <Topbar />
-      </div>
-
-      <div className="flex w-full md:pb-0 pb-8">
-        <div className="w-[20%] border-r-2 hidden md:flex ">
-          <Menu />
-        </div>
-        {/* <Mainfeed/> */}
-        <div className="md:w-[80vw] w-full px-2  md:items-center">
-          <div className="2xl:h-[50vh] md:h-[48vh] h-[45vh] md:mb-28 mb-4 py-2">
-            <DisasterImage disasters={paginatedData} />
-          </div>
-          <div className=" flex">
-            <input
-              className="bg-graylight-300 h-[60px] placeholder:italic placeholder:text-slate-400 placeholder:px-4 px-2  md:w-[100%] w-[75%] outline-[2px]  border  focus:border-2  focus:outline-2 focus:outline-gray-300 border-gray-200 rounded-lg text-graydark "
-              type="text"
-              placeholder="🔍 Search disaster keywords"
-            />
-            <button className="bg-[#067d83]  text-white font-serif border relative md:w-[20%] w-[25%] rounded-lg">
-              Search
-            </button>
-          </div>
-          <div>
-            <h2 className="font-bold md:mt-8 mt-2 py-4 border-b-2 self-end text-2xl  text-[#434343] leading-4 border-gray-300">
-              {loading ? (
-                "Loading disasters..."
-              ) : paginatedData.length > 0 ? (
-                `Showing ${paginatedData.length} of ${totalItems} results`
-              ) : (
-                "No disasters found"
-              )}
-            </h2>
-          </div>
-          <Disasters disasters={paginatedData} />
-          
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <div className="mt-8">
-              <Pagination
-                currentPage={currentPage}
-                totalPages={totalPages}
-                onPageChange={goToPage}
-                totalItems={totalItems}
-                itemsPerPage={itemsPerPage}
-                className="justify-center"
-              />
+      <div className="min-h-[100dvh] bg-background flex flex-col overflow-x-hidden">
+        <header className="sticky top-0 z-50 bg-navbar border-b border-border">
+          <Topbar />
+        </header>
+        <div className="flex flex-1">
+          <aside className="hidden md:block w-[220px] lg:w-[240px] bg-sidebar border-r border-border sticky top-16 h-[calc(100dvh-4rem)] overflow-y-auto shrink-0">
+            <div className="p-4">
+              <Menu />
             </div>
-          )}
+          </aside>
+          <main className="flex-1 min-w-0 px-3 sm:px-4 py-4 pb-24 md:pb-8">
+            <div className="h-44 sm:h-56 mb-4 overflow-hidden border border-border bg-surface">
+              <DisasterImage disasters={paginatedData} />
+            </div>
+            <form
+              className="flex gap-2"
+              onSubmit={(event) => {
+                event.preventDefault();
+              }}
+            >
+              <label htmlFor="disaster-search" className="sr-only">Search disasters</label>
+              <input
+                id="disaster-search"
+                className="h-11 flex-1 px-3 border border-border bg-surface"
+                type="search"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search by country, type, or status"
+              />
+              <button type="submit" className="h-11 px-4 bg-primary text-primary-foreground shrink-0">
+                Search
+              </button>
+            </form>
+            <h2 className="font-semibold mt-6 py-3 border-b border-border text-lg text-foreground">
+              {loading
+                ? "Loading disasters..."
+                : paginatedData.length > 0
+                  ? `Showing ${paginatedData.length} of ${totalItems} reports`
+                  : "No disasters found"}
+            </h2>
+            {error ? (
+              <div className="mt-6 max-w-md border border-border bg-surface p-5">
+                <p className="font-medium">{error}</p>
+                <button type="button" className="mt-4 h-10 px-4 bg-primary text-primary-foreground" onClick={loadDisasters}>
+                  Retry
+                </button>
+              </div>
+            ) : (
+              <Disasters disasters={paginatedData} />
+            )}
+            {totalPages > 1 && (
+              <div className="mt-8">
+                <Pagination
+                  currentPage={currentPage}
+                  totalPages={totalPages}
+                  onPageChange={goToPage}
+                  totalItems={totalItems}
+                  itemsPerPage={itemsPerPage}
+                  className="justify-center"
+                />
+              </div>
+            )}
+          </main>
         </div>
-      </div>
-      <div className="md:hidden">
-        <Footer />
-      </div>
+        <div className="md:hidden">
+          <Footer />
+        </div>
       </div>
     </>
   );

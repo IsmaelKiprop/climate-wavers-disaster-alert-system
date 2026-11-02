@@ -13,6 +13,7 @@ from .models import (
     TreeProject,
     TreeProjectUpdate,
     TreeProjectDonation,
+    Disaster,
 )
 from api.models import User
 import requests
@@ -514,3 +515,14 @@ class TreeProjectDonationCreateSerializer(serializers.ModelSerializer):
         validated_data['donor'] = self.context['request'].user
         validated_data['payment_reference'] = f"TREE_{self.context['project'].id}_{int(time.time())}"
         return super().create(validated_data)
+
+
+class DisasterSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Disaster
+        fields = [
+            'id', 'title', 'description', 'disaster_type', 'severity', 'status',
+            'country', 'region', 'city', 'latitude', 'longitude', 'address',
+            'cover_image', 'gallery', 'start_date', 'end_date', 'is_verified',
+            'affected_population', 'casualties', 'created_at', 'updated_at',
+        ]

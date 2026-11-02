@@ -4,9 +4,7 @@ import en from "javascript-time-ago/locale/en";
 import { client } from "../api";
 import { endpoints } from "./endpoints";
 import axios from 'axios';
-import { dummyUser, dummyCampaigns } from "./dummies";
 import { ipinfoKey, ipinfoUrl } from "../config/ipinfo.config";
-import { env } from "../config/env";
 
 // Global flag to track if locale has been added
 if (!window.timeAgoLocaleAdded) {
@@ -17,15 +15,7 @@ if (!window.timeAgoLocaleAdded) {
 // Create TimeAgo instance after locale is registered
 const timeAgo = new TimeAgo("en-US");
 
-export const getCampaigns = () => {
-  return dummyCampaigns;
-};
-
 export const getUser = () => {
-  const backendStatus = env.backendEnabled;
-  if (!backendStatus) {
-    return dummyUser;
-  }
   const raw = Cookies.get("user");
   const token = Cookies.get("accessToken");
 
