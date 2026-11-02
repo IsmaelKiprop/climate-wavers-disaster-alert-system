@@ -46,9 +46,6 @@ const AuthCommunity = lazy(() =>
 const AuthNotification = lazy(() =>
   import("./pages/AuthenticatedPages").then((m) => ({ default: m.AuthNotification }))
 );
-const AuthWaverXPosts = lazy(() =>
-  import("./pages/AuthenticatedPages").then((m) => ({ default: m.AuthWaverXPosts }))
-);
 const AuthProfile = lazy(() =>
   import("./pages/AuthenticatedPages").then((m) => ({ default: m.AuthProfile }))
 );
@@ -156,7 +153,7 @@ function App() {
                 <Route index element={<AuthMainfeed />} />
                 <Route path="/app/community" element={<AuthCommunity />} />
                 <Route path="/app/notifications" element={<AuthNotification />} />
-                <Route path="/app/waverx" element={<AuthWaverXPosts />} />
+                <Route path="/app/waverx" element={<AuthWaverX />} />
                 <Route path="/app/donations" element={<Donations />} />
                 <Route
                   path="/app/plant-tree"

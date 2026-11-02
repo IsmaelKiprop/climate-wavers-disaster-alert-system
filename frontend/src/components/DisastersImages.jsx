@@ -1,46 +1,49 @@
 import PropTypes from "prop-types";
 import { Link } from "react-router-dom";
+import { disasterCoverImage } from "../utils/apiData";
 
 const DisasterImages = ({ disasters }) => {
-  // Handle undefined or null disasters array
-  if (!disasters || !Array.isArray(disasters)) {
+  if (!disasters || !Array.isArray(disasters) || disasters.length === 0) {
     return (
-      <div className="flex md:py-8 py-4 max-w-screen overflow-x-auto">
-        <div className="px-4">
-          <p className="text-gray-500">No disaster data available</p>
-        </div>
+      <div className="h-full flex items-center px-4 text-sm text-muted">
+        Live alert images will appear here when events load.
       </div>
     );
   }
 
+  const featured = disasters.slice(0, 6);
+
   return (
-    <div className="flex md:py-8 py-4 max-w-screen overflow-x-auto">
-      {disasters.map((disaster) => (
-        <div key={disaster.id} className=" px-4">
-          <img
-            alt=""
-            className="border-2 rounded-xl shadow-2xl md:min-w-[35vw] h-[70%]  shadow-gray-400 min-w-[90vw] "
-            src={
-              disaster.images?.length ? disaster.images[0] : '/placeholde-disaster-img.jpg'
-            }
-          />
-          <div className="text-white relative px-8 bottom-[55%]">
-            <span className="relative font-semibold md:bottom-[5rem] text-xl">
-              Trending Now
-            </span>
-            <h2 className="font-bold  text-2xl ">
-              {disaster.region}, {disaster.country} - {disaster.disasterType}
-            </h2>
-            <p className="h-[60px] py-4 md:text-xl md:h-fit md:max-h-[150px] overflow-hidden">{disaster.details}</p>
-            <Link to={`/disasters/${encodeURIComponent(disaster.id)}`}>
-              <button className="rounded-lg bg-[#2F4F4F] w-fit h-12 my-2 px-4">
-                {" "}
-                See details
-              </button>
-            </Link>
-          </div>
-        </div>
-      ))}
+    <div className="flex h-full gap-3 overflow-x-auto px-1">
+      {featured.map((disaster) => {
+        const cover = disaster.image || disaster.images?.[0] || disasterCoverImage(disaster.disasterType);
+        const title = disaster.name || disaster.title || [disaster.region, disaster.country].filter(Boolean).join(", ");
+        return (
+          <Link
+            key={disaster.id}
+            to={`/disasters/${encodeURIComponent(disaster.id)}`}
+            className="relative shrink-0 w-[78vw] sm:w-[320px] h-full overflow-hidden border border-border bg-background"
+          >
+            <img
+              alt={title}
+              className="absolute inset-0 w-full h-full object-cover"
+              src={cover}
+              loading="lazy"
+            />
+            <div className="absolute inset-0 bg-black/45" />
+            <div className="relative z-10 h-full flex flex-col justify-end p-4 text-white">
+              <p className="text-xs uppercase tracking-wide text-white/80">
+                {String(disaster.disasterType || "alert").replace(/_/g, " ")}
+                {disaster.source ? ` · ${disaster.source}` : ""}
+              </p>
+              <h2 className="mt-1 font-semibold text-base leading-snug line-clamp-2">{title}</h2>
+              <span className="mt-3 inline-flex h-9 w-fit items-center px-3 bg-primary text-primary-foreground text-sm">
+                View details
+              </span>
+            </div>
+          </Link>
+        );
+      })}
     </div>
   );
 };

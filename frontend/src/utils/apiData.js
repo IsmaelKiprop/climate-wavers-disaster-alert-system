@@ -27,6 +27,27 @@ export function mapProjectToCampaign(project) {
   };
 }
 
+const DISASTER_COVERS = {
+  earthquake: "/ai-disaster.jpg",
+  wildfire: "/community-respond.jpg",
+  flood: "/emergency-response.jpg",
+  storm: "/ai-disaster.jpg",
+  hurricane: "/ai-disaster.jpg",
+  typhoon: "/ai-disaster.jpg",
+  volcanic_eruption: "/ai-disaster.jpg",
+  volcanoes: "/ai-disaster.jpg",
+  drought: "/environment.jpg",
+  heatwave: "/environment.jpg",
+  landslide: "/emergency-response.jpg",
+  blizzard: "/environment.jpg",
+  other: "/disaster.png",
+};
+
+export function disasterCoverImage(type) {
+  const key = String(type || "other").toLowerCase().replace(/\s+/g, "_");
+  return DISASTER_COVERS[key] || DISASTER_COVERS.other;
+}
+
 export function mapDisaster(disaster) {
   const lat = Number(disaster.latitude ?? disaster.coordinates?.lat);
   const lng = Number(disaster.longitude ?? disaster.coordinates?.lng);
@@ -41,22 +62,29 @@ export function mapDisaster(disaster) {
     LOW: "LOW",
     CRITICAL: "CRITICAL",
   };
+  const disasterType = disaster.disasterType || disaster.disaster_type || disaster.type || "other";
+  const suppliedImages = []
+    .concat(disaster.images || disaster.gallery || [])
+    .concat(disaster.cover_image ? [disaster.cover_image] : [])
+    .filter(Boolean);
+  const cover = suppliedImages[0] || disasterCoverImage(disasterType);
 
   return {
     id: disaster.id,
     title: disaster.title || `${disaster.region || disaster.city || ""}, ${disaster.country || ""}`.trim(),
     region: disaster.region || disaster.city || "",
     country: disaster.country || "",
-    disasterType: disaster.disasterType || disaster.disaster_type || disaster.type || "other",
+    disasterType,
     status: disaster.status || "monitoring",
     startDate: disaster.startDate || disaster.start_date,
     details: disaster.details || disaster.description || "",
-    images: disaster.images || disaster.gallery || (disaster.cover_image ? [disaster.cover_image] : []),
+    images: suppliedImages.length ? suppliedImages : [cover],
+    image: cover,
     latitude: Number.isFinite(lat) ? lat : null,
     longitude: Number.isFinite(lng) ? lng : null,
     severity: severityMap[severityRaw] || (disaster.is_urgent ? "HIGH" : "MEDIUM"),
     name: disaster.title || disaster.name || disaster.disasterType || "Disaster",
-    type: disaster.disasterType || disaster.disaster_type || disaster.type || "alert",
+    type: disasterType,
     description: disaster.description || disaster.details || "",
     location: [disaster.city, disaster.region, disaster.country].filter(Boolean).join(", "),
     lastUpdated: disaster.updated_at || disaster.last_updated || disaster.start_date || disaster.startDate,

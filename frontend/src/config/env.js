@@ -10,7 +10,7 @@ const backendUrl = trimSlash(
   import.meta.env.VITE_APP_BACKEND_URL || (isDev ? "" : PRODUCTION_API)
 );
 const chatbotUrl = trimSlash(
-  import.meta.env.VITE_APP_CHATBOT_URL || (isDev ? "" : PRODUCTION_CHATBOT)
+  import.meta.env.VITE_APP_CHATBOT_URL || PRODUCTION_CHATBOT
 );
 
 export const env = {

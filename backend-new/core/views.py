@@ -301,11 +301,13 @@ class PostViewSet(viewsets.ModelViewSet):
         Custom action to get trending hashtags.
         """
         trending_hashtags = (
-            Post.objects.values("hashtags")
+            Post.objects.exclude(hashtags__isnull=True)
+            .exclude(hashtags="")
+            .values("hashtags")
             .annotate(count=Count("id"))
             .order_by("-count")[:10]
         )
-        return Response(trending_hashtags)
+        return Response(list(trending_hashtags))
 
     @action(detail=True, methods=["post"], permission_classes=[IsAuthenticated])
     def bookmark(self, request, pk=None):

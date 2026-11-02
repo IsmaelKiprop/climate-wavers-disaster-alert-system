@@ -86,8 +86,15 @@ const DisasterPage = () => {
         </div>
       ) : (
         <>
+          {disaster?.image || disaster?.images?.[0] ? (
+            <img
+              src={disaster.image || disaster.images[0]}
+              alt=""
+              className="mt-4 w-full h-48 sm:h-64 object-cover border border-border bg-background"
+            />
+          ) : null}
           <p className="mt-4 text-xs font-semibold uppercase tracking-wide text-muted">
-            {disaster?.severity || "Alert"} {disaster?.source ? `· ${disaster.source}` : ""}
+            {disaster?.severity || "Alert"} {disaster?.source ? ` · ${disaster.source}` : ""}
           </p>
           <h1 className="mt-1 font-semibold text-xl sm:text-2xl">{title}</h1>
           <p className="mt-2 text-sm text-muted capitalize">{typeLabel}</p>

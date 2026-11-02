@@ -1,26 +1,22 @@
-import { useQuery } from '@tanstack/react-query';
-import { client } from '../api';
-import { endpoints } from '../utils/endpoints';
+import { useQuery } from "@tanstack/react-query";
+import { client } from "../api";
+import { endpoints } from "../utils/endpoints";
 
 const useTrending = () => {
   return useQuery({
-    queryKey: ['trending'],
+    queryKey: ["trending"],
     queryFn: async () => {
-      try {
-        const response = await client.run('get', '/api/v1/post/trending/', {}, true);
-        return response;
-      } catch (error) {
-        console.error('Error fetching trending data:', error);
-        throw error;
-      }
+      const response = await client.run("get", endpoints.trending, null, true);
+      const rows = Array.isArray(response) ? response : response?.results || [];
+      return rows.filter((item) => String(item?.hashtags || "").trim());
     },
-    refetchInterval: 30000, // 30 seconds
-    staleTime: 15000, // 15 seconds
-    cacheTime: 60000, // 1 minute
+    refetchInterval: 30000,
+    staleTime: 15000,
+    gcTime: 60000,
     refetchOnWindowFocus: true,
     refetchOnMount: true,
-    retry: 3,
-    retryDelay: 1000,
+    retry: 1,
+    retryDelay: 1500,
   });
 };
 
