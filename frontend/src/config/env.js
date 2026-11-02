@@ -3,15 +3,15 @@ function trimSlash(url = "") {
 }
 
 const isDev = import.meta.env.DEV;
+const PRODUCTION_API = "https://climate-wavers-api.onrender.com";
+const PRODUCTION_CHATBOT = "https://climate-wavers-response.onrender.com";
 
-const backendUrl = trimSlash(import.meta.env.VITE_APP_BACKEND_URL || "");
-const chatbotUrl = trimSlash(import.meta.env.VITE_APP_CHATBOT_URL || "");
-
-if (!isDev && !backendUrl) {
-  console.warn(
-    "VITE_APP_BACKEND_URL is empty. The UI will call this origin instead of the Django API."
-  );
-}
+const backendUrl = trimSlash(
+  import.meta.env.VITE_APP_BACKEND_URL || (isDev ? "" : PRODUCTION_API)
+);
+const chatbotUrl = trimSlash(
+  import.meta.env.VITE_APP_CHATBOT_URL || (isDev ? "" : PRODUCTION_CHATBOT)
+);
 
 export const env = {
   isDev,

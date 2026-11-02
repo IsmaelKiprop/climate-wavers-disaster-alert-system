@@ -167,6 +167,27 @@ USE_TZ = True
 
 # Connection URL for RabbitMQ (optional for development)
 AMQP_URL = env("AMQP_URL", default=None)
+NOTIFICATION_SERVICE_URL = env(
+    "NOTIFICATION_SERVICE_URL",
+    default="https://climate-wavers-notifications.onrender.com",
+)
+NOTIFICATION_SECRET = env(
+    "NOTIFICATION_SECRET",
+    default=os.environ.get("SERVER_SECRET", "change-me-server-secret"),
+)
+EMAIL_BACKEND = env(
+    "EMAIL_BACKEND",
+    default="django.core.mail.backends.smtp.EmailBackend",
+)
+EMAIL_HOST = env("MAIL_HOST", default="smtp.gmail.com")
+EMAIL_PORT = env.int("MAIL_PORT", default=587)
+EMAIL_HOST_USER = env("MAIL_USER", default="")
+EMAIL_HOST_PASSWORD = env("MAIL_PASS", default="")
+EMAIL_USE_TLS = env.bool("EMAIL_USE_TLS", default=True)
+DEFAULT_FROM_EMAIL = env(
+    "MAIL_FROM",
+    default=EMAIL_HOST_USER or "Climate Wavers <hello@climatewavers.org>",
+)
 
 
 # Static files (CSS, JavaScript, Images)

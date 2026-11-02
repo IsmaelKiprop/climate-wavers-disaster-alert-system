@@ -30,9 +30,12 @@ const firebaseConfig = {
     apiKey: process.env.GEMINI_API_KEY
   }
 
+  const defaultModelRoot = process.env.NODE_ENV === "production"
+    ? "https://climate-wavers-models.onrender.com/api/v1"
+    : "http://127.0.0.1:5000/api/v1"
   const aiModels = {
-    analysis: process.env.ANALYSIS_MODEL_URL,
-    recognition: process.env.RECOGNITION_MODEL_URL
+    analysis: process.env.ANALYSIS_MODEL_URL || `${defaultModelRoot}/analysis`,
+    recognition: process.env.RECOGNITION_MODEL_URL || `${defaultModelRoot}/recognition`
   }
 
 

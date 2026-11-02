@@ -8,49 +8,72 @@ const {formatConversation} = require("../utils/factory");
 const { logBuilder } = require("../lib/log");
 
 
+function localReply(prompt = "") {
+    const clipped = String(prompt).replace(/\s+/g, " ").slice(0, 280)
+    return `I'm WaverX at Climate Wavers in Nairobi. We verify alerts before amplifying them. Live events come from USGS and NASA EONET. ${clipped ? `I read: "${clipped}". ` : ""}Treat social posts as claims until source, location, time, and a human review check out.`
+}
+
 class AI{
     constructor(){
-        this.openai = new OpenAI({
-            apiKey: config.openai.apiKey
-        });
+        this.openai = config.openai.apiKey
+            ? new OpenAI({ apiKey: config.openai.apiKey })
+            : null;
         this.promptCategories = postCategories
 
         this.usePrePrompt = (prompt, prevConversation, appLogs)=>{
             return `you are integrated as an AI chatbot named ${aiConfig.username} for a climate mitigation app "Climate wavers", generate a response for this prompt "${prompt}".${prevConversation && `generate your response based on previous conversation (if necessary) shown below: \n ${prevConversation}`}${appLogs && `. Also generate response from activities from the app using the logs below is applicable: ${appLogs}`}. respond with only the generated response, no label (e.g waver-x), and keep it brief and concise`
         }
 
+        this.execGemini = async function(prompt) {
+            const key = config.gemini?.apiKey
+            if (!key) return null
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`
+            const response = await fetch(url, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
+            })
+            if (!response.ok) {
+                throw new Error(`Gemini HTTP ${response.status}`)
+            }
+            const payload = await response.json()
+            return payload?.candidates?.[0]?.content?.parts?.[0]?.text || null
+        }
+
         this.exec = async function(prompt, imageUrl = undefined) {
-            // Check if API key is available
-            console.log("OpenAI API Key:", config.openai.apiKey ? "Set" : "Not set");
-            if (!config.openai.apiKey) {
-                console.log("OPENAI_API_KEY not configured. AI features disabled.");
-                return "AI service is currently unavailable. Please check configuration.";
+            if (this.openai) {
+                try {
+                    const messages = [
+                        {
+                            role: "user",
+                            content: imageUrl ? [
+                                { type: "text", text: prompt },
+                                { type: "image_url", image_url: { url: imageUrl } }
+                            ] : prompt
+                        }
+                    ];
+
+                    const completion = await this.openai.chat.completions.create({
+                        model: "gpt-4o-mini",
+                        messages: messages,
+                        max_tokens: 1000,
+                        temperature: 0.7
+                    });
+
+                    return cleanText(completion.choices[0].message.content);
+                } catch(err) {
+                    console.log(`OpenAI Error: ${err.message} \n${err} `)
+                }
             }
-            
+
             try {
-                const messages = [
-                    {
-                        role: "user",
-                        content: imageUrl ? [
-                            { type: "text", text: prompt },
-                            { type: "image_url", image_url: { url: imageUrl } }
-                        ] : prompt
-                    }
-                ];
-
-                const completion = await this.openai.chat.completions.create({
-                    model: "gpt-4o-mini",
-                    messages: messages,
-                    max_tokens: 1000,
-                    temperature: 0.7
-                });
-
-                const text = cleanText(completion.choices[0].message.content);
-                return text;
-            } catch(err) {
-                console.log(`OpenAI Error: ${err.message} \n${err} `)
-                return "AI service temporarily unavailable. Please try again later.";
+                const geminiText = await this.execGemini(prompt)
+                if (geminiText) return cleanText(geminiText)
+            } catch (err) {
+                console.log(`Gemini Error: ${err.message}`)
             }
+
+            return localReply(prompt)
         }
     }
 

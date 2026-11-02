@@ -55,6 +55,8 @@ services:
         value: us-east-1
       - key: AMQP_URL
         sync: false
+      - key: NOTIFICATION_SERVICE_URL
+        value: https://climate-wavers-notifications.onrender.com
       - key: OPENAI_API_KEY
         sync: false
 
@@ -74,9 +76,9 @@ services:
       - key: GEMINI_API_KEY
         sync: false
       - key: ANALYSIS_MODEL_URL
-        sync: false
+        value: https://climate-wavers-models.onrender.com/api/v1/analysis
       - key: RECOGNITION_MODEL_URL
-        sync: false
+        value: https://climate-wavers-models.onrender.com/api/v1/recognition
 
   - type: web
     name: climate-wavers-notifications

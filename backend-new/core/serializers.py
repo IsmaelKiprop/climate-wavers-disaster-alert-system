@@ -416,7 +416,6 @@ class TreeProjectDonationSerializer(serializers.ModelSerializer):
 
 
 class TreeProjectSerializer(serializers.ModelSerializer):
-    organization_name = serializers.CharField(source='organization.username', read_only=True)
     progress_percentage = serializers.ReadOnlyField()
     funding_percentage = serializers.ReadOnlyField()
     total_co2_offset = serializers.ReadOnlyField()

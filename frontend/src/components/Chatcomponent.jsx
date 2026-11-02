@@ -45,7 +45,7 @@ const Chatcomponent = ({
           messages.map((m) => (
             <MessageCard
               postedBy={m.postedBy}
-              key={m.remoteId}
+              key={m.id || m.remoteId || `${m.postedAt}-${m.body}`}
               body={m.body}
               postedAt={m.postedAt}
             />

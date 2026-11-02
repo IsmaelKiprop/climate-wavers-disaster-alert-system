@@ -36,7 +36,9 @@ class ChatService{
 
     async getChat(chatId){
         const fRes = await fbService.getById(chatCollection, chatId)
-        return {...fRes?.data(), id: fRes?.id}
+        const data = typeof fRes?.data === "function" ? fRes.data() : fRes
+        if (!data) return null
+        return {...data, id: fRes?.id || data.id}
     }
 
     async getChats(userId){

@@ -1,11 +1,12 @@
 #!/usr/bin/python3
 """ Flask Application """
 import os
+import tempfile
 from os import environ
 from flask import Flask, jsonify, request, make_response
 from flask_cors import CORS
-from analysis_model.prediction import predict
-from recognition_model.recognition import inference
+from analysis_model.prediction import analysis_ready, predict
+from recognition_model.recognition import inference, recognition_backend
 
 app = Flask(__name__)
 app.config['JSONIFY_PRETTYPRINT_REGULAR'] = True
@@ -14,15 +15,22 @@ cors = CORS(app, resources={r"/api/v1/*": {"origins": _cors_origins if "*" not i
 
 @app.route("/api/v1/analysis/inference", methods=['POST'], strict_slashes=False)
 def magnitude_analysis():
-    print("Here")
-    location = request.json['location']
-    start_date = request.json['startDate']
-    end_date = request.json['endDate']
+    payload = request.get_json(silent=True) or {}
+    location = payload.get("location")
+    start_date = payload.get("startDate")
+    end_date = payload.get("endDate")
+    if not location or not start_date or not end_date:
+        return jsonify({"error": "location, startDate, and endDate are required"}), 400
     key = os.getenv("API_KEY")
     try:
-        return jsonify(predict(location, start_date, end_date, key))
+        result = predict(location, start_date, end_date, key)
     except FileNotFoundError as exc:
         return jsonify({"error": str(exc)}), 503
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 502
+    if isinstance(result, str):
+        return jsonify({"error": result}), 502
+    return jsonify(result)
 
 @app.route('/api/v1/recognition/inference', methods=['POST'])
 def disaster_recognition():
@@ -30,7 +38,9 @@ def disaster_recognition():
         return jsonify({'error': 'No image file provided'}), 400
     
     image_file = request.files['image']
-    image_path = f'/tmp/{image_file.filename}'
+    suffix = os.path.splitext(image_file.filename or "")[1] or ".jpg"
+    handle, image_path = tempfile.mkstemp(suffix=suffix)
+    os.close(handle)
     image_file.save(image_path)
     
     quantized = request.form.get('quantized', 'false').lower() == 'true'
@@ -39,6 +49,9 @@ def disaster_recognition():
         result = inference(image_path, quantized)
     except FileNotFoundError as exc:
         return jsonify({"error": str(exc)}), 503
+    finally:
+        if os.path.exists(image_path):
+            os.remove(image_path)
     if result is None:
         return jsonify({'error': 'Failed to process image'}), 500
     return jsonify({"inference": result})
@@ -46,15 +59,19 @@ def disaster_recognition():
 
 @app.route("/status", strict_slashes=False)
 def status():
-    return jsonify({"status": "OK"})
+    return jsonify({
+        "status": "OK",
+        "analysis": "ready" if analysis_ready() else "missing_weights",
+        "recognition": recognition_backend(),
+    })
 
 @app.route("/api/v1/analysis/status", strict_slashes=False)
 def analysis_status():
-    return jsonify({"status": "OK"})
+    return jsonify({"status": "OK" if analysis_ready() else "missing_weights"})
 
 @app.route("/api/v1/recognition/status", strict_slashes=False)
 def recognition_status():
-    return jsonify({"status": "OK"})
+    return jsonify({"status": "OK", "backend": recognition_backend()})
 
 @app.errorhandler(404)
 def not_found(error):
