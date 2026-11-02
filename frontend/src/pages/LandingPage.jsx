@@ -56,6 +56,7 @@ const LandingPage = () => {
   const [showDisasterMap, setShowDisasterMap] = useState(false);
   const [showDonationModal, setShowDonationModal] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [updateEmail, setUpdateEmail] = useState("");
   const firstHeroRef = useRef(null);
 
   useEffect(() => {
@@ -190,6 +191,17 @@ const LandingPage = () => {
 
   const markHeroReady = () => {
     setHeroReady(true);
+  };
+
+  const onSubscribe = (event) => {
+    event.preventDefault();
+    const email = updateEmail.trim();
+    if (!email) return;
+    const subject = encodeURIComponent("Subscribe me to Climate Wavers updates");
+    const body = encodeURIComponent(
+      `Please add ${email} to Climate Wavers updates.\n\nSent from the site footer.`
+    );
+    window.location.href = `mailto:${SITE.emails.hello}?subject=${subject}&body=${body}`;
   };
 
   return (
@@ -858,20 +870,30 @@ const LandingPage = () => {
                 Live USGS and NASA monitoring from Nairobi. Verify disaster alerts. Do not amplify them.
               </p>
               
-              {/* Newsletter */}
-              <div className="mb-6 md:mb-8">
-                <h4 className="text-base md:text-lg font-semibold mb-3 md:mb-4 text-white">Stay Updated</h4>
+              <form onSubmit={onSubscribe} className="mb-6 md:mb-8">
+                <h4 className="text-base md:text-lg font-semibold mb-2 text-white">Stay Updated</h4>
+                <p className="text-sm text-white/75 mb-3">
+                  There is no mailing list product yet. Subscribe opens an email to {SITE.emails.hello}.
+                </p>
                 <div className="flex flex-col sm:flex-row gap-2 md:gap-3">
-                <input
-                  type="email"
+                  <label htmlFor="footer-update-email" className="sr-only">
+                    Email address
+                  </label>
+                  <input
+                    id="footer-update-email"
+                    type="email"
+                    required
+                    autoComplete="email"
+                    value={updateEmail}
+                    onChange={(event) => setUpdateEmail(event.target.value)}
                     placeholder="Enter your email address"
-                    className="px-3 md:px-4 py-2 md:py-3 rounded-lg md:rounded-xl bg-gray-800/50 border border-gray-700 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#067d83] focus:border-transparent backdrop-blur-sm text-sm md:text-base"
-                />
-                  <button type="button" className="bg-primary hover:bg-primary-dark text-primary-foreground px-4 md:px-6 py-2 md:py-3 text-sm md:text-base min-h-11">
-                  Subscribe
-                </button>
+                    className="min-h-11 flex-1 px-3 md:px-4 py-2 md:py-3 bg-secondary border border-white/20 text-white placeholder:text-white/50 text-sm md:text-base"
+                  />
+                  <button type="submit" className="bg-primary hover:bg-primary-dark text-primary-foreground px-4 md:px-6 py-2 md:py-3 text-sm md:text-base min-h-11">
+                    Subscribe
+                  </button>
                 </div>
-              </div>
+              </form>
 
               {/* Social Links */}
               <div>
