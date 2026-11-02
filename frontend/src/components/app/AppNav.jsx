@@ -12,6 +12,7 @@ import {
   IoNotificationsOutline,
   IoNotifications,
   IoLogOutOutline,
+  IoCreateOutline,
 } from "react-icons/io5";
 import { MdOutlineCampaign, MdCampaign } from "react-icons/md";
 import { RiAlarmWarningLine, RiAlarmWarningFill } from "react-icons/ri";
@@ -20,16 +21,10 @@ import { useEffect, useState } from "react";
 import Modal from "../Modal";
 import Createpost from "../Createpost";
 
-const itemClass = ({ isActive }) =>
-  `flex items-center gap-3 px-3 py-2.5 text-sm font-medium ${
-    isActive
-      ? "bg-primary text-primary-foreground"
-      : "text-foreground hover:bg-background"
-  }`;
-
 const AppNav = ({ onNavigate, compact = false }) => {
   const location = useLocation();
   const onboarding = location.pathname.startsWith("/onboarding");
+  const isCompact = compact;
   const [user, setUser] = useState(getUser());
   const [isModalOpen, setIsModalOpen] = useState(false);
 
@@ -87,13 +82,29 @@ const AppNav = ({ onNavigate, compact = false }) => {
     <div className="flex flex-col h-full">
       <nav className="flex flex-col gap-1" aria-label="Main">
         {items.map(({ to, label, Icon, ActiveIcon, end }) => (
-          <NavLink key={to} to={to} end={Boolean(end)} className={itemClass} onClick={close}>
+          <NavLink
+            key={to}
+            to={to}
+            end={Boolean(end)}
+            title={label}
+            aria-label={label}
+            onClick={close}
+            className={({ isActive }) =>
+              `flex items-center min-h-11 text-sm font-medium ${
+                isCompact ? "justify-center px-0" : "gap-3 px-3"
+              } py-2.5 ${
+                isActive
+                  ? "bg-primary text-primary-foreground"
+                  : "text-foreground hover:bg-background"
+              }`
+            }
+          >
             {({ isActive }) => {
               const Glyph = isActive ? ActiveIcon : Icon;
               return (
                 <>
                   <Glyph size={18} aria-hidden="true" />
-                  <span>{label}</span>
+                  {isCompact ? <span className="sr-only">{label}</span> : <span>{label}</span>}
                 </>
               );
             }}
@@ -101,31 +112,39 @@ const AppNav = ({ onNavigate, compact = false }) => {
         ))}
       </nav>
 
-      {!onboarding && !compact ? (
+      {!onboarding ? (
         <button
           type="button"
-          className="mt-6 w-full py-2.5 text-sm font-medium bg-primary text-primary-foreground hover:bg-primary-dark"
+          title="New post"
+          aria-label="New post"
+          className={`mt-4 min-h-11 text-sm font-medium bg-primary text-primary-foreground hover:bg-primary-dark ${
+            isCompact ? "px-0 flex items-center justify-center" : "w-full py-2.5"
+          }`}
           onClick={() => setIsModalOpen(true)}
         >
-          New post
+          {isCompact ? <IoCreateOutline size={18} /> : "New post"}
         </button>
       ) : null}
 
-      <div className="mt-auto pt-6 border-t border-border">
-        {user?.first_name ? (
+      <div className="mt-auto pt-4 border-t border-border">
+        {user?.first_name && !isCompact ? (
           <p className="px-3 mb-3 text-xs text-muted truncate">
             {user.first_name} {user.last_name}
           </p>
         ) : null}
         <button
           type="button"
-          className="flex items-center gap-3 w-full px-3 py-2.5 text-sm font-medium text-destructive hover:bg-background"
+          title="Log out"
+          aria-label="Log out"
+          className={`flex items-center min-h-11 w-full text-sm font-medium text-destructive hover:bg-background ${
+            isCompact ? "justify-center px-0" : "gap-3 px-3 py-2.5"
+          }`}
           onClick={() => {
             if (window.confirm("Log out of Climate Wavers?")) logout();
           }}
         >
           <IoLogOutOutline size={18} aria-hidden="true" />
-          Log out
+          {isCompact ? <span className="sr-only">Log out</span> : "Log out"}
         </button>
       </div>
 

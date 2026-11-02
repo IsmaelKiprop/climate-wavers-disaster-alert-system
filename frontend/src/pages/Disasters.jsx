@@ -2,6 +2,7 @@ import Disasters from "../components/Disaster";
 import DisasterImage from "../components/DisastersImages";
 import Topbar from "../components/Topbar";
 import Menu from "../components/Menu";
+import DashboardSidebar from "../components/DashboardSidebar";
 import Footer from "../components/FooterBar";
 import Pagination from "../components/Pagination";
 import { useEffect, useMemo, useState } from "react";
@@ -61,12 +62,10 @@ const DisasterPage = () => {
         <header className="sticky top-0 z-50 bg-navbar border-b border-border">
           <Topbar />
         </header>
-        <div className="flex flex-1">
-          <aside className="hidden md:block w-[220px] lg:w-[240px] bg-sidebar border-r border-border sticky top-16 h-[calc(100dvh-4rem)] overflow-y-auto shrink-0">
-            <div className="p-4">
-              <Menu />
-            </div>
-          </aside>
+        <div className="flex flex-1 min-h-0">
+          <DashboardSidebar>
+            <Menu />
+          </DashboardSidebar>
           <main className="flex-1 min-w-0 px-3 sm:px-4 py-4 pb-24 md:pb-8">
             <div className="h-44 sm:h-56 mb-4 overflow-hidden border border-border bg-surface">
               <DisasterImage disasters={paginatedData} />

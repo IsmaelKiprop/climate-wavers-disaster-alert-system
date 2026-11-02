@@ -5,8 +5,9 @@ import Search from "./Search";
 import { getUser, logout } from "../utils/factory";
 import Modal from "../components/Modal";
 import Report from "./Report";
-import { IoNotifications, IoNotificationsOutline, IoSearch, IoLogOutOutline, IoPersonOutline, IoMenu } from "react-icons/io5";
+import { IoNotifications, IoNotificationsOutline, IoSearch, IoLogOutOutline, IoPersonOutline, IoMenu, IoChevronBack, IoChevronForward } from "react-icons/io5";
 import { useNotifications } from "../context/NotificationContext";
+import { useSidebar } from "../context/SidebarContext";
 
 const Topbar = () => {
   const location = useLocation();
@@ -16,11 +17,16 @@ const Topbar = () => {
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const { hasNewNotification, markAsRead } = useNotifications();
+  const { collapsed, toggle } = useSidebar();
   const userMenuRef = useRef(null);
   const [user, setUser] = useState(getUser());
   const homeTo = onboarding ? "/onboarding/home" : "/app";
   const notificationsTo = onboarding ? "/onboarding/notifications" : "/app/notifications";
   const profileTo = user?.id ? `/app/${user.id}/profile` : "/login";
+  const showSidebarToggle =
+    location.pathname.startsWith("/app") ||
+    location.pathname.startsWith("/onboarding") ||
+    location.pathname === "/disasters";
 
   useEffect(() => {
     const handleUserUpdate = () => setUser(getUser());
@@ -44,6 +50,17 @@ const Topbar = () => {
         <button type="button" onClick={() => setIsOpen(true)} className="md:hidden p-2" aria-label="Open menu">
           <IoMenu size={22} />
         </button>
+        {showSidebarToggle ? (
+          <button
+            type="button"
+            onClick={toggle}
+            className="hidden md:inline-flex p-2 hover:bg-background text-foreground"
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            aria-expanded={!collapsed}
+          >
+            {collapsed ? <IoChevronForward size={18} /> : <IoChevronBack size={18} />}
+          </button>
+        ) : null}
         {isOpen ? <Mobilemenu setIsOpen={setIsOpen} /> : null}
         <Link to={homeTo} className="hidden md:flex items-center gap-2">
           <img alt="Climate Wavers" src="/logo.jpg" className="h-8 w-auto" />

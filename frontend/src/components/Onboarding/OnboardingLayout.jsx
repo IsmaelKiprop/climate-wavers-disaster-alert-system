@@ -1,5 +1,6 @@
 import Topbar from "../Topbar";
 import Leftsidebar from "./Leftsidebar";
+import DashboardSidebar from "../DashboardSidebar";
 import { Outlet } from "react-router-dom";
 import Footer from "../FooterBar";
 
@@ -11,9 +12,9 @@ const OnboardingLayout = () => {
       </header>
 
       <div className="flex flex-1 min-h-0">
-        <aside className="hidden md:block w-[220px] lg:w-[248px] bg-sidebar border-r border-border sticky top-16 h-[calc(100dvh-4rem)] overflow-y-auto shrink-0">
+        <DashboardSidebar>
           <Leftsidebar />
-        </aside>
+        </DashboardSidebar>
 
         <main className="flex-1 min-w-0 overflow-x-hidden">
           <div className="max-w-4xl mx-auto px-4 sm:px-6 py-5 pb-24 md:pb-8">
