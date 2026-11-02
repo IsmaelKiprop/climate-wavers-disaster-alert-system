@@ -26,6 +26,7 @@ const Topbar = () => {
   const showSidebarToggle =
     location.pathname.startsWith("/app") ||
     location.pathname.startsWith("/onboarding") ||
+    location.pathname.startsWith("/campaigns") ||
     location.pathname === "/disasters";
 
   useEffect(() => {

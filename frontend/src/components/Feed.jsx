@@ -1,12 +1,18 @@
 import { useState, useEffect } from "react";
 import PropTypes from "prop-types";
-import Posts from "./Posts";
+import { Link } from "react-router-dom";
 import ProfileContent from "./ProfileContent";
 import { usePostMutations } from "../hooks/usePostMutations";
-import { stripLastS } from "../utils/factory";
+import { useLiveDisasters } from "../hooks/useLiveDisasters";
+import { disasterTypeFallback, formatTimeAgo } from "../utils/apiData";
 
 const Feed = ({ feeds, feedData, activeFeed, setActiveFeed, isLoading, error, trendingData, trendingLoading, trendingError }) => {
   const [feed, setFeed] = useState(activeFeed || "Trending");
+  const { data: liveEvents = [], isFetching: liveFetching, error: liveError, refetch: refetchLive } = useLiveDisasters();
+  const hashtags = Array.isArray(trendingData)
+    ? trendingData.filter((item) => String(item?.hashtags || "").trim())
+    : [];
+  const live = Array.isArray(liveEvents) ? liveEvents.slice(0, 12) : [];
 
   const {
     likeMutation,
@@ -71,44 +77,64 @@ const Feed = ({ feeds, feedData, activeFeed, setActiveFeed, isLoading, error, tr
       {!isLoading && !error && feedData && (
         <div className="mt-4">
           {feed === "trending" || feed === "Trending" ? (
-            // For trending, show trending hashtags in a clean layout
-            <div className="p-3 sm:p-4 bg-white rounded-lg shadow-sm border border-gray-200">
-              <div className="text-xs sm:text-sm text-gray-600 mb-3 sm:mb-4 font-medium">Real-time trending topics:</div>
-              {trendingLoading ? (
-                <div className="space-y-2 sm:space-y-3">
-                  {[...Array(5)].map((_, i) => (
-                    <div key={i} className="animate-pulse">
-                      <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
-                      <div className="h-3 bg-gray-100 rounded w-1/2"></div>
-                    </div>
-                  ))}
+            <div className="border border-border bg-surface p-4">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-sm font-medium">Live trending</p>
+                <span className="text-xs text-muted">{liveFetching ? "Updating" : "USGS and NASA"}</span>
+              </div>
+              {trendingLoading && live.length === 0 ? (
+                <p className="text-sm text-muted">Loading live events...</p>
+              ) : liveError && hashtags.length === 0 && live.length === 0 ? (
+                <div className="py-4">
+                  <p className="text-sm">We could not load trending events.</p>
+                  <button type="button" className="mt-3 h-10 px-4 bg-primary text-primary-foreground text-sm" onClick={() => refetchLive()}>
+                    Try again
+                  </button>
                 </div>
-              ) : trendingError ? (
-                <div className="text-center py-6 sm:py-8">
-                  <div className="text-red-500 text-sm sm:text-base">Failed to load trending topics</div>
-                  <div className="text-gray-400 text-xs sm:text-sm mt-1">Please try again later</div>
-                </div>
-              ) : Array.isArray(trendingData) && trendingData.length > 0 ? (
-                <div className="space-y-2 sm:space-y-3">
-                  {trendingData.slice(0, 5).map((item, index) => (
-                    <div key={index} className="flex items-center justify-between p-2 sm:p-3 bg-gray-50 rounded-lg border">
-                      <div className="flex items-center space-x-2 sm:space-x-3 min-w-0 flex-1">
-                        <div className="flex items-center justify-center w-5 h-5 sm:w-6 sm:h-6 bg-[#2F4F4F] text-white text-xs font-bold rounded-full flex-shrink-0">
-                          {index + 1}
-                        </div>
-                        <span className="font-medium text-gray-800 text-sm sm:text-base truncate">#{item.hashtags}</span>
-                      </div>
-                      <div className="flex items-center space-x-1 flex-shrink-0 ml-2">
-                        <span className="text-xs sm:text-sm text-gray-500">{item.count} posts</span>
-                        <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-green-500 rounded-full"></div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+              ) : hashtags.length === 0 && live.length === 0 ? (
+                <p className="text-sm text-muted">Live USGS and NASA events will appear here as they are reported.</p>
               ) : (
-                <div className="text-center py-6 sm:py-8">
-                  <div className="text-gray-500 text-sm sm:text-base">No trending data available</div>
-                  <div className="text-gray-400 text-xs sm:text-sm mt-1">Check back later for trending topics</div>
+                <div className="space-y-2">
+                  {hashtags.slice(0, 5).map((item) => (
+                    <Link
+                      key={item.hashtags}
+                      to="/app/community"
+                      className="flex items-center justify-between p-3 border border-border hover:border-primary"
+                    >
+                      <span className="font-medium text-sm truncate">#{String(item.hashtags).replace(/^#/, "")}</span>
+                      <span className="text-xs text-muted shrink-0 ml-3">{item.count} posts</span>
+                    </Link>
+                  ))}
+                  {live.map((event) => {
+                    const cover = event.image || event.images?.[0] || disasterTypeFallback(event.disasterType);
+                    return (
+                      <Link
+                        key={event.id}
+                        to={`/disasters/${encodeURIComponent(event.id)}`}
+                        className="flex gap-3 p-3 border border-border hover:border-primary"
+                      >
+                        <img
+                          src={cover}
+                          alt=""
+                          className="h-16 w-20 shrink-0 object-cover bg-background"
+                          onError={(imgEvent) => {
+                            imgEvent.target.onerror = null;
+                            imgEvent.target.src = disasterTypeFallback(event.disasterType);
+                          }}
+                        />
+                        <span className="min-w-0">
+                          <span className="block text-xs uppercase tracking-wide text-muted">
+                            {String(event.disasterType || "alert").replace(/_/g, " ")}
+                            {event.source ? ` · ${event.source}` : ""}
+                          </span>
+                          <span className="mt-1 block font-medium text-sm truncate">{event.name || event.title}</span>
+                          <span className="mt-1 block text-xs text-muted truncate">
+                            {[event.location, formatTimeAgo(event.lastUpdated || event.startDate)].filter(Boolean).join(" · ")}
+                          </span>
+                        </span>
+                      </Link>
+                    );
+                  })}
                 </div>
               )}
             </div>

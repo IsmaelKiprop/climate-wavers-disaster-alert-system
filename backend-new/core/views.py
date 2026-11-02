@@ -298,16 +298,20 @@ class PostViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=["get"])
     def trending(self, request):
         """
-        Custom action to get trending hashtags.
+        Return individual hashtags ranked by how often they appear in posts.
         """
-        trending_hashtags = (
+        counts = {}
+        values = (
             Post.objects.exclude(hashtags__isnull=True)
             .exclude(hashtags="")
-            .values("hashtags")
-            .annotate(count=Count("id"))
-            .order_by("-count")[:10]
+            .values_list("hashtags", flat=True)
         )
-        return Response(list(trending_hashtags))
+        for raw in values:
+            for tag in re.findall(r"[#]?([A-Za-z0-9_]{2,})", raw or ""):
+                key = tag.lower()
+                counts[key] = counts.get(key, 0) + 1
+        ranked = sorted(counts.items(), key=lambda item: item[1], reverse=True)[:10]
+        return Response([{"hashtags": tag, "count": count} for tag, count in ranked])
 
     @action(detail=True, methods=["post"], permission_classes=[IsAuthenticated])
     def bookmark(self, request, pk=None):

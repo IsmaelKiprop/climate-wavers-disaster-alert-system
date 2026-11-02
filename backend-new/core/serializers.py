@@ -489,15 +489,14 @@ class TreeProjectSerializer(serializers.ModelSerializer):
         read_only_fields = ['trees_planted', 'funds_raised', 'is_verified', 'verification_date', 'created_at', 'updated_at']
     
     def get_cover_image_url(self, obj):
-        if obj.cover_image:
-            request = self.context.get('request')
-            if request:
-                # If it's a relative URL, make it absolute
-                if obj.cover_image.startswith('/'):
-                    return request.build_absolute_uri(obj.cover_image)
-                return obj.cover_image
-            return obj.cover_image
-        return None
+        if not obj.cover_image:
+            return None
+        url = obj.cover_image
+        if "climatewavers.org/" in url:
+            return "/" + url.split("climatewavers.org/")[-1].lstrip("/")
+        if url.startswith("/"):
+            return url
+        return url
     
     def get_organization_logo_url(self, obj):
         if obj.organization_logo:

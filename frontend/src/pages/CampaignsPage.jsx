@@ -6,6 +6,8 @@ import Pagination from "../components/Pagination";
 import Payment from "../components/Payment";
 import Modal from "../components/Modal";
 import Footer from "../components/FooterBar";
+import DashboardSidebar from "../components/DashboardSidebar";
+import Menu from "../components/Menu";
 import { CampaignsPageSEO } from "../components/SEOComponents";
 import { usePagination } from "../hooks/usePagination";
 import { fetchTreeProjects } from "../utils/apiData";
@@ -20,26 +22,22 @@ const CampaignsPage = () => {
   const location = useLocation();
   const itemsPerPage = 12;
 
-  useEffect(() => {
-    let active = true;
+  const loadCampaigns = () => {
     setLoading(true);
     fetchTreeProjects()
       .then((data) => {
-        if (!active) return;
         setCampaigns(data);
         setError("");
       })
       .catch(() => {
-        if (!active) return;
         setCampaigns([]);
         setError("We could not load campaigns. Please try again.");
       })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
-    return () => {
-      active = false;
-    };
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    loadCampaigns();
   }, []);
 
   useEffect(() => {
@@ -77,66 +75,71 @@ const CampaignsPage = () => {
         <header className="sticky top-0 z-50 bg-navbar border-b border-border">
           <Topbar />
         </header>
-        <main className="flex-1 w-full max-w-6xl mx-auto px-3 sm:px-4 py-6 pb-24 md:pb-10">
-          <h1 className="text-2xl sm:text-3xl font-semibold text-foreground text-center">
-            Support live climate projects
-          </h1>
-          <p className="mt-2 text-center text-muted text-sm sm:text-base">
-            These campaigns come from verified tree projects in the Climate Wavers database.
-          </p>
+        <div className="flex flex-1 min-h-0">
+          <DashboardSidebar>
+            <Menu />
+          </DashboardSidebar>
+          <main className="flex-1 min-w-0 px-4 sm:px-6 py-5 pb-24 md:pb-8">
+            <h1 className="text-xl sm:text-2xl font-semibold text-foreground">
+              Support live climate projects
+            </h1>
+            <p className="mt-1 text-muted text-sm">
+              Verified tree campaigns from the Climate Wavers database in Nairobi.
+            </p>
 
-          {loading ? (
-            <p className="mt-10 text-center text-muted">Loading campaigns...</p>
-          ) : error ? (
-            <div className="mt-10 max-w-md mx-auto text-center border border-border bg-surface p-6">
-              <p className="text-foreground font-medium">{error}</p>
-              <button
-                type="button"
-                className="mt-4 h-10 px-4 bg-primary text-primary-foreground"
-                onClick={() => window.location.reload()}
-              >
-                Retry
-              </button>
-            </div>
-          ) : paginatedData.length === 0 ? (
-            <div className="mt-10 max-w-md mx-auto text-center border border-border bg-surface p-6">
-              <p className="font-medium text-foreground">No campaigns yet</p>
-              <p className="mt-2 text-sm text-muted">
-                Live tree projects will appear here once they are published.
-              </p>
-              <Link to="/app/plant-tree" className="inline-flex mt-4 h-10 px-4 items-center bg-primary text-primary-foreground">
-                Plant a tree
-              </Link>
-            </div>
-          ) : (
-            <>
-              <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {paginatedData.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    className="text-left"
-                    onClick={() => chooseCampaign(item)}
-                  >
-                    <Campaign campaign={item} />
-                  </button>
-                ))}
+            {loading ? (
+              <p className="mt-10 text-muted">Loading campaigns...</p>
+            ) : error ? (
+              <div className="mt-8 max-w-md border border-border bg-surface p-5">
+                <p className="font-medium">{error}</p>
+                <button
+                  type="button"
+                  className="mt-4 h-10 px-4 bg-primary text-primary-foreground"
+                  onClick={loadCampaigns}
+                >
+                  Retry
+                </button>
               </div>
-              {totalPages > 1 && (
-                <div className="mt-8">
-                  <Pagination
-                    currentPage={currentPage}
-                    totalPages={totalPages}
-                    onPageChange={goToPage}
-                    totalItems={totalItems}
-                    itemsPerPage={itemsPerPage}
-                    className="justify-center"
-                  />
+            ) : paginatedData.length === 0 ? (
+              <div className="mt-8 max-w-md border border-border bg-surface p-5">
+                <p className="font-medium">No campaigns yet</p>
+                <p className="mt-2 text-sm text-muted">
+                  Live tree projects will appear here once they are published.
+                </p>
+                <Link to="/app/plant-tree" className="inline-flex mt-4 h-10 px-4 items-center bg-primary text-primary-foreground">
+                  Plant a tree
+                </Link>
+              </div>
+            ) : (
+              <>
+                <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+                  {paginatedData.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      className="text-left"
+                      onClick={() => chooseCampaign(item)}
+                    >
+                      <Campaign campaign={item} />
+                    </button>
+                  ))}
                 </div>
-              )}
-            </>
-          )}
-        </main>
+                {totalPages > 1 && (
+                  <div className="mt-8">
+                    <Pagination
+                      currentPage={currentPage}
+                      totalPages={totalPages}
+                      onPageChange={goToPage}
+                      totalItems={totalItems}
+                      itemsPerPage={itemsPerPage}
+                      className="justify-center"
+                    />
+                  </div>
+                )}
+              </>
+            )}
+          </main>
+        </div>
         {isModalOpen && (
           <Modal closeFn={() => setIsModalOpen(false)}>
             <Payment

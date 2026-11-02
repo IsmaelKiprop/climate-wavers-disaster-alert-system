@@ -12,17 +12,55 @@ export function unwrapList(payload) {
   return [];
 }
 
+const PROJECT_COVERS = {
+  urban_greening: "/environment.jpg",
+  school_garden: "/community-respond.jpg",
+  afforestation: "/environment.jpg",
+  reforestation: "/environment.jpg",
+};
+
+export function projectCoverImage(project) {
+  const lat = Number(project.latitude ?? project.lat);
+  const lng = Number(project.longitude ?? project.lng);
+  const typeCover = PROJECT_COVERS[project.project_type] || "/environment.jpg";
+  const raw = project.cover_image_url || project.cover_image || project.image_url || "";
+  if (typeof raw === "string" && raw) {
+    const https = toHttpsUrl(raw);
+    if (https.startsWith("/")) return https;
+    try {
+      const parsed = new URL(https);
+      if (
+        parsed.hostname.includes("climatewavers.org") ||
+        parsed.hostname.includes("climate-wavers") ||
+        parsed.hostname.includes("vercel.app")
+      ) {
+        return parsed.pathname || typeCover;
+      }
+      return https;
+    } catch {
+      // Fall through to location imagery.
+    }
+  }
+  return locationImagery(lat, lng, "other") || typeCover;
+}
+
 export function mapProjectToCampaign(project) {
+  const lat = Number(project.latitude ?? project.lat);
+  const lng = Number(project.longitude ?? project.lng);
   return {
     id: project.id,
     title: project.name || project.title || "Tree project",
     details: project.short_description || project.description || "",
     amount: project.funding_goal || project.total_budget || 0,
     raised: project.funds_raised || 0,
-    image: project.cover_image_url || project.cover_image || project.image_url || "/logo.jpg",
+    image: projectCoverImage(project),
+    fallbackImage: PROJECT_COVERS[project.project_type] || "/environment.jpg",
     country: project.country || "",
     city: project.city || "",
     trees_planted: project.trees_planted || 0,
+    target_trees: project.target_trees || 0,
+    latitude: Number.isFinite(lat) ? lat : null,
+    longitude: Number.isFinite(lng) ? lng : null,
     raw: project,
   };
 }
