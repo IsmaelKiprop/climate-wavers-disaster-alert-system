@@ -45,6 +45,7 @@ app.use(express.static(path.join(__dirname, "views")));
 
 //status endpoint
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+app.get("/", (req, res) => res.status(200).json({ status: "ok", service: "climate-wavers-response" }));
 app.get("/status", (req, res) => res.status(200).send("OK"));
 
 app.use("/api/v1/posts", logBuilder.listen("post"), postsRouter);
@@ -57,6 +58,6 @@ useQueue(getPostChannel,queues.analyze_post, analyzePost);
 useQueue(getChatChannel,queues.generate_chat_title, generateTitle);
 useQueue(getLogsChannel,queues.build_log, buildLog);
 
-app.listen(port, () => {
+app.listen(port, "0.0.0.0", () => {
   logger.info(`Server is running on port ${port}`);
 });

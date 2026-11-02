@@ -12,6 +12,7 @@ useQueue(channels.forget_password, controller.sendForgetPassword);
 useQueue(channels.onboarding, controller.onboardUser);
 useQueue(channels.verification, controller.sendVerification);
 
+app.get("/", (req, res) => res.status(200).json({ status: "ok", service: "climate-wavers-notifications" }))
 app.get("/status", (req, res)=>res.status(200).send("OK"))
 
 app.listen(port, "0.0.0.0", () => {

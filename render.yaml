@@ -65,8 +65,6 @@ services:
     dockerfilePath: ./Dockerfile
     healthCheckPath: /status
     envVars:
-      - key: PORT
-        value: "3004"
       - key: CORS_ORIGINS
         sync: false
       - key: AMQP_URL
@@ -87,14 +85,10 @@ services:
     dockerfilePath: ./Dockerfile
     healthCheckPath: /status
     envVars:
-      - key: PORT
-        value: "3000"
       - key: AMQP_URL
         sync: false
-      - key: SERVER_PORT
-        value: "3000"
       - key: SERVER_HOST
-        sync: false
+        value: 0.0.0.0
       - key: SERVER_PROTOCOL
         value: https
       - key: SERVER_SECRET
@@ -121,7 +115,5 @@ services:
         sync: false
       - key: MODEL_HOST
         value: 0.0.0.0
-      - key: MODEL_PORT
-        value: "5000"
       - key: CORS_ORIGINS
         value: "*"
