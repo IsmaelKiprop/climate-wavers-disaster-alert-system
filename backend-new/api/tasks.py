@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 import socket
 import ssl
 import urllib.error
@@ -111,7 +112,69 @@ def _post_notification(payload):
         raise RuntimeError(f"notification service returned {exc.code}: {body[:500]}") from exc
 
 
+def _resend_from_addresses():
+    configured = settings.DEFAULT_FROM_EMAIL or settings.EMAIL_HOST_USER or ""
+    lowered = configured.lower()
+    addresses = []
+    if (
+        configured
+        and "gmail.com" not in lowered
+        and "example.com" not in lowered
+        and "yahoo." not in lowered
+        and "outlook." not in lowered
+        and "hotmail." not in lowered
+    ):
+        addresses.append(configured)
+    addresses.append("Climate Wavers <hello@flowops.africa>")
+    addresses.append("Climate Wavers <onboarding@resend.dev>")
+    unique = []
+    for item in addresses:
+        if item not in unique:
+            unique.append(item)
+    return unique
+
+
+def _send_resend(queue_name, payload):
+    key = getattr(settings, "RESEND_API_KEY", "") or os.environ.get("RESEND_API_KEY", "")
+    if not key:
+        raise RuntimeError("RESEND_API_KEY is not set")
+    email = payload.get("email")
+    subject, body = _mail_copy(queue_name, payload)
+    last_error = None
+    for from_email in _resend_from_addresses():
+        request = urllib.request.Request(
+            "https://api.resend.com/emails",
+            data=json.dumps(
+                {
+                    "from": from_email,
+                    "to": [email],
+                    "subject": subject,
+                    "text": body,
+                }
+            ).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {key}",
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=12, context=_ssl_context()) as response:
+                logger.info("Resend ok from=%s status=%s", from_email, response.status)
+                return
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="replace")
+            last_error = RuntimeError(f"resend {exc.code} from {from_email}: {detail[:400]}")
+            logger.warning("Resend from %s failed: %s", from_email, last_error)
+        except Exception as exc:
+            last_error = exc
+            logger.warning("Resend from %s failed: %s", from_email, exc)
+    raise last_error or RuntimeError("Resend send failed")
+
+
 def _send_smtp(queue_name, payload):
+    if os.environ.get("RENDER"):
+        raise RuntimeError("SMTP is blocked on Render")
     if not settings.EMAIL_HOST_USER or not settings.EMAIL_HOST_PASSWORD:
         raise RuntimeError("SMTP is not configured")
     email = payload.get("email")
@@ -154,18 +217,29 @@ def _send_smtp(queue_name, payload):
 
 def send_message(queue_name, message):
     """
-    Deliver email over SMTP. Notifications holds the Gmail credentials.
+    On Render, send over HTTPS (Resend). Gmail SMTP ports are blocked.
     """
     payload = json.loads(message) if isinstance(message, str) else message
     errors = []
 
     try:
+        _send_resend(queue_name, payload)
+        print(f" [x] Sent {queue_name} via Resend")
+        return
+    except Exception as exc:
+        errors.append(f"resend: {exc}")
+        if "RESEND_API_KEY is not set" in str(exc):
+            logger.info("Resend skipped: %s", exc)
+        else:
+            logger.exception("Resend HTTP failed")
+
+    try:
         _post_notification({"type": queue_name, **payload})
-        print(f" [x] Sent {queue_name} via SMTP notification service")
+        print(f" [x] Sent {queue_name} via notification service")
         return
     except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, RuntimeError, Exception) as exc:
         errors.append(f"http: {exc}")
-        logger.exception("Notification SMTP failed")
+        logger.exception("Notification send failed")
 
     try:
         _send_smtp(queue_name, payload)
@@ -173,7 +247,7 @@ def send_message(queue_name, message):
         return
     except Exception as exc:
         errors.append(f"smtp: {exc}")
-        if "not configured" in str(exc):
+        if "not configured" in str(exc) or "blocked on Render" in str(exc):
             logger.info("Direct SMTP skipped: %s", exc)
         else:
             logger.exception("SMTP send failed")

@@ -31,8 +31,9 @@ app.post("/api/v1/mail/test", async (req, res) => {
   if (!requireSecret(req, res)) return
   try {
     const report = await mailer.diagnose()
-    console.log(`mail smtp diagnose ${JSON.stringify(report)}`)
-    return res.status(report.probes.some((probe) => probe.ok) ? 200 : 503).json(report)
+    console.log(`mail diagnose ${JSON.stringify(report)}`)
+    const ok = Boolean(report.resend?.ok) || report.probes.some((probe) => probe.ok)
+    return res.status(ok ? 200 : 503).json(report)
   } catch (error) {
     console.log(error)
     return res.status(500).json({ error: String(error.message || error) })
@@ -70,6 +71,6 @@ app.use((err, req, res, next) => {
 app.listen(port, "0.0.0.0", () => {
   console.log(`Server is running on port ${port}`);
   console.log(
-    `mail: smtp host=${process.env.MAIL_HOST || "smtp.gmail.com"} user=${Boolean(process.env.MAIL_USER)}`
+    `mail: resend=${Boolean(process.env.RESEND_API_KEY)} smtp_user=${Boolean(process.env.MAIL_USER)} render=${Boolean(process.env.RENDER)}`
   )
 });

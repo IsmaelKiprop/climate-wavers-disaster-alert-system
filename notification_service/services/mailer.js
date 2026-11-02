@@ -4,6 +4,7 @@ import ejs from "ejs"
 import path from "path"
 
 const __dirname = process.cwd()
+const ON_RENDER = Boolean(process.env.RENDER)
 
 export const mailTypes = {
     custom: "custom",
@@ -24,6 +25,8 @@ function mailMeta() {
         userSet: Boolean(process.env.MAIL_USER),
         passSet: Boolean(process.env.MAIL_PASS),
         fromSet: Boolean(process.env.MAIL_FROM || process.env.MAIL_USER),
+        resendKey: Boolean(process.env.RESEND_API_KEY),
+        onRender: ON_RENDER,
     }
 }
 
@@ -40,6 +43,25 @@ function describeError(error) {
         address: error.address || null,
         port: error.port || null,
     }
+}
+
+function fromAddresses() {
+    const configured = process.env.MAIL_FROM || config.mail.auth.user || ""
+    const lowered = configured.toLowerCase()
+    const addresses = []
+    if (
+        configured &&
+        !lowered.includes("gmail.com") &&
+        !lowered.includes("example.com") &&
+        !lowered.includes("yahoo.") &&
+        !lowered.includes("outlook.") &&
+        !lowered.includes("hotmail.")
+    ) {
+        addresses.push(configured)
+    }
+    addresses.push("Climate Wavers <hello@flowops.africa>")
+    addresses.push("Climate Wavers <onboarding@resend.dev>")
+    return [...new Set(addresses)]
 }
 
 class Mailer{
@@ -91,51 +113,116 @@ class Mailer{
         }
     }
 
+    async _sendResend(email, html, subject, from) {
+        const key = process.env.RESEND_API_KEY
+        if (!key) {
+            throw new Error("RESEND_API_KEY is not set")
+        }
+        const response = await fetch("https://api.resend.com/emails", {
+            method: "POST",
+            headers: {
+                Authorization: `Bearer ${key}`,
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                from,
+                to: [email],
+                subject,
+                html,
+            }),
+            signal: AbortSignal.timeout(12000),
+        })
+        const detail = await response.text()
+        if (!response.ok) {
+            throw new Error(`resend ${response.status}: ${detail}`)
+        }
+        return detail
+    }
+
     async diagnose() {
+        const report = { ...mailMeta(), probes: [], resend: null }
+        if (process.env.RESEND_API_KEY) {
+            try {
+                const response = await fetch("https://api.resend.com/domains", {
+                    headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}` },
+                    signal: AbortSignal.timeout(10000),
+                })
+                const data = await response.json()
+                report.resend = {
+                    ok: response.ok,
+                    status: response.status,
+                    domains: Array.isArray(data.data)
+                        ? data.data.map((domain) => ({ name: domain.name, status: domain.status }))
+                        : [],
+                }
+            } catch (error) {
+                report.resend = { ok: false, error: String(error.message || error) }
+            }
+        }
         const attempts = [
             { port: 465, secure: true },
             { port: Number(process.env.MAIL_PORT) || 587, secure: false, requireTLS: true },
         ]
-        const probes = []
         for (const attempt of attempts) {
-            probes.push(await this._tryPort(attempt))
+            report.probes.push(await this._tryPort(attempt))
         }
-        return { ...mailMeta(), probes }
+        console.log(`mail diagnose ${JSON.stringify(report)}`)
+        return report
     }
 
     async sendMail(email, html, subject="Climate Wavers"){
-        const attempts = [
-            { port: 465, secure: true },
-            { port: Number(process.env.MAIL_PORT) || 587, secure: false, requireTLS: true },
-        ]
         const failures = []
-        for (const attempt of attempts) {
-            const started = Date.now()
-            try {
-                const transporter = this._transport(attempt)
-                await transporter.sendMail({
-                    to: email,
-                    from: this.from_address,
-                    html,
-                    subject,
-                })
-                transporter.close()
-                console.log(`mail smtp sent ${JSON.stringify({
-                    ...mailMeta(),
-                    port: attempt.port,
-                    ms: Date.now() - started,
-                    toHost: String(email).split("@")[1] || "",
-                })}`)
-                return
-            } catch (error) {
-                const failure = {
-                    port: attempt.port,
-                    secure: Boolean(attempt.secure),
-                    ms: Date.now() - started,
-                    error: describeError(error),
+        if (process.env.RESEND_API_KEY) {
+            for (const from of fromAddresses()) {
+                const started = Date.now()
+                try {
+                    await this._sendResend(email, html, subject, from)
+                    console.log(`mail resend sent ${JSON.stringify({ from, ms: Date.now() - started })}`)
+                    return
+                } catch (error) {
+                    const failure = {
+                        via: "resend",
+                        from,
+                        ms: Date.now() - started,
+                        error: describeError(error),
+                    }
+                    failures.push(failure)
+                    console.log(`mail resend failed ${JSON.stringify(failure)}`)
                 }
-                failures.push(failure)
-                console.log(`mail smtp failed ${JSON.stringify({ ...mailMeta(), ...failure })}`)
+            }
+        }
+        if (!ON_RENDER) {
+            const attempts = [
+                { port: 465, secure: true },
+                { port: Number(process.env.MAIL_PORT) || 587, secure: false, requireTLS: true },
+            ]
+            for (const attempt of attempts) {
+                const started = Date.now()
+                try {
+                    const transporter = this._transport(attempt)
+                    await transporter.sendMail({
+                        to: email,
+                        from: this.from_address,
+                        html,
+                        subject,
+                    })
+                    transporter.close()
+                    console.log(`mail smtp sent ${JSON.stringify({
+                        ...mailMeta(),
+                        port: attempt.port,
+                        ms: Date.now() - started,
+                    })}`)
+                    return
+                } catch (error) {
+                    const failure = {
+                        via: "smtp",
+                        port: attempt.port,
+                        ms: Date.now() - started,
+                        error: describeError(error),
+                    }
+                    failures.push(failure)
+                    console.log(`mail smtp failed ${JSON.stringify({ ...mailMeta(), ...failure })}`)
+                }
             }
         }
         const err = new Error("mail send failed")
