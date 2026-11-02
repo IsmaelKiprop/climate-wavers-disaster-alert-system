@@ -58,3 +58,15 @@ export function wsHttpUrl(path = "") {
   const normalized = path.startsWith("/") ? path : `/${path}`;
   return `${base}${normalized}`;
 }
+
+export function notificationsSocketUrl(token = "") {
+  const path = `/ws/notifications/?token=${encodeURIComponent(token || "")}`;
+  const explicit = trimSlash(import.meta.env.VITE_WSS_BACKEND || "");
+  const httpBase = explicit || env.backendUrl;
+  if (httpBase) {
+    return `${httpBase.replace(/^http/i, "ws")}${path}`;
+  }
+  if (typeof window === "undefined") return `ws://localhost:8000${path}`;
+  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+  return `${protocol}//${window.location.host}${path}`;
+}

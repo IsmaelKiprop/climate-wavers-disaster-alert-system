@@ -1,7 +1,7 @@
 import { Link, useLocation, useParams } from "react-router-dom";
 import { useEffect, useState } from "react";
 import PublicPage from "../components/PublicPage";
-import { fetchDisaster, getCachedDisaster } from "../utils/apiData";
+import { disasterTypeFallback, fetchDisaster, getCachedDisaster } from "../utils/apiData";
 import { getAuthToken } from "../utils/factory";
 
 const DisasterPage = () => {
@@ -91,6 +91,10 @@ const DisasterPage = () => {
               src={disaster.image || disaster.images[0]}
               alt=""
               className="mt-4 w-full h-48 sm:h-64 object-cover border border-border bg-background"
+              onError={(imgEvent) => {
+                imgEvent.target.onerror = null;
+                imgEvent.target.src = disasterTypeFallback(disaster?.disasterType);
+              }}
             />
           ) : null}
           <p className="mt-4 text-xs font-semibold uppercase tracking-wide text-muted">

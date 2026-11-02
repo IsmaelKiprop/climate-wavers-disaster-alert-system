@@ -4,7 +4,6 @@ import { FiMapPin } from "react-icons/fi";
 import { IoCreateOutline, IoCamera, IoCallOutline, IoGlobeOutline, IoLeaf } from "react-icons/io5";
 import TreeBadge from "./TreeBadge";
 import { toast } from "react-toastify";
-import Cookies from "js-cookie";
 import Feed from "./Feed";
 import ProfileEditModal from "./ProfileEditModal";
 import { useParams, useNavigate } from "react-router-dom";
@@ -12,7 +11,7 @@ import { useProfile } from "../hooks/useProfile";
 import { useTrending } from "../hooks/useTrending";
 import { endpoints } from "../utils/endpoints";
 import { client } from "../api";
-import { getUser } from "../utils/factory";
+import { getUser, setUser } from "../utils/factory";
 
 const Profile = () => {
   const { userId } = useParams();
@@ -99,35 +98,21 @@ const Profile = () => {
   };
 
   const handleProfileUpdate = (updatedUser) => {
-    console.log("Profile update - updatedUser:", updatedUser);
-    console.log("Profile update - current user before:", getUser());
-    
-    // Update the profile state with new data
-    setProfile(prev => ({
-      ...prev,
-      ...updatedUser
-    }));
-    
-    // User data is managed by cookies and database, no localStorage needed
-    
-    // Also update cookies for getUser() function
-    if (currentUser) {
-      const updatedUserForCookies = {
-        ...currentUser,
-        ...updatedUser
-      };
-      console.log("Profile update - updated user for cookies:", updatedUserForCookies);
-      // Update the user cookie using js-cookie
-      Cookies.set('user', JSON.stringify(updatedUserForCookies), { path: '/' });
-    }
-    
-    // Dispatch custom event to notify other components
-    console.log("Profile - Dispatching userUpdated event");
-    window.dispatchEvent(new CustomEvent('userUpdated'));
-    console.log("Profile - userUpdated event dispatched");
-    
-    // Show success message
-    toast.success("Profile updated successfully!");
+    const nextProfile = {
+      ...profile,
+      ...updatedUser,
+      profile_picture:
+        updatedUser?.profile_picture ||
+        updatedUser?.profile_pic ||
+        profile?.profile_picture,
+    };
+    setProfile(nextProfile);
+
+    const currentUser = getUser() || {};
+    setUser({
+      ...currentUser,
+      ...nextProfile,
+    });
   };
 
   const follow = async (userId) => {

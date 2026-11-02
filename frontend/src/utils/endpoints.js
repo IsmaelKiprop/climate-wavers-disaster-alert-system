@@ -13,6 +13,7 @@ export const endpoints = {
     "profile": "/api/v1/users/activity/",
     "users": "/api/v1/users/",
     "notifications": "/api/v1/notifications/",
+    "notificationsRead": "/api/v1/notifications/mark-read/",
     "ai_generate_content": "/api/v1/ai/generate-content/",
     "ai_analyze_content": "/api/v1/ai/analyze-content/",
     "ai_generate_hashtags": "/api/v1/ai/generate-hashtags/",

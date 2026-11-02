@@ -73,7 +73,12 @@ export default defineConfig({
         target: process.env.API_PROXY_TARGET || 'http://127.0.0.1:8000',
         changeOrigin: true,
         secure: false,
-      }
+      },
+      '/ws': {
+        target: process.env.API_PROXY_TARGET || 'ws://127.0.0.1:8000',
+        ws: true,
+        changeOrigin: true,
+      },
     }
   },
   esbuild: {

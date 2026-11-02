@@ -1,6 +1,6 @@
 import PropTypes from "prop-types";
 import { Link } from "react-router-dom";
-import { disasterCoverImage } from "../utils/apiData";
+import { disasterCoverImage, disasterTypeFallback } from "../utils/apiData";
 
 const DisasterImages = ({ disasters }) => {
   if (!disasters || !Array.isArray(disasters) || disasters.length === 0) {
@@ -16,7 +16,10 @@ const DisasterImages = ({ disasters }) => {
   return (
     <div className="flex h-full gap-3 overflow-x-auto px-1">
       {featured.map((disaster) => {
-        const cover = disaster.image || disaster.images?.[0] || disasterCoverImage(disaster.disasterType);
+        const cover =
+          disaster.image ||
+          disaster.images?.[0] ||
+          disasterCoverImage(disaster.disasterType, disaster.latitude, disaster.longitude);
         const title = disaster.name || disaster.title || [disaster.region, disaster.country].filter(Boolean).join(", ");
         return (
           <Link
@@ -29,6 +32,10 @@ const DisasterImages = ({ disasters }) => {
               className="absolute inset-0 w-full h-full object-cover"
               src={cover}
               loading="lazy"
+              onError={(event) => {
+                event.target.onerror = null;
+                event.target.src = disasterTypeFallback(disaster.disasterType);
+              }}
             />
             <div className="absolute inset-0 bg-black/45" />
             <div className="relative z-10 h-full flex flex-col justify-end p-4 text-white">

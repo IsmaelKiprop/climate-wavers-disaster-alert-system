@@ -6,6 +6,7 @@ import { useState } from "react";
 import { client } from "../api";
 import { endpoints } from "../utils/endpoints";
 import { uploadFiles } from "../services/upload.service";
+import { getUser, setUser } from "../utils/factory";
 
 const UploadPhoto = () => {
   const navigate = useNavigate();
@@ -36,7 +37,7 @@ const UploadPhoto = () => {
       const profilePicUrl = uploaded_image && uploaded_image.length > 0 ? uploaded_image[0] : null;
       console.log("Profile picture URL:", profilePicUrl);
       
-      await client.run(
+      const updated = await client.run(
         "patch",
         endpoints?.user,
         { profile_pic: profilePicUrl },
@@ -45,6 +46,12 @@ const UploadPhoto = () => {
         false,
         false
       );
+      setUser({
+        ...(getUser() || {}),
+        ...updated,
+        profile_pic: profilePicUrl,
+        profile_picture: updated?.profile_picture || profilePicUrl,
+      });
       setImagePreview(null);
       navigate(-1);
     } catch (error) {

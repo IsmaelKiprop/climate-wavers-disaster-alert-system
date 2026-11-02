@@ -28,7 +28,7 @@ class JwtAuthMiddleware(BaseMiddleware):
                 logger.info("Decoding user token...")
                 payload = jwt.decode(
                     token, settings.SECRET_KEY, algorithms=['HS256'])
-                user = await self.get_user(payload['user_id'])
+                user = await self.get_user(payload.get('user_id') or payload.get('userId') or payload.get('id'))
                 scope['user'] = user
             except jwt.ExpiredSignatureError:
                 scope['user'] = AnonymousUser()
@@ -47,6 +47,8 @@ class JwtAuthMiddleware(BaseMiddleware):
     @database_sync_to_async
     def get_user(self, user_id):
         from api.models import User
+        if not user_id:
+            return AnonymousUser()
         try:
             return User.objects.get(id=user_id)
         except User.DoesNotExist:

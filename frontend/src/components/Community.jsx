@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useFeedData } from "../hooks/useFeedData";
-import { formatTimeAgo } from "../utils/apiData";
+import { disasterTypeFallback, formatTimeAgo } from "../utils/apiData";
 
 const FEEDS = ["Trending", "Climate Action", "Alerts", "Disasters"];
 
@@ -94,6 +94,10 @@ const Community = () => {
                     alt=""
                     className="h-20 w-24 shrink-0 object-cover bg-background"
                     loading="lazy"
+                    onError={(imgEvent) => {
+                      imgEvent.target.onerror = null;
+                      imgEvent.target.src = disasterTypeFallback(event.disasterType);
+                    }}
                   />
                   <div className="min-w-0">
                     <p className="text-xs uppercase tracking-wide text-muted">

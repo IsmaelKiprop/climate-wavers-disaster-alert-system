@@ -10,7 +10,12 @@ logger = logging.getLogger(__name__)
 
 class NotificationConsumer(AsyncWebsocketConsumer):
     async def connect(self):
-        self.room_name = self.scope['user'].username
+        user = self.scope.get('user')
+        if not user or not getattr(user, 'is_authenticated', False):
+            await self.close(code=4401)
+            return
+
+        self.room_name = user.username
         self.room_group_name = f'notifications_{self.room_name}'
 
         logger.info(
@@ -24,10 +29,9 @@ class NotificationConsumer(AsyncWebsocketConsumer):
         await self.accept()
 
     async def disconnect(self, close_code):
-        await self.channel_layer.group_discard(
-            self.room_group_name,
-            self.channel_name
-        )
+        group = getattr(self, "room_group_name", None)
+        if group:
+            await self.channel_layer.group_discard(group, self.channel_name)
 
     async def notification_message(self, event):
         notification_id = event['id']

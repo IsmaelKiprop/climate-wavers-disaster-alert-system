@@ -4,6 +4,7 @@ import { useState } from "react";
 import { client } from "../api";
 import { endpoints } from "../utils/endpoints";
 import { uploadFiles } from "../services/upload.service";
+import { getUser, setUser } from "../utils/factory";
 
 const UploadCover = () => {
   const navigate = useNavigate();
@@ -34,7 +35,7 @@ const UploadCover = () => {
       const coverUrl = uploaded_image && uploaded_image.length > 0 ? uploaded_image[0] : null;
       console.log("Cover image URL:", coverUrl);
       
-      await client.run(
+      const updated = await client.run(
         "patch",
         endpoints?.user,
         { cover: coverUrl },
@@ -43,6 +44,11 @@ const UploadCover = () => {
         false,
         false
       );
+      setUser({
+        ...(getUser() || {}),
+        ...updated,
+        cover: coverUrl,
+      });
       setImagePreview(null);
       navigate(-1);
     } catch (error) {

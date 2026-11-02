@@ -42,10 +42,10 @@ class User(AbstractBaseUser, PermissionsMixin):
     profession = models.CharField(max_length=100, verbose_name=_("Profession"), blank=True, null=True)
     state = models.CharField(max_length=100, verbose_name=_("State"))
     profile_pic = models.URLField(
-        blank=True, null=True, max_length=300
+        blank=True, null=True, max_length=500
     )
     cover = models.URLField(
-        blank=True, null=True, max_length=300
+        blank=True, null=True, max_length=500
     )
     default_avatar = models.URLField(
         max_length=100, choices=AVATAR_CHOICES, blank=True, null=True

@@ -65,8 +65,8 @@ class UserSerializer(serializers.ModelSerializer):
     cover_image = serializers.URLField(source='cover', required=False, allow_blank=True, allow_null=True)
     
     # Allow cover and profile_pic fields to be updated
-    cover = serializers.URLField(required=False, allow_blank=True, allow_null=True)
-    profile_pic = serializers.URLField(required=False, allow_blank=True, allow_null=True)
+    cover = serializers.URLField(required=False, allow_blank=True, allow_null=True, max_length=500)
+    profile_pic = serializers.URLField(required=False, allow_blank=True, allow_null=True, max_length=500)
 
     def get_is_following(self, obj):
         user = self.get_user_from_context()
@@ -400,6 +400,7 @@ class UserActivitySerializer(serializers.Serializer):
 class NotificationSerializer(serializers.ModelSerializer):
     user = UserSerializer(read_only=True)
     content = serializers.SerializerMethodField()
+    actor = serializers.SerializerMethodField()
 
     class Meta:
         model = Notification
@@ -410,14 +411,26 @@ class NotificationSerializer(serializers.ModelSerializer):
         }
 
     def get_content(self, obj):
+        if hasattr(obj, "_content_cache"):
+            return obj._content_cache
         request = self.context.get("request")
-        if obj.content_type.model == 'post':
-            return PostSerializer(Post.objects.get(id=obj.object_id), context={'request': request}).data
-        elif obj.content_type.model == 'comment':
-            return CommentSerializer(Comment.objects.get(id=obj.object_id), context={'request': request}).data
-        elif obj.content_type.model == 'follow':
-            return FollowSerializer(Follow.objects.get(id=obj.object_id), context={'request': request}).data
+        payload = None
+        try:
+            if obj.content_type and obj.content_type.model == 'post':
+                payload = PostSerializer(Post.objects.get(id=obj.object_id), context={'request': request}).data
+            elif obj.content_type and obj.content_type.model == 'comment':
+                payload = CommentSerializer(Comment.objects.get(id=obj.object_id), context={'request': request}).data
+            elif obj.content_type and obj.content_type.model == 'follow':
+                payload = FollowSerializer(Follow.objects.get(id=obj.object_id), context={'request': request}).data
+        except Exception:
+            payload = None
+        obj._content_cache = payload
+        return payload
 
+    def get_actor(self, obj):
+        content = self.get_content(obj)
+        if isinstance(content, dict):
+            return content.get("user")
         return None
 
 

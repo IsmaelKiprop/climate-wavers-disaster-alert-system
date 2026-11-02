@@ -20,11 +20,13 @@ import { getUser, logout, isAdmin } from "../../utils/factory";
 import { useEffect, useState } from "react";
 import Modal from "../Modal";
 import Createpost from "../Createpost";
+import { useNotifications } from "../../context/NotificationContext";
 
 const AppNav = ({ onNavigate, compact = false }) => {
   const location = useLocation();
   const onboarding = location.pathname.startsWith("/onboarding");
   const isCompact = compact;
+  const { hasNewNotification } = useNotifications() || {};
   const [user, setUser] = useState(getUser());
   const [isModalOpen, setIsModalOpen] = useState(false);
 
@@ -101,9 +103,15 @@ const AppNav = ({ onNavigate, compact = false }) => {
           >
             {({ isActive }) => {
               const Glyph = isActive ? ActiveIcon : Icon;
+              const showDot = label === "Notifications" && hasNewNotification;
               return (
                 <>
-                  <Glyph size={18} aria-hidden="true" />
+                  <span className="relative inline-flex">
+                    <Glyph size={18} aria-hidden="true" />
+                    {showDot ? (
+                      <span className="absolute -top-0.5 -right-0.5 h-2 w-2 bg-destructive" />
+                    ) : null}
+                  </span>
                   {isCompact ? <span className="sr-only">{label}</span> : <span>{label}</span>}
                 </>
               );

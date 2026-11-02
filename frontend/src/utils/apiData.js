@@ -27,6 +27,22 @@ export function mapProjectToCampaign(project) {
   };
 }
 
+const EONET_TYPE_MAP = {
+  wildfires: "wildfire",
+  severeStorms: "storm",
+  volcanoes: "volcanic_eruption",
+  floods: "flood",
+  drought: "drought",
+  earthquakes: "earthquake",
+  landslides: "landslide",
+  tempExtremes: "heatwave",
+  seaLakeIce: "other",
+  dustHaze: "other",
+  snow: "blizzard",
+  waterColor: "other",
+  manmade: "other",
+};
+
 const DISASTER_COVERS = {
   earthquake: "/ai-disaster.jpg",
   wildfire: "/community-respond.jpg",
@@ -51,10 +67,31 @@ export function toHttpsUrl(url) {
   return url.replace(/^http:\/\//i, "https://");
 }
 
-export function disasterCoverImage(type) {
+export function disasterTypeFallback(type) {
   const key = String(type || "other").toLowerCase().replace(/\s+/g, "_");
   if (key.includes("flood")) return DISASTER_COVERS.flood;
   return DISASTER_COVERS[key] || DISASTER_COVERS.other;
+}
+
+export function locationImagery(lat, lng, type = "other") {
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return "";
+  const key = String(type || "").toLowerCase();
+  let span = 1.0;
+  if (key.includes("earth")) span = 1.5;
+  else if (key.includes("fire")) span = 0.55;
+  else if (key.includes("flood")) span = 0.7;
+  else if (key.includes("storm") || key.includes("hurricane") || key.includes("typhoon")) span = 2.2;
+  else if (key.includes("volcano")) span = 0.45;
+  const latSpan = span * 0.62;
+  const minLat = Math.max(-85, lat - latSpan);
+  const maxLat = Math.min(85, lat + latSpan);
+  return `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export?bbox=${lng - span},${minLat},${lng + span},${maxLat}&bboxSR=4326&imageSR=4326&size=800,450&format=jpg&f=image`;
+}
+
+export function disasterCoverImage(type, lat, lng) {
+  const satellite = locationImagery(lat, lng, type);
+  if (satellite) return satellite;
+  return disasterTypeFallback(type);
 }
 
 export function mapDisaster(disaster) {
@@ -71,13 +108,14 @@ export function mapDisaster(disaster) {
     LOW: "LOW",
     CRITICAL: "CRITICAL",
   };
-  const disasterType = disaster.disasterType || disaster.disaster_type || disaster.type || "other";
+  const rawType = disaster.disasterType || disaster.disaster_type || disaster.type || "other";
+  const disasterType = EONET_TYPE_MAP[rawType] || rawType;
   const suppliedImages = []
     .concat(disaster.images || disaster.gallery || [])
     .concat(disaster.cover_image ? [disaster.cover_image] : [])
-    .filter(Boolean)
+    .filter((url) => typeof url === "string" && /^https?:\/\//i.test(url))
     .map(toHttpsUrl);
-  const cover = suppliedImages[0] || disasterCoverImage(disasterType);
+  const cover = suppliedImages[0] || disasterCoverImage(disasterType, lat, lng);
   const startRaw = disaster.startDate || disaster.start_date;
   const startDate =
     typeof startRaw === "number" ? new Date(startRaw).toISOString() : startRaw;
@@ -152,22 +190,6 @@ export async function fetchTreeStats() {
 const USGS_WEEK_URL =
   "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/4.5_week.geojson";
 const EONET_URL = "https://eonet.gsfc.nasa.gov/api/v3/events?status=open&limit=80";
-
-const EONET_TYPE_MAP = {
-  wildfires: "wildfire",
-  severeStorms: "storm",
-  volcanoes: "volcanic_eruption",
-  floods: "flood",
-  drought: "drought",
-  earthquakes: "earthquake",
-  landslides: "landslide",
-  tempExtremes: "heatwave",
-  seaLakeIce: "other",
-  dustHaze: "other",
-  snow: "blizzard",
-  waterColor: "other",
-  manmade: "other",
-};
 
 function severityFromMagnitude(mag) {
   if (mag >= 7) return "CRITICAL";
@@ -319,7 +341,7 @@ export function prependCachedDisaster(disaster) {
   return mapped;
 }
 
-const DISASTER_CACHE_KEY = "cw_live_disasters";
+const DISASTER_CACHE_KEY = "cw_live_disasters_v2";
 
 function cacheDisasters(list) {
   try {

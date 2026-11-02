@@ -1,7 +1,7 @@
 import Postcomponent from "./Postcomponent";
 import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
-import { getAuthToken } from "../utils/factory";
+import { getAuthToken, setUser } from "../utils/factory";
 import Cookies from "js-cookie";
 import ModernPostCreator from "./ModernPostCreator";
 import { getLocation } from "../utils/location";
@@ -35,10 +35,10 @@ const Mainfeed = () => {
     queryKey: ["userDetails"],
     queryFn: fetchUserDetailsFn,
   });
-  if (isFetched) {
-    // Set cookies without domain restriction for development
-    Cookies.set("user", JSON.stringify(data));
-  }
+
+  useEffect(() => {
+    if (isFetched && data) setUser(data);
+  }, [isFetched, data]);
 
   return (
     <div className="space-y-4">

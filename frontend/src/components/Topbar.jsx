@@ -121,7 +121,8 @@ const Topbar = () => {
             aria-label="Account menu"
           >
             <img
-              src={user?.profile_picture || "/avatar.png"}
+              key={user?.profile_picture || user?.profile_pic || "avatar"}
+              src={user?.profile_picture || user?.profile_pic || user?.picture || "/avatar.png"}
               className="w-full h-full object-cover"
               alt=""
               style={{ borderRadius: "50%" }}

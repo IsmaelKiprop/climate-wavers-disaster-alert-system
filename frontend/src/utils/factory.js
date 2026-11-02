@@ -15,6 +15,15 @@ if (!window.timeAgoLocaleAdded) {
 // Create TimeAgo instance after locale is registered
 const timeAgo = new TimeAgo("en-US");
 
+export const setUser = (user) => {
+  if (!user) return user;
+  Cookies.set("user", JSON.stringify(user), { path: "/" });
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("userUpdated"));
+  }
+  return user;
+};
+
 export const getUser = () => {
   const raw = Cookies.get("user");
   const token = Cookies.get("accessToken");
@@ -33,11 +42,7 @@ export const getUser = () => {
     try {
       const fetchUser = async () => {
         const user = await client.run("get", endpoints?.user, {}, true);
-        if (user) {
-          const userString = JSON.stringify(user);
-          Cookies.set("user", userString);
-          return user;
-        }
+        if (user) setUser(user);
       };
       fetchUser();
     } catch (error) {

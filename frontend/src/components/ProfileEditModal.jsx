@@ -64,51 +64,34 @@ const ProfileEditModal = ({ isOpen, onClose, user, onProfileUpdate }) => {
 
   const onSubmit = async (data) => {
     setIsLoading(true);
-    
+
     try {
-      const formData = new FormData();
-      
-      // Add text fields
-      Object.keys(data).forEach(key => {
-        if (data[key]) {
-          formData.append(key, data[key]);
+      const payload = {};
+      Object.keys(data).forEach((key) => {
+        if (data[key] !== undefined && data[key] !== null && data[key] !== "") {
+          payload[key] = data[key];
         }
       });
 
-      // Handle cover image upload
       if (coverImageFile) {
         const coverImageUrl = await uploadFiles(coverImageFile);
-        if (coverImageUrl && coverImageUrl.length > 0) {
-          // Ensure we're sending a string, not an array
-          const coverUrl = coverImageUrl[0];
-          console.log("Cover image URL:", coverUrl);
-          formData.set('cover', coverUrl); // Use set instead of append to avoid arrays
-        }
+        if (coverImageUrl?.[0]) payload.cover = coverImageUrl[0];
       }
 
-      // Handle profile picture upload
       if (profileImageFile) {
         const profileImageUrl = await uploadFiles(profileImageFile);
-        if (profileImageUrl && profileImageUrl.length > 0) {
-          // Ensure we're sending a string, not an array
-          const profileUrl = profileImageUrl[0];
-          console.log("Profile image URL:", profileUrl);
-          formData.set('profile_pic', profileUrl); // Use set instead of append to avoid arrays
-        }
+        if (profileImageUrl?.[0]) payload.profile_pic = profileImageUrl[0];
       }
 
-      // Update profile
-      const response = await client.run("put", `${endpoints?.users}${user.id}/`, formData, true);
-      
-      console.log("ProfileEditModal - API response:", response);
-      console.log("ProfileEditModal - profile_picture:", response?.profile_picture);
-      console.log("ProfileEditModal - profile_pic:", response?.profile_pic);
-      console.log("ProfileEditModal - picture:", response?.picture);
-      
+      const response = await client.run("put", `${endpoints?.users}${user.id}/`, payload, true);
       toast.success("Profile updated successfully!");
-      onProfileUpdate(response);
+      onProfileUpdate({
+        ...response,
+        profile_pic: payload.profile_pic || response?.profile_pic,
+        cover: payload.cover || response?.cover,
+        profile_picture: response?.profile_picture || payload.profile_pic,
+      });
       onClose();
-      
     } catch (error) {
       console.error("Profile update error:", error);
       toast.error("Failed to update profile. Please try again.");

@@ -118,10 +118,12 @@ class Client {
 
     if (authheaders) {
       config.headers = {
-        "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
         "X-CSRFToken": `${Cookies.get("csrftoken")}`,
       };
+      if (!(data instanceof FormData)) {
+        config.headers["Content-Type"] = "application/json";
+      }
     }
     if (toastMsg) {
       toast.success(toastMsg.info, {
