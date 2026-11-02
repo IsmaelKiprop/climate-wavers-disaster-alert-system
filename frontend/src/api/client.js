@@ -28,6 +28,9 @@ class Client {
       if (error.response.status >= 500) {
         return false;
       }
+      if (error.config?.url?.includes("/users/activity/")) {
+        return false;
+      }
       
       let errorMessages = [];
 
@@ -143,13 +146,17 @@ class Client {
       console.log('API Response:', { response, hasData: !!response?.data });
       
       if (authCookies) {
-        // Set cookies without domain restriction for development
-        Cookies.set("accessToken", response.data.access_token);
-        if (response?.data?.user){
-          Cookies.set("user", JSON.stringify(response.data.user));
-        }
-        else {
-          Cookies.set("user", JSON.stringify(response.data));
+        Cookies.set("accessToken", response.data.access_token, { path: "/" });
+        const rawUser = response?.data?.user || response.data;
+        const user =
+          rawUser && typeof rawUser === "object"
+            ? { ...rawUser, id: rawUser.id ?? rawUser.pk ?? rawUser.user_id }
+            : rawUser;
+        if (user) {
+          Cookies.set("user", JSON.stringify(user), { path: "/" });
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(new CustomEvent("userUpdated"));
+          }
         }
       }
 

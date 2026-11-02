@@ -11,13 +11,12 @@ import { useProfile } from "../hooks/useProfile";
 import { useTrending } from "../hooks/useTrending";
 import { endpoints } from "../utils/endpoints";
 import { client } from "../api";
-import { getUser, setUser } from "../utils/factory";
+import { getUser, normalizeUser, setUser } from "../utils/factory";
 
 const seedOwnProfile = (userId) => {
-  const me = getUser() || {};
+  const me = normalizeUser(getUser()) || {};
   if (!userId || String(me.id) !== String(userId)) return {};
-  if (me.first_name || me.profile_picture || me.username) return me;
-  if (me.full_name) {
+  if (me.full_name && !me.first_name) {
     const parts = String(me.full_name).trim().split(/\s+/);
     return { ...me, first_name: parts[0] || "", last_name: parts.slice(1).join(" ") };
   }
@@ -27,7 +26,7 @@ const seedOwnProfile = (userId) => {
 const Profile = () => {
   const { userId } = useParams();
   const navigate = useNavigate();
-  const me = getUser() || {};
+  const me = normalizeUser(getUser()) || {};
   const [profile, setProfile] = useState(() => seedOwnProfile(userId));
   const [feed, setFeed] = useState({});
   const [isFollow, setIsFollow] = useState(false);
@@ -42,18 +41,7 @@ const Profile = () => {
     user_id: userId,
   });
 
-  const {
-    data: trendingData,
-    isLoading: trendingLoading,
-    error: trendingError,
-  } = useTrending();
-
-  // Debug trending data
-  useEffect(() => {
-    console.log("Trending data:", trendingData);
-    console.log("Trending loading:", trendingLoading);
-    console.log("Trending error:", trendingError);
-  }, [trendingData, trendingLoading, trendingError]);
+  const { data: trendingData, isLoading: trendingLoading, error: trendingError } = useTrending();
 
   const profileFeeds = [
     "post",
@@ -66,7 +54,28 @@ const Profile = () => {
   ];
 
   useEffect(() => {
-    const nextUser = user?.user || loadedUser;
+    setProfile(seedOwnProfile(userId));
+    const syncCookie = () => {
+      const seed = seedOwnProfile(userId);
+      if (!seed?.id) return;
+      setProfile((prev) => ({
+        ...seed,
+        ...prev,
+        first_name: prev.first_name || seed.first_name,
+        last_name: prev.last_name || seed.last_name,
+        username: prev.username || seed.username,
+        profile_picture: prev.profile_picture || seed.profile_picture,
+        profile_pic: prev.profile_pic || seed.profile_pic,
+        cover: prev.cover || seed.cover,
+        bio: prev.bio || seed.bio,
+      }));
+    };
+    window.addEventListener("userUpdated", syncCookie);
+    return () => window.removeEventListener("userUpdated", syncCookie);
+  }, [userId]);
+
+  useEffect(() => {
+    const nextUser = normalizeUser(user?.user || loadedUser);
     if (nextUser?.id) {
       setProfile((prev) => ({ ...prev, ...nextUser }));
       setIsFollow(Boolean(nextUser.is_following));
@@ -90,7 +99,11 @@ const Profile = () => {
   const isOwnProfile = String(me.id || "") === String(profile?.id || userId || "");
   const avatarSrc = profile?.profile_picture || profile?.profile_pic || profile?.picture || "";
   const coverSrc = profile?.cover || profile?.cover_image || "";
-  const displayName = [profile?.first_name, profile?.last_name].filter(Boolean).join(" ") || profile?.username || "";
+  const displayName =
+    [profile?.first_name, profile?.last_name].filter(Boolean).join(" ") ||
+    profile?.full_name ||
+    profile?.username ||
+    "";
 
   const handleProfilePictureClick = (event) => {
     event.stopPropagation();

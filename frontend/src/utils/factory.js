@@ -15,13 +15,25 @@ if (!window.timeAgoLocaleAdded) {
 // Create TimeAgo instance after locale is registered
 const timeAgo = new TimeAgo("en-US");
 
+export const normalizeUser = (user) => {
+  if (!user || typeof user !== "object") return null;
+  const source =
+    user.user && typeof user.user === "object" && (user.user.id || user.user.pk || user.user.user_id)
+      ? { ...user, ...user.user }
+      : user;
+  const id = source.id ?? source.pk ?? source.user_id;
+  if (id == null || id === "") return source;
+  return { ...source, id };
+};
+
 export const setUser = (user) => {
-  if (!user) return user;
-  Cookies.set("user", JSON.stringify(user), { path: "/" });
+  const normalized = normalizeUser(user);
+  if (!normalized) return user;
+  Cookies.set("user", JSON.stringify(normalized), { path: "/" });
   if (typeof window !== "undefined") {
     window.dispatchEvent(new CustomEvent("userUpdated"));
   }
-  return user;
+  return normalized;
 };
 
 export const getUser = () => {
@@ -30,8 +42,8 @@ export const getUser = () => {
 
   if (raw) {
     try {
-      const userData = JSON.parse(raw);
-      return userData;
+      const userData = normalizeUser(JSON.parse(raw));
+      return userData || false;
     } catch (error) {
       console.error("Failed to parse user data from cookies:", error);
       Cookies.remove("user");
