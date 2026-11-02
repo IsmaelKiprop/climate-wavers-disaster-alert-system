@@ -6,12 +6,6 @@ from flask import Flask, jsonify, request, make_response
 from flask_cors import CORS
 from analysis_model.prediction import predict
 from recognition_model.recognition import inference
-import logging
-
-# Configure the logging settings
-# logging.basicConfig(filename='modelserver.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(name)s - %(message)s')
-# # Create a logger instance
-# logger = logging.getLogger('modelserver')
 
 app = Flask(__name__)
 app.config['JSONIFY_PRETTYPRINT_REGULAR'] = True
@@ -25,7 +19,10 @@ def magnitude_analysis():
     start_date = request.json['startDate']
     end_date = request.json['endDate']
     key = os.getenv("API_KEY")
-    return jsonify(predict(location, start_date, end_date, key))
+    try:
+        return jsonify(predict(location, start_date, end_date, key))
+    except FileNotFoundError as exc:
+        return jsonify({"error": str(exc)}), 503
 
 @app.route('/api/v1/recognition/inference', methods=['POST'])
 def disaster_recognition():
@@ -38,7 +35,10 @@ def disaster_recognition():
     
     quantized = request.form.get('quantized', 'false').lower() == 'true'
     
-    result = inference(image_path, quantized)
+    try:
+        result = inference(image_path, quantized)
+    except FileNotFoundError as exc:
+        return jsonify({"error": str(exc)}), 503
     if result is None:
         return jsonify({'error': 'Failed to process image'}), 500
     return jsonify({"inference": result})

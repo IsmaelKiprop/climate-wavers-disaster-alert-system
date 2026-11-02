@@ -19,10 +19,24 @@ Run inference on model
 # logger = logging.getLogger('waverx_nlp')
 
 
-# Load the model from file
-earthquake_model = joblib.load("analysis_model/model/Earthquake.pkl")
-flood_model = joblib.load("analysis_model/model/Flood.pkl")
-storm_model = joblib.load("analysis_model/model/Storm.pkl")
+earthquake_model = None
+flood_model = None
+storm_model = None
+
+
+def _load_models():
+    global earthquake_model, flood_model, storm_model
+    if earthquake_model is not None:
+        return
+    earthquake_path = "analysis_model/model/Earthquake.pkl"
+    flood_path = "analysis_model/model/Flood.pkl"
+    storm_path = "analysis_model/model/Storm.pkl"
+    missing = [path for path in (earthquake_path, flood_path, storm_path) if not os.path.exists(path)]
+    if missing:
+        raise FileNotFoundError(f"Analysis weights are missing: {', '.join(missing)}")
+    earthquake_model = joblib.load(earthquake_path)
+    flood_model = joblib.load(flood_path)
+    storm_model = joblib.load(storm_path)
 
 
 def fetch_climate_data(location, start_date, end_date, api_key):
@@ -115,6 +129,7 @@ def fetch_climate_data(location, start_date, end_date, api_key):
 
 
 def predict(location, start_date, end_date, api_key):
+    _load_models()
     climate_data_df = fetch_climate_data(location, start_date, end_date, api_key)
     if type(climate_data_df) == str:
         print("Prediction failed")
