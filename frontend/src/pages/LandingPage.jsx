@@ -4,7 +4,7 @@ import fb from "../assets/Icons/fb.webp";
 import exx from "../assets/Icons/x.png";
 import linkedIn from "../assets/Icons/lin.webp";
 import yt from "../assets/Icons/yt.svg";
-import { useState, useEffect, useMemo, lazy, Suspense } from "react";
+import { useState, useEffect, useMemo, useRef, lazy, Suspense } from "react";
 import { Link } from "react-router-dom";
 import { LandingPageSEO } from "../components/SEOComponents";
 import { SITE } from "../config/site";
@@ -14,47 +14,56 @@ const LeafletMap = lazy(() => import("../components/LeafletMap"));
 const DonationForm = lazy(() => import("../components/DonationForm"));
 const LandingCharts = lazy(() => import("../components/LandingCharts"));
 
+const HERO_SLIDES = [
+  {
+    id: 1,
+    image: "/ai-disaster.jpg",
+    imageSm: "/ai-disaster-sm.jpg",
+    title: "AI-Powered",
+    subtitle: "Disaster Detection",
+    description: "Live USGS and NASA events, built in Nairobi to verify disaster information instead of shouting it louder.",
+  },
+  {
+    id: 2,
+    image: "/environment.jpg",
+    imageSm: "/environment-sm.jpg",
+    title: "Environmental",
+    subtitle: "Monitoring",
+    description: "Track climate pressure and environmental hazards as they appear in the live feeds.",
+  },
+  {
+    id: 3,
+    image: "/emergency-response.jpg",
+    imageSm: "/emergency-response-sm.jpg",
+    title: "Emergency",
+    subtitle: "Response",
+    description: "Coordinate with community networks for faster disaster response.",
+  },
+  {
+    id: 4,
+    image: "/community-respond.jpg",
+    imageSm: "/community-respond-sm.jpg",
+    title: "Community",
+    subtitle: "Protection",
+    description: "Real-time monitoring and coordinated emergency response for local communities.",
+  },
+];
+
 const LandingPage = () => {
   const [isScrolled, setIsScrolled] = useState(false);
   const [currentSlide, setCurrentSlide] = useState(0);
+  const [heroReady, setHeroReady] = useState(false);
   const [showDisasterMap, setShowDisasterMap] = useState(false);
   const [showDonationModal, setShowDonationModal] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const firstHeroRef = useRef(null);
 
-  const heroSlides = [
-    {
-      id: 1,
-      image: "/ai-disaster.jpg",
-      imageSm: "/ai-disaster-sm.jpg",
-      title: "AI-Powered",
-      subtitle: "Disaster Detection",
-      description: "Live USGS and NASA events, built in Nairobi to verify disaster information instead of shouting it louder.",
-    },
-    {
-      id: 2,
-      image: "/environment.jpg",
-      imageSm: "/environment-sm.jpg",
-      title: "Environmental",
-      subtitle: "Monitoring",
-      description: "Track climate pressure and environmental hazards as they appear in the live feeds.",
-    },
-    {
-      id: 3,
-      image: "/emergency-response.jpg",
-      imageSm: "/emergency-response-sm.jpg",
-      title: "Emergency",
-      subtitle: "Response",
-      description: "Coordinate with community networks for faster disaster response.",
-    },
-    {
-      id: 4,
-      image: "/community-respond.jpg",
-      imageSm: "/community-respond-sm.jpg",
-      title: "Community",
-      subtitle: "Protection",
-      description: "Real-time monitoring and coordinated emergency response for local communities.",
-    }
-  ];
+  useEffect(() => {
+    document.documentElement.setAttribute("data-route", "home");
+    return () => {
+      document.documentElement.removeAttribute("data-route");
+    };
+  }, []);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -65,11 +74,34 @@ const LandingPage = () => {
   }, []);
 
   useEffect(() => {
+    if (!heroReady) return undefined;
     const interval = setInterval(() => {
-      setCurrentSlide((prev) => (prev + 1) % heroSlides.length);
+      setCurrentSlide((prev) => (prev + 1) % HERO_SLIDES.length);
     }, 6000);
     return () => clearInterval(interval);
-  }, [heroSlides.length]);
+  }, [heroReady]);
+
+  useEffect(() => {
+    if (heroReady) return undefined;
+    const node = firstHeroRef.current;
+    if (node?.complete && node.naturalWidth > 0) {
+      setHeroReady(true);
+      return undefined;
+    }
+    const timeoutId = window.setTimeout(() => setHeroReady(true), 2000);
+    return () => window.clearTimeout(timeoutId);
+  }, [heroReady]);
+
+  useEffect(() => {
+    if (!heroReady) return undefined;
+    HERO_SLIDES.slice(1).forEach((slide) => {
+      const small = new Image();
+      small.src = slide.imageSm;
+      const large = new Image();
+      large.src = slide.image;
+    });
+    return undefined;
+  }, [heroReady]);
 
   useEffect(() => {
     const locked = isMobileMenuOpen || showDisasterMap || showDonationModal;
@@ -149,17 +181,21 @@ const LandingPage = () => {
   };
 
   const nextSlide = () => {
-    setCurrentSlide((prev) => (prev + 1) % heroSlides.length);
+    setCurrentSlide((prev) => (prev + 1) % HERO_SLIDES.length);
   };
 
   const prevSlide = () => {
-    setCurrentSlide((prev) => (prev - 1 + heroSlides.length) % heroSlides.length);
+    setCurrentSlide((prev) => (prev - 1 + HERO_SLIDES.length) % HERO_SLIDES.length);
+  };
+
+  const markHeroReady = () => {
+    setHeroReady(true);
   };
 
   return (
     <>
       <LandingPageSEO />
-      <main className="min-h-[100dvh] bg-background overflow-x-hidden">
+      <main className="min-h-[100dvh] overflow-x-hidden">
       {/* Modern Navigation */}
       <nav className={`fixed top-0 w-full z-50 transition-all duration-300 ${
         isScrolled ? 'bg-white/95 backdrop-blur-md shadow-lg' : 'bg-transparent'
@@ -343,12 +379,12 @@ const LandingPage = () => {
 
       <section id="home" className="relative min-h-[100dvh] flex items-center justify-center overflow-hidden pt-16">
         <div className="absolute inset-0">
-          {heroSlides.map((slide, index) => (
+          {HERO_SLIDES.map((slide, index) => (
             <div
               key={slide.id}
-              className={`absolute inset-0 transition-opacity duration-700 ease-out ${
+              className={`absolute inset-0 ${
                 index === currentSlide ? "opacity-100" : "opacity-0"
-              }`}
+              } ${heroReady ? "transition-opacity duration-700 ease-out" : ""}`}
             >
               <img
                 src={slide.imageSm}
@@ -356,73 +392,86 @@ const LandingPage = () => {
                 sizes="100vw"
                 alt={`Disaster alert system - ${slide.title}`}
                 className="w-full h-full object-cover"
+                width="1600"
+                height="900"
                 loading={index === 0 ? "eager" : "lazy"}
                 fetchPriority={index === 0 ? "high" : "low"}
-                decoding={index === 0 ? "sync" : "async"}
+                decoding="async"
+                onLoad={index === 0 ? markHeroReady : undefined}
+                onError={index === 0 ? markHeroReady : undefined}
+                ref={index === 0 ? firstHeroRef : undefined}
               />
-              <div className="absolute inset-0 bg-black/55"></div>
+              {heroReady ? <div className="absolute inset-0 bg-black/55"></div> : null}
             </div>
           ))}
         </div>
 
-        <button
-          onClick={prevSlide}
-          className="absolute left-4 top-1/2 -translate-y-1/2 z-20 bg-black/40 hover:bg-black/60 text-white p-3 hidden md:block"
-          aria-label="Previous slide"
-        >
-          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-          </svg>
-        </button>
-        <button
-          onClick={nextSlide}
-          className="absolute right-4 top-1/2 -translate-y-1/2 z-20 bg-black/40 hover:bg-black/60 text-white p-3 hidden md:block"
-          aria-label="Next slide"
-        >
-          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-          </svg>
-        </button>
+        {heroReady ? (
+          <button
+            onClick={prevSlide}
+            className="absolute left-4 top-1/2 -translate-y-1/2 z-20 bg-black/40 hover:bg-black/60 text-white p-3 hidden md:block"
+            aria-label="Previous slide"
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
+        ) : null}
+        {heroReady ? (
+          <button
+            onClick={nextSlide}
+            className="absolute right-4 top-1/2 -translate-y-1/2 z-20 bg-black/40 hover:bg-black/60 text-white p-3 hidden md:block"
+            aria-label="Next slide"
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
+        ) : null}
 
-        <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center pb-16">
-          <div className="max-w-3xl mx-auto">
-            <h1 className="text-3xl sm:text-4xl md:text-5xl font-semibold text-white mb-4 leading-tight">
-              <span className="block">{heroSlides[currentSlide].title}</span>
-              <span className="block">{heroSlides[currentSlide].subtitle}</span>
-            </h1>
-            <p className="text-base sm:text-lg text-white/90 mb-8 max-w-2xl mx-auto leading-relaxed">
-              {heroSlides[currentSlide].description}
-            </p>
+        {heroReady ? (
+          <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center pb-16">
+            <div className="max-w-3xl mx-auto">
+              <h1 className="text-3xl sm:text-4xl md:text-5xl font-semibold text-white mb-4 leading-tight">
+                <span className="block">{HERO_SLIDES[currentSlide].title}</span>
+                <span className="block">{HERO_SLIDES[currentSlide].subtitle}</span>
+              </h1>
+              <p className="text-base sm:text-lg text-white/90 mb-8 max-w-2xl mx-auto leading-relaxed">
+                {HERO_SLIDES[currentSlide].description}
+              </p>
 
-            <div className="flex flex-col sm:flex-row gap-3 justify-center items-stretch sm:items-center mb-8 w-full max-w-md mx-auto sm:max-w-none">
-              <a href="/signup" className="min-h-11 bg-primary hover:bg-primary-dark text-primary-foreground px-6 py-3 text-base font-medium flex items-center justify-center">
-                Create an account
-              </a>
-              <a href="/login" className="min-h-11 border border-white text-white hover:bg-white hover:text-foreground px-6 py-3 text-base font-medium flex items-center justify-center">
-                Sign in
-              </a>
-            </div>
+              <div className="flex flex-col sm:flex-row gap-3 justify-center items-stretch sm:items-center mb-8 w-full max-w-md mx-auto sm:max-w-none">
+                <a href="/signup" className="min-h-11 bg-primary hover:bg-primary-dark text-primary-foreground px-6 py-3 text-base font-medium flex items-center justify-center">
+                  Create an account
+                </a>
+                <a href="/login" className="min-h-11 border border-white text-white hover:bg-white hover:text-foreground px-6 py-3 text-base font-medium flex items-center justify-center">
+                  Sign in
+                </a>
+              </div>
 
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-8 text-white/85">
-              <span className="text-sm">{Number(platformStats.disaster_count).toLocaleString()} live disaster reports</span>
-              <span className="text-sm">{Number(platformStats.total_trees_planted).toLocaleString()} trees planted</span>
-              <span className="text-sm">{Number(platformStats.active_projects).toLocaleString()} active projects</span>
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-8 text-white/85">
+                <span className="text-sm">{Number(platformStats.disaster_count).toLocaleString()} live disaster reports</span>
+                <span className="text-sm">{Number(platformStats.total_trees_planted).toLocaleString()} trees planted</span>
+                <span className="text-sm">{Number(platformStats.active_projects).toLocaleString()} active projects</span>
+              </div>
             </div>
           </div>
-        </div>
+        ) : null}
 
-        <div className="absolute bottom-5 left-1/2 -translate-x-1/2 z-20 flex gap-2">
-          {heroSlides.map((_, index) => (
-            <button
-              key={index}
-              onClick={() => goToSlide(index)}
-              className={`h-2.5 w-2.5 ${
-                index === currentSlide ? "bg-white" : "bg-white/50"
-              }`}
-              aria-label={`Go to slide ${index + 1}`}
-            />
-          ))}
-        </div>
+        {heroReady ? (
+          <div className="absolute bottom-5 left-1/2 -translate-x-1/2 z-20 flex gap-2">
+            {HERO_SLIDES.map((_, index) => (
+              <button
+                key={index}
+                onClick={() => goToSlide(index)}
+                className={`h-2.5 w-2.5 ${
+                  index === currentSlide ? "bg-white" : "bg-white/50"
+                }`}
+                aria-label={`Go to slide ${index + 1}`}
+              />
+            ))}
+          </div>
+        ) : null}
       </section>
 
       {/* Impact Section with Statistics and Charts */}

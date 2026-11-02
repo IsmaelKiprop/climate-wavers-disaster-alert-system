@@ -3,8 +3,31 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <script>
+      (function () {
+        var path = location.pathname;
+        if (path === "/" || path === "/index.html" || path === "/landing") {
+          document.documentElement.setAttribute("data-route", "home");
+        }
+      })();
+    </script>
     <link rel="preload" as="image" href="/logo.jpg" fetchpriority="high" />
-    <link rel="preload" as="image" href="/ai-disaster-sm.jpg" fetchpriority="high" />
+    <link rel="preload" as="image" href="/ai-disaster-sm.jpg" media="(max-width: 959px)" fetchpriority="high" />
+    <link rel="preload" as="image" href="/ai-disaster.jpg" media="(min-width: 960px)" fetchpriority="high" />
+    <style>
+      html[data-route="home"] body {
+        background-color: #111111;
+        background-image: url("/ai-disaster-sm.jpg");
+        background-position: center;
+        background-size: cover;
+        background-repeat: no-repeat;
+      }
+      @media (min-width: 960px) {
+        html[data-route="home"] body {
+          background-image: url("/ai-disaster.jpg");
+        }
+      }
+    </style>
     
     <!-- Primary Meta Tags -->
     <title>Climate Wavers - Disaster Alert & Climate Action Platform</title>
