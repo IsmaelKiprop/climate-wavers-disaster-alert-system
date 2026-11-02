@@ -119,7 +119,7 @@ def _https_from_address():
         or "outlook." in lowered
         or "hotmail." in lowered
     ):
-        return "Climate Wavers <beth.t@example.com>"
+        return "Climate Wavers <hello@flowops.africa>"
     return from_email
 
 

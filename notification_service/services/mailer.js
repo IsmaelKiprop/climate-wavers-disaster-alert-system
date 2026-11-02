@@ -30,7 +30,7 @@ function httpsFromAddress() {
         lowered.includes("outlook.") ||
         lowered.includes("hotmail.")
     ) {
-        return "Climate Wavers <beth.t@example.com>"
+        return "Climate Wavers <hello@flowops.africa>"
     }
     return from
 }
