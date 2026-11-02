@@ -4,7 +4,6 @@ import ejs from "ejs"
 import path from "path"
 
 const __dirname = process.cwd()
-const ON_RENDER = Boolean(process.env.RENDER)
 
 export const mailTypes = {
     custom: "custom",
@@ -17,18 +16,6 @@ export const mailTypes = {
 
 const getPath = fileName =>{
     return path.join(__dirname, `/templates/${fileName}.ejs`)
-}
-
-function fromAddresses() {
-    const configured = process.env.MAIL_FROM || config.mail.auth.user || ""
-    const lowered = configured.toLowerCase()
-    const addresses = []
-    if (configured && !lowered.includes("gmail.com") && !lowered.includes("example.com")) {
-        addresses.push(configured)
-    }
-    addresses.push("Climate Wavers <hello@flowops.africa>")
-    addresses.push("Climate Wavers <onboarding@resend.dev>")
-    return [...new Set(addresses)]
 }
 
 class Mailer{
@@ -48,60 +35,20 @@ class Mailer{
                 user: process.env.MAIL_USER,
                 pass: process.env.MAIL_PASS,
             },
-            connectionTimeout: 8000,
-            greetingTimeout: 8000,
-            socketTimeout: 12000,
+            connectionTimeout: 12000,
+            greetingTimeout: 12000,
+            socketTimeout: 15000,
             tls: { minVersion: "TLSv1.2" },
             ...options,
         })
     }
 
-    async _sendResend(email, html, subject, from) {
-        const key = process.env.RESEND_API_KEY
-        if (!key) {
-            throw new Error("RESEND_API_KEY is not set")
-        }
-        const response = await fetch("https://api.resend.com/emails", {
-            method: "POST",
-            headers: {
-                Authorization: `Bearer ${key}`,
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-                from,
-                to: [email],
-                subject,
-                html,
-            }),
-            signal: AbortSignal.timeout(12000),
-        })
-        if (!response.ok) {
-            const detail = await response.text()
-            throw new Error(`resend ${response.status}: ${detail}`)
-        }
-    }
-
     async sendMail(email, html, subject="Climate Wavers"){
-        let lastError
-        if (process.env.RESEND_API_KEY) {
-            for (const from of fromAddresses()) {
-                try {
-                    await this._sendResend(email, html, subject, from)
-                    console.log(`mail sent via resend from ${from}`)
-                    return
-                } catch (error) {
-                    lastError = error
-                    console.log(`mail resend from ${from} failed: ${error}`)
-                }
-            }
-        }
-        if (ON_RENDER) {
-            throw lastError || new Error("SMTP is blocked on Render. Use a verified Resend domain.")
-        }
         const attempts = [
             { port: 465, secure: true },
             { port: Number(process.env.MAIL_PORT) || 587, secure: false, requireTLS: true },
         ]
+        let lastError
         for (const attempt of attempts) {
             try {
                 const transporter = this._transport(attempt)
