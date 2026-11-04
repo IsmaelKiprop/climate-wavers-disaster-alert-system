@@ -149,8 +149,6 @@ class Client {
         throw axiosError;
       }
       
-      console.log('API Response:', { response, hasData: !!response?.data });
-      
       if (authCookies) {
         Cookies.set("accessToken", response.data.access_token, { path: "/" });
         const rawUser = response?.data?.user || response.data;

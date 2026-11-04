@@ -1,6 +1,6 @@
 import { useForm } from "react-hook-form";
 import PropTypes from "prop-types";
-import { getUser, getAuthToken } from "../utils/factory";
+import { getUser, getAuthToken, avatarUrl } from "../utils/factory";
 import { client } from "../api";
 import { endpoints } from "../utils/endpoints";
 import { uploadFiles } from "../services/upload.service";
@@ -13,8 +13,14 @@ import { env } from "../config/env";
 
 const Createcomment = ({ type, postId, parentId, button = "reply" }) => {
   const { register, handleSubmit, reset, formState: { errors }, watch, setValue } = useForm();
-  const user = getUser();
+  const [user, setUserState] = useState(() => getUser() || null);
   const [imageName, setImageName] = useState("");
+
+  useEffect(() => {
+    const sync = () => setUserState(getUser() || null);
+    window.addEventListener("userUpdated", sync);
+    return () => window.removeEventListener("userUpdated", sync);
+  }, []);
   const [videoName, setVideoName] = useState("");
   const [isDisabled, setIsDisabled] = useState(false);
   const [imagePreview, setImagePreview] = useState(null);
@@ -258,7 +264,7 @@ const Createcomment = ({ type, postId, parentId, button = "reply" }) => {
         <div className="flex justify-between gap-2 md:gap-4">
           <div className="flex justify-start gap-2 md:gap-4 flex-1 min-w-0">
             <img
-              src={user?.profile_picture || "/avatar.png"}
+              src={avatarUrl(user)}
               alt=""
               className="w-8 h-8 md:w-10 md:h-10 rounded-full flex-shrink-0"
               onError={(e) => {

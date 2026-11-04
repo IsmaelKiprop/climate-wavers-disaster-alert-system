@@ -1,9 +1,9 @@
 import { useForm } from "react-hook-form";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import PropTypes from "prop-types";
 import { client } from "../api";
 import { endpoints } from "../utils/endpoints";
-import { getUser } from "../utils/factory";
+import { getUser, avatarUrl } from "../utils/factory";
 import { uploadFiles } from "../services/upload.service";
 import { getAuthToken } from "../utils/factory";
 import { toast } from "react-toastify";
@@ -30,7 +30,13 @@ export default function Createpost({ type, postId, parentId, closeModal }) {
   const fileInputRef = useRef(null);
   const videoInputRef = useRef(null);
   const aiPromptRef = useRef(null);
-  const user = getUser();
+  const [user, setUserState] = useState(() => getUser() || null);
+
+  useEffect(() => {
+    const sync = () => setUserState(getUser() || null);
+    window.addEventListener("userUpdated", sync);
+    return () => window.removeEventListener("userUpdated", sync);
+  }, []);
 
   const handleImageChange = (e) => {
     const file = e.target.files[0];
@@ -473,7 +479,7 @@ export default function Createpost({ type, postId, parentId, closeModal }) {
     >
       <div className="flex items-center gap-4">
         <img
-          src={user?.profile_picture || "/avatar.png"}
+          src={avatarUrl(user)}
           alt="Profile"
           className="w-12 h-12 rounded-full object-cover"
           onError={(e) => {

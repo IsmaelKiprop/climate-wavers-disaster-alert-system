@@ -2,7 +2,7 @@ import { useForm } from "react-hook-form";
 import { useState, useRef, useEffect } from "react";
 import { client } from "../api";
 import { endpoints } from "../utils/endpoints";
-import { getUser, getAuthToken } from "../utils/factory";
+import { getUser, getAuthToken, avatarUrl } from "../utils/factory";
 import { uploadFiles } from "../services/upload.service";
 import { 
   IoSend, 
@@ -22,7 +22,7 @@ import { env } from "../config/env";
 
 const ModernPostCreator = ({ type = "post", postId, parentId, closeModal }) => {
   const { register, handleSubmit, reset, watch, setValue, formState: { errors } } = useForm();
-  const user = getUser();
+  const [user, setUserState] = useState(() => getUser() || null);
   const [imagePreview, setImagePreview] = useState(null);
   const [videoPreview, setVideoPreview] = useState(null);
   const [isDisabled, setIsDisabled] = useState(false);
@@ -37,6 +37,13 @@ const ModernPostCreator = ({ type = "post", postId, parentId, closeModal }) => {
   const fileInputRef = useRef(null);
   const videoInputRef = useRef(null);
   const content = watch("content", "");
+
+  useEffect(() => {
+    const sync = () => setUserState(getUser() || null);
+    sync();
+    window.addEventListener("userUpdated", sync);
+    return () => window.removeEventListener("userUpdated", sync);
+  }, []);
 
   // Token validation helper
   const validateToken = () => {
@@ -450,8 +457,9 @@ const ModernPostCreator = ({ type = "post", postId, parentId, closeModal }) => {
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center space-x-2 md:space-x-3">
             <img
-              src={user?.profile_picture || "/avatar.png"}
-              alt="Profile"
+              key={avatarUrl(user)}
+              src={avatarUrl(user)}
+              alt=""
               className="w-8 h-8 md:w-10 md:h-10 rounded-full object-cover"
               onError={(e) => {
                 e.target.src = "/avatar.png";

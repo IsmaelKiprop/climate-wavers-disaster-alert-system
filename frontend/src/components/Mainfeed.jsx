@@ -1,44 +1,40 @@
 import Postcomponent from "./Postcomponent";
 import { useQuery } from "@tanstack/react-query";
-import axios from "axios";
-import { getAuthToken, setUser } from "../utils/factory";
-import Cookies from "js-cookie";
+import { getAuthToken, setUser, getUser } from "../utils/factory";
 import ModernPostCreator from "./ModernPostCreator";
 import { getLocation } from "../utils/location";
 import { useEffect } from "react";
-import { env } from "../config/env";
+import { client } from "../api";
+import { endpoints } from "../utils/endpoints";
 
 const Mainfeed = () => {
-  const BACKENDURL = env.backendUrl;
   const accessToken = getAuthToken();
 
   useEffect(() => {
-    getLocation();
+    const idle = window.requestIdleCallback
+      ? window.requestIdleCallback(() => getLocation())
+      : window.setTimeout(() => getLocation(), 1500);
+    return () => {
+      if (window.cancelIdleCallback && typeof idle === "number") {
+        window.cancelIdleCallback(idle);
+      } else {
+        window.clearTimeout(idle);
+      }
+    };
   }, []);
 
-
-  const headers = {
-    "Content-Type": "application/json",
-    Authorization: `Bearer ${accessToken}`,
-    "X-CSRFToken": `${Cookies.get("csrftoken")}`,
-  };
-  const endpoint = `${BACKENDURL}/api/v1/auth/user/`;
-  const fetchUserDetailsFn = async () => {
-    const res = await axios.get(endpoint, {
-      headers: headers,
-      withCredentials: true,
-    });
-    return res.data;
-  };
-
-  const { data, isFetched } = useQuery({
+  useQuery({
     queryKey: ["userDetails"],
-    queryFn: fetchUserDetailsFn,
+    enabled: Boolean(accessToken),
+    staleTime: 120000,
+    gcTime: 600000,
+    retry: 1,
+    queryFn: async () => {
+      const data = await client.run("get", endpoints.user, {}, true);
+      if (data) setUser({ ...(getUser() || {}), ...data });
+      return data;
+    },
   });
-
-  useEffect(() => {
-    if (isFetched && data) setUser(data);
-  }, [isFetched, data]);
 
   return (
     <div className="space-y-4">

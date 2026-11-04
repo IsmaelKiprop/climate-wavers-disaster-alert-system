@@ -65,6 +65,9 @@ export const getUser = () => {
   return false;
 };
 
+export const avatarUrl = (user) =>
+  user?.profile_picture || user?.profile_pic || user?.picture || "/avatar.png";
+
 export const getAuthToken = () => {
   const token = Cookies.get("accessToken");
   return token;

@@ -10,11 +10,11 @@ const useTrending = () => {
       const rows = Array.isArray(response) ? response : response?.results || [];
       return rows.filter((item) => String(item?.hashtags || "").trim());
     },
-    refetchInterval: 30000,
-    staleTime: 15000,
-    gcTime: 60000,
-    refetchOnWindowFocus: true,
-    refetchOnMount: true,
+    refetchInterval: 120000,
+    staleTime: 60000,
+    gcTime: 300000,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
     retry: 1,
     retryDelay: 1500,
   });
