@@ -118,7 +118,21 @@ class PasswordResetRequestSerializer(serializers.Serializer):
             user = User.objects.get(email=email)
             uidb64 = urlsafe_base64_encode(smart_bytes(user.id))
             token = PasswordResetTokenGenerator().make_token(user)
-            frontend = (settings.FRONTEND_URL or "https://climate-wavers-three.vercel.app").rstrip("/")
+            frontend = str(settings.FRONTEND_URL or "https://climate-wavers-three.vercel.app").rstrip("/")
+            if "," in frontend or ";" in frontend:
+                candidates = [
+                    part.strip().rstrip("/")
+                    for part in frontend.replace(";", ",").split(",")
+                    if part.strip()
+                ]
+                public = [
+                    part
+                    for part in candidates
+                    if part.startswith("https://")
+                    and "localhost" not in part
+                    and "127.0.0.1" not in part
+                ]
+                frontend = (public or candidates or [frontend])[0]
             reset_url = f"{frontend}/verifypasswordreset/{uidb64}/{token}"
             data = {
                 "url": reset_url,

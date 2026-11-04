@@ -51,7 +51,32 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
-FRONTEND_URL = env("FRONTEND_URL", default="http://localhost:5173")
+def _public_frontend_url(raw, fallback="https://climate-wavers-three.vercel.app"):
+    """FRONTEND_URL must be one origin. Render sometimes stores a CORS-style comma list."""
+    parts = [
+        part.strip().rstrip("/")
+        for part in str(raw or "").replace(";", ",").split(",")
+        if part and part.strip()
+    ]
+    public = [
+        part
+        for part in parts
+        if part.startswith("https://")
+        and "localhost" not in part
+        and "127.0.0.1" not in part
+    ]
+    if public:
+        return public[0]
+    if os.environ.get("RENDER"):
+        return fallback.rstrip("/")
+    if parts:
+        return parts[0]
+    return fallback.rstrip("/")
+
+
+FRONTEND_URL = _public_frontend_url(
+    env("FRONTEND_URL", default="http://localhost:5173")
+)
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS = env.list(
     "ALLOWED_ORIGINS",
