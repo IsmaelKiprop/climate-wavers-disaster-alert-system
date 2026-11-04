@@ -46,21 +46,19 @@ function describeError(error) {
 }
 
 function fromAddresses() {
+    const preferred = [
+        "Climate Wavers <hello@flowops.africa>",
+        "Climate Wavers <onboarding@resend.dev>",
+    ]
     const configured = process.env.MAIL_FROM || config.mail.auth.user || ""
     const lowered = configured.toLowerCase()
-    const addresses = []
-    if (
-        configured &&
-        !lowered.includes("gmail.com") &&
-        !lowered.includes("example.com") &&
-        !lowered.includes("yahoo.") &&
-        !lowered.includes("outlook.") &&
-        !lowered.includes("hotmail.")
-    ) {
+    const blocked = ["gmail.com", "example.com", "yahoo.", "outlook.", "hotmail.", "climatewavers.org"]
+    const addresses = [...preferred]
+    if (configured && !blocked.some((token) => lowered.includes(token))) {
+        addresses.unshift(configured)
+    } else if (configured && lowered.includes("climatewavers.org")) {
         addresses.push(configured)
     }
-    addresses.push("Climate Wavers <hello@flowops.africa>")
-    addresses.push("Climate Wavers <onboarding@resend.dev>")
     return [...new Set(addresses)]
 }
 

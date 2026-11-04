@@ -3,7 +3,6 @@ import logging
 import os
 import socket
 import ssl
-import threading
 import time
 import urllib.error
 import urllib.request
@@ -92,17 +91,37 @@ def _mail_copy(queue_name, payload):
     return ("Climate Wavers", data.get("content") or "A message from Climate Wavers.")
 
 
+def _is_cloudflare_block(status_code, body=""):
+    text = str(body or "")
+    return status_code in (403, 429, 503) and (
+        "Just a moment" in text
+        or "cf-error" in text
+        or "error code: 1010" in text
+        or "challenges.cloudflare.com" in text
+    )
+
+
 def _wake_notification_service():
     base = (settings.NOTIFICATION_SERVICE_URL or "").rstrip("/")
     if not base:
-        return
+        return False
     ctx = _ssl_context()
     try:
-        urllib.request.urlopen(
+        with urllib.request.urlopen(
             urllib.request.Request(f"{base}/status"), timeout=20, context=ctx
+        ) as response:
+            return response.status < 400
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="replace")
+        logger.warning(
+            "Notification wake-up failed HTTP %s cloudflare=%s",
+            exc.code,
+            _is_cloudflare_block(exc.code, body),
         )
+        return False
     except Exception as exc:
         logger.warning("Notification wake-up failed: %s", exc)
+        return False
 
 
 def _post_notification(payload):
@@ -111,14 +130,16 @@ def _post_notification(payload):
         raise RuntimeError("NOTIFICATION_SERVICE_URL is not set")
     ctx = _ssl_context()
     last_error = None
-    for attempt in range(1, 4):
-        _wake_notification_service()
+    # One wake only. Extra status pings trigger Cloudflare 429 on Render.
+    _wake_notification_service()
+    for attempt in range(1, 3):
         request = urllib.request.Request(
             f"{base}/api/v1/mail",
             data=json.dumps(payload).encode("utf-8"),
             headers={
                 "Content-Type": "application/json",
                 "X-Internal-Secret": settings.NOTIFICATION_SECRET or "",
+                "User-Agent": "ClimateWavers-API/1.0",
             },
             method="POST",
         )
@@ -141,34 +162,44 @@ def _post_notification(payload):
             last_error = RuntimeError(
                 f"notification service returned {exc.code}: {body[:500]}"
             )
-            logger.error("Notification mail HTTP %s attempt=%s: %s", exc.code, attempt, body[:1000])
-            if exc.code in (401, 403, 400):
+            logger.error(
+                "Notification mail HTTP %s attempt=%s cloudflare=%s: %s",
+                exc.code,
+                attempt,
+                _is_cloudflare_block(exc.code, body),
+                body[:300],
+            )
+            if exc.code in (401, 400):
                 raise last_error from exc
+            if exc.code == 429 or _is_cloudflare_block(exc.code, body):
+                time.sleep(8 * attempt)
+                continue
         except Exception as exc:
             last_error = exc
             logger.warning("Notification mail attempt %s failed: %s", attempt, exc)
-            time.sleep(min(2 * attempt, 6))
+            time.sleep(3 * attempt)
     raise RuntimeError(f"notification service unreachable: {last_error}")
 
 
 def _resend_from_addresses():
-    configured = settings.DEFAULT_FROM_EMAIL or settings.EMAIL_HOST_USER or ""
+    """Prefer verified Resend senders. Unverified domains (403) must not abort the loop."""
+    preferred = [
+        "Climate Wavers <hello@flowops.africa>",
+        "Climate Wavers <onboarding@resend.dev>",
+    ]
+    configured = (settings.DEFAULT_FROM_EMAIL or settings.EMAIL_HOST_USER or "").strip()
     lowered = configured.lower()
-    addresses = []
-    if (
-        configured
-        and "gmail.com" not in lowered
-        and "example.com" not in lowered
-        and "yahoo." not in lowered
-        and "outlook." not in lowered
-        and "hotmail." not in lowered
-    ):
+    blocked = ("gmail.com", "example.com", "yahoo.", "outlook.", "hotmail.", "climatewavers.org")
+    addresses = list(preferred)
+    if configured and not any(token in lowered for token in blocked):
+        if configured not in addresses:
+            addresses.insert(0, configured)
+    elif configured and "climatewavers.org" in lowered:
+        # Keep as last resort only; this domain currently trips Resend/Cloudflare 403.
         addresses.append(configured)
-    addresses.append("Climate Wavers <hello@flowops.africa>")
-    addresses.append("Climate Wavers <onboarding@resend.dev>")
     unique = []
     for item in addresses:
-        if item not in unique:
+        if item and item not in unique:
             unique.append(item)
     return unique
 
@@ -180,47 +211,48 @@ def _send_resend(queue_name, payload):
     email = payload.get("email")
     subject, body = _mail_copy(queue_name, payload)
     last_error = None
-    for round_idx in range(1, 3):
-        for from_email in _resend_from_addresses():
-            request = urllib.request.Request(
-                "https://api.resend.com/emails",
-                data=json.dumps(
-                    {
-                        "from": from_email,
-                        "to": [email],
-                        "subject": subject,
-                        "text": body,
-                    }
-                ).encode("utf-8"),
-                headers={
-                    "Content-Type": "application/json",
-                    "Authorization": f"Bearer {key}",
-                },
-                method="POST",
+    for from_email in _resend_from_addresses():
+        request = urllib.request.Request(
+            "https://api.resend.com/emails",
+            data=json.dumps(
+                {
+                    "from": from_email,
+                    "to": [email],
+                    "subject": subject,
+                    "text": body,
+                }
+            ).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {key}",
+                "User-Agent": "ClimateWavers-API/1.0",
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(
+                request, timeout=20, context=_ssl_context()
+            ) as response:
+                logger.info("Resend ok from=%s status=%s", from_email, response.status)
+                return
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="replace")
+            last_error = RuntimeError(
+                f"resend {exc.code} from {from_email}: {detail[:400]}"
             )
-            try:
-                with urllib.request.urlopen(
-                    request, timeout=15, context=_ssl_context()
-                ) as response:
-                    logger.info(
-                        "Resend ok from=%s round=%s status=%s",
-                        from_email,
-                        round_idx,
-                        response.status,
-                    )
-                    return
-            except urllib.error.HTTPError as exc:
-                detail = exc.read().decode("utf-8", errors="replace")
-                last_error = RuntimeError(
-                    f"resend {exc.code} from {from_email}: {detail[:400]}"
-                )
-                logger.warning("Resend from %s failed: %s", from_email, last_error)
-                if exc.code in (401, 403):
-                    raise last_error from exc
-            except Exception as exc:
-                last_error = exc
-                logger.warning("Resend from %s failed: %s", from_email, exc)
-        time.sleep(1)
+            logger.warning(
+                "Resend from %s failed cloudflare=%s: %s",
+                from_email,
+                _is_cloudflare_block(exc.code, detail),
+                last_error,
+            )
+            # Invalid API key: stop. Domain/from 403: try the next sender.
+            if exc.code == 401:
+                raise last_error from exc
+            continue
+        except Exception as exc:
+            last_error = exc
+            logger.warning("Resend from %s failed: %s", from_email, exc)
     raise last_error or RuntimeError("Resend send failed")
 
 
@@ -274,9 +306,6 @@ def send_message(queue_name, message):
     payload = json.loads(message) if isinstance(message, str) else message
     errors = []
 
-    # Warm the notification service while Resend runs, so fallback is ready.
-    threading.Thread(target=_wake_notification_service, daemon=True).start()
-
     try:
         _send_resend(queue_name, payload)
         print(f" [x] Sent {queue_name} via Resend")
@@ -286,7 +315,7 @@ def send_message(queue_name, message):
         if "RESEND_API_KEY is not set" in str(exc):
             logger.info("Resend skipped: %s", exc)
         else:
-            logger.exception("Resend HTTP failed")
+            logger.warning("Resend HTTP failed: %s", exc)
 
     try:
         _post_notification({"type": queue_name, **payload})
@@ -294,7 +323,7 @@ def send_message(queue_name, message):
         return
     except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, RuntimeError, Exception) as exc:
         errors.append(f"http: {exc}")
-        logger.exception("Notification send failed")
+        logger.warning("Notification send failed: %s", exc)
 
     try:
         _send_smtp(queue_name, payload)

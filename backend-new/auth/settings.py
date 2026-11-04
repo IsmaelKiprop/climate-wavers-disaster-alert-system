@@ -213,7 +213,7 @@ EMAIL_USE_SSL = env.bool("EMAIL_USE_SSL", default=False)
 EMAIL_TIMEOUT = env.int("EMAIL_TIMEOUT", default=8)
 DEFAULT_FROM_EMAIL = env(
     "MAIL_FROM",
-    default=EMAIL_HOST_USER or "Climate Wavers <hello@climatewavers.org>",
+    default=EMAIL_HOST_USER or "Climate Wavers <hello@flowops.africa>",
 )
 RESEND_API_KEY = env("RESEND_API_KEY", default="")
 
