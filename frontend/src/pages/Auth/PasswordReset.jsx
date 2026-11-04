@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { client } from "../../api";
 import { endpoints } from "../../utils/endpoints";
 import Cookies from "js-cookie";
@@ -10,11 +10,17 @@ const PasswordReset = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [isDisabled, setIsDisabled] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
   const { register, handleSubmit, watch, formState: { errors } } = useForm();
-  const uidb64 = Cookies.get("uid");
-  const token = Cookies.get("reset_token");
+  const uidb64 = location.state?.uidb64 || Cookies.get("uid");
+  const token = location.state?.token || Cookies.get("reset_token");
+  const hasResetCredentials = Boolean(uidb64 && token);
 
   const onSubmit = async (data) => {
+    if (!hasResetCredentials) {
+      navigate("/forgotpassword");
+      return;
+    }
     try {
       setIsDisabled(true);
       await client.run(
@@ -30,6 +36,8 @@ const PasswordReset = () => {
         false,
         false
       );
+      Cookies.remove("uid");
+      Cookies.remove("reset_token");
       navigate("/login");
     } catch (error) {
       console.log(error);
@@ -37,6 +45,21 @@ const PasswordReset = () => {
       setIsDisabled(false);
     }
   };
+
+  if (!hasResetCredentials) {
+    return (
+      <AuthLayout
+        title="Reset link required"
+        subtitle="Open the newest reset email, or request a new link."
+        panelTitle="Start again"
+        panelBody="We need a valid reset link before a new password can be saved."
+      >
+        <Link to="/forgotpassword" className={`${authButtonClass} inline-flex items-center justify-center`}>
+          Request reset link
+        </Link>
+      </AuthLayout>
+    );
+  }
 
   return (
     <AuthLayout

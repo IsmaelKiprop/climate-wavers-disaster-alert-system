@@ -156,6 +156,8 @@ class TestCaseView(GenericAPIView):
 
 class PasswordResetRequestView(GenericAPIView):
     serializer_class = PasswordResetRequestSerializer
+    authentication_classes = []
+    permission_classes = []
 
     def post(self, request):
         serializer = self.serializer_class(
@@ -169,6 +171,10 @@ class PasswordResetRequestView(GenericAPIView):
 
 
 class PasswordResetConfirm(GenericAPIView):
+    # Ignore stale Bearer cookies so a leftover login session cannot block reset.
+    authentication_classes = []
+    permission_classes = []
+
     def get(self, request, uidb64, token):
         try:
             user_id = smart_str(urlsafe_base64_decode(uidb64))
@@ -187,7 +193,7 @@ class PasswordResetConfirm(GenericAPIView):
                 },
                 status=status.HTTP_200_OK,
             )
-        except DjangoUnicodeDecodeError:
+        except (DjangoUnicodeDecodeError, User.DoesNotExist, ValueError, OverflowError, TypeError):
             return Response(
                 {"message": "Token is invalid or has expired"},
                 status=status.HTTP_401_UNAUTHORIZED,
@@ -196,6 +202,8 @@ class PasswordResetConfirm(GenericAPIView):
 
 class SetNewPassword(GenericAPIView):
     serializer_class = SetNewPasswordSerializer
+    authentication_classes = []
+    permission_classes = []
 
     def patch(self, request):
         serializer = self.serializer_class(data=request.data)
