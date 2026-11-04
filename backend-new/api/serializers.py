@@ -1,13 +1,19 @@
-from rest_framework import serializers
+from rest_framework import serializers, status
 from .models import User
 from django.contrib.auth import authenticate
-from rest_framework.exceptions import AuthenticationFailed
+from rest_framework.exceptions import AuthenticationFailed, APIException
 from django.contrib.auth.tokens import PasswordResetTokenGenerator
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 from django.utils.encoding import smart_str, smart_bytes
 from rest_framework_simplejwt.tokens import RefreshToken, TokenError
 from django.conf import settings
 from .tasks import send_reset_password_email, send_onboarding_email
+
+
+class MailDeliveryFailed(APIException):
+    status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    default_detail = "Could not send the reset email right now. Wait a moment and try again."
+    default_code = "mail_delivery_failed"
 
 
 class UserRegisterSerializer(serializers.ModelSerializer):
@@ -113,9 +119,10 @@ class PasswordResetRequestSerializer(serializers.Serializer):
     email = serializers.EmailField(max_length=255)
 
     def validate(self, attrs):
-        email = attrs.get("email")
-        if User.objects.filter(email=email).exists():
-            user = User.objects.get(email=email)
+        email = str(attrs.get("email") or "").strip().lower()
+        attrs["email"] = email
+        user = User.objects.filter(email__iexact=email).first()
+        if user:
             uidb64 = urlsafe_base64_encode(smart_bytes(user.id))
             token = PasswordResetTokenGenerator().make_token(user)
             frontend = str(settings.FRONTEND_URL or "https://climate-wavers-three.vercel.app").rstrip("/")
@@ -141,11 +148,7 @@ class PasswordResetRequestSerializer(serializers.Serializer):
             try:
                 send_reset_password_email(data)
             except Exception as exc:
-                raise serializers.ValidationError(
-                    {
-                        "email": "Could not send the reset email right now. Wait a moment and try again."
-                    }
-                ) from exc
+                raise MailDeliveryFailed() from exc
         return super().validate(attrs)
 
 

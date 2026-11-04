@@ -31,6 +31,12 @@ class Client {
       if (error.config?.url?.includes("/users/activity/")) {
         return false;
       }
+      if (error.config?.url?.includes("/auth/password-reset")) {
+        return false;
+      }
+      if (error.response.status === 503) {
+        return false;
+      }
       
       let errorMessages = [];
 

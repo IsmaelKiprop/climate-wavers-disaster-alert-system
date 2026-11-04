@@ -3,6 +3,8 @@ import logging
 import os
 import socket
 import ssl
+import threading
+import time
 import urllib.error
 import urllib.request
 from contextlib import contextmanager
@@ -76,10 +78,31 @@ def _mail_copy(queue_name, payload):
             ),
         )
     if queue_name == "forget_password":
-        return ("Forget Password", f"Reset your Climate Wavers password: {data.get('url')}")
+        reset_url = data.get("url") or ""
+        return (
+            "Reset your Climate Wavers password",
+            (
+                "Use this link to choose a new Climate Wavers password:\n\n"
+                f"{reset_url}\n\n"
+                "If you did not ask for a reset, you can ignore this email."
+            ),
+        )
     if queue_name == "onboarding":
         return ("Welcome Aboard", "Welcome to Climate Wavers. Verify first. Send second.")
     return ("Climate Wavers", data.get("content") or "A message from Climate Wavers.")
+
+
+def _wake_notification_service():
+    base = (settings.NOTIFICATION_SERVICE_URL or "").rstrip("/")
+    if not base:
+        return
+    ctx = _ssl_context()
+    try:
+        urllib.request.urlopen(
+            urllib.request.Request(f"{base}/status"), timeout=20, context=ctx
+        )
+    except Exception as exc:
+        logger.warning("Notification wake-up failed: %s", exc)
 
 
 def _post_notification(payload):
@@ -89,12 +112,7 @@ def _post_notification(payload):
     ctx = _ssl_context()
     last_error = None
     for attempt in range(1, 4):
-        try:
-            urllib.request.urlopen(
-                urllib.request.Request(f"{base}/status"), timeout=15, context=ctx
-            )
-        except Exception as exc:
-            logger.warning("Notification wake-up attempt %s failed: %s", attempt, exc)
+        _wake_notification_service()
         request = urllib.request.Request(
             f"{base}/api/v1/mail",
             data=json.dumps(payload).encode("utf-8"),
@@ -105,7 +123,7 @@ def _post_notification(payload):
             method="POST",
         )
         try:
-            with urllib.request.urlopen(request, timeout=45, context=ctx) as response:
+            with urllib.request.urlopen(request, timeout=60, context=ctx) as response:
                 body = response.read().decode("utf-8", errors="replace")
                 logger.info(
                     "Notification mail ok attempt=%s status=%s body=%s",
@@ -129,6 +147,7 @@ def _post_notification(payload):
         except Exception as exc:
             last_error = exc
             logger.warning("Notification mail attempt %s failed: %s", attempt, exc)
+            time.sleep(min(2 * attempt, 6))
     raise RuntimeError(f"notification service unreachable: {last_error}")
 
 
@@ -161,34 +180,47 @@ def _send_resend(queue_name, payload):
     email = payload.get("email")
     subject, body = _mail_copy(queue_name, payload)
     last_error = None
-    for from_email in _resend_from_addresses():
-        request = urllib.request.Request(
-            "https://api.resend.com/emails",
-            data=json.dumps(
-                {
-                    "from": from_email,
-                    "to": [email],
-                    "subject": subject,
-                    "text": body,
-                }
-            ).encode("utf-8"),
-            headers={
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {key}",
-            },
-            method="POST",
-        )
-        try:
-            with urllib.request.urlopen(request, timeout=12, context=_ssl_context()) as response:
-                logger.info("Resend ok from=%s status=%s", from_email, response.status)
-                return
-        except urllib.error.HTTPError as exc:
-            detail = exc.read().decode("utf-8", errors="replace")
-            last_error = RuntimeError(f"resend {exc.code} from {from_email}: {detail[:400]}")
-            logger.warning("Resend from %s failed: %s", from_email, last_error)
-        except Exception as exc:
-            last_error = exc
-            logger.warning("Resend from %s failed: %s", from_email, exc)
+    for round_idx in range(1, 3):
+        for from_email in _resend_from_addresses():
+            request = urllib.request.Request(
+                "https://api.resend.com/emails",
+                data=json.dumps(
+                    {
+                        "from": from_email,
+                        "to": [email],
+                        "subject": subject,
+                        "text": body,
+                    }
+                ).encode("utf-8"),
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {key}",
+                },
+                method="POST",
+            )
+            try:
+                with urllib.request.urlopen(
+                    request, timeout=15, context=_ssl_context()
+                ) as response:
+                    logger.info(
+                        "Resend ok from=%s round=%s status=%s",
+                        from_email,
+                        round_idx,
+                        response.status,
+                    )
+                    return
+            except urllib.error.HTTPError as exc:
+                detail = exc.read().decode("utf-8", errors="replace")
+                last_error = RuntimeError(
+                    f"resend {exc.code} from {from_email}: {detail[:400]}"
+                )
+                logger.warning("Resend from %s failed: %s", from_email, last_error)
+                if exc.code in (401, 403):
+                    raise last_error from exc
+            except Exception as exc:
+                last_error = exc
+                logger.warning("Resend from %s failed: %s", from_email, exc)
+        time.sleep(1)
     raise last_error or RuntimeError("Resend send failed")
 
 
@@ -241,6 +273,9 @@ def send_message(queue_name, message):
     """
     payload = json.loads(message) if isinstance(message, str) else message
     errors = []
+
+    # Warm the notification service while Resend runs, so fallback is ready.
+    threading.Thread(target=_wake_notification_service, daemon=True).start()
 
     try:
         _send_resend(queue_name, payload)

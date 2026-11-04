@@ -27,6 +27,7 @@ const ForgotPassword = () => {
       );
     } catch (error) {
       console.log(error);
+      // Toast already shown by client; avoid a second Validation Error modal.
     } finally {
       setIsDisabled(false);
     }
