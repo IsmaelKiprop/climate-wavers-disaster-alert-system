@@ -14,6 +14,11 @@ from .views import (
 from .ai_views import generate_content, analyze_content, generate_hashtags
 from .newsletter import NewsletterSubscribeView
 from .alerts import fanout_disaster_alert
+from .alert_preferences import (
+    AlertPreferenceView,
+    AlertPhoneVerifyConfirmView,
+    AlertPhoneVerifyRequestView,
+)
 
 
 # Initialize the default router
@@ -43,6 +48,17 @@ urlpatterns = [
     path("status/", status_view, name='status'),
     path("newsletter/", NewsletterSubscribeView.as_view(), name="newsletter-subscribe"),
     path("alerts/fanout/", fanout_disaster_alert, name="disaster-alert-fanout"),
+    path("alerts/preferences/", AlertPreferenceView.as_view(), name="alert-preferences"),
+    path(
+        "alerts/phone/request-code/",
+        AlertPhoneVerifyRequestView.as_view(),
+        name="alert-phone-request",
+    ),
+    path(
+        "alerts/phone/confirm/",
+        AlertPhoneVerifyConfirmView.as_view(),
+        name="alert-phone-confirm",
+    ),
     path('notifications/', NotificationListView.as_view(),
          name='notification_list'),
     path('notifications/mark-read/', MarkNotificationsAsReadView.as_view(),

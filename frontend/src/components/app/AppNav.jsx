@@ -13,6 +13,7 @@ import {
   IoNotifications,
   IoLogOutOutline,
   IoCreateOutline,
+  IoPhonePortraitOutline,
 } from "react-icons/io5";
 import { MdOutlineCampaign, MdCampaign } from "react-icons/md";
 import { RiAlarmWarningLine, RiAlarmWarningFill } from "react-icons/ri";
@@ -76,6 +77,12 @@ const AppNav = ({ onNavigate, compact = false }) => {
             ]
           : []),
         { to: "/app/notifications", label: "Notifications", Icon: IoNotificationsOutline, ActiveIcon: IoNotifications },
+        {
+          to: "/app/alert-settings",
+          label: "Alert settings",
+          Icon: IoPhonePortraitOutline,
+          ActiveIcon: IoPhonePortraitOutline,
+        },
         { to: "/campaigns", label: "Campaigns", Icon: MdOutlineCampaign, ActiveIcon: MdCampaign },
         { to: "/disasters", label: "Alerts", Icon: RiAlarmWarningLine, ActiveIcon: RiAlarmWarningFill },
       ];

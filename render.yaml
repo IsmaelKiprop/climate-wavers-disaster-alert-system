@@ -59,6 +59,8 @@ services:
         value: https://climate-wavers-notifications.onrender.com
       - key: NOTIFICATION_SECRET
         sync: false
+      - key: RESPONSE_SYSTEM_URL
+        value: https://climate-wavers-response.onrender.com
       - key: MAIL_USER
         sync: false
       - key: MAIL_PASS
@@ -70,6 +72,41 @@ services:
       - key: RESEND_API_KEY
         sync: false
       - key: OPENAI_API_KEY
+        sync: false
+
+  - type: cron
+    name: climate-wavers-alert-poller
+    runtime: docker
+    rootDir: backend-new
+    dockerfilePath: ./Dockerfile
+    schedule: "*/10 * * * *"
+    dockerCommand: python manage.py poll_live_official_alerts
+    envVars:
+      - key: DEBUG
+        value: "False"
+      - key: STORAGE_BACKEND
+        value: supabase
+      - key: SECRET_KEY
+        sync: false
+      - key: FERNET_KEY
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: ALLOWED_HOSTS
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+      - key: NOTIFICATION_SERVICE_URL
+        value: https://climate-wavers-notifications.onrender.com
+      - key: NOTIFICATION_SECRET
+        sync: false
+      - key: RESPONSE_SYSTEM_URL
+        value: https://climate-wavers-response.onrender.com
+      - key: RESEND_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: AMQP_URL
         sync: false
 
   - type: web
@@ -99,6 +136,8 @@ services:
         sync: false
       - key: SERVER_SECRET
         sync: false
+      - key: FRONTEND_URL
+        value: https://climate-wavers-three.vercel.app
 
   - type: web
     name: climate-wavers-notifications
@@ -129,6 +168,18 @@ services:
         sync: false
       - key: RESEND_API_KEY
         sync: false
+      - key: META_WA_TOKEN
+        sync: false
+      - key: META_WA_PHONE_NUMBER_ID
+        sync: false
+      - key: META_WA_BUSINESS_ACCOUNT_ID
+        sync: false
+      - key: META_WA_APP_SECRET
+        sync: false
+      - key: META_WA_VERIFY_TOKEN
+        sync: false
+      - key: META_WA_TEMPLATE_LANG
+        value: en
 
   - type: web
     name: climate-wavers-models

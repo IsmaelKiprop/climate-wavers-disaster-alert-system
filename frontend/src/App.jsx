@@ -45,6 +45,7 @@ const AuthCampaigns = lazy(() => import("./pages/AuthenticatedPages/Campaigns"))
 const AuthDisasters = lazy(() => import("./pages/AuthenticatedPages/Disasters"));
 const AuthUploadCover = lazy(() => import("./pages/AuthenticatedPages/UploadCover"));
 const AuthUploadPhoto = lazy(() => import("./pages/AuthenticatedPages/UploadPhoto"));
+const AuthAlertSettings = lazy(() => import("./pages/AuthenticatedPages/AlertSettings"));
 
 const OnboardingLayout = lazy(() =>
   import("./components/Onboarding").then((m) => ({ default: m.OnboardingLayout }))
@@ -160,6 +161,7 @@ function App() {
                   }
                 />
                 <Route path="/app/admin/tree-projects" element={<TreeProjectAdmin />} />
+                <Route path="/app/alert-settings" element={<AuthAlertSettings />} />
                 <Route path="/app/:userId/profile" element={<AuthProfile />} />
                 <Route path="/app/:postId/comments" element={<AuthComment type={"post"} />} />
                 <Route

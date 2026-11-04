@@ -1,6 +1,7 @@
 import mailDataValidator from "../validation/mail.js"
 import mailer from "./mailer.js"
 import Subscription from "./subscription.js"
+import whatsapp from "./whatsapp.js"
 
 class Controller{
 
@@ -28,8 +29,29 @@ class Controller{
             }
         })
         if (!dataList.length) return
-        const mailData = {city: data.city, type: data.disasterType}
-        await Promise.all(dataList.map((row) => mailer.sendDisasterAlert(row.email, mailData, `${data.disasterType} Alert`)))
+        const mailData = {
+            city: data.city,
+            type: data.disasterType,
+            disasterType: data.disasterType,
+            confidence: data.confidence,
+            aiSummary: data.aiSummary,
+            source: data.source,
+            sourceUrl: data.sourceUrl,
+            deepLink: data.deepLink,
+            magnitude: data.magnitude,
+            isOfficial: data.isOfficial,
+            agencies: data.agencies || [],
+            disclaimer: data.disclaimer,
+        }
+        await Promise.all(
+            dataList.map((row) =>
+                mailer.sendDisasterAlert(row.email, mailData, `${data.disasterType} Alert`)
+            )
+        )
+    }
+
+    async sendDisasterAlertWhatsApp(d){
+        return whatsapp.sendDisasterAlertWhatsApp(d?.data || d)
     }
 
     async sendCustom(d){

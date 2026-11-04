@@ -1154,63 +1154,9 @@ class DisasterViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=False, methods=['get'], permission_classes=[AllowAny])
     def live(self, request):
         """Proxy live USGS and NASA EONET events for the public map and charts."""
-        events = []
-        try:
-            usgs = requests.get(
-                "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/4.5_week.geojson",
-                timeout=20,
-            )
-            if usgs.ok:
-                for feature in usgs.json().get("features", []):
-                    props = feature.get("properties") or {}
-                    coords = (feature.get("geometry") or {}).get("coordinates") or []
-                    mag = props.get("mag") or 0
-                    events.append({
-                        "id": feature.get("id"),
-                        "title": props.get("title"),
-                        "disaster_type": "earthquake",
-                        "severity": "catastrophic" if mag >= 7 else "high" if mag >= 6 else "moderate",
-                        "status": "ongoing",
-                        "country": (props.get("place") or "").split(",")[-1].strip(),
-                        "region": props.get("place") or "",
-                        "latitude": coords[1] if len(coords) > 1 else None,
-                        "longitude": coords[0] if coords else None,
-                        "description": props.get("title"),
-                        "start_date": datetime.utcfromtimestamp((props.get("time") or 0) / 1000).isoformat() if props.get("time") else None,
-                        "official_source": "USGS",
-                    })
-        except Exception:
-            pass
-        try:
-            eonet = requests.get(
-                "https://eonet.gsfc.nasa.gov/api/v3/events?status=open&limit=80",
-                timeout=20,
-            )
-            if eonet.ok:
-                for item in eonet.json().get("events", []):
-                    geos = item.get("geometry") or []
-                    geo = geos[-1] if geos else {}
-                    coords = geo.get("coordinates") or []
-                    lng = lat = None
-                    if geo.get("type") == "Point" and len(coords) >= 2:
-                        lng, lat = coords[0], coords[1]
-                    category = ((item.get("categories") or [{}])[0]).get("id") or "other"
-                    events.append({
-                        "id": item.get("id"),
-                        "title": item.get("title"),
-                        "disaster_type": category,
-                        "severity": "high",
-                        "status": "ongoing",
-                        "region": item.get("title"),
-                        "latitude": lat,
-                        "longitude": lng,
-                        "description": item.get("description") or item.get("title"),
-                        "start_date": geo.get("date"),
-                        "official_source": "NASA EONET",
-                    })
-        except Exception:
-            pass
-        return Response(events)
+        from .live_feeds import fetch_live_official_events
+
+        return Response(fetch_live_official_events())
 
 
 class TreeProjectUpdateViewSet(viewsets.ModelViewSet):

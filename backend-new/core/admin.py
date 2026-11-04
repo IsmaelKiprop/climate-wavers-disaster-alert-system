@@ -1,5 +1,20 @@
 from django.contrib import admin
-from .models import Post, Poll, PollVote, Comment, Reaction, Repost, View, Follow, Bookmark, Notification, NewsletterSubscriber
+from .models import (
+    Post,
+    Poll,
+    PollVote,
+    Comment,
+    Reaction,
+    Repost,
+    View,
+    Follow,
+    Bookmark,
+    Notification,
+    NewsletterSubscriber,
+    UserAlertPreference,
+    EmergencyAgency,
+    OfficialAlertEvent,
+)
 from unfold.admin import ModelAdmin
 
 class PostAdmin(ModelAdmin):
@@ -48,4 +63,40 @@ class NewsletterSubscriberAdmin(ModelAdmin):
     ordering = ("-created_at",)
 
 admin.site.register(NewsletterSubscriber, NewsletterSubscriberAdmin)
+
+
+@admin.register(UserAlertPreference)
+class UserAlertPreferenceAdmin(ModelAdmin):
+    list_display = (
+        "user",
+        "email_alerts",
+        "whatsapp_alerts",
+        "radius_km",
+        "phone_verified",
+        "updated_at",
+    )
+    list_filter = ("email_alerts", "whatsapp_alerts", "phone_verified")
+    search_fields = ("user__email", "phone")
+
+
+@admin.register(EmergencyAgency)
+class EmergencyAgencyAdmin(ModelAdmin):
+    list_display = (
+        "name",
+        "agency_type",
+        "city",
+        "country",
+        "phone",
+        "whatsapp_opt_in",
+        "is_active",
+    )
+    list_filter = ("agency_type", "country", "is_active", "whatsapp_opt_in")
+    search_fields = ("name", "city", "phone", "email")
+
+
+@admin.register(OfficialAlertEvent)
+class OfficialAlertEventAdmin(ModelAdmin):
+    list_display = ("event_id", "source", "title", "disaster_type", "created_at")
+    list_filter = ("source", "disaster_type")
+    search_fields = ("event_id", "title")
 

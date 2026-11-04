@@ -25,5 +25,8 @@ export const endpoints = {
     "tree_projects_african": "/api/v1/tree-projects/african_projects/",
     "treeProjectDonations": "/api/v1/tree-project-donations/",
     "disasters": "/api/v1/disasters/",
-    "newsletter": "/api/v1/newsletter/"
+    "newsletter": "/api/v1/newsletter/",
+    "alertPreferences": "/api/v1/alerts/preferences/",
+    "alertPhoneRequest": "/api/v1/alerts/phone/request-code/",
+    "alertPhoneConfirm": "/api/v1/alerts/phone/confirm/",
 }

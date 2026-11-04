@@ -44,6 +44,9 @@ exports.createDisaster = catchAsyncErrors(async (req, res) => {
     details: disaster.details,
     id: disaster.id,
     vision,
+    latitude: disaster.latitude ?? disaster.lat ?? req.body?.latitude,
+    longitude: disaster.longitude ?? disaster.lng ?? req.body?.longitude,
+    magnitude: disaster.magnitude ?? req.body?.magnitude,
   });
   return res.status(201).json({ disaster, recommendation, vision, alert });
 });

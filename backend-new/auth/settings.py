@@ -200,6 +200,10 @@ NOTIFICATION_SECRET = env(
     "NOTIFICATION_SECRET",
     default=os.environ.get("SERVER_SECRET", "change-me-server-secret"),
 )
+RESPONSE_SYSTEM_URL = env(
+    "RESPONSE_SYSTEM_URL",
+    default="https://climate-wavers-response.onrender.com",
+)
 EMAIL_BACKEND = env(
     "EMAIL_BACKEND",
     default="django.core.mail.backends.smtp.EmailBackend",

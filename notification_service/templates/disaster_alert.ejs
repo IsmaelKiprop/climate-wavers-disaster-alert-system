@@ -1,92 +1,65 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Climate Wavers Alert</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            line-height: 1.6;
-            margin: 0;
-            padding: 0;
-            background-color: #f4f4f4;
-        }
-
-        .container {
-            width: 100%;
-            background-color: #fff;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
-            padding: 20px;
-        }
-
-        .header {
-            padding: 10px 0;
-            background-color: #f4f4f4;
-            text-align: left;
-            display: flex;
-            align-items: center;
-        }
-
-        .header img {
-            width: 50px;
-            height: auto;
-        }
-
-        .header h1 {
-            font-family: Montserrat, sans-serif;
-            font-size: 20px;
-            font-weight: 800;
-            color: #008080;
-            margin: 0 0 0 15px;
-        }
-
-        .body {
-            margin-top: 20px;
-        }
-
-        .alert-details {
-            font-size: 14px;
-            color: #333;
-        }
-
-        p {
-            margin-bottom: 10px;
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Climate Wavers Alert</title>
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.55; margin: 0; padding: 0; background: #f4f4f4; color: #222; }
+    .container { max-width: 640px; margin: 0 auto; background: #fff; padding: 24px; }
+    h1 { font-size: 20px; color: #067d83; margin: 0 0 12px; }
+    .badge { display: inline-block; padding: 4px 8px; font-size: 12px; border: 1px solid #067d83; color: #067d83; margin-bottom: 12px; }
+    .muted { color: #555; font-size: 13px; }
+    ul { padding-left: 18px; }
+    a { color: #067d83; }
+    .agencies { margin-top: 16px; padding-top: 12px; border-top: 1px solid #ddd; }
+    .disclaimer { margin-top: 20px; font-size: 12px; color: #666; }
+  </style>
 </head>
-
 <body>
-    <div class="container">
-        <!-- Header -->
-        <div class="header">
-            <img src="https://res.cloudinary.com/lahri/image/upload/v1726333240/disax/tnbbn9m9vpueskb66qd3.png"
-                alt="Climate Wavers Logo">
-            <h1>Disaster Alert in <%= city %>
-            </h1>
-        </div>
-
-        <!-- Body -->
-        <div class="body">
-            <div class="alert-details">
-                <p>Attention: A <%= type %> has been reported in <%= city %>. This situation is ongoing, and it is
-                            important to stay
-                            informed.</p>
-
-                <p>For your safety:</p>
-                <ul>
-                    <li>Remain indoors and avoid the affected area if possible.</li>
-                    <li>Follow local authorities' instructions and stay tuned to official updates.</li>
-                    <li>Prepare an emergency kit and ensure you have necessary supplies.</li>
-                </ul>
-
-                <p>We are monitoring the situation closely and will provide updates as they become available.</p>
-
-                <p>Thank you for your attention and cooperation.</p>
-            </div>
-        </div>
-    </div>
+  <div class="container">
+    <h1>Disaster alert — <%= city %></h1>
+    <div class="badge"><%= typeof confidence !== 'undefined' && confidence ? confidence : (isOfficial ? 'Confirmed official feed' : 'Community report — unconfirmed') %></div>
+    <p>
+      A <strong><%= type || disasterType %></strong> situation is associated with
+      <strong><%= city %></strong><% if (typeof magnitude !== 'undefined' && magnitude != null) { %>
+      (magnitude <%= magnitude %>)<% } %>.
+    </p>
+    <% if (typeof aiSummary !== 'undefined' && aiSummary) { %>
+      <p><%= aiSummary %></p>
+    <% } else { %>
+      <p>Stay informed and follow guidance from local emergency services.</p>
+    <% } %>
+    <p>For your safety:</p>
+    <ul>
+      <li>Follow local authorities and official updates first.</li>
+      <li>Avoid the affected area unless you are a trained responder.</li>
+      <li>Keep emergency supplies and charged phones ready.</li>
+    </ul>
+    <% if (typeof source !== 'undefined' && source) { %>
+      <p class="muted">Source: <%= source %><% if (typeof sourceUrl !== 'undefined' && sourceUrl) { %> — <a href="<%= sourceUrl %>"><%= sourceUrl %></a><% } %></p>
+    <% } %>
+    <% if (typeof deepLink !== 'undefined' && deepLink) { %>
+      <p><a href="<%= deepLink %>">Open Climate Wavers alerts</a></p>
+    <% } %>
+    <% if (typeof agencies !== 'undefined' && agencies && agencies.length) { %>
+      <div class="agencies">
+        <p><strong>Nearby agencies</strong></p>
+        <ul>
+          <% agencies.forEach(function (agency) { %>
+            <li>
+              <%= agency.name %><% if (agency.phone) { %> — <%= agency.phone %><% } %>
+              <% if (agency.distance_km != null) { %> (<%= agency.distance_km %> km)<% } %>
+            </li>
+          <% }) %>
+        </ul>
+      </div>
+    <% } %>
+    <p class="disclaimer">
+      <%= typeof disclaimer !== 'undefined' && disclaimer
+        ? disclaimer
+        : 'Climate Wavers operational alert — not a government emergency warning. Follow local authorities.' %>
+    </p>
+  </div>
 </body>
-
 </html>

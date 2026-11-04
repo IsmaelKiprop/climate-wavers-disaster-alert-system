@@ -16,13 +16,14 @@ class Notification(models.Model):
         ("repost", "Repost"),
         ("poll", "Poll"),
         ("follow", "Follow"),
+        ("disaster", "Disaster"),
     ]
 
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="notifications"
     )
     notification_type = models.CharField(
-        max_length=10, choices=NOTIFICATION_TYPES)
+        max_length=20, choices=NOTIFICATION_TYPES)
     content_type = models.ForeignKey(
         ContentType, on_delete=models.CASCADE, null=True, blank=True
     )
@@ -1221,4 +1222,94 @@ class NewsletterSubscriber(models.Model):
 
     def __str__(self):
         return self.email
+
+
+class UserAlertPreference(models.Model):
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="alert_preference",
+    )
+    email_alerts = models.BooleanField(default=True)
+    whatsapp_alerts = models.BooleanField(default=False)
+    radius_km = models.PositiveIntegerField(default=100)
+    min_magnitude = models.DecimalField(
+        max_digits=3, decimal_places=1, default=4.5
+    )
+    latitude = models.DecimalField(
+        max_digits=9, decimal_places=6, null=True, blank=True
+    )
+    longitude = models.DecimalField(
+        max_digits=9, decimal_places=6, null=True, blank=True
+    )
+    phone = models.CharField(max_length=32, blank=True, null=True)
+    phone_verified = models.BooleanField(default=False)
+    phone_otp = models.CharField(max_length=12, blank=True, null=True)
+    phone_otp_expires = models.DateTimeField(null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Alert prefs for {self.user.email}"
+
+
+class EmergencyAgency(models.Model):
+    AGENCY_TYPES = [
+        ("fire", "Fire"),
+        ("police", "Police"),
+        ("medical", "Medical"),
+        ("red_cross", "Red Cross"),
+        ("county", "County Emergency"),
+        ("other", "Other"),
+    ]
+
+    name = models.CharField(max_length=200)
+    agency_type = models.CharField(max_length=20, choices=AGENCY_TYPES, default="other")
+    phone = models.CharField(max_length=32, blank=True, null=True)
+    email = models.EmailField(blank=True, null=True)
+    whatsapp_opt_in = models.BooleanField(default=False)
+    latitude = models.DecimalField(max_digits=9, decimal_places=6)
+    longitude = models.DecimalField(max_digits=9, decimal_places=6)
+    country = models.CharField(max_length=100, default="Kenya")
+    city = models.CharField(max_length=100, blank=True, null=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["name"]
+        indexes = [
+            models.Index(fields=["latitude", "longitude"]),
+            models.Index(fields=["country", "is_active"]),
+        ]
+
+    def __str__(self):
+        return self.name
+
+
+class OfficialAlertEvent(models.Model):
+    """Dedupes official USGS/NASA (and similar) fanouts."""
+
+    event_id = models.CharField(max_length=120, unique=True)
+    source = models.CharField(max_length=40)
+    title = models.CharField(max_length=300, blank=True)
+    disaster_type = models.CharField(max_length=80, blank=True)
+    magnitude = models.DecimalField(
+        max_digits=4, decimal_places=1, null=True, blank=True
+    )
+    latitude = models.DecimalField(
+        max_digits=9, decimal_places=6, null=True, blank=True
+    )
+    longitude = models.DecimalField(
+        max_digits=9, decimal_places=6, null=True, blank=True
+    )
+    source_url = models.URLField(blank=True, null=True)
+    payload = models.JSONField(default=dict, blank=True)
+    ai_summary = models.TextField(blank=True)
+    fanout_result = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.source}:{self.event_id}"
 

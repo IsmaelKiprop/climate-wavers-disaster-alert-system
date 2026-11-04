@@ -1,0 +1,130 @@
+"""Shared USGS + NASA EONET live event fetch for map API and alert poller."""
+
+from datetime import datetime
+
+import requests
+
+USGS_URL = (
+    "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/4.5_week.geojson"
+)
+EONET_URL = "https://eonet.gsfc.nasa.gov/api/v3/events?status=open&limit=80"
+
+
+def fetch_live_official_events(timeout=20):
+    events = []
+    events.extend(_fetch_usgs(timeout))
+    events.extend(_fetch_eonet(timeout))
+    return events
+
+
+def _fetch_usgs(timeout):
+    events = []
+    try:
+        response = requests.get(USGS_URL, timeout=timeout)
+        if not response.ok:
+            return events
+        for feature in response.json().get("features", []):
+            props = feature.get("properties") or {}
+            coords = (feature.get("geometry") or {}).get("coordinates") or []
+            mag = props.get("mag") or 0
+            event_id = feature.get("id") or ""
+            detail = props.get("detail") or props.get("url") or ""
+            events.append(
+                {
+                    "id": event_id,
+                    "title": props.get("title") or "Earthquake",
+                    "disaster_type": "earthquake",
+                    "severity": (
+                        "catastrophic"
+                        if mag >= 7
+                        else "high"
+                        if mag >= 6
+                        else "moderate"
+                    ),
+                    "status": "ongoing",
+                    "country": (props.get("place") or "").split(",")[-1].strip(),
+                    "region": props.get("place") or "",
+                    "city": (props.get("place") or "").split(",")[0].strip(),
+                    "latitude": coords[1] if len(coords) > 1 else None,
+                    "longitude": coords[0] if coords else None,
+                    "description": props.get("title"),
+                    "magnitude": mag,
+                    "start_date": (
+                        datetime.utcfromtimestamp(
+                            (props.get("time") or 0) / 1000
+                        ).isoformat()
+                        if props.get("time")
+                        else None
+                    ),
+                    "official_source": "USGS",
+                    "source_url": detail
+                    or f"https://earthquake.usgs.gov/earthquakes/eventpage/{event_id}",
+                    "is_official": True,
+                }
+            )
+    except Exception:
+        pass
+    return events
+
+
+def _fetch_eonet(timeout):
+    events = []
+    try:
+        response = requests.get(EONET_URL, timeout=timeout)
+        if not response.ok:
+            return events
+        for item in response.json().get("events", []):
+            geos = item.get("geometry") or []
+            geo = geos[-1] if geos else {}
+            coords = geo.get("coordinates") or []
+            lng = lat = None
+            if geo.get("type") == "Point" and len(coords) >= 2:
+                lng, lat = coords[0], coords[1]
+            category = ((item.get("categories") or [{}])[0]).get("id") or "other"
+            event_id = item.get("id") or ""
+            events.append(
+                {
+                    "id": event_id,
+                    "title": item.get("title") or category,
+                    "disaster_type": category,
+                    "severity": "high",
+                    "status": "ongoing",
+                    "region": item.get("title") or "",
+                    "city": "",
+                    "country": "",
+                    "latitude": lat,
+                    "longitude": lng,
+                    "description": item.get("description") or item.get("title"),
+                    "magnitude": None,
+                    "start_date": geo.get("date"),
+                    "official_source": "NASA EONET",
+                    "source_url": f"https://eonet.gsfc.nasa.gov/api/v3/events/{event_id}",
+                    "is_official": True,
+                }
+            )
+    except Exception:
+        pass
+    return events
+
+
+def passes_severity_gate(event, min_magnitude=4.5):
+    dtype = (event.get("disaster_type") or "").lower()
+    if dtype == "earthquake":
+        try:
+            return float(event.get("magnitude") or 0) >= float(min_magnitude)
+        except (TypeError, ValueError):
+            return False
+    # NASA categories worth alerting
+    interesting = {
+        "wildfires",
+        "severeStorms",
+        "floods",
+        "volcanoes",
+        "landslides",
+        "earthquakes",
+        "dustHaze",
+        "tempExtremes",
+    }
+    return dtype in interesting or dtype.replace(" ", "") in {
+        x.lower() for x in interesting
+    }
