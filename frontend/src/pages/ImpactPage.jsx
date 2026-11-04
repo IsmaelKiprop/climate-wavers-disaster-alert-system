@@ -39,27 +39,27 @@ const ImpactPage = () => {
         <div className="border border-border bg-surface p-4">
           <p className="text-sm text-muted">Active events</p>
           <p className="text-2xl font-semibold">{summary.total}</p>
-        </div>
+                </div>
         <div className="border border-border bg-surface p-4">
           <p className="text-sm text-muted">USGS</p>
           <p className="text-2xl font-semibold">{summary.sourceCounts.USGS || 0}</p>
-        </div>
+              </div>
         <div className="border border-border bg-surface p-4">
           <p className="text-sm text-muted">NASA EONET</p>
           <p className="text-2xl font-semibold">{summary.sourceCounts["NASA EONET"] || 0}</p>
-        </div>
+              </div>
         <div className="border border-border bg-surface p-4">
           <p className="text-sm text-muted">Trees planted</p>
           <p className="text-2xl font-semibold">{treeStats?.total_trees_planted?.toLocaleString?.() ?? "—"}</p>
-        </div>
-      </div>
+            </div>
+          </div>
 
       <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-4">
         {PHOTOS.map((photo) => (
           <img key={photo.src} src={photo.src} alt={photo.alt} className="w-full h-48 sm:h-56 object-cover border border-border" />
         ))}
-      </div>
-
+          </div>
+          
       <section className="mt-10 grid gap-4 md:grid-cols-2">
         <article className="border border-border bg-surface p-5">
           <p className="text-xs font-semibold uppercase tracking-wide text-primary">Now</p>
@@ -86,7 +86,7 @@ const ImpactPage = () => {
             Disaster alert verification research
           </a>
         </article>
-      </section>
+        </section>
 
       <section className="mt-10">
         <h2 className="text-lg font-semibold">Latest verified events</h2>
@@ -103,7 +103,7 @@ const ImpactPage = () => {
           ))}
           {!summary.newest.length ? <li className="p-4 text-sm text-muted">Live events will appear here after the feeds load.</li> : null}
         </ul>
-      </section>
+        </section>
     </PublicPage>
   );
 };

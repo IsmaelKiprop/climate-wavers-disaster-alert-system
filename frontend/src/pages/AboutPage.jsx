@@ -45,7 +45,7 @@ const AboutPage = () => {
             Human review before high-impact send. Verify first. Broadcast second.
           </p>
         </article>
-      </div>
+              </div>
 
       <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-4">
         <img
@@ -58,8 +58,8 @@ const AboutPage = () => {
           alt="Firefighter working at a burned structure"
           className="w-full h-52 sm:h-64 object-cover border border-border"
         />
-      </div>
-
+              </div>
+              
       <section className="mt-12 max-w-3xl">
         <h2 className="text-2xl font-semibold">Why this exists</h2>
         <p className="mt-3 text-muted">
@@ -71,7 +71,7 @@ const AboutPage = () => {
           That research is a controlled experiment. It is not a government siren and it does not claim to remove every AI failure.
           The point is to find failure modes, measure them, and put safeguards into the product people already use.
         </p>
-      </section>
+        </section>
 
       <section className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {[
@@ -108,16 +108,16 @@ const AboutPage = () => {
               The product. Live map, event pages, tree campaigns, community, and WaverX.
               Built for African operating reality: incomplete connectivity, multilingual reports, and the need for a clear
               “we do not know yet” signal.
-            </p>
-          </div>
-          <div>
+                </p>
+              </div>
+              <div>
             <h2 className="text-lg font-semibold">{SITE.org.name}</h2>
             <p className="mt-2 text-sm text-muted">
               The lab. Practical AI engineering from {SITE.org.city}. The disaster-alert verification project tests
               reliability before those controls are treated as production warnings.
-            </p>
-          </div>
-        </div>
+                </p>
+              </div>
+            </div>
       </section>
 
       <div className="mt-10 flex flex-wrap gap-3">
@@ -135,7 +135,7 @@ const AboutPage = () => {
         <Link to="/contact" className="h-11 px-4 inline-flex items-center border border-border">
           Contact {SITE.name}
         </Link>
-      </div>
+          </div>
     </PublicPage>
   );
 };

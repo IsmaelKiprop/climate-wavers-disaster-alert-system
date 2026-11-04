@@ -17,36 +17,36 @@ const DonationForm = lazy(() => import("../components/DonationForm"));
 const LandingCharts = lazy(() => import("../components/LandingCharts"));
 
 const HERO_SLIDES = [
-  {
-    id: 1,
-    image: "/ai-disaster.jpg",
+    {
+      id: 1,
+      image: "/ai-disaster.jpg",
     imageSm: "/ai-disaster-sm.jpg",
-    title: "AI-Powered",
-    subtitle: "Disaster Detection",
+      title: "AI-Powered",
+      subtitle: "Disaster Detection",
     description: "Live USGS and NASA events, built in Nairobi to verify disaster information instead of shouting it louder.",
-  },
-  {
-    id: 2,
-    image: "/environment.jpg",
+    },
+    {
+      id: 2,
+      image: "/environment.jpg",
     imageSm: "/environment-sm.jpg",
-    title: "Environmental",
-    subtitle: "Monitoring",
+      title: "Environmental",
+      subtitle: "Monitoring",
     description: "Track climate pressure and environmental hazards as they appear in the live feeds.",
-  },
-  {
-    id: 3,
-    image: "/emergency-response.jpg",
+    },
+    {
+      id: 3,
+      image: "/emergency-response.jpg",
     imageSm: "/emergency-response-sm.jpg",
-    title: "Emergency",
-    subtitle: "Response",
+      title: "Emergency",
+      subtitle: "Response",
     description: "Coordinate with community networks for faster disaster response.",
-  },
-  {
-    id: 4,
-    image: "/community-respond.jpg",
+    },
+    {
+      id: 4,
+      image: "/community-respond.jpg",
     imageSm: "/community-respond-sm.jpg",
-    title: "Community",
-    subtitle: "Protection",
+      title: "Community",
+      subtitle: "Protection",
     description: "Real-time monitoring and coordinated emergency response for local communities.",
   },
 ];
@@ -261,7 +261,7 @@ const LandingPage = () => {
             </div>
 
             <div className="flex items-center gap-2 sm:gap-4">
-              <button
+              <button 
                 type="button"
                 onClick={() => setShowDisasterMap(true)}
                 className="hidden md:inline-flex items-center h-10 px-3 text-sm font-medium text-destructive hover:bg-surface"
@@ -433,7 +433,7 @@ const LandingPage = () => {
                 srcSet={`${slide.imageSm} 960w, ${slide.image} 1600w`}
                 sizes="100vw"
                 alt={`Disaster alert system - ${slide.title}`}
-                className="w-full h-full object-cover"
+            className="w-full h-full object-cover"
                 width="1600"
                 height="900"
                 loading={index === 0 ? "eager" : "lazy"}
@@ -449,26 +449,26 @@ const LandingPage = () => {
         </div>
 
         {heroReady ? (
-          <button
-            onClick={prevSlide}
+        <button
+          onClick={prevSlide}
             className="absolute left-4 top-1/2 -translate-y-1/2 z-20 bg-black/40 hover:bg-black/60 text-white p-3 hidden md:block"
-            aria-label="Previous slide"
-          >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-          </button>
+          aria-label="Previous slide"
+        >
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          </svg>
+        </button>
         ) : null}
         {heroReady ? (
-          <button
-            onClick={nextSlide}
+        <button
+          onClick={nextSlide}
             className="absolute right-4 top-1/2 -translate-y-1/2 z-20 bg-black/40 hover:bg-black/60 text-white p-3 hidden md:block"
-            aria-label="Next slide"
-          >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-            </svg>
-          </button>
+          aria-label="Next slide"
+        >
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+        </button>
         ) : null}
 
         {heroReady ? (
@@ -477,7 +477,7 @@ const LandingPage = () => {
               <h1 className="text-3xl sm:text-4xl md:text-5xl font-semibold text-white mb-4 leading-tight">
                 <span className="block">{HERO_SLIDES[currentSlide].title}</span>
                 <span className="block">{HERO_SLIDES[currentSlide].subtitle}</span>
-              </h1>
+            </h1>
               <p className="text-base sm:text-lg text-white/90 mb-8 max-w-2xl mx-auto leading-relaxed">
                 {HERO_SLIDES[currentSlide].description}
               </p>
@@ -488,31 +488,31 @@ const LandingPage = () => {
                 </a>
                 <a href="/login" className="min-h-11 border border-white text-white hover:bg-white hover:text-foreground px-6 py-3 text-base font-medium flex items-center justify-center">
                   Sign in
-                </a>
-              </div>
+              </a>
+            </div>
 
               <div className="flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-8 text-white/85">
                 <span className="text-sm">{Number(platformStats.disaster_count).toLocaleString()} live disaster reports</span>
                 <span className="text-sm">{Number(platformStats.total_trees_planted).toLocaleString()} trees planted</span>
                 <span className="text-sm">{Number(platformStats.active_projects).toLocaleString()} active projects</span>
+                </div>
               </div>
-            </div>
-          </div>
+                </div>
         ) : null}
 
         {heroReady ? (
           <div className="absolute bottom-5 left-1/2 -translate-x-1/2 z-20 flex gap-2">
             {HERO_SLIDES.map((_, index) => (
-              <button
-                key={index}
-                onClick={() => goToSlide(index)}
+            <button
+              key={index}
+              onClick={() => goToSlide(index)}
                 className={`h-2.5 w-2.5 ${
                   index === currentSlide ? "bg-white" : "bg-white/50"
-                }`}
-                aria-label={`Go to slide ${index + 1}`}
-              />
-            ))}
-          </div>
+              }`}
+              aria-label={`Go to slide ${index + 1}`}
+            />
+          ))}
+        </div>
         ) : null}
       </section>
 
@@ -537,7 +537,7 @@ const LandingPage = () => {
                 {Number(platformStats.disaster_count).toLocaleString()}
               </div>
               <div className="text-muted text-sm mt-1">Disaster reports</div>
-            </div>
+              </div>
             <div className="bg-surface border border-border p-4 sm:p-6 text-center">
               <div className="text-2xl sm:text-3xl font-semibold text-primary">
                 {Number(platformStats.total_trees_planted).toLocaleString()}
@@ -549,14 +549,14 @@ const LandingPage = () => {
                 {Number(platformStats.active_projects).toLocaleString()}
               </div>
               <div className="text-muted text-sm mt-1">Active projects</div>
-            </div>
+              </div>
             <div className="bg-surface border border-border p-4 sm:p-6 text-center">
               <div className="text-2xl sm:text-3xl font-semibold text-primary">
                 ${Number(platformStats.total_funds_raised).toLocaleString()}
               </div>
               <div className="text-muted text-sm mt-1">Funds raised</div>
+              </div>
             </div>
-          </div>
 
           <Suspense fallback={<p className="text-sm text-muted mb-6">Loading live charts.</p>}>
             <LandingCharts liveCharts={liveCharts} allDisasters={allDisasters} recentEvents={recentEvents} />
@@ -566,13 +566,13 @@ const LandingPage = () => {
             <div className="bg-surface border border-border p-4 sm:p-6">
               <div className="text-2xl sm:text-3xl font-semibold text-primary">{disasterData.length}</div>
               <div className="text-sm text-muted mt-1">Events with map coordinates</div>
-            </div>
+                </div>
             <div className="bg-surface border border-border p-4 sm:p-6">
               <div className="text-2xl sm:text-3xl font-semibold text-primary">
                 {allDisasters.filter((event) => String(event.severity).toUpperCase() === "CRITICAL" || String(event.severity).toUpperCase() === "HIGH").length}
               </div>
               <div className="text-sm text-muted mt-1">High or critical events</div>
-            </div>
+              </div>
             <div className="bg-surface border border-border p-4 sm:p-6">
               <div className="text-2xl sm:text-3xl font-semibold text-primary">
                 {liveUpdatedAt ? liveUpdatedAt.toLocaleTimeString() : "--"}
@@ -587,9 +587,9 @@ const LandingPage = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-16 items-center">
             <div className="order-2 lg:order-1 relative overflow-hidden">
-              <img
-                src={masked}
-                alt="Advanced disaster response technology"
+        <img
+          src={masked}
+                  alt="Advanced disaster response technology"
                 className="w-full h-64 sm:h-80 lg:h-[420px] object-cover"
                 loading="lazy"
                 decoding="async"
@@ -597,7 +597,7 @@ const LandingPage = () => {
               <div className="absolute top-4 right-4 bg-surface border border-border p-3">
                 <div className="text-xl font-semibold text-primary">{allDisasters.length}</div>
                 <div className="text-xs text-muted">Live events</div>
-              </div>
+                </div>
               <div className="absolute bottom-4 left-4 bg-surface border border-border p-3">
                 <div className="text-xl font-semibold text-primary">{disasterData.length}</div>
                 <div className="text-xs text-muted">Mapped locations</div>
@@ -608,25 +608,25 @@ const LandingPage = () => {
               <p className="text-sm font-medium text-primary mb-3">Origin</p>
               <h2 className="text-3xl sm:text-4xl font-semibold text-foreground mb-5 leading-tight">
                 Built in Nairobi to verify alerts, not amplify them
-              </h2>
+          </h2>
               <p className="text-base text-muted mb-8 leading-relaxed">
                 Climate Wavers is the live platform. FlowOps Africa is the lab. USGS and NASA feeds are on the map today.
                 The endgame is AI that labels what is confirmed, what is rumor, and what still needs a human.
               </p>
               <div className="space-y-5 mb-8">
-                <div>
+                    <div>
                   <h3 className="font-semibold text-foreground mb-1">Live official feeds</h3>
                   <p className="text-muted text-sm">USGS earthquakes and NASA EONET events, refreshed every 60 seconds, with the source attached.</p>
-                </div>
-                <div>
+                    </div>
+                    <div>
                   <h3 className="font-semibold text-foreground mb-1">Human review before send</h3>
                   <p className="text-muted text-sm">High-impact alerts wait for a person. Fluent AI is not treated as a siren.</p>
-                </div>
-                <div>
+                    </div>
+                    <div>
                   <h3 className="font-semibold text-foreground mb-1">Community on the same map</h3>
                   <p className="text-muted text-sm">Tree campaigns, reports, and WaverX sit next to the live events.</p>
-                </div>
-              </div>
+                    </div>
+                  </div>
               <div className="flex flex-wrap gap-3">
                 <Link to="/about" className="inline-flex items-center min-h-11 px-5 py-2.5 bg-primary text-primary-foreground font-medium">
                   Read the story
@@ -684,8 +684,8 @@ const LandingPage = () => {
                 Read the verification research
               </a>
             </article>
-          </div>
-        </div>
+              </div>
+            </div>
       </section>
 
       <section className="py-16 sm:py-24 bg-surface">
@@ -697,7 +697,7 @@ const LandingPage = () => {
             <p className="text-muted max-w-3xl mx-auto">
               These cards are the newest events from the live USGS and NASA feeds, not sample quotes.
             </p>
-          </div>
+            </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {recentEvents.slice(0, 3).map((event) => (
@@ -724,11 +724,11 @@ const LandingPage = () => {
             <p className="text-sm font-medium text-white/80 mb-3">Our commitment</p>
             <h2 className="text-3xl sm:text-4xl font-semibold text-white mb-4">
               Protecting communities by refusing fake certainty
-            </h2>
+          </h2>
             <p className="text-base text-white/85 max-w-3xl mx-auto">
               Live official feeds today. Verification research from Nairobi as the next layer. Communities get time, sources, and a clear line between confirmed and unconfirmed.
-            </p>
-          </div>
+          </p>
+        </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-10">
             <div className="border border-white/20 p-5">
@@ -736,20 +736,20 @@ const LandingPage = () => {
               <p className="text-white/80 text-sm leading-relaxed">
                 USGS and NASA feeds give communities earlier visibility when disasters are active.
               </p>
-            </div>
+              </div>
             <div className="border border-white/20 p-5">
               <h3 className="text-lg font-semibold text-white mb-2">Community response</h3>
               <p className="text-white/80 text-sm leading-relaxed">
                 Reports, campaigns, and tree projects sit next to the live map so people can act locally.
               </p>
-            </div>
+              </div>
             <div className="border border-white/20 p-5">
               <h3 className="text-lg font-semibold text-white mb-2">Climate action</h3>
               <p className="text-white/80 text-sm leading-relaxed">
                 Tree-planting campaigns run alongside monitoring, not as a separate story.
               </p>
             </div>
-          </div>
+        </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {[
@@ -782,7 +782,7 @@ const LandingPage = () => {
                 </figcaption>
               </figure>
             ))}
-          </div>
+            </div>
 
           <div className="text-center mt-10">
             <Link to="/about" className="inline-flex items-center min-h-11 px-6 py-3 bg-white text-primary font-medium">
@@ -909,9 +909,9 @@ const LandingPage = () => {
                   <label htmlFor="footer-update-email" className="sr-only">
                     Email address
                   </label>
-                  <input
+                <input
                     id="footer-update-email"
-                    type="email"
+                  type="email"
                     required
                     autoComplete="email"
                     value={updateEmail}
@@ -926,7 +926,7 @@ const LandingPage = () => {
                     className="bg-primary hover:bg-primary-dark text-primary-foreground px-4 md:px-6 py-2 md:py-3 text-sm md:text-base min-h-11 disabled:opacity-60 disabled:cursor-not-allowed"
                   >
                     {updateBusy ? "Subscribing..." : "Subscribe"}
-                  </button>
+                </button>
                 </div>
                 {updateMessage ? (
                   <p
@@ -1026,30 +1026,30 @@ const LandingPage = () => {
                   {disasterData.length} mapped events
                   {liveUpdatedAt ? ` · ${liveUpdatedAt.toLocaleTimeString()}` : ""}
                 </p>
-              </div>
-              <button
+                </div>
+                <button
                 type="button"
-                onClick={() => setShowDisasterMap(false)}
+                  onClick={() => setShowDisasterMap(false)}
                 className="min-h-11 min-w-11 shrink-0 hover:bg-background"
                 aria-label="Close map"
-              >
+                >
                 <svg className="w-6 h-6 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
             <div className="relative flex-1 min-h-[70dvh] sm:min-h-[70vh] bg-background">
               <Suspense fallback={<p className="p-4 text-sm text-muted">Loading map.</p>}>
                 <LeafletMap disasters={disasterData} />
               </Suspense>
             </div>
-          </div>
+              </div>
         </div>
       )}
 
       {showDonationModal && (
         <Suspense fallback={null}>
-          <DonationForm onClose={() => setShowDonationModal(false)} />
+        <DonationForm onClose={() => setShowDonationModal(false)} />
         </Suspense>
       )}
     </main>
