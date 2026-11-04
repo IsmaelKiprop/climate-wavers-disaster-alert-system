@@ -1,14 +1,29 @@
+import { useEffect } from "react";
 import Topbar from "./Topbar";
 import Leftsidebar from "./Leftsidebar";
 import Rightsidebar from "./Rightsidebar";
 import DashboardSidebar from "./DashboardSidebar";
 import { Outlet, useLocation } from "react-router-dom";
 import Footer from "./FooterBar";
+import {
+  avatarUrl,
+  completeAuthSession,
+  getAuthToken,
+  getUser,
+} from "../utils/factory";
 
 const SharedLayout = ({ showRight = true }) => {
   const location = useLocation();
   const isChat = location.pathname.startsWith("/app/waverx");
   const showAside = showRight && !isChat;
+
+  useEffect(() => {
+    const token = getAuthToken();
+    if (!token) return;
+    const user = getUser();
+    if (user && avatarUrl(user) !== "/avatar.png" && user.first_name) return;
+    completeAuthSession({ access_token: token, ...(user || {}) });
+  }, []);
 
   return (
     <div className="bg-background text-foreground h-[100dvh] flex flex-col overflow-hidden">

@@ -4,6 +4,7 @@ import { useForm } from "react-hook-form";
 import { client } from "../../api";
 import { endpoints } from "../../utils/endpoints";
 import { validationRules } from "../../utils/validation";
+import { safeRedirectPath } from "../../utils/factory";
 import { SignupPageSEO } from "../../components/SEOComponents";
 import AuthLayout, {
   AuthField,
@@ -17,6 +18,10 @@ const Signup = () => {
   const [isDisabled, setIsDisabled] = useState(false);
   const [formError, setFormError] = useState("");
   const navigate = useNavigate();
+  const params = new URLSearchParams(window.location.search);
+  const redirectTo = safeRedirectPath(params.get("redirect"), "/onboarding");
+  const loginHref = `/login?redirect=${encodeURIComponent(redirectTo)}`;
+  const emailCodeHref = `/emailcode?redirect=${encodeURIComponent(redirectTo)}`;
   const {
     register,
     handleSubmit,
@@ -67,7 +72,10 @@ const Signup = () => {
         false,
         true
       );
-      navigate("/emailcode");
+      if (typeof sessionStorage !== "undefined") {
+        sessionStorage.setItem("authRedirect", redirectTo);
+      }
+      navigate(emailCodeHref);
     } catch (error) {
       console.log("Signup failed:", error);
       const apiMessage =
@@ -340,7 +348,7 @@ const Signup = () => {
         </form>
         <p className="mt-6 text-sm text-center text-muted">
           Already have an account?{" "}
-          <Link to="/login" className="text-primary font-medium hover:text-primary-dark">
+          <Link to={loginHref} className="text-primary font-medium hover:text-primary-dark">
             Sign in
           </Link>
         </p>

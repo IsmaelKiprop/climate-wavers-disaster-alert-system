@@ -81,11 +81,30 @@ class LoginSerializer(serializers.ModelSerializer):
     refresh_token = serializers.CharField(max_length=255, read_only=True)
     id = serializers.CharField(read_only=True)
     username = serializers.CharField(read_only=True)
+    is_admin = serializers.BooleanField(read_only=True)
+    profile_picture = serializers.CharField(
+        max_length=500, read_only=True, allow_null=True, required=False
+    )
 
     class Meta:
         model = User
-        fields = ["email", "password", "id", "full_name",
-                  "username", "access_token", "refresh_token"]
+        fields = [
+            "email",
+            "password",
+            "id",
+            "full_name",
+            "first_name",
+            "last_name",
+            "username",
+            "access_token",
+            "refresh_token",
+            "is_staff",
+            "is_superuser",
+            "is_admin",
+            "profile_pic",
+            "profile_picture",
+            "picture",
+        ]
 
     def validate(self, attrs):
         email = attrs.get("email")

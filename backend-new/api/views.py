@@ -84,6 +84,12 @@ class VerifyUserEmail(GenericAPIView):
                         "first_name": user.first_name,
                         "last_name": user.last_name,
                         "full_name": user.get_full_name,
+                        "is_staff": user.is_staff,
+                        "is_superuser": user.is_superuser,
+                        "is_admin": bool(user.is_staff or user.is_superuser),
+                        "profile_pic": user.profile_pic,
+                        "profile_picture": user.profile_picture,
+                        "picture": user.picture,
                         "access_token": str(tokens.get("access")),
                         "refresh_token": str(tokens.get("refresh")),
                     },
@@ -143,7 +149,8 @@ class LoginUserView(GenericAPIView):
             data=request.data, context={"request": request}
         )
         serializer.is_valid(raise_exception=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        # validated_data keeps profile + staff fields returned from LoginSerializer.validate
+        return Response(serializer.validated_data, status=status.HTTP_200_OK)
 
 
 class TestCaseView(GenericAPIView):

@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { client } from "../../api";
 import { endpoints } from "../../utils/endpoints";
 import Cookies from "js-cookie";
+import { completeAuthSession, safeRedirectPath } from "../../utils/factory";
 import AuthLayout, { AuthField, authButtonClass, fieldInputClass } from "../../components/AuthLayout";
 
 const EmailCode = () => {
@@ -13,6 +14,15 @@ const EmailCode = () => {
   const [statusKind, setStatusKind] = useState("");
   const navigate = useNavigate();
   const email = Cookies.get("email") || "";
+  const params = new URLSearchParams(window.location.search);
+  const storedRedirect =
+    typeof sessionStorage !== "undefined"
+      ? sessionStorage.getItem("authRedirect")
+      : null;
+  const redirectTo = safeRedirectPath(
+    params.get("redirect") || storedRedirect,
+    "/onboarding"
+  );
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -23,7 +33,7 @@ const EmailCode = () => {
     }
     try {
       setIsDisabled(true);
-      await client.run(
+      const response = await client.run(
         "post",
         endpoints.emailcode,
         { email, otp: token.trim() },
@@ -33,10 +43,14 @@ const EmailCode = () => {
           success: "Email verified. Welcome to Climate Wavers.",
           error: "Invalid or expired code.",
         },
-        true,
+        false,
         false
       );
-      navigate("/onboarding");
+      await completeAuthSession(response || {});
+      if (typeof sessionStorage !== "undefined") {
+        sessionStorage.removeItem("authRedirect");
+      }
+      navigate(redirectTo, { replace: true });
     } catch (error) {
       console.log("Confirmation failed");
     } finally {

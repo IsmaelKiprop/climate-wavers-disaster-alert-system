@@ -1,7 +1,7 @@
 import axios from "axios";
 import { toast } from "react-toastify";
 import Cookies from "js-cookie";
-import { getAuthToken } from "../utils/factory";
+import { getAuthToken, setUser } from "../utils/factory";
 import Swal from "sweetalert2";
 import { env } from "../config/env";
 
@@ -150,17 +150,13 @@ class Client {
       }
       
       if (authCookies) {
-        Cookies.set("accessToken", response.data.access_token, { path: "/" });
+        const token = response.data?.access_token || response.data?.access;
+        if (token) {
+          Cookies.set("accessToken", token, { path: "/" });
+        }
         const rawUser = response?.data?.user || response.data;
-        const user =
-          rawUser && typeof rawUser === "object"
-            ? { ...rawUser, id: rawUser.id ?? rawUser.pk ?? rawUser.user_id }
-            : rawUser;
-        if (user) {
-          Cookies.set("user", JSON.stringify(user), { path: "/" });
-          if (typeof window !== "undefined") {
-            window.dispatchEvent(new CustomEvent("userUpdated"));
-          }
+        if (rawUser && typeof rawUser === "object") {
+          setUser(rawUser);
         }
       }
 

@@ -1,47 +1,57 @@
-import { useEffect, useState } from 'react';
-import { Navigate, useLocation } from 'react-router-dom';
-import { getUser } from '../utils/factory';
+import { useEffect, useState } from "react";
+import { Navigate, useLocation } from "react-router-dom";
+import { completeAuthSession, getAuthToken, getUser } from "../utils/factory";
 
-const ProtectedRoute = ({ children, redirectTo = '/login' }) => {
-  const [isAuthenticated, setIsAuthenticated] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
+const ProtectedRoute = ({ children, redirectTo = "/login" }) => {
+  const [ready, setReady] = useState(false);
+  const [allowed, setAllowed] = useState(false);
   const location = useLocation();
 
   useEffect(() => {
-    const checkAuth = () => {
-      try {
-        const user = getUser();
-        setIsAuthenticated(!!user);
-      } catch (error) {
-        console.error('Auth check failed:', error);
-        setIsAuthenticated(false);
-      } finally {
-        setIsLoading(false);
+    let active = true;
+    const boot = async () => {
+      const token = getAuthToken();
+      const user = getUser();
+      if (!token && !user) {
+        if (active) {
+          setAllowed(false);
+          setReady(true);
+        }
+        return;
+      }
+      if (token && (!user || !(user.profile_picture || user.profile_pic || user.picture))) {
+        await completeAuthSession({ access_token: token, ...(user || {}) });
+      }
+      if (active) {
+        setAllowed(Boolean(getAuthToken() || getUser()));
+        setReady(true);
       }
     };
-
-    checkAuth();
+    boot();
+    return () => {
+      active = false;
+    };
   }, []);
 
-  if (isLoading) {
+  if (!ready) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Checking authentication...</p>
-        </div>
+      <div className="min-h-[40vh] flex items-center justify-center bg-background">
+        <p className="text-sm text-muted">Opening your workspace…</p>
       </div>
     );
   }
 
-  if (!isAuthenticated) {
-    // Store the intended destination for redirect after login
+  if (!allowed) {
     const currentPath = location.pathname + location.search;
-    return <Navigate to={`${redirectTo}?redirect=${encodeURIComponent(currentPath)}`} replace />;
+    return (
+      <Navigate
+        to={`${redirectTo}?redirect=${encodeURIComponent(currentPath)}`}
+        replace
+      />
+    );
   }
 
   return children;
 };
 
 export default ProtectedRoute;
-

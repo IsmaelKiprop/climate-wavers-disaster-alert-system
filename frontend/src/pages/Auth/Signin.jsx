@@ -3,6 +3,7 @@ import { Link, NavLink, useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { client } from "../../api";
 import { endpoints } from "../../utils/endpoints";
+import { completeAuthSession, safeRedirectPath } from "../../utils/factory";
 import { LoginPageSEO } from "../../components/SEOComponents";
 import AuthLayout, { AuthField, authButtonClass, fieldInputClass } from "../../components/AuthLayout";
 
@@ -11,12 +12,14 @@ const Signin = () => {
   const [isDisabled, setIsDisabled] = useState(false);
   const { register, handleSubmit, formState: { errors } } = useForm();
   const navigate = useNavigate();
-  const redirectTo = new URLSearchParams(window.location.search).get("redirect") || "/app";
+  const params = new URLSearchParams(window.location.search);
+  const redirectTo = safeRedirectPath(params.get("redirect"), "/app");
+  const signupHref = `/signup?redirect=${encodeURIComponent(redirectTo)}`;
 
   const onSubmit = async (data) => {
     try {
       setIsDisabled(true);
-      await client.run(
+      const response = await client.run(
         "post",
         endpoints.signin,
         data,
@@ -28,7 +31,8 @@ const Signin = () => {
         true,
         false
       );
-      navigate(redirectTo);
+      await completeAuthSession(response || {});
+      navigate(redirectTo, { replace: true });
     } catch (error) {
       console.log("Login failed:", error);
     } finally {
@@ -93,7 +97,7 @@ const Signin = () => {
         </form>
         <p className="mt-6 text-sm text-center text-muted">
           No account yet?{" "}
-          <Link to="/signup" className="text-primary font-medium hover:text-primary-dark">
+          <Link to={signupHref} className="text-primary font-medium hover:text-primary-dark">
             Sign up
           </Link>
         </p>

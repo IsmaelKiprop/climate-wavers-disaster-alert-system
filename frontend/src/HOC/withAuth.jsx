@@ -1,46 +1,67 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import Cookies from "js-cookie";
-import { client } from "../api";
-import { endpoints } from "../utils/endpoints";
+import {
+  completeAuthSession,
+  getAuthToken,
+  getUser,
+} from "../utils/factory";
 
 const withAuth = (WrappedComponent) => {
   const WithAuth = (props) => {
     const navigate = useNavigate();
     const location = useLocation();
-    const token = Cookies.get("accessToken");
-    const raw = Cookies.get("user");
-    const next = `/login?redirect=${encodeURIComponent(location.pathname + location.search)}`;
+    const [ready, setReady] = useState(false);
+    const next = `/login?redirect=${encodeURIComponent(
+      location.pathname + location.search
+    )}`;
 
     useEffect(() => {
-      if (!raw && token) {
-        client
-          .run("get", endpoints?.user, {}, true)
-          .then((user) => {
-            Cookies.set("user", JSON.stringify(user));
-          })
-          .catch(() => {
-            navigate(next);
-          });
-      } else if (!token) {
-        navigate(next);
-      }
-    }, [raw, token, navigate, next]);
+      let active = true;
+      const boot = async () => {
+        const token = getAuthToken();
+        const user = getUser();
+        if (!token && !user) {
+          navigate(next, { replace: true });
+          return;
+        }
+        if (token) {
+          const needsProfile =
+            !user ||
+            !(user.profile_picture || user.profile_pic || user.picture) ||
+            !user.first_name;
+          if (needsProfile) {
+            await completeAuthSession({ access_token: token, ...(user || {}) });
+          }
+        }
+        if (!active) return;
+        if (!getAuthToken() && !getUser()) {
+          navigate(next, { replace: true });
+          return;
+        }
+        setReady(true);
+      };
+      boot();
+      return () => {
+        active = false;
+      };
+    }, [navigate, next]);
 
-    if (!raw && !token) return null; // Avoid rendering if the user is not authenticated
+    if (!ready) {
+      return (
+        <div className="min-h-[40vh] flex items-center justify-center bg-background">
+          <p className="text-sm text-muted">Opening your workspace…</p>
+        </div>
+      );
+    }
 
     return <WrappedComponent {...props} />;
   };
 
-  // Set the displayName for easier debugging
   WithAuth.displayName = `WithAuth(${getDisplayName(WrappedComponent)})`;
-
   return WithAuth;
 };
 
-// Helper function to get the display name of the wrapped component
-const getDisplayName = (WrappedComponent) => {
-  return WrappedComponent.displayName || WrappedComponent.name || "Component";
-};
+const getDisplayName = (WrappedComponent) =>
+  WrappedComponent.displayName || WrappedComponent.name || "Component";
 
 export default withAuth;

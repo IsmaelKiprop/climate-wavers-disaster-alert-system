@@ -29,11 +29,49 @@ export const normalizeUser = (user) => {
 export const setUser = (user) => {
   const normalized = normalizeUser(user);
   if (!normalized) return user;
-  Cookies.set("user", JSON.stringify(normalized), { path: "/" });
+  const {
+    access_token: _access,
+    refresh_token: _refresh,
+    password: _password,
+    ...safeUser
+  } = normalized;
+  Cookies.set("user", JSON.stringify(safeUser), { path: "/" });
   if (typeof window !== "undefined") {
     window.dispatchEvent(new CustomEvent("userUpdated"));
   }
-  return normalized;
+  return safeUser;
+};
+
+export const safeRedirectPath = (value, fallback = "/app") => {
+  const path = String(value || "").trim();
+  if (!path.startsWith("/") || path.startsWith("//")) return fallback;
+  return path;
+};
+
+export const completeAuthSession = async (authPayload = {}) => {
+  const token =
+    authPayload.access_token ||
+    authPayload.access ||
+    Cookies.get("accessToken") ||
+    "";
+  if (token) {
+    Cookies.set("accessToken", token, { path: "/" });
+  }
+
+  const seed = normalizeUser(authPayload.user || authPayload) || {};
+  if (seed.id || seed.email) {
+    setUser(seed);
+  }
+
+  try {
+    const remote = await client.run("get", endpoints.user, {}, true);
+    if (remote) {
+      return setUser({ ...seed, ...remote });
+    }
+  } catch (error) {
+    console.error("Failed to hydrate signed-in profile:", error);
+  }
+  return getUser();
 };
 
 export const getUser = () => {

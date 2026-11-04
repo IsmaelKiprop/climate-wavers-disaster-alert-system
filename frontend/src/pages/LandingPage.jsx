@@ -282,15 +282,15 @@ const LandingPage = () => {
               </button>
 
               {/* Plant Tree Button */}
-              <a 
-                href="/app/plant-tree"
+              <Link
+                to="/app/plant-tree"
                 className="hidden md:flex items-center px-3 py-1.5 bg-[#067d83] text-white rounded-md hover:bg-[#055a5f] transition-colors text-sm font-medium"
               >
                 <svg className="w-3 h-3 mr-1.5" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M10 2L8 4h2l2-2h-2zm-2 4L6 8h2l2-2h-2zm4 0L14 8h-2l-2-2h2zm-2 4L10 12h2l2-2h-2zm4 0L18 12h-2l-2-2h2zm-8 4L6 16h2l2-2h-2zm4 0L10 16h2l2-2h-2zm4 0L18 16h-2l-2-2h2z" clipRule="evenodd" />
                 </svg>
                 Plant Tree
-              </a>
+              </Link>
 
               <a href="/login" className={`hidden md:inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md transition-colors ${isScrolled ? 'text-[#067d83] hover:text-[#055a5f]' : 'text-white hover:text-[#4F6F6F]'}`}>
                 Sign In

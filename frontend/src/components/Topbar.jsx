@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { NavLink, Link, useLocation } from "react-router-dom";
 import Mobilemenu from "./Mobilemenu";
 import Search from "./Search";
-import { getUser, logout } from "../utils/factory";
+import { avatarUrl, getUser, logout } from "../utils/factory";
 import Modal from "../components/Modal";
 import Report from "./Report";
 import { IoNotifications, IoNotificationsOutline, IoSearch, IoLogOutOutline, IoPersonOutline, IoMenu, IoChevronBack, IoChevronForward } from "react-icons/io5";
@@ -122,8 +122,8 @@ const Topbar = () => {
             aria-label="Account menu"
           >
             <img
-              key={user?.profile_picture || user?.profile_pic || "avatar"}
-              src={user?.profile_picture || user?.profile_pic || user?.picture || "/avatar.png"}
+              key={avatarUrl(user)}
+              src={avatarUrl(user)}
               className="w-full h-full object-cover"
               alt=""
               style={{ borderRadius: "50%" }}
