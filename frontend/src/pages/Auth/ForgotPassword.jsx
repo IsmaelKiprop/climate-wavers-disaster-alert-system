@@ -15,12 +15,12 @@ const ForgotPassword = () => {
       await client.run(
         "post",
         endpoints.forgotpassword,
-        { email },
+        { email: String(email || "").trim().toLowerCase() },
         false,
         {
           info: "Sending reset link...",
           success: "Check your inbox for a reset link.",
-          error: "Could not send the reset email. Try again later.",
+          error: "Could not send the reset email. Wait a moment and try again.",
         },
         false,
         false

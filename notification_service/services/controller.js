@@ -61,21 +61,16 @@ class Controller{
         }
     }
 
-    sendForgetPassword(d){
+    async sendForgetPassword(d){
         const { email, data } = d
-        if(!email)return 
-        if(!data)return
+        if(!email) return
+        if(!data) return
         const validationErr = mailDataValidator.validateForgetPasswordEmailData(data).error
         if(validationErr){
             console.log(validationErr)
-            return
+            throw new Error(String(validationErr.message || validationErr))
         }
-        try {
-            mailer.sendForgetPassword(email, data)
-        } catch (error) {
-            console.log(`mail error: ${error}`)
-        }
-
+        await mailer.sendForgetPassword(email, data)
     }
 
     async sendVerification(d){

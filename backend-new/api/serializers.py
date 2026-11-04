@@ -118,13 +118,20 @@ class PasswordResetRequestSerializer(serializers.Serializer):
             user = User.objects.get(email=email)
             uidb64 = urlsafe_base64_encode(smart_bytes(user.id))
             token = PasswordResetTokenGenerator().make_token(user)
-            reset_page = f"{settings.FRONTEND_URL}/verifypasswordreset"
-            reset_url = f"{reset_page}/{uidb64}/{token}"
+            frontend = (settings.FRONTEND_URL or "https://climate-wavers-three.vercel.app").rstrip("/")
+            reset_url = f"{frontend}/verifypasswordreset/{uidb64}/{token}"
             data = {
                 "url": reset_url,
                 "email": user.email,
             }
-            send_reset_password_email(data)
+            try:
+                send_reset_password_email(data)
+            except Exception as exc:
+                raise serializers.ValidationError(
+                    {
+                        "email": "Could not send the reset email right now. Wait a moment and try again."
+                    }
+                ) from exc
         return super().validate(attrs)
 
 

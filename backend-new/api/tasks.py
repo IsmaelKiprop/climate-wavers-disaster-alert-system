@@ -25,7 +25,7 @@ QUEUES = {
 
 DATA_TYPES = {
     "custom_mail": {"email": str, "data": {"content": str}},
-    "forget_password": {"email": str, "data": {"token": str}},
+    "forget_password": {"email": str, "data": {"url": str}},
     "onboarding": {"email": str, "data": {"city": str}},
     "verification": {"email": str, "data": {"code": str}},
 }
@@ -87,29 +87,49 @@ def _post_notification(payload):
     if not base:
         raise RuntimeError("NOTIFICATION_SERVICE_URL is not set")
     ctx = _ssl_context()
-    try:
-        urllib.request.urlopen(urllib.request.Request(f"{base}/status"), timeout=8, context=ctx)
-    except Exception:
-        logger.warning("Notification service wake-up ping failed")
-    request = urllib.request.Request(
-        f"{base}/api/v1/mail",
-        data=json.dumps(payload).encode("utf-8"),
-        headers={
-            "Content-Type": "application/json",
-            "X-Internal-Secret": settings.NOTIFICATION_SECRET or "",
-        },
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=30, context=ctx) as response:
-            body = response.read().decode("utf-8", errors="replace")
-            logger.info("Notification SMTP ok status=%s body=%s", response.status, body[:500])
-            if response.status >= 400:
-                raise RuntimeError(f"notification service returned {response.status}: {body[:500]}")
-    except urllib.error.HTTPError as exc:
-        body = exc.read().decode("utf-8", errors="replace")
-        logger.error("Notification SMTP HTTP %s: %s", exc.code, body[:1000])
-        raise RuntimeError(f"notification service returned {exc.code}: {body[:500]}") from exc
+    last_error = None
+    for attempt in range(1, 4):
+        try:
+            urllib.request.urlopen(
+                urllib.request.Request(f"{base}/status"), timeout=15, context=ctx
+            )
+        except Exception as exc:
+            logger.warning("Notification wake-up attempt %s failed: %s", attempt, exc)
+        request = urllib.request.Request(
+            f"{base}/api/v1/mail",
+            data=json.dumps(payload).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "X-Internal-Secret": settings.NOTIFICATION_SECRET or "",
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=45, context=ctx) as response:
+                body = response.read().decode("utf-8", errors="replace")
+                logger.info(
+                    "Notification mail ok attempt=%s status=%s body=%s",
+                    attempt,
+                    response.status,
+                    body[:500],
+                )
+                if response.status >= 400:
+                    raise RuntimeError(
+                        f"notification service returned {response.status}: {body[:500]}"
+                    )
+                return
+        except urllib.error.HTTPError as exc:
+            body = exc.read().decode("utf-8", errors="replace")
+            last_error = RuntimeError(
+                f"notification service returned {exc.code}: {body[:500]}"
+            )
+            logger.error("Notification mail HTTP %s attempt=%s: %s", exc.code, attempt, body[:1000])
+            if exc.code in (401, 403, 400):
+                raise last_error from exc
+        except Exception as exc:
+            last_error = exc
+            logger.warning("Notification mail attempt %s failed: %s", attempt, exc)
+    raise RuntimeError(f"notification service unreachable: {last_error}")
 
 
 def _resend_from_addresses():
