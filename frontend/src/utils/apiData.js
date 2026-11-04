@@ -12,36 +12,67 @@ export function unwrapList(payload) {
   return [];
 }
 
+const DISASTER_COVER_FILES = new Set([
+  "/environment.jpg",
+  "/environment-sm.jpg",
+  "/environ.jpeg",
+  "/community-respond.jpg",
+  "/community-respond-sm.jpg",
+  "/emergency-response.jpg",
+  "/emergency-response-sm.jpg",
+  "/ai-disaster.jpg",
+  "/ai-disaster-sm.jpg",
+]);
+
 const PROJECT_COVERS = {
-  urban_greening: "/environment.jpg",
-  school_garden: "/community-respond.jpg",
-  afforestation: "/environment.jpg",
-  reforestation: "/environment.jpg",
+  urban_greening: "/nairobi-urban-canopy.jpg",
+  school_garden: "/nairobi-school-shade.jpg",
+  afforestation: "/nairobi-urban-canopy.jpg",
+  reforestation: "/nairobi-urban-canopy.jpg",
 };
+
+const PROJECT_NAME_COVERS = [
+  { match: /school|shade belt/i, cover: "/nairobi-school-shade.jpg" },
+  { match: /urban canopy|karura|canopy/i, cover: "/nairobi-urban-canopy.jpg" },
+];
+
+function isDisasterCoverPath(path) {
+  if (!path) return true;
+  const clean = String(path).split("?")[0].toLowerCase();
+  return DISASTER_COVER_FILES.has(clean) || [...DISASTER_COVER_FILES].some((file) => clean.endsWith(file));
+}
 
 export function projectCoverImage(project) {
   const lat = Number(project.latitude ?? project.lat);
   const lng = Number(project.longitude ?? project.lng);
-  const typeCover = PROJECT_COVERS[project.project_type] || "/environment.jpg";
+  const name = project.name || project.title || "";
+  const namedCover = PROJECT_NAME_COVERS.find((row) => row.match.test(name))?.cover;
+  const typeCover = PROJECT_COVERS[project.project_type] || namedCover || "/nairobi-urban-canopy.jpg";
   const raw = project.cover_image_url || project.cover_image || project.image_url || "";
+
   if (typeof raw === "string" && raw) {
     const https = toHttpsUrl(raw);
-    if (https.startsWith("/")) return https;
+    let path = https;
     try {
-      const parsed = new URL(https);
-      if (
-        parsed.hostname.includes("climatewavers.org") ||
-        parsed.hostname.includes("climate-wavers") ||
-        parsed.hostname.includes("vercel.app")
-      ) {
-        return parsed.pathname || typeCover;
+      if (!https.startsWith("/")) {
+        const parsed = new URL(https);
+        if (
+          parsed.hostname.includes("climatewavers.org") ||
+          parsed.hostname.includes("climate-wavers") ||
+          parsed.hostname.includes("vercel.app")
+        ) {
+          path = parsed.pathname || typeCover;
+        } else if (!isDisasterCoverPath(parsed.pathname)) {
+          return https;
+        }
       }
-      return https;
     } catch {
-      // Fall through to location imagery.
+      path = https;
     }
+    if (path.startsWith("/") && !isDisasterCoverPath(path)) return path;
   }
-  return locationImagery(lat, lng, "other") || typeCover;
+
+  return namedCover || typeCover || locationImagery(lat, lng, "other") || "/nairobi-urban-canopy.jpg";
 }
 
 export function mapProjectToCampaign(project) {
@@ -54,7 +85,7 @@ export function mapProjectToCampaign(project) {
     amount: project.funding_goal || project.total_budget || 0,
     raised: project.funds_raised || 0,
     image: projectCoverImage(project),
-    fallbackImage: PROJECT_COVERS[project.project_type] || "/environment.jpg",
+    fallbackImage: projectCoverImage({ ...project, cover_image: "", cover_image_url: "" }),
     country: project.country || "",
     city: project.city || "",
     trees_planted: project.trees_planted || 0,

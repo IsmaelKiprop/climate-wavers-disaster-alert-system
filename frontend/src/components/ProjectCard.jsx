@@ -1,6 +1,6 @@
-import { useState } from 'react';
 import { FaMapMarkerAlt, FaUsers, FaShare } from 'react-icons/fa';
 import { useExchangeRate } from '../hooks/useExchangeRate';
+import { projectCoverImage } from '../utils/apiData';
 
 const ProjectCard = ({ 
   project, 
@@ -9,11 +9,11 @@ const ProjectCard = ({
   onPlantTree 
 }) => {
   const { exchangeRate, convertedAmount, loading: loadingExchangeRate } = useExchangeRate(project.tree_price);
+  const cover = projectCoverImage(project);
 
   return (
     <div className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-all duration-300 hover:scale-105">
-      {project.cover_image_url && (
-        <div className="h-40 sm:h-48 bg-cover bg-center relative" style={{ backgroundImage: `url(${project.cover_image_url})` }}>
+      <div className="h-40 sm:h-48 bg-cover bg-center relative" style={{ backgroundImage: `url(${cover})` }}>
           <div className="absolute inset-0 bg-black bg-opacity-20"></div>
           {project.gallery_urls && project.gallery_urls.length > 0 && (
             <div className="absolute bottom-2 right-2 bg-white bg-opacity-90 rounded-full px-2 py-1 text-xs font-semibold text-gray-700">
@@ -21,7 +21,6 @@ const ProjectCard = ({
             </div>
           )}
         </div>
-      )}
       <div className="p-4 sm:p-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-2">
           <h3 className="text-lg sm:text-xl font-semibold text-gray-900 mb-1 sm:mb-0">

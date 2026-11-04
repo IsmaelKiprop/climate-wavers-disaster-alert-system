@@ -2,7 +2,7 @@ const Campaign = ({ campaign }) => {
   const goal = Number(campaign.amount) || 0;
   const raised = Number(campaign.raised) || 0;
   const percent = goal > 0 ? Math.min(100, Math.round((raised / goal) * 100)) : 0;
-  const fallback = campaign.fallbackImage || "/environment.jpg";
+  const fallback = campaign.fallbackImage || "/nairobi-urban-canopy.jpg";
 
   return (
     <article className="w-full h-full bg-surface border border-border overflow-hidden flex flex-col">

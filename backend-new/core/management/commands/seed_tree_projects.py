@@ -62,7 +62,7 @@ class Command(BaseCommand):
                 "biodiversity_impact": "Native canopy for urban birds and pollinators along Nairobi forest edges.",
                 "soil_improvement": "Reduces runoff on compacted roadside soils.",
                 "water_conservation": "Shade slows evaporation on exposed public ground.",
-                "cover_image": "/environment.jpg",
+                "cover_image": "/nairobi-urban-canopy.jpg",
                 "start_date": date.today() - timedelta(days=21),
                 "expected_completion": date.today() + timedelta(days=365),
                 "total_budget": Decimal("12500.00"),
@@ -101,7 +101,7 @@ class Command(BaseCommand):
                 "biodiversity_impact": "School-yard canopy and fruit trees for learners and local pollinators.",
                 "soil_improvement": "Mulched pits on compacted school grounds.",
                 "water_conservation": "Shade reduces irrigation demand in dry terms.",
-                "cover_image": "/community-respond.jpg",
+                "cover_image": "/nairobi-school-shade.jpg",
                 "start_date": date.today() - timedelta(days=7),
                 "expected_completion": date.today() + timedelta(days=300),
                 "total_budget": Decimal("4800.00"),
@@ -122,6 +122,10 @@ class Command(BaseCommand):
             if created_project:
                 self.stdout.write(self.style.SUCCESS(f"Created campaign: {project.name}"))
             else:
-                self.stdout.write(self.style.WARNING(f"Campaign already exists: {project.name}"))
+                for key, value in project_data.items():
+                    setattr(project, key, value)
+                project.organization = org_user
+                project.save()
+                self.stdout.write(self.style.SUCCESS(f"Updated campaign: {project.name}"))
 
         self.stdout.write(self.style.SUCCESS("Official tree campaigns are ready."))

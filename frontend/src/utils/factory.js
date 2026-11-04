@@ -161,9 +161,17 @@ export function formatRecommendation(text) {
   return htmlString;
 }
 
+const TREE_ADMIN_EMAILS = new Set([
+  "hello@flowops.africa",
+  "flowopsafrica@gmail.com",
+]);
+
 // Check if user is admin or staff
 export const isAdmin = () => {
   const user = getUser();
-  return user && (user.is_staff || user.is_superuser || user.is_admin);
+  if (!user) return false;
+  if (user.is_staff || user.is_superuser || user.is_admin) return true;
+  const email = String(user.email || "").trim().toLowerCase();
+  return TREE_ADMIN_EMAILS.has(email);
 };
 

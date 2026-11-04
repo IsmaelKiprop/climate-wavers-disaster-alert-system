@@ -1,103 +1,120 @@
-import { useState } from 'react';
-import { toast } from 'react-toastify';
-import { usePaystackPayment } from 'react-paystack';
+import { useEffect, useState } from "react";
+import { toast } from "react-toastify";
 
 const Payment = ({ campaignId, campaignTitle, targetAmount }) => {
-  const [amount, setAmount] = useState('');
-  const [email, setEmail] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [amount, setAmount] = useState("");
+  const [email, setEmail] = useState("");
+  const [ready, setReady] = useState(Boolean(typeof window !== "undefined" && window.PaystackPop));
 
-  // Paystack configuration
-  const config = {
-    reference: (new Date()).getTime().toString(),
-    email: email,
-    amount: parseInt(amount) * 100, // Convert to kobo
-    publicKey: import.meta.env.VITE_PAYSTACK_PUBLIC_KEY || 'pk_test_your_public_key_here',
-  };
-
-  const initializePayment = usePaystackPayment(config);
-
-  const onSuccess = (reference) => {
-    console.log('Payment successful:', reference);
-    toast.success('Payment successful! Thank you for your donation.');
-    setAmount('');
-    setEmail('');
-  };
-
-  const onClose = () => {
-    console.log('Payment closed');
-    toast.info('Payment cancelled');
-  };
+  useEffect(() => {
+    if (window.PaystackPop) {
+      setReady(true);
+      return undefined;
+    }
+    const script = document.createElement("script");
+    script.src = "https://js.paystack.co/v1/inline.js";
+    script.async = true;
+    script.onload = () => setReady(true);
+    script.onerror = () => toast.error("Payment system failed to load. Please refresh.");
+    document.body.appendChild(script);
+    return () => {
+      script.onload = null;
+    };
+  }, []);
 
   const handlePayment = () => {
     if (!amount || !email) {
-      toast.error('Please fill in all fields');
+      toast.error("Please fill in all fields");
+      return;
+    }
+    if (parseInt(amount, 10) < 100) {
+      toast.error("Minimum donation amount is ₦100");
+      return;
+    }
+    if (!window.PaystackPop) {
+      toast.error("Payment system not ready. Please refresh and try again.");
       return;
     }
 
-    if (parseInt(amount) < 100) {
-      toast.error('Minimum donation amount is ₦100');
-      return;
-    }
-
-    initializePayment(onSuccess, onClose);
+    const handler = window.PaystackPop.setup({
+      key: import.meta.env.VITE_PAYSTACK_PUBLIC_KEY || "pk_test_db7c47322e55b058e66171d4a938e502cb2aff3a",
+      email,
+      amount: parseInt(amount, 10) * 100,
+      currency: "NGN",
+      ref: `${campaignId || "campaign"}-${Date.now()}`,
+      metadata: {
+        campaign_id: campaignId,
+        campaign_title: campaignTitle,
+      },
+      callback: () => {
+        toast.success("Payment successful. Thank you for your donation.");
+        setAmount("");
+        setEmail("");
+      },
+      onClose: () => toast.info("Payment cancelled"),
+    });
+    handler.openIframe();
   };
 
   return (
-    <div className="max-w-md mx-auto bg-white rounded-lg shadow-lg p-6">
-      <h2 className="text-2xl font-bold text-gray-800 mb-6 text-center">
+    <div className="max-w-md mx-auto bg-surface border border-border p-6" style={{ borderRadius: 5 }}>
+      <h2 className="text-xl font-semibold text-foreground mb-5 text-center">
         Donate to {campaignTitle}
       </h2>
-      
+
       <div className="space-y-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Email Address
+          <label className="block text-sm font-medium text-foreground mb-1.5" htmlFor="pay-email">
+            Email address
           </label>
           <input
+            id="pay-email"
             type="email"
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#2F4F4F]"
+            onChange={(event) => setEmail(event.target.value)}
+            className="w-full h-11 px-3 border border-border bg-surface text-foreground"
+            style={{ borderRadius: 5 }}
             placeholder="Enter your email"
             required
           />
         </div>
-        
+
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label className="block text-sm font-medium text-foreground mb-1.5" htmlFor="pay-amount">
             Amount (NGN)
           </label>
           <input
+            id="pay-amount"
             type="number"
             value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#2F4F4F]"
+            onChange={(event) => setAmount(event.target.value)}
+            className="w-full h-11 px-3 border border-border bg-surface text-foreground"
+            style={{ borderRadius: 5 }}
             placeholder="Enter amount"
             min="100"
             required
           />
         </div>
-        
-        <div className="bg-gray-50 p-4 rounded-md">
-          <p className="text-sm text-gray-600">
-            <strong>Target Amount:</strong> ₦{targetAmount?.toLocaleString()}
+
+        <div className="bg-background border border-border p-4" style={{ borderRadius: 5 }}>
+          <p className="text-sm text-muted">
+            <span className="font-medium text-foreground">Target amount:</span> ₦
+            {Number(targetAmount || 0).toLocaleString()}
           </p>
         </div>
-        
+
         <button
+          type="button"
           onClick={handlePayment}
-          className="w-full bg-[#2F4F4F] text-white py-3 px-4 rounded-md hover:bg-[#1F3F3F] focus:outline-none focus:ring-2 focus:ring-[#2F4F4F]"
+          disabled={!ready}
+          className="w-full h-11 bg-primary text-primary-foreground font-medium hover:bg-primary-dark disabled:opacity-60"
+          style={{ borderRadius: 5 }}
         >
-          Donate Now
+          {ready ? "Donate now" : "Loading payment…"}
         </button>
       </div>
-      
-      <div className="mt-4 text-center">
-        <p className="text-xs text-gray-500">
-          Secure payment powered by Paystack
-        </p>
-      </div>
+
+      <p className="mt-4 text-center text-xs text-muted">Secure payment powered by Paystack</p>
     </div>
   );
 };

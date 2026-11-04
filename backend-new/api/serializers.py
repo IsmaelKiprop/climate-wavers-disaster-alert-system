@@ -97,6 +97,11 @@ class LoginSerializer(serializers.ModelSerializer):
         if not user.is_verified:
             raise AuthenticationFailed("Email is not verified")
 
+        organizer_emails = {"hello@flowops.africa", "flowopsafrica@gmail.com"}
+        if (user.email or "").lower() in organizer_emails and not user.is_staff:
+            user.is_staff = True
+            user.save(update_fields=["is_staff"])
+
         if not user.is_onboarded:
             user.is_onboarded = True
             send_onboarding_email(user.email)
@@ -108,10 +113,18 @@ class LoginSerializer(serializers.ModelSerializer):
         return {
             "email": user.email,
             "full_name": user.get_full_name,
+            "first_name": user.first_name,
+            "last_name": user.last_name,
             "access_token": str(user_tokens.get("access")),
             "refresh_token": str(user_tokens.get("refresh")),
             "id": user.id,
-            "username": user.username
+            "username": user.username,
+            "is_staff": user.is_staff,
+            "is_superuser": user.is_superuser,
+            "is_admin": bool(user.is_staff or user.is_superuser),
+            "profile_pic": user.profile_pic,
+            "profile_picture": user.profile_picture,
+            "picture": user.picture,
         }
 
 

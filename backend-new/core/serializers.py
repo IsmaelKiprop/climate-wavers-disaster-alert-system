@@ -493,7 +493,24 @@ class TreeProjectSerializer(serializers.ModelSerializer):
             return None
         url = obj.cover_image
         if "climatewavers.org/" in url:
-            return "/" + url.split("climatewavers.org/")[-1].lstrip("/")
+            url = "/" + url.split("climatewavers.org/")[-1].lstrip("/")
+        path = url.split("?")[0].lower() if isinstance(url, str) else ""
+        disaster_covers = {
+            "/environment.jpg",
+            "/environment-sm.jpg",
+            "/environ.jpeg",
+            "/community-respond.jpg",
+            "/community-respond-sm.jpg",
+            "/emergency-response.jpg",
+            "/emergency-response-sm.jpg",
+            "/ai-disaster.jpg",
+            "/ai-disaster-sm.jpg",
+        }
+        name = (obj.name or "").lower()
+        if path in disaster_covers or any(path.endswith(item) for item in disaster_covers):
+            if "school" in name or "shade" in name:
+                return "/nairobi-school-shade.jpg"
+            return "/nairobi-urban-canopy.jpg"
         if url.startswith("/"):
             return url
         return url
