@@ -59,7 +59,7 @@ const VerifyResetRequest = () => {
         subtitle={message}
         panelTitle="Request a fresh link"
         panelBody="Password reset links expire for security. Ask for a new one and open the newest email only."
-        panelImage="/community-respond-sm.jpg")
+        panelImage="/community-respond-sm.jpg"
         panelImageAlt="Response crew after an emergency"
       >
         <div className="space-y-3">
@@ -86,7 +86,7 @@ const VerifyResetRequest = () => {
       subtitle={message}
       panelTitle="Almost there"
       panelBody="We are checking that this reset link is still valid before you choose a new password."
-      panelImage="/community-respond-sm.jpg")
+      panelImage="/community-respond-sm.jpg"
       panelImageAlt="Response crew after an emergency"
     >
       <div
