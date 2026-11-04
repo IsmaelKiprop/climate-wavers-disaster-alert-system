@@ -1,15 +1,18 @@
 import { useQuery } from "@tanstack/react-query";
 import { fetchDisasters } from "../utils/apiData";
+import { readCachedDisasters } from "../utils/disasterCache";
 
 export const useLiveDisasters = () => {
   return useQuery({
     queryKey: ["liveDisasters"],
     queryFn: fetchDisasters,
-    refetchInterval: 30000,
+    initialData: () => readCachedDisasters(),
+    initialDataUpdatedAt: () => (readCachedDisasters() ? Date.now() - 20000 : 0),
+    refetchInterval: 60000,
     refetchIntervalInBackground: false,
-    staleTime: 15000,
-    gcTime: 300000,
-    refetchOnWindowFocus: true,
+    staleTime: 45000,
+    gcTime: 600000,
+    refetchOnWindowFocus: false,
     refetchOnMount: true,
     retry: 1,
     retryDelay: 1500,

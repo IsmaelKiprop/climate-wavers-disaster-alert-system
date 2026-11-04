@@ -82,7 +82,7 @@ export const NotificationProvider = ({ children }) => {
     if (pollRef.current) return;
     pollRef.current = setInterval(() => {
       loadNotifications();
-    }, 8000);
+    }, 30000);
   }, [loadNotifications]);
 
   const connectSocket = useCallback(() => {
@@ -141,9 +141,22 @@ export const NotificationProvider = ({ children }) => {
   }, [mergeNotices, startPolling, stopPolling]);
 
   useEffect(() => {
-    loadNotifications();
-    connectSocket();
-    startPolling();
+    if (!getAuthToken()) return undefined;
+
+    const boot = () => {
+      loadNotifications();
+      connectSocket();
+      // Poll only as fallback after the socket has had time to connect.
+      window.setTimeout(() => {
+        if (!socketRef.current || socketRef.current.readyState !== WebSocket.OPEN) {
+          startPolling();
+        }
+      }, 4000);
+    };
+
+    const idleId = window.requestIdleCallback
+      ? window.requestIdleCallback(boot, { timeout: 2500 })
+      : window.setTimeout(boot, 800);
 
     const onUser = () => {
       loadNotifications();
@@ -158,6 +171,11 @@ export const NotificationProvider = ({ children }) => {
     return () => {
       window.removeEventListener("userUpdated", onUser);
       document.removeEventListener("visibilitychange", onVisible);
+      if (window.cancelIdleCallback && typeof idleId === "number") {
+        window.cancelIdleCallback(idleId);
+      } else {
+        window.clearTimeout(idleId);
+      }
       if (reconnectRef.current) clearTimeout(reconnectRef.current);
       stopPolling();
       if (socketRef.current) {

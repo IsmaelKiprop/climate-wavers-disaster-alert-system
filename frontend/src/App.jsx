@@ -34,39 +34,17 @@ const PublicProjectView = lazy(() => import("./components/PublicProjectView"));
 const MyCertificates = lazy(() => import("./pages/MyCertificates"));
 const PaymentSuccess = lazy(() => import("./pages/PaymentSuccess"));
 
-const AuthSharedLayout = lazy(() =>
-  import("./pages/AuthenticatedPages").then((m) => ({ default: m.AuthSharedLayout }))
-);
-const AuthMainfeed = lazy(() =>
-  import("./pages/AuthenticatedPages").then((m) => ({ default: m.AuthMainfeed }))
-);
-const AuthCommunity = lazy(() =>
-  import("./pages/AuthenticatedPages").then((m) => ({ default: m.AuthCommunity }))
-);
-const AuthNotification = lazy(() =>
-  import("./pages/AuthenticatedPages").then((m) => ({ default: m.AuthNotification }))
-);
-const AuthProfile = lazy(() =>
-  import("./pages/AuthenticatedPages").then((m) => ({ default: m.AuthProfile }))
-);
-const AuthComment = lazy(() =>
-  import("./pages/AuthenticatedPages").then((m) => ({ default: m.AuthComment }))
-);
-const AuthWaverX = lazy(() =>
-  import("./pages/AuthenticatedPages").then((m) => ({ default: m.AuthWaverX }))
-);
-const AuthCampaigns = lazy(() =>
-  import("./pages/AuthenticatedPages").then((m) => ({ default: m.AuthCampaigns }))
-);
-const AuthDisasters = lazy(() =>
-  import("./pages/AuthenticatedPages").then((m) => ({ default: m.AuthDisasters }))
-);
-const AuthUploadCover = lazy(() =>
-  import("./pages/AuthenticatedPages").then((m) => ({ default: m.AuthUploadCover }))
-);
-const AuthUploadPhoto = lazy(() =>
-  import("./pages/AuthenticatedPages").then((m) => ({ default: m.AuthUploadPhoto }))
-);
+const AuthSharedLayout = lazy(() => import("./pages/AuthenticatedPages/SharedLayout"));
+const AuthMainfeed = lazy(() => import("./pages/AuthenticatedPages/Mainfeed"));
+const AuthCommunity = lazy(() => import("./pages/AuthenticatedPages/Community"));
+const AuthNotification = lazy(() => import("./pages/AuthenticatedPages/Notification"));
+const AuthProfile = lazy(() => import("./pages/AuthenticatedPages/Profile"));
+const AuthComment = lazy(() => import("./pages/AuthenticatedPages/Comment"));
+const AuthWaverX = lazy(() => import("./pages/AuthenticatedPages/WaverX"));
+const AuthCampaigns = lazy(() => import("./pages/AuthenticatedPages/Campaigns"));
+const AuthDisasters = lazy(() => import("./pages/AuthenticatedPages/Disasters"));
+const AuthUploadCover = lazy(() => import("./pages/AuthenticatedPages/UploadCover"));
+const AuthUploadPhoto = lazy(() => import("./pages/AuthenticatedPages/UploadPhoto"));
 
 const OnboardingLayout = lazy(() =>
   import("./components/Onboarding").then((m) => ({ default: m.OnboardingLayout }))
@@ -115,7 +93,17 @@ const OnboardingTreeAdmin = lazy(() =>
 );
 
 function RouteFallback() {
-  return <div className="min-h-[100dvh] bg-background" />;
+  return (
+    <div className="min-h-[100dvh] bg-background">
+      <div className="h-16 border-b border-border bg-navbar" />
+      <div className="max-w-4xl mx-auto px-4 py-6 space-y-3">
+        <div className="h-11 border border-border bg-surface" />
+        <div className="h-24 border border-border bg-surface" />
+        <div className="h-24 border border-border bg-surface" />
+        <div className="h-24 border border-border bg-surface" />
+      </div>
+    </div>
+  );
 }
 
 function App() {

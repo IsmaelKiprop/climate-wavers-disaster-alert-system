@@ -81,7 +81,7 @@ const AppNav = ({ onNavigate, compact = false }) => {
       ];
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col gap-3">
       <nav className="flex flex-col gap-1" aria-label="Main">
         {items.map(({ to, label, Icon, ActiveIcon, end }) => (
           <NavLink
@@ -125,7 +125,7 @@ const AppNav = ({ onNavigate, compact = false }) => {
           type="button"
           title="New post"
           aria-label="New post"
-          className={`mt-4 min-h-11 text-sm font-medium bg-primary text-primary-foreground hover:bg-primary-dark ${
+          className={`min-h-11 text-sm font-medium bg-primary text-primary-foreground hover:bg-primary-dark ${
             isCompact ? "px-0 flex items-center justify-center" : "w-full py-2.5"
           }`}
           onClick={() => setIsModalOpen(true)}
@@ -134,9 +134,9 @@ const AppNav = ({ onNavigate, compact = false }) => {
         </button>
       ) : null}
 
-      <div className="mt-auto pt-4 border-t border-border">
+      <div className="pt-3 border-t border-border">
         {user?.first_name && !isCompact ? (
-          <p className="px-3 mb-3 text-xs text-muted truncate">
+          <p className="px-3 mb-2 text-xs text-muted truncate">
             {user.first_name} {user.last_name}
           </p>
         ) : null}

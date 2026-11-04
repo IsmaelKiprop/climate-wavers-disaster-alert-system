@@ -10,8 +10,7 @@ const DashboardSidebar = ({ children }) => {
         collapsed ? "w-[72px]" : "w-[220px] lg:w-[248px]"
       }`}
     >
-      <div className={`flex items-center border-b border-border ${collapsed ? "justify-center p-2" : "justify-between px-3 py-2"}`}>
-        {collapsed ? null : <span className="text-xs font-medium text-muted">Menu</span>}
+      <div className={`flex items-center border-b border-border shrink-0 ${collapsed ? "justify-center p-2" : "justify-end px-2 py-2"}`}>
         <button
           type="button"
           onClick={toggle}

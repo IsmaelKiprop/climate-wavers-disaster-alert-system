@@ -3,11 +3,7 @@ import { useSidebar } from "../context/SidebarContext";
 
 const Leftsidebar = () => {
   const { collapsed } = useSidebar();
-  return (
-    <div className="h-full">
-      <AppNav compact={collapsed} />
-    </div>
-  );
+  return <AppNav compact={collapsed} />;
 };
 
 export default Leftsidebar;

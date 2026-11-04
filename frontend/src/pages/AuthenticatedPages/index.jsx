@@ -1,46 +1,11 @@
-import Mainfeed from "../../components/Mainfeed";
-import Community from "../../components/Community";
-import Profile from "../../components/Profile";
-import Comment from "../Comment";
-import WaverxChatPage from "../WaverX";
-import withAuth from "../../HOC/withAuth";
-import SharedLayout from "../../components/ShareLayout";
-import CampaignsPage from "../CampaignsPage";
-import WaverXPosts from "../../components/WaverXPosts";
-import Notification from "../../components/Notification";
-import Disasters from "../Disasters";
-import DisasterPage from "../DisasterPage";
-import UploadCover from "../UploadCover";
-import UploadPhoto from "../UploadPhoto";
-
-const AuthSharedLayout = withAuth(SharedLayout);
-const AuthCommunity = withAuth(Community);
-const AuthMainfeed = withAuth(Mainfeed);
-const AuthProfile = withAuth(Profile);
-const AuthComment = withAuth(Comment);
-const AuthWaverX = withAuth(WaverxChatPage);
-const AuthCampaigns = withAuth(CampaignsPage);
-const AuthWaverXPosts = withAuth(WaverXPosts);
-const AuthNotification = withAuth(Notification);
-const AuthDisasters = withAuth(Disasters)
-// const AuthDisasters = Disasters
-const AuthDisasterPage = withAuth(DisasterPage)
-// const AuthDisasterPage = DisasterPage
-const AuthUploadCover = withAuth(UploadCover)
-const AuthUploadPhoto = withAuth(UploadPhoto)
-
-export {
-  AuthSharedLayout,
-  AuthWaverXPosts,
-  AuthCampaigns,
-  AuthComment,
-  AuthCommunity,
-  AuthMainfeed,
-  AuthWaverX,
-  AuthProfile,
-  AuthNotification,
-  AuthDisasterPage,
-  AuthDisasters,
-  AuthUploadCover,
-  AuthUploadPhoto
-};
+export { default as AuthSharedLayout } from "./SharedLayout";
+export { default as AuthMainfeed } from "./Mainfeed";
+export { default as AuthCommunity } from "./Community";
+export { default as AuthProfile } from "./Profile";
+export { default as AuthNotification } from "./Notification";
+export { default as AuthComment } from "./Comment";
+export { default as AuthWaverX } from "./WaverX";
+export { default as AuthCampaigns } from "./Campaigns";
+export { default as AuthDisasters } from "./Disasters";
+export { default as AuthUploadCover } from "./UploadCover";
+export { default as AuthUploadPhoto } from "./UploadPhoto";
