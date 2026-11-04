@@ -6,7 +6,7 @@ const DashboardSidebar = ({ children }) => {
 
   return (
     <aside
-      className={`hidden md:flex flex-col bg-sidebar border-r border-border sticky top-16 h-[calc(100dvh-4rem)] shrink-0 overflow-hidden transition-[width] duration-200 ease-out motion-reduce:transition-none ${
+      className={`hidden md:flex flex-col bg-sidebar border-r border-border h-full shrink-0 overflow-hidden z-30 transition-[width] duration-200 ease-out motion-reduce:transition-none ${
         collapsed ? "w-[72px]" : "w-[220px] lg:w-[248px]"
       }`}
     >
