@@ -54,6 +54,16 @@ body {
 img,
 video {
   max-width: 100%;
+  height: auto;
+}
+
+/* Leaflet tiles break if max-width: 100% applies to map pane images. */
+.leaflet-container img,
+.leaflet-pane img,
+.leaflet-marker-icon,
+.leaflet-marker-shadow {
+  max-width: none !important;
+  height: auto !important;
 }
 
 * {
