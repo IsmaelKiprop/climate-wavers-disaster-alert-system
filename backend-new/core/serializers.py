@@ -67,9 +67,18 @@ def reverse_geocode(latitude, longitude):
         return f"{latitude}, {longitude}"
 
 
+def _force_https(url):
+    if not url:
+        return url
+    value = str(url).strip()
+    if value.startswith("http://"):
+        return f"https://{value[7:]}"
+    return value
+
+
 class UserSerializer(serializers.ModelSerializer):
     is_following = serializers.SerializerMethodField()
-    profile_picture = serializers.ReadOnlyField()
+    profile_picture = serializers.SerializerMethodField()
     cover_image = serializers.URLField(source='cover', required=False, allow_blank=True, allow_null=True)
     
     # Allow cover and profile_pic fields to be updated
@@ -81,6 +90,16 @@ class UserSerializer(serializers.ModelSerializer):
         if user and user.is_authenticated:
             return obj.followers.filter(follower=user).exists()
         return False
+
+    def get_profile_picture(self, obj):
+        return _force_https(obj.profile_picture)
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        for key in ("profile_pic", "picture", "cover", "default_avatar", "cover_image"):
+            if data.get(key):
+                data[key] = _force_https(data[key])
+        return data
     
     def get_user_from_context(self):
         request = self.context.get("request", None)
@@ -97,7 +116,17 @@ class UserSerializer(serializers.ModelSerializer):
 
 
 class PostAuthorSerializer(serializers.ModelSerializer):
-    profile_picture = serializers.ReadOnlyField()
+    profile_picture = serializers.SerializerMethodField()
+
+    def get_profile_picture(self, obj):
+        return _force_https(obj.profile_picture)
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        for key in ("profile_pic", "picture", "default_avatar"):
+            if data.get(key):
+                data[key] = _force_https(data[key])
+        return data
 
     class Meta:
         model = User
@@ -318,38 +347,32 @@ class ViewSerializer(serializers.ModelSerializer):
 class FollowSerializer(serializers.ModelSerializer):
     follower = UserSerializer(read_only=True)
     following = UserSerializer(read_only=True)
-    following_id = serializers.IntegerField(write_only=True, required=False)
+    following_id = serializers.IntegerField(write_only=True)
 
     class Meta:
         model = Follow
-        fields = "__all__"
+        fields = ("id", "follower", "following", "following_id", "created_at")
+        read_only_fields = ("id", "follower", "following", "created_at")
 
     def create(self, validated_data):
-        # Add the user from the request context to the validated data
         follower = self.context["request"].user
-        
-        # Handle following_id if provided
-        following_id = validated_data.pop('following_id', None)
-        if following_id:
-            try:
-                from api.models import User
-                following = User.objects.get(id=following_id)
-                validated_data['following'] = following
-            except User.DoesNotExist:
-                raise serializers.ValidationError("User to follow not found.")
-        
-        following = validated_data.get("following")
-        
-        # Check if the follow relationship already exists
-        if Follow.objects.filter(follower=follower, following=following).exists():
-            raise serializers.ValidationError("You are already following this user.")
-        
-        # Check if user is trying to follow themselves
-        if follower == following:
-            raise serializers.ValidationError("You cannot follow yourself.")
-        
-        validated_data["follower"] = follower
-        return super().create(validated_data)
+        following_id = validated_data.pop("following_id", None)
+        if not following_id:
+            raise serializers.ValidationError({"detail": "following_id is required."})
+
+        try:
+            following = User.objects.get(id=following_id)
+        except User.DoesNotExist:
+            raise serializers.ValidationError({"detail": "User to follow not found."})
+
+        if follower.id == following.id:
+            raise serializers.ValidationError({"detail": "You cannot follow yourself."})
+
+        follow, _created = Follow.objects.get_or_create(
+            follower=follower,
+            following=following,
+        )
+        return follow
 
 
 class BookmarkSerializer(serializers.ModelSerializer):

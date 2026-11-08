@@ -97,15 +97,19 @@ class User(AbstractBaseUser, PermissionsMixin):
 
         pass
 
+    @staticmethod
+    def _https_url(url):
+        if not url:
+            return None
+        value = str(url).strip()
+        if value.startswith("http://"):
+            return f"https://{value[7:]}"
+        return value
+
     @property
     def profile_picture(self):
-        if self.profile_pic:
-            return self.profile_pic
-        elif self.picture:
-            return self.picture
-        elif self.default_avatar:
-            return self.default_avatar
-        return None
+        raw = self.profile_pic or self.picture or self.default_avatar
+        return self._https_url(raw)
 
     def save(self, *args, **kwargs):
         if self.auth_provider != "email":

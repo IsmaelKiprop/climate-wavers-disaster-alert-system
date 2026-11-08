@@ -6,6 +6,7 @@ import { PiBookmark, PiBookmarkFill } from "react-icons/pi";
 import { BsBarChart } from "react-icons/bs";
 import { formatDistanceToNow } from "date-fns";
 import PropTypes from "prop-types";
+import { avatarUrl } from "../utils/factory";
 
 const ProfileContent = ({ content, type, onLike, onUnlike, onRepost, onUnrepost, onSave, onUnsave }) => {
   const navigate = useNavigate();
@@ -63,7 +64,7 @@ const ProfileContent = ({ content, type, onLike, onUnlike, onRepost, onUnrepost,
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center space-x-3">
                   <img
-                    src={content.user?.profile_picture || "/avatar.png"}
+                    src={avatarUrl(content.user)}
                     alt={content.user?.username}
                     className="w-12 h-12 rounded-full object-cover ring-2 ring-gray-100"
                   />
@@ -199,7 +200,7 @@ const ProfileContent = ({ content, type, onLike, onUnlike, onRepost, onUnrepost,
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center space-x-3">
                   <img
-                    src={content.user?.profile_picture || "/avatar.png"}
+                    src={avatarUrl(content.user)}
                     alt={content.user?.username}
                     className="w-12 h-12 rounded-full object-cover ring-2 ring-gray-100"
                   />
@@ -220,7 +221,7 @@ const ProfileContent = ({ content, type, onLike, onUnlike, onRepost, onUnrepost,
                     <div className="bg-white p-3 rounded border">
                       <div className="flex items-center space-x-2 mb-2">
                         <img
-                          src={content.post.user?.profile_picture || "/avatar.png"}
+                          src={avatarUrl(content.post?.user)}
                           alt={content.post.user?.username}
                           className="w-6 h-6 rounded-full object-cover"
                         />
@@ -360,7 +361,7 @@ const ProfileContent = ({ content, type, onLike, onUnlike, onRepost, onUnrepost,
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center space-x-3">
                   <img
-                    src={content.user?.profile_picture || "/avatar.png"}
+                    src={avatarUrl(content.user)}
                     alt={content.user?.username}
                     className="w-12 h-12 rounded-full object-cover ring-2 ring-gray-100"
                   />
@@ -381,7 +382,7 @@ const ProfileContent = ({ content, type, onLike, onUnlike, onRepost, onUnrepost,
                     <div className="bg-white p-4 rounded border">
                       <div className="flex items-center space-x-3 mb-3">
                         <img
-                          src={content.post.user?.profile_picture || "/avatar.png"}
+                          src={avatarUrl(content.post?.user)}
                           alt={content.post.user?.username}
                           className="w-8 h-8 rounded-full object-cover"
                         />
@@ -445,7 +446,7 @@ const ProfileContent = ({ content, type, onLike, onUnlike, onRepost, onUnrepost,
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center space-x-3">
                   <img
-                    src={content.post?.user?.profile_picture || "/avatar.png"}
+                    src={avatarUrl(content.post?.user)}
                     alt={content.post?.user?.username}
                     className="w-12 h-12 rounded-full object-cover ring-2 ring-gray-100"
                   />
@@ -515,7 +516,7 @@ const ProfileContent = ({ content, type, onLike, onUnlike, onRepost, onUnrepost,
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center space-x-3">
                   <img
-                    src={content.post?.user?.profile_picture || "/avatar.png"}
+                    src={avatarUrl(content.post?.user)}
                     alt={content.post?.user?.username}
                     className="w-12 h-12 rounded-full object-cover ring-2 ring-gray-100"
                   />
@@ -566,7 +567,7 @@ const ProfileContent = ({ content, type, onLike, onUnlike, onRepost, onUnrepost,
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center space-x-3">
                   <img
-                    src={content.user?.profile_picture || "/avatar.png"}
+                    src={avatarUrl(content.user)}
                     alt={content.user?.username}
                     className="w-12 h-12 rounded-full object-cover ring-2 ring-gray-100"
                   />

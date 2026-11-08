@@ -3,6 +3,7 @@ import { MdArrowBack } from "react-icons/md";
 import { useEffect } from "react";
 import { useNotifications } from "../context/NotificationContext";
 import { formatTimeAgo } from "../utils/apiData";
+import { secureMediaUrl } from "../utils/factory";
 
 const noticeUrl = (notice) => {
   if (notice?.content?.post) {
@@ -19,11 +20,14 @@ const noticeUrl = (notice) => {
 };
 
 const actorPhoto = (notice) =>
-  notice?.actor?.profile_picture ||
-  notice?.actor?.profile_pic ||
-  notice?.actor?.profile_image ||
-  notice?.content?.user?.profile_picture ||
-  "/avatar.png";
+  secureMediaUrl(
+    notice?.actor?.profile_picture ||
+      notice?.actor?.profile_pic ||
+      notice?.actor?.profile_image ||
+      notice?.content?.user?.profile_picture ||
+      notice?.content?.follower?.profile_picture,
+    "/avatar.png"
+  );
 
 const Notification = () => {
   const { notifications, isLoading, markAsRead, refreshNotifications } = useNotifications();

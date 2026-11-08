@@ -3,7 +3,20 @@ import PropTypes from "prop-types";
 import { endpoints } from "../utils/endpoints";
 import { client } from "../api";
 import { Link } from "react-router-dom";
-import { getUser } from "../utils/factory";
+import { avatarUrl, getUser } from "../utils/factory";
+
+const alreadyFollowing = (error) => {
+  const data = error?.response?.data;
+  if (!data) return false;
+  if (typeof data.detail === "string" && data.detail.toLowerCase().includes("already following")) {
+    return true;
+  }
+  const nonField = data.non_field_errors;
+  if (Array.isArray(nonField) && nonField.some((msg) => String(msg).toLowerCase().includes("already following"))) {
+    return true;
+  }
+  return false;
+};
 
 const Accountcard = ({ user, onFollowChange }) => {
   const [isFollow, setIsFollow] = useState(user?.is_following);
@@ -16,25 +29,21 @@ const Accountcard = ({ user, onFollowChange }) => {
 
   const follow = async (userId) => {
     try {
-      await client.run("post", endpoints?.follow, { following_id: userId }, true);
+      await client.run(
+        "post",
+        endpoints?.follow,
+        { following_id: Number(userId) },
+        true
+      );
       setIsFollow(true);
-      // Notify parent component of follow change
-      if (onFollowChange) {
-        onFollowChange(userId, true);
-      }
+      if (onFollowChange) onFollowChange(userId, true);
     } catch (error) {
       console.log("Follow error:", error.response?.data);
-      // Handle specific follow errors
-      if (error.response?.data?.detail === "You are already following this user.") {
-        // User is already following, update UI to reflect this
+      if (alreadyFollowing(error)) {
         setIsFollow(true);
-        // Notify parent component of follow change
-        if (onFollowChange) {
-          onFollowChange(userId, true);
-        }
+        if (onFollowChange) onFollowChange(userId, true);
         return;
       }
-      // Revert UI state on other errors
       setIsFollow(false);
       throw error;
     }
@@ -69,7 +78,7 @@ const Accountcard = ({ user, onFollowChange }) => {
         <div className="flex items-center space-x-3 min-w-0">
           <div className="relative">
             <img
-              src={user?.profile_picture || "/avatar.png"}
+              src={avatarUrl(user)}
               className="h-12 w-12 rounded-full object-cover ring-2 ring-gray-100 group-hover:ring-teal-200 transition-all duration-200 flex-shrink-0"
               alt="Profile Pic"
               onError={(e) => {

@@ -7,6 +7,7 @@ import { IoSearch, IoClose, IoPerson, IoTime, IoLocation } from "react-icons/io5
 import { BsPostcard } from "react-icons/bs";
 import { formatDistanceToNow } from "date-fns";
 import { useDebouncedSearch } from "../hooks/useDebouncedSearch";
+import { avatarUrl } from "../utils/factory";
 
 const Search = ({ isOpen, onClose }) => {
   const [activeTab, setActiveTab] = useState("all");
@@ -372,7 +373,7 @@ const PostResult = ({ post }) => (
       <Link to={`/app/post/${post.id}`} className="block p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
     <div className="flex items-start gap-3">
       <img 
-        src={post.user?.profile_picture || post.user?.profile_pic || "/avatar.png"} 
+        src={avatarUrl(post.user)} 
         alt={post.user?.username}
         className="w-8 h-8 rounded-full object-cover"
       />
@@ -399,7 +400,7 @@ const UserResult = ({ user }) => (
   <Link to={`/app/${user.id}/profile`} className="block p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
     <div className="flex items-center gap-3">
       <img 
-        src={user.profile_picture || user.profile_pic || "/avatar.png"} 
+        src={avatarUrl(user)} 
         alt={user.username}
         className="w-12 h-12 rounded-full object-cover"
       />

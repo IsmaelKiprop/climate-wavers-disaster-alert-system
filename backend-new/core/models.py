@@ -341,7 +341,7 @@ class Follow(models.Model):
         """
         Ensures a user cannot follow themselves.
         """
-        if self.follower == self.followed:
+        if self.follower_id and self.following_id and self.follower_id == self.following_id:
             raise ValidationError("User cannot follow themselves.")
 
     class Meta:

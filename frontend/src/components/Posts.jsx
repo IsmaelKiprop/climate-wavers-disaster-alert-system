@@ -4,7 +4,7 @@ import { formatDistanceToNow } from "date-fns";
 import Accountcard from "./Accountcard";
 import { client } from "../api";
 import { endpoints } from "../utils/endpoints";
-import { getAuthToken, getUser } from "../utils/factory";
+import { getAuthToken, getUser, secureMediaUrl } from "../utils/factory";
 import { toast } from "react-toastify";
 import { AiOutlineHeart, AiFillHeart, AiOutlineRetweet } from "react-icons/ai";
 import { IoChatboxEllipsesOutline, IoEllipsisHorizontal, IoTrashOutline, IoEyeOutline } from "react-icons/io5";
@@ -464,7 +464,7 @@ const Posts = ({
                   <div className="mt-4">
                 <img
                       className="w-full rounded-xl shadow-md group-hover:shadow-lg transition-shadow duration-300"
-                  src={post.image}
+                  src={secureMediaUrl(post.image)}
                   alt="Post content"
                 />
                   </div>

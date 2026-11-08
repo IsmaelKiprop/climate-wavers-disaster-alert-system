@@ -641,24 +641,21 @@ class FollowViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def create(self, request, *args, **kwargs):
-        try:
-            # Get the serializer with the request data
-            serializer = self.get_serializer(data=request.data)
-            if serializer.is_valid():
-                serializer.save()
-                return Response(serializer.data, status=status.HTTP_201_CREATED)
-            else:
-                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        except Exception as e:
-            if "UNIQUE constraint failed" in str(e) or "already following" in str(e):
-                return Response(
-                    {"detail": "You are already following this user."}, 
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-            return Response(
-                {"detail": f"Error creating follow relationship: {str(e)}"}, 
-                status=status.HTTP_400_BAD_REQUEST
-            )
+        following_id = request.data.get("following_id")
+        already = False
+        if following_id is not None:
+            already = Follow.objects.filter(
+                follower=request.user, following_id=following_id
+            ).exists()
+
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        follow = serializer.save()
+        out = self.get_serializer(follow).data
+        return Response(
+            out,
+            status=status.HTTP_200_OK if already else status.HTTP_201_CREATED,
+        )
 
     def destroy(self, request, *args, **kwargs):
         following_id = kwargs.get('pk')
