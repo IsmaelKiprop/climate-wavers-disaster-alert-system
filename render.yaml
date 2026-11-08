@@ -137,7 +137,7 @@ services:
       - key: SERVER_SECRET
         sync: false
       - key: FRONTEND_URL
-        value: https://climate-wavers-three.vercel.app
+        value: https://alerts.flowops.africa
 
   - type: web
     name: climate-wavers-notifications

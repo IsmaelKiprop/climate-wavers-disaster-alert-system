@@ -456,7 +456,7 @@ class TreeProjectDonationSerializer(serializers.ModelSerializer):
         read_only_fields = ['payment_reference', 'created_at']
     
     def get_donor_name(self, obj):
-        if obj.is_anonymous:
+        if obj.is_anonymous or not obj.donor_id:
             return "Anonymous"
         return f"{obj.donor.first_name} {obj.donor.last_name}".strip() or obj.donor.username
 

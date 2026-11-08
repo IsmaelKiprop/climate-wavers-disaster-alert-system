@@ -85,7 +85,10 @@ CORS_ALLOWED_ORIGINS = env.list(
 CORS_ALLOW_ALL_ORIGINS = env.bool("ALLOW_ALL_ORIGINS", default=DEBUG)
 CORS_ALLOWED_ORIGIN_REGEXES = env.list(
     "CORS_ORIGIN_REGEXES",
-    default=[r"^https://.*\.vercel\.app$"],
+    default=[
+        r"^https://.*\.vercel\.app$",
+        r"^https://([a-z0-9-]+\.)?flowops\.africa$",
+    ],
 )
 CORS_ORIGIN_ALLOW_ALL = CORS_ALLOW_ALL_ORIGINS
 

@@ -7,7 +7,7 @@ const aiService = require("../services/ai.service")
 const NOTIFY_URL = (process.env.NOTIFICATION_SERVICE_URL || "https://climate-wavers-notifications.onrender.com").replace(/\/$/, "")
 const DJANGO_URL = (process.env.DJANGO_API_URL || "https://climate-wavers-api.onrender.com").replace(/\/$/, "")
 const SECRET = process.env.NOTIFICATION_SECRET || process.env.SERVER_SECRET || ""
-const FRONTEND = (process.env.FRONTEND_URL || "https://climate-wavers-three.vercel.app").replace(/\/$/, "")
+const FRONTEND = (process.env.FRONTEND_URL || "https://alerts.flowops.africa").replace(/\/$/, "")
 
 async function postJson(url, body) {
   const response = await axios.post(url, body, {

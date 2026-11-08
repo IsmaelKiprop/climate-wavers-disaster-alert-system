@@ -1,0 +1,245 @@
+"""Record a verified Paystack tree payment exactly once."""
+
+import hashlib
+import hmac
+import json
+import os
+from decimal import Decimal, InvalidOperation
+
+import requests
+from django.contrib.auth import get_user_model
+from django.db import IntegrityError, transaction
+from django.db.models import Sum
+from rest_framework_simplejwt.authentication import JWTAuthentication
+
+from .models import TreeProject, TreeProjectDonation
+
+
+class PaymentRecordError(Exception):
+    def __init__(self, message, status=400):
+        super().__init__(message)
+        self.status = status
+
+
+def user_from_request(request):
+    user = getattr(request, "user", None)
+    if user is not None and getattr(user, "is_authenticated", False):
+        return user
+    try:
+        authenticated = JWTAuthentication().authenticate(request)
+    except Exception:
+        return None
+    if authenticated:
+        return authenticated[0]
+    return None
+
+
+def claim_tree_donations(user):
+    if not user or not getattr(user, "is_authenticated", False):
+        return
+    email = (getattr(user, "email", "") or "").strip()
+    if not email:
+        return
+    TreeProjectDonation.objects.filter(
+        donor__isnull=True,
+        payer_email__iexact=email,
+    ).update(donor=user)
+
+
+def _metadata_value(metadata, key, default=None):
+    if not isinstance(metadata, dict):
+        return default
+    value = metadata.get(key)
+    if value not in (None, ""):
+        return value
+    for field in metadata.get("custom_fields") or []:
+        if isinstance(field, dict) and field.get("variable_name") == key:
+            field_value = field.get("value")
+            if field_value not in (None, ""):
+                return field_value
+    return default
+
+
+def _as_dict(value):
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str) and value.strip().startswith("{"):
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError:
+            return {}
+        return parsed if isinstance(parsed, dict) else {}
+    return {}
+
+
+def _as_int(value, default=1):
+    try:
+        number = int(value)
+    except (TypeError, ValueError):
+        return default
+    return number if number > 0 else default
+
+
+def _as_decimal(value):
+    try:
+        return Decimal(str(value))
+    except (InvalidOperation, TypeError, ValueError):
+        return None
+
+
+def _resolve_donor(request_user, email):
+    if request_user is not None and getattr(request_user, "is_authenticated", False):
+        return request_user
+    email = (email or "").strip()
+    if not email:
+        return None
+    return get_user_model().objects.filter(email__iexact=email).first()
+
+
+def _verify_with_paystack(reference):
+    secret = os.getenv("PAYSTACK_SECRET_KEY", "").strip()
+    if not secret:
+        raise PaymentRecordError("Paystack is not configured.", 500)
+    response = requests.get(
+        f"https://api.paystack.co/transaction/verify/{reference}",
+        headers={"Authorization": f"Bearer {secret}"},
+        timeout=20,
+    )
+    try:
+        payload = response.json()
+    except ValueError:
+        payload = {}
+    if response.status_code != 200 or not payload.get("status"):
+        message = payload.get("message") or "Payment verification failed"
+        raise PaymentRecordError(message, 400)
+    data = payload.get("data") or {}
+    if data.get("status") != "success":
+        raise PaymentRecordError("Payment is not successful yet.", 400)
+    return data
+
+
+def _donation_payload(donation, payer_email):
+    project = donation.project
+    user = donation.donor
+    user_total_trees = 0
+    if user is not None:
+        user_total_trees = (
+            TreeProjectDonation.objects.filter(donor=user).aggregate(total=Sum("trees_purchased"))["total"]
+            or 0
+        )
+    certificate_id = f"CW{donation.payment_reference}{donation.id}"
+    donor_name = "Anonymous"
+    if user is not None:
+        donor_name = f"{user.first_name} {user.last_name}".strip() or user.username
+    return {
+        "success": True,
+        "message": "Payment verified successfully",
+        "donation_id": donation.id,
+        "payment_reference": donation.payment_reference,
+        "certificate_id": certificate_id,
+        "user_total_trees": user_total_trees,
+        "certificate_data": {
+            "certificate_id": certificate_id,
+            "tree_type": project.name,
+            "co2_absorption": float(project.co2_absorption_per_tree),
+            "location": f"{project.city}, {project.country}",
+            "planting_date": donation.created_at.strftime("%m/%d/%Y"),
+            "user_name": donor_name,
+            "trees_planted": donation.trees_purchased,
+            "amount": float(donation.amount),
+            "payer_email": payer_email,
+        },
+    }
+
+
+def record_tree_payment(reference, request_user=None, client_data=None):
+    reference = str(reference or "").strip()
+    if not reference:
+        raise PaymentRecordError("Missing payment reference.")
+
+    client_data = client_data or {}
+    payment = _verify_with_paystack(reference)
+    metadata = payment.get("metadata") or {}
+    if not isinstance(metadata, dict):
+        metadata = {}
+
+    customer = payment.get("customer") or {}
+    payer_email = (customer.get("email") or client_data.get("email") or "").strip()
+    donor = _resolve_donor(request_user, payer_email)
+
+    existing = TreeProjectDonation.objects.filter(payment_reference=reference).select_related("project", "donor").first()
+    if existing:
+        updates = []
+        if existing.donor_id is None and donor is not None:
+            existing.donor = donor
+            updates.append("donor")
+        if not existing.payer_email and payer_email:
+            existing.payer_email = payer_email
+            updates.append("payer_email")
+        if updates:
+            existing.save(update_fields=updates)
+        return _donation_payload(existing, payer_email)
+
+    project_id = _metadata_value(metadata, "project_id") or client_data.get("project_id")
+    if not project_id:
+        raise PaymentRecordError("This payment has no tree project attached.", 400)
+    try:
+        project = TreeProject.objects.get(id=project_id)
+    except (TreeProject.DoesNotExist, ValueError, TypeError):
+        raise PaymentRecordError("Project not found.", 404)
+
+    amount = _as_decimal(payment.get("amount", 0))
+    if amount is None:
+        raise PaymentRecordError("Paystack did not return a valid amount.", 400)
+    amount = (amount / Decimal("100")).quantize(Decimal("0.01"))
+
+    trees_purchased = _as_int(
+        _metadata_value(metadata, "trees_purchased") or client_data.get("trees_purchased"),
+        1,
+    )
+    dedication = str(
+        _metadata_value(metadata, "dedication_message", "")
+        or client_data.get("dedication_message")
+        or ""
+    )
+    selected_species = _as_dict(
+        _metadata_value(metadata, "selected_species", {}) or client_data.get("selected_species")
+    )
+    if selected_species:
+        species_text = ", ".join(
+            f"{species}: {qty}" for species, qty in selected_species.items() if _as_int(qty, 0) > 0
+        )
+        if species_text:
+            dedication = f"{dedication}\n\nSelected Species: {species_text}".strip()
+
+    try:
+        with transaction.atomic():
+            donation = TreeProjectDonation.objects.create(
+                project=project,
+                donor=donor,
+                payer_email=payer_email,
+                amount=amount,
+                trees_purchased=trees_purchased,
+                payment_reference=reference,
+                payment_status="completed",
+                dedication_message=dedication,
+                is_anonymous=donor is None,
+            )
+            project.trees_planted += trees_purchased
+            project.funds_raised += amount
+            project.save(update_fields=["trees_planted", "funds_raised"])
+    except IntegrityError:
+        donation = TreeProjectDonation.objects.select_related("project", "donor").get(payment_reference=reference)
+
+    return _donation_payload(donation, payer_email)
+
+
+def webhook_signature_ok(body, signature):
+    secret = os.getenv("PAYSTACK_SECRET_KEY", "").strip()
+    if not secret or not signature:
+        return False
+    expected = hmac.new(secret.encode("utf-8"), body, hashlib.sha512).hexdigest()
+    try:
+        return hmac.compare_digest(signature, expected)
+    except (TypeError, ValueError):
+        return False

@@ -19,7 +19,7 @@ from .models import (
 logger = logging.getLogger(__name__)
 
 DEFAULT_RADIUS_KM = 100
-FRONTEND = getattr(settings, "FRONTEND_URL", "https://climate-wavers-three.vercel.app").rstrip("/")
+FRONTEND = getattr(settings, "FRONTEND_URL", "https://alerts.flowops.africa").rstrip("/")
 
 
 def _authorized(request):

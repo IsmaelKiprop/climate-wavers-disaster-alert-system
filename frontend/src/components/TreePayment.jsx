@@ -3,6 +3,8 @@ import { toast } from 'react-toastify';
 import { FaTree, FaLeaf, FaGlobe, FaArrowLeft } from 'react-icons/fa';
 import TreeCertificate from './TreeCertificate';
 import PaymentSuccess from './PaymentSuccess';
+import { apiUrl } from '../config/env';
+import { getAuthToken, getUser } from '../utils/factory';
 
 const TreePayment = ({ treeData, onSuccess, onBack }) => {
   const [email, setEmail] = useState('');
@@ -91,6 +93,14 @@ const TreePayment = ({ treeData, onSuccess, onBack }) => {
     }
   };
 
+  useEffect(() => {
+    const user = getUser();
+    if (!user) return;
+    if (user.email) setEmail(user.email);
+    const name = [user.first_name, user.last_name].filter(Boolean).join(" ").trim();
+    if (name) setDonorName(name);
+  }, []);
+
   // Load Paystack script and fetch exchange rate
   useEffect(() => {
     // Fetch exchange rate
@@ -164,10 +174,12 @@ const TreePayment = ({ treeData, onSuccess, onBack }) => {
       
       // Send payment verification to backend
       
-      const response = await fetch('https://backend-production-5f10.up.railway.app/api/v1/verify-payment/', {
+      const token = getAuthToken();
+      const response = await fetch(apiUrl('/api/v1/verify-payment/'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify(paymentData)
       });
@@ -272,12 +284,30 @@ const TreePayment = ({ treeData, onSuccess, onBack }) => {
     });
 
     // Use Paystack inline script with KES currency
+    const checkout = {
+      project_id: treeData.id,
+      trees_purchased: totalQuantity,
+      donor_name: donorName,
+      dedication_message: dedicationMessage,
+      selected_species: selectedSpecies,
+    };
+    sessionStorage.setItem(`cw-pay-${config.reference}`, JSON.stringify(checkout));
+
     const handler = window.PaystackPop.setup({
       key: paystackKey,
       email: email,
       amount: Math.round(convertedAmount * 100), // Convert KES to cents
       currency: 'KES', // Use KES for Paystack
       ref: config.reference,
+      callback_url: `${window.location.origin}/payment-success`,
+      metadata: {
+        project_id: String(treeData.id),
+        trees_purchased: String(totalQuantity),
+        donor_name: donorName,
+        dedication_message: dedicationMessage,
+        selected_species: JSON.stringify(selectedSpecies),
+        custom_fields: config.metadata.custom_fields,
+      },
       callback: function(response) {
         console.log('Payment successful:', response);
         onPaymentSuccess(response.reference);

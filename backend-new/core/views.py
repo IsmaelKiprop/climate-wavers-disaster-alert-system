@@ -35,6 +35,13 @@ from .models import (
     TreeProjectDonation,
     Disaster,
 )
+from .paystack_payment import (
+    PaymentRecordError,
+    claim_tree_donations,
+    record_tree_payment,
+    user_from_request,
+    webhook_signature_ok,
+)
 from .serializers import (
     NotificationSerializer,
     UserSerializer,
@@ -1183,6 +1190,7 @@ class TreeProjectDonationViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     
     def get_queryset(self):
+        claim_tree_donations(self.request.user)
         project_id = self.request.query_params.get('project_id')
         donor_id = self.request.query_params.get('donor')
         
@@ -1247,284 +1255,63 @@ class FileUploadViewSet(viewsets.ViewSet):
 @require_http_methods(["POST"])
 def verify_paystack_payment(request):
     """
-    Verify Paystack payment and create tree donation record
+    Verify a Paystack charge and store the tree donation for the payer.
     """
     try:
-        import requests
-        
-        data = json.loads(request.body)
-        reference = data.get('reference')
-        project_id = data.get('project_id')
-        amount = float(data.get('amount', 0))  # Convert to float
-        trees_purchased = int(data.get('trees_purchased', 1))  # Convert to int
-        donor_name = data.get('donor_name', 'Anonymous')
-        dedication_message = data.get('dedication_message', '')
-        selected_species = data.get('selected_species', {})
-        
-        print(f"Payment data - amount: {amount} (type: {type(amount)}), trees: {trees_purchased} (type: {type(trees_purchased)})")
-        
-        if not reference or not project_id:
-            return JsonResponse({
-                'success': False,
-                'message': 'Missing required parameters'
-            }, status=400)
-        
-        # Verify payment with Paystack
-        paystack_secret_key = os.getenv('PAYSTACK_SECRET_KEY', 'test_secret_key')
-        headers = {
-            'Authorization': f'Bearer {paystack_secret_key}',
-            'Content-Type': 'application/json'
-        }
-        
-        verify_url = f'https://api.paystack.co/transaction/verify/{reference}'
-        print(f"Verifying payment with reference: {reference}")
-        print(f"Using secret key: {paystack_secret_key[:10]}...")
-        response = requests.get(verify_url, headers=headers)
-        print(f"Paystack verification response status: {response.status_code}")
-        
-        if response.status_code != 200:
-            print(f"Paystack verification error: {response.text}")
-            return JsonResponse({
-                'success': False,
-                'message': f'Payment verification failed: {response.text}'
-            }, status=400)
-        
-        payment_data = response.json()
-        print(f"Paystack verification response: {payment_data}")
-        
-        if payment_data['status'] != True:
-            print(f"Payment verification failed: {payment_data}")
-            return JsonResponse({
-                'success': False,
-                'message': f'Payment verification failed: {payment_data.get("message", "Unknown error")}'
-            }, status=400)
-        
-        print(f"Payment verification successful: {payment_data['data']['status']}")
-        
-        # Get the project
-        try:
-            project = TreeProject.objects.get(id=project_id)
-        except TreeProject.DoesNotExist:
-            return JsonResponse({
-                'success': False,
-                'message': 'Project not found'
-            }, status=404)
-        
-        # Get or create user (for anonymous donations, create a placeholder)
-        user = None
-        if request.user.is_authenticated:
-            user = request.user
-        else:
-            # Create anonymous user or use a default user
-            User = get_user_model()
-            customer_email = payment_data['data']['customer']['email']
-            
-            try:
-                # Try to get existing user by email first
-                user = User.objects.get(email=customer_email)
-                print(f"Found existing user: {user.id} - {user.email}")
-            except User.DoesNotExist:
-                # Create new user only if doesn't exist
-                try:
-                    user = User.objects.create(
-                        username=f'anonymous_{reference}',
-                        email=customer_email,
-                        first_name=donor_name,
-                        is_active=False
-                    )
-                    print(f"Created new user: {user.id} - {user.email}")
-                except Exception as create_error:
-                    print(f"Error creating user: {str(create_error)}")
-                    # If creation fails due to unique constraint, try to get the user again
-                    try:
-                        user = User.objects.get(email=customer_email)
-                        print(f"Retrieved existing user after creation error: {user.id} - {user.email}")
-                    except User.DoesNotExist:
-                        # If still can't find user, create with unique email
-                        import time
-                        unique_email = f"anonymous_{int(time.time())}@example.com"
-                        user = User.objects.create(
-                            username=f'anonymous_{reference}',
-                            email=unique_email,
-                            first_name=donor_name,
-                            is_active=False
-                        )
-                        print(f"Created user with unique email: {user.id} - {user.email}")
-        
-        # Create donation record
-        try:
-            print(f"Creating donation record - project: {project.id}, user: {user.id if user else 'None'}, amount: {amount}")
-            # Add selected species to dedication message
-            final_dedication_message = dedication_message
-            if selected_species:
-                species_text = ", ".join([f"{species}: {qty}" for species, qty in selected_species.items() if qty > 0])
-                if species_text:
-                    final_dedication_message = f"{dedication_message}\n\nSelected Species: {species_text}".strip()
-            
-            donation = TreeProjectDonation.objects.create(
-                project=project,
-                donor=user,
-                amount=amount,
-                trees_purchased=trees_purchased,
-                payment_reference=reference,
-                payment_status='completed',
-                dedication_message=final_dedication_message,
-                is_anonymous=not request.user.is_authenticated
-            )
-            print(f"Donation record created successfully: {donation.id}")
-        except Exception as donation_error:
-            print(f"Error creating donation record: {str(donation_error)}")
-            import traceback
-            print(f"Donation creation traceback: {traceback.format_exc()}")
-            raise donation_error
-        
-        # Update project stats
-        print(f"Before update - trees_planted: {project.trees_planted} (type: {type(project.trees_planted)}), funds_raised: {project.funds_raised} (type: {type(project.funds_raised)})")
-        print(f"Adding - trees: {trees_purchased} (type: {type(trees_purchased)}), amount: {amount} (type: {type(amount)})")
-        
-        try:
-            from decimal import Decimal
-            # Convert amount to Decimal to match database field type
-            amount_decimal = Decimal(str(amount))
-            print(f"Converting amount from {amount} (type: {type(amount)}) to {amount_decimal} (type: {type(amount_decimal)})")
-            
-            project.trees_planted += trees_purchased
-            project.funds_raised += amount_decimal
-            project.save()
-            print(f"After update - trees_planted: {project.trees_planted}, funds_raised: {project.funds_raised}")
-            
-            # Calculate user's total trees planted for badge system
-            if user:
-                # Calculate total trees planted by this user from all donations
-                from django.db.models import Sum
-                total_trees = TreeProjectDonation.objects.filter(donor=user).aggregate(
-                    total=Sum('trees_purchased')
-                )['total'] or 0
-                print(f"User {user.id} total trees planted: {total_trees}")
-            
-        except Exception as update_error:
-            print(f"Error updating project stats: {str(update_error)}")
-            import traceback
-            print(f"Update traceback: {traceback.format_exc()}")
-            raise update_error
-        
-        print(f"Tree donation created successfully: {donation.id}")
-        
-        # Generate certificate ID
-        certificate_id = f"CW{reference}{donation.id}"
-        
-        # Calculate user's total trees planted for badge system
-        user_total_trees = 0
-        if user:
-            from django.db.models import Sum
-            user_total_trees = TreeProjectDonation.objects.filter(donor=user).aggregate(
-                total=Sum('trees_purchased')
-            )['total'] or 0
-        
-        return JsonResponse({
-            'success': True,
-            'message': 'Payment verified successfully',
-            'donation_id': donation.id,
-            'payment_reference': reference,
-            'certificate_id': certificate_id,
-            'user_total_trees': user_total_trees,  # For badge system
-            'certificate_data': {
-                'certificate_id': certificate_id,
-                'tree_type': project.name,
-                'co2_absorption': float(project.co2_absorption_per_tree),
-                'location': f"{project.city}, {project.country}",
-                'planting_date': donation.created_at.strftime('%m/%d/%Y'),
-                'user_name': user.first_name + ' ' + user.last_name if user else 'Anonymous',
-                'trees_planted': trees_purchased,
-                'amount': amount,
-                'selected_species': selected_species
-            }
-        })
-        
-    except Exception as e:
-        import traceback
-        print(f"Payment processing error: {str(e)}")
-        print(f"Traceback: {traceback.format_exc()}")
-        return JsonResponse({
-            'success': False,
-            'message': f'Error processing payment: {str(e)}'
-        }, status=500)
+        data = json.loads(request.body or b"{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"success": False, "message": "Invalid JSON."}, status=400)
+
+    try:
+        payload = record_tree_payment(
+            data.get("reference"),
+            request_user=user_from_request(request),
+            client_data=data,
+        )
+    except PaymentRecordError as exc:
+        return JsonResponse({"success": False, "message": str(exc)}, status=exc.status)
+    except Exception as exc:
+        return JsonResponse({"success": False, "message": f"Error processing payment: {exc}"}, status=500)
+
+    return JsonResponse(payload)
+
+
+verify_payment = verify_paystack_payment
 
 
 @csrf_exempt
 @require_http_methods(["POST"])
 def paystack_webhook(request):
     """
-    Paystack webhook endpoint for payment notifications
+    Paystack server callback. A successful charge is recorded even if the
+    browser never returns to the site.
     """
+    body = request.body or b""
+    signature = request.META.get("HTTP_X_PAYSTACK_SIGNATURE", "")
+    if not webhook_signature_ok(body, signature):
+        return JsonResponse({"status": "error", "message": "Invalid signature"}, status=400)
+
     try:
-        # Get the raw request body
-        body = request.body.decode('utf-8')
-        signature = request.META.get('HTTP_X_PAYSTACK_SIGNATURE', '')
-        
-        print(f"Webhook received - Signature: {signature[:20]}...")
-        print(f"Webhook body: {body[:200]}...")
-        
-        # Verify webhook signature (optional but recommended)
-        import hashlib
-        import hmac
-        import os
-        
-        paystack_secret_key = os.getenv('PAYSTACK_SECRET_KEY', 'test_secret_key')
-        
-        # Create expected signature
-        expected_signature = hmac.new(
-            paystack_secret_key.encode('utf-8'),
-            body.encode('utf-8'),
-            hashlib.sha512
-        ).hexdigest()
-        
-        # Verify signature
-        if not hmac.compare_digest(signature, expected_signature):
-            print("Webhook signature verification failed")
-            return JsonResponse({'status': 'error', 'message': 'Invalid signature'}, status=400)
-        
-        # Parse webhook data
-        import json
-        webhook_data = json.loads(body)
-        
-        print(f"Webhook event: {webhook_data.get('event')}")
-        print(f"Webhook data: {webhook_data}")
-        
-        # Handle different webhook events
-        event = webhook_data.get('event')
-        data = webhook_data.get('data', {})
-        
-        if event == 'charge.success':
-            # Payment was successful
-            reference = data.get('reference')
-            amount = data.get('amount', 0) / 100  # Convert from kobo to naira
-            status = data.get('status')
-            
-            print(f"Payment successful - Reference: {reference}, Amount: {amount}, Status: {status}")
-            
-            # You can add additional processing here
-            # For example, send confirmation emails, update analytics, etc.
-            
-        elif event == 'charge.failed':
-            # Payment failed
-            reference = data.get('reference')
-            print(f"Payment failed - Reference: {reference}")
-            
-        elif event == 'subscription.create':
-            # Subscription created
-            print(f"Subscription created - {data.get('subscription_code')}")
-            
-        else:
-            print(f"Unhandled webhook event: {event}")
-        
-        return JsonResponse({'status': 'success', 'message': 'Webhook processed'})
-        
-    except Exception as e:
-        print(f"Webhook processing error: {str(e)}")
-        import traceback
-        print(f"Webhook traceback: {traceback.format_exc()}")
-        return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+        webhook_data = json.loads(body.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return JsonResponse({"status": "error", "message": "Invalid payload"}, status=400)
+
+    event = webhook_data.get("event")
+    data = webhook_data.get("data") or {}
+    if event != "charge.success":
+        return JsonResponse({"status": "ignored"})
+
+    reference = data.get("reference")
+    try:
+        record_tree_payment(reference)
+    except PaymentRecordError as exc:
+        if exc.status >= 500:
+            return JsonResponse({"status": "error", "message": str(exc)}, status=500)
+        return JsonResponse({"status": "ignored", "message": str(exc)})
+    except Exception as exc:
+        return JsonResponse({"status": "error", "message": str(exc)}, status=500)
+
+    return JsonResponse({"status": "success"})
 
 
 @csrf_exempt
@@ -1535,189 +1322,22 @@ def mark_certificate_downloaded(request):
     """
     try:
         data = json.loads(request.body)
-        certificate_id = data.get('certificate_id')
-        user_id = data.get('user_id')
-        
+        certificate_id = data.get("certificate_id")
+        user_id = data.get("user_id")
+
         if not certificate_id or not user_id:
             return JsonResponse({
-                'success': False,
-                'message': 'Certificate ID and User ID are required'
+                "success": False,
+                "message": "Certificate ID and User ID are required",
             }, status=400)
-        
-        # Store certificate download in user's profile or session
-        # For now, we'll use localStorage on frontend, but this could be stored in database
+
         return JsonResponse({
-            'success': True,
-            'message': 'Certificate download marked'
+            "success": True,
+            "message": "Certificate download marked",
         })
-        
-    except Exception as e:
+
+    except Exception as exc:
         return JsonResponse({
-            'success': False,
-            'message': f'Error marking certificate download: {str(e)}'
+            "success": False,
+            "message": f"Error marking certificate download: {exc}",
         }, status=500)
-
-
-# Paystack Webhook Handler
-@csrf_exempt
-@require_http_methods(["POST"])
-def paystack_webhook(request):
-    """
-    Handle Paystack webhook notifications for payment events
-    """
-    try:
-        # Get the raw request body
-        payload = request.body
-        signature = request.headers.get('X-Paystack-Signature', '')
-        
-        # Verify webhook signature (you should implement this with your Paystack secret)
-        # For now, we'll process the webhook without signature verification
-        # In production, you should verify the signature for security
-        
-        data = json.loads(payload)
-        event_type = data.get('event')
-        
-        if event_type == 'charge.success':
-            # Payment was successful
-            payment_data = data.get('data', {})
-            reference = payment_data.get('reference')
-            amount = payment_data.get('amount', 0) / 100  # Convert from cents
-            customer_email = payment_data.get('customer', {}).get('email', '')
-            metadata = payment_data.get('metadata', {})
-            
-            # Extract project information from metadata
-            project_id = metadata.get('project_id')
-            donor_name = metadata.get('donor_name', 'Anonymous')
-            dedication_message = metadata.get('dedication_message', '')
-            trees_purchased = int(metadata.get('trees_purchased', 1))
-            
-            if project_id:
-                try:
-                    # Get the project
-                    project = TreeProject.objects.get(id=project_id)
-                    
-                    # Create donation record
-                    donation = TreeProjectDonation.objects.create(
-                        project=project,
-                        donor=None,  # Webhook doesn't have user context
-                        amount=amount,
-                        trees_purchased=trees_purchased,
-                        payment_reference=reference,
-                        payment_status='completed',
-                        dedication_message=dedication_message,
-                        donor_name=donor_name
-                    )
-                    
-                    # Update project stats
-                    project.funds_raised += amount
-                    project.trees_planted += trees_purchased
-                    project.save()
-                    
-                    return JsonResponse({'status': 'success'}, status=200)
-                    
-                except TreeProject.DoesNotExist:
-                    return JsonResponse({'error': 'Project not found'}, status=404)
-                except Exception as e:
-                    return JsonResponse({'error': str(e)}, status=500)
-        
-        return JsonResponse({'status': 'ignored'}, status=200)
-        
-    except Exception as e:
-        return JsonResponse({'error': str(e)}, status=500)
-
-
-# Payment Verification Endpoint
-@csrf_exempt
-@require_http_methods(["POST"])
-def verify_payment(request):
-    """
-    Verify payment with Paystack and create donation record
-    """
-    try:
-        data = json.loads(request.body)
-        reference = data.get('reference')
-        project_id = data.get('project_id')
-        amount = data.get('amount', 0)
-        trees_purchased = data.get('trees_purchased', 1)
-        donor_name = data.get('donor_name', 'Anonymous')
-        dedication_message = data.get('dedication_message', '')
-        selected_species = data.get('selected_species', {})
-        
-        if not reference or not project_id:
-            return JsonResponse({'success': False, 'message': 'Missing required fields'}, 
-                              status=400)
-        
-        # Verify payment with Paystack
-        import requests
-        paystack_secret = os.getenv('PAYSTACK_SECRET_KEY', 'sk_test_your_secret_key')
-        
-        verify_url = f"https://api.paystack.co/transaction/verify/{reference}"
-        headers = {
-            'Authorization': f'Bearer {paystack_secret}',
-            'Content-Type': 'application/json'
-        }
-        
-        response = requests.get(verify_url, headers=headers)
-        paystack_data = response.json()
-        
-        if paystack_data.get('status') and paystack_data.get('data', {}).get('status') == 'success':
-            # Payment is verified, create donation record
-            try:
-                project = TreeProject.objects.get(id=project_id)
-                
-                # Create donation record
-                donation = TreeProjectDonation.objects.create(
-                    project=project,
-                    donor=None,  # This endpoint doesn't require authentication
-                    amount=amount,
-                    trees_purchased=trees_purchased,
-                    payment_reference=reference,
-                    payment_status='completed',
-                    dedication_message=dedication_message,
-                    donor_name=donor_name
-                )
-                
-                # Store selected species in donation metadata (you might want to add a JSONField for this)
-                # For now, we'll log it or store it in the dedication message
-                if selected_species:
-                    species_text = ", ".join([f"{species}: {qty}" for species, qty in selected_species.items() if qty > 0])
-                    if species_text:
-                        donation.dedication_message = f"{dedication_message}\n\nSelected Species: {species_text}".strip()
-                        donation.save()
-                
-                # Update project stats
-                project.funds_raised += amount
-                project.trees_planted += trees_purchased
-                project.save()
-                
-                # Prepare certificate data
-                certificate_data = {
-                    'certificate_id': donation.id,
-                    'donor_name': donor_name,
-                    'project_name': project.name,
-                    'project_location': f"{project.city}, {project.country}",
-                    'trees_planted': trees_purchased,
-                    'amount': amount,
-                    'date': donation.created_at.strftime('%B %d, %Y'),
-                    'dedication_message': dedication_message
-                }
-                
-                return JsonResponse({
-                    'success': True,
-                    'message': 'Payment verified successfully',
-                    'certificate_data': certificate_data
-                })
-                
-            except TreeProject.DoesNotExist:
-                return JsonResponse({'success': False, 'message': 'Project not found'}, 
-                                  status=404)
-            except Exception as e:
-                return JsonResponse({'success': False, 'message': str(e)}, 
-                                  status=500)
-        else:
-            return JsonResponse({'success': False, 'message': 'Payment verification failed'}, 
-                              status=400)
-            
-    except Exception as e:
-        return JsonResponse({'success': False, 'message': str(e)}, 
-                          status=500)

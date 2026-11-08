@@ -70,12 +70,12 @@ DB_SSL_REQUIRE=True
 ALLOWED_HOSTS=your-api.onrender.com
 BASE_URL=https://your-api.onrender.com
 BACKEND_HOST=https://your-api.onrender.com
-FRONTEND_URL=https://your-app.vercel.app
+FRONTEND_URL=https://alerts.flowops.africa
 
-ALLOWED_ORIGINS=https://your-app.vercel.app
+ALLOWED_ORIGINS=https://alerts.flowops.africa,https://climate-wavers-three.vercel.app
 ALLOW_ALL_ORIGINS=False
-CSRF_TRUSTED_ORIGINS=https://your-app.vercel.app,https://your-api.onrender.com
-CORS_ORIGIN_REGEXES=^https://.*\.vercel\.app$
+CSRF_TRUSTED_ORIGINS=https://alerts.flowops.africa,https://climate-wavers-three.vercel.app,https://climate-wavers-api.onrender.com
+CORS_ORIGIN_REGEXES=^https://.*\.vercel\.app$,^https://([a-z0-9-]+\.)?flowops\.africa$
 
 STORAGE_BACKEND=supabase
 AWS_ACCESS_KEY_ID=...
@@ -102,8 +102,8 @@ The container runs migrations on boot (`entrypoint.sh`).
 VITE_APP_BACKEND_URL=https://your-api.onrender.com
 VITE_APP_BACKEND_STATUS=true
 VITE_APP_CHATBOT_URL=https://your-response.onrender.com
-VITE_DOMAIN=your-app.vercel.app
-VITE_SITE_URL=https://your-app.vercel.app
+VITE_DOMAIN=alerts.flowops.africa
+VITE_SITE_URL=https://alerts.flowops.africa
 ```
 
 Leave `VITE_APP_CHATBOT_URL` empty until the response service is live. Disaster pages fall back to mock data.

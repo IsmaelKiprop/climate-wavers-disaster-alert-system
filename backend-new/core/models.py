@@ -553,9 +553,12 @@ class TreeProjectDonation(models.Model):
     donor = models.ForeignKey(
         settings.AUTH_USER_MODEL, 
         on_delete=models.CASCADE, 
-        related_name='tree_donations'
+        related_name='tree_donations',
+        null=True,
+        blank=True,
     )
-    amount = models.DecimalField(max_digits=10, decimal_places=2, help_text="Amount in USD")
+    payer_email = models.EmailField(blank=True, default="")
+    amount = models.DecimalField(max_digits=10, decimal_places=2, help_text="Amount charged, in major units")
     trees_purchased = models.PositiveIntegerField()
     payment_reference = models.CharField(max_length=100, unique=True)
     payment_status = models.CharField(
@@ -576,7 +579,8 @@ class TreeProjectDonation(models.Model):
         ordering = ['-created_at']
     
     def __str__(self):
-        return f"Donation to {self.project.name} by {self.donor.username}"
+        donor_label = self.donor.username if self.donor_id else (self.payer_email or "anonymous")
+        return f"Donation to {self.project.name} by {donor_label}"
 
 class Campaign(models.Model):
     """

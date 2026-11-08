@@ -178,7 +178,7 @@ class PasswordResetRequestSerializer(serializers.Serializer):
         if user:
             uidb64 = urlsafe_base64_encode(smart_bytes(user.id))
             token = PasswordResetTokenGenerator().make_token(user)
-            frontend = str(settings.FRONTEND_URL or "https://climate-wavers-three.vercel.app").rstrip("/")
+            frontend = str(settings.FRONTEND_URL or "https://alerts.flowops.africa").rstrip("/")
             if "," in frontend or ";" in frontend:
                 candidates = [
                     part.strip().rstrip("/")

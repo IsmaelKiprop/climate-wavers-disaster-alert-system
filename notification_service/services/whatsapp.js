@@ -86,7 +86,7 @@ async function sendDisasterAlertWhatsApp(payload) {
           data.confidence || (data.isOfficial ? "Official feed" : "Community report"),
           data.magnitude != null ? String(data.magnitude) : "-",
           (data.aiSummary || "Follow local emergency instructions.").slice(0, 200),
-          data.deepLink || "https://climate-wavers-three.vercel.app/disasters",
+          data.deepLink || "https://alerts.flowops.africa/disasters",
         ]),
       ]
     }
