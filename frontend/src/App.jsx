@@ -33,6 +33,7 @@ const TreeProjectAdmin = lazy(() => import("./components/TreeProjectAdmin"));
 const PublicProjectView = lazy(() => import("./components/PublicProjectView"));
 const MyCertificates = lazy(() => import("./pages/MyCertificates"));
 const PaymentSuccess = lazy(() => import("./pages/PaymentSuccess"));
+const SharedProfilePage = lazy(() => import("./pages/SharedProfilePage"));
 
 const AuthSharedLayout = lazy(() => import("./pages/AuthenticatedPages/SharedLayout"));
 const AuthMainfeed = lazy(() => import("./pages/AuthenticatedPages/Mainfeed"));
@@ -138,6 +139,8 @@ function App() {
               <Route path="/transparency-report" element={<TransparencyReport />} />
               <Route path="/consulting" element={<Consulting />} />
               <Route path="/project" element={<PublicProjectView />} />
+              <Route path="/u/:userId" element={<SharedProfilePage />} />
+              <Route path="/gift/:userId" element={<PlantTree />} />
               <Route path="/app" element={<AuthSharedLayout />}>
                 <Route index element={<AuthMainfeed />} />
                 <Route path="/app/community" element={<AuthCommunity />} />

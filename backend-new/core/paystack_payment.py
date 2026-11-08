@@ -96,6 +96,21 @@ def _resolve_donor(request_user, email):
     return get_user_model().objects.filter(email__iexact=email).first()
 
 
+def _resolve_gifted_to(metadata, client_data):
+    raw = (
+        _metadata_value(metadata, "gifted_to")
+        or _metadata_value(metadata, "gift_for_user_id")
+        or (client_data or {}).get("gifted_to")
+        or (client_data or {}).get("gift_for_user_id")
+    )
+    if raw in (None, ""):
+        return None
+    try:
+        return get_user_model().objects.filter(id=int(raw)).first()
+    except (TypeError, ValueError):
+        return None
+
+
 def _verify_with_paystack(reference):
     secret = os.getenv("PAYSTACK_SECRET_KEY", "").strip()
     if not secret:
@@ -167,12 +182,17 @@ def record_tree_payment(reference, request_user=None, client_data=None):
     payer_email = (customer.get("email") or client_data.get("email") or "").strip()
     donor = _resolve_donor(request_user, payer_email)
 
+    gifted_to_early = _resolve_gifted_to(metadata, client_data)
+
     existing = TreeProjectDonation.objects.filter(payment_reference=reference).select_related("project", "donor").first()
     if existing:
         updates = []
         if existing.donor_id is None and donor is not None:
             existing.donor = donor
             updates.append("donor")
+        if existing.gifted_to_id is None and gifted_to_early is not None:
+            existing.gifted_to = gifted_to_early
+            updates.append("gifted_to")
         if not existing.payer_email and payer_email:
             existing.payer_email = payer_email
             updates.append("payer_email")
@@ -202,6 +222,7 @@ def record_tree_payment(reference, request_user=None, client_data=None):
         or client_data.get("dedication_message")
         or ""
     )
+    gifted_to = _resolve_gifted_to(metadata, client_data)
     selected_species = _as_dict(
         _metadata_value(metadata, "selected_species", {}) or client_data.get("selected_species")
     )
@@ -211,12 +232,19 @@ def record_tree_payment(reference, request_user=None, client_data=None):
         )
         if species_text:
             dedication = f"{dedication}\n\nSelected Species: {species_text}".strip()
+    if gifted_to is not None:
+        gift_label = (
+            f"{gifted_to.first_name} {gifted_to.last_name}".strip()
+            or gifted_to.username
+        )
+        dedication = f"{dedication}\n\nGifted to: {gift_label}".strip()
 
     try:
         with transaction.atomic():
             donation = TreeProjectDonation.objects.create(
                 project=project,
                 donor=donor,
+                gifted_to=gifted_to,
                 payer_email=payer_email,
                 amount=amount,
                 trees_purchased=trees_purchased,
@@ -231,7 +259,21 @@ def record_tree_payment(reference, request_user=None, client_data=None):
     except IntegrityError:
         donation = TreeProjectDonation.objects.select_related("project", "donor").get(payment_reference=reference)
 
-    return _donation_payload(donation, payer_email)
+    points_earned = 0
+    points_balance = None
+    try:
+        from .points import credit_gift_points, get_or_create_account
+
+        points_earned = credit_gift_points(donation) or 0
+        if donation.donor_id:
+            points_balance = get_or_create_account(donation.donor).balance
+    except Exception:
+        points_earned = 0
+
+    payload = _donation_payload(donation, payer_email)
+    payload["points_earned"] = points_earned
+    payload["points_balance"] = points_balance
+    return payload
 
 
 def webhook_signature_ok(body, signature):

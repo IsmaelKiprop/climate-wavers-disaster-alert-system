@@ -4,11 +4,14 @@ import { FaTree, FaLeaf, FaGlobe, FaArrowLeft } from 'react-icons/fa';
 import TreeCertificate from './TreeCertificate';
 import PaymentSuccess from './PaymentSuccess';
 import { apiUrl } from '../config/env';
+import { client } from '../api';
+import { endpoints } from '../utils/endpoints';
 import { getAuthToken, getUser } from '../utils/factory';
 
-const TreePayment = ({ treeData, onSuccess, onBack }) => {
+const TreePayment = ({ treeData, onSuccess, onBack, giftForUser = null }) => {
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
+  const [redeeming, setRedeeming] = useState(false);
   const [donorName, setDonorName] = useState('');
   const [dedicationMessage, setDedicationMessage] = useState('');
   const [exchangeRate, setExchangeRate] = useState(null);
@@ -22,6 +25,8 @@ const TreePayment = ({ treeData, onSuccess, onBack }) => {
   const [selectedSpecies, setSelectedSpecies] = useState({});
   const [totalQuantity, setTotalQuantity] = useState(0);
   const [totalAmount, setTotalAmount] = useState(0);
+  const [pointsBalance, setPointsBalance] = useState(0);
+  const [pointsPerTree, setPointsPerTree] = useState(null);
 
   // Currency configuration
   const currencyConfig = {
@@ -95,11 +100,38 @@ const TreePayment = ({ treeData, onSuccess, onBack }) => {
 
   useEffect(() => {
     const user = getUser();
-    if (!user) return;
-    if (user.email) setEmail(user.email);
-    const name = [user.first_name, user.last_name].filter(Boolean).join(" ").trim();
-    if (name) setDonorName(name);
-  }, []);
+    if (user) {
+      if (user.email) setEmail(user.email);
+      const name = [user.first_name, user.last_name].filter(Boolean).join(" ").trim();
+      if (name) setDonorName(name);
+    }
+    if (giftForUser?.name && !dedicationMessage) {
+      setDedicationMessage(`Trees gifted to ${giftForUser.name}`);
+    }
+  }, [giftForUser]);
+
+  useEffect(() => {
+    if (!getAuthToken() || !treeData?.id) return;
+    let alive = true;
+    client
+      .run("get", `${endpoints.pointsBalance}?project_id=${treeData.id}`, {}, true)
+      .then((res) => {
+        if (!alive) return;
+        setPointsBalance(Number(res?.balance || 0));
+        setPointsPerTree(Number(res?.redeem_cost_for_project || 0) || null);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [treeData?.id]);
+
+  const pointsNeeded = (pointsPerTree || 0) * Math.max(totalQuantity, 1);
+  const canRedeem =
+    Boolean(getAuthToken()) &&
+    pointsPerTree > 0 &&
+    totalQuantity > 0 &&
+    pointsBalance >= pointsNeeded;
 
   // Load Paystack script and fetch exchange rate
   useEffect(() => {
@@ -169,7 +201,8 @@ const TreePayment = ({ treeData, onSuccess, onBack }) => {
         trees_purchased: totalQuantity,
         donor_name: donorName,
         dedication_message: dedicationMessage,
-        selected_species: selectedSpecies
+        selected_species: selectedSpecies,
+        ...(giftForUser?.id ? { gifted_to: Number(giftForUser.id) } : {}),
       };
       
       // Send payment verification to backend
@@ -187,7 +220,11 @@ const TreePayment = ({ treeData, onSuccess, onBack }) => {
       const result = await response.json();
       
       if (result.success) {
-        toast.success('🌱 Payment verified! Your tree will be planted soon.');
+        toast.success(
+          result.points_earned
+            ? `🌱 Payment verified! +${result.points_earned} Wavers Points earned for gifting.`
+            : '🌱 Payment verified! Your tree will be planted soon.'
+        );
         
         // Set payment success data
         const successData = {
@@ -215,6 +252,9 @@ const TreePayment = ({ treeData, onSuccess, onBack }) => {
             detail: { trees_planted: result.user_total_trees }
           }));
         }
+        if (result.points_balance != null || result.points_earned) {
+          window.dispatchEvent(new CustomEvent('waversPointsUpdated'));
+        }
     
         const treeWithPayment = {
           ...treeData,
@@ -237,6 +277,69 @@ const TreePayment = ({ treeData, onSuccess, onBack }) => {
   const onClose = () => {
     console.log('Payment closed');
     setLoading(false);
+  };
+
+  const handleRedeemWithPoints = async () => {
+    if (!canRedeem) {
+      toast.error(
+        pointsBalance < pointsNeeded
+          ? `Need ${pointsNeeded} points. You have ${pointsBalance}.`
+          : "Select at least one tree to redeem."
+      );
+      return;
+    }
+    setRedeeming(true);
+    try {
+      const result = await client.run(
+        "post",
+        endpoints.pointsRedeem,
+        {
+          project_id: treeData.id,
+          trees: totalQuantity,
+          dedication_message: dedicationMessage,
+          ...(giftForUser?.id ? { gifted_to: Number(giftForUser.id) } : {}),
+        },
+        true
+      );
+      toast.success(result?.message || "Tree redeemed with points!");
+      setPointsBalance(Number(result?.points_balance ?? pointsBalance - pointsNeeded));
+      window.dispatchEvent(new CustomEvent("waversPointsUpdated"));
+      if (result?.user_total_trees !== undefined) {
+        window.dispatchEvent(
+          new CustomEvent("userTreesUpdated", {
+            detail: { trees_planted: result.user_total_trees },
+          })
+        );
+      }
+      setPaymentSuccessData({
+        project_name: treeData.name,
+        project_location: treeData.plantingLocation,
+        trees_planted: totalQuantity,
+        amount: 0,
+        date: new Date().toLocaleDateString("en-US", {
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+        }),
+        dedication_message: dedicationMessage || "Redeemed with Wavers Points",
+        donor_name: donorName || "Anonymous",
+        selected_species: selectedSpecies,
+      });
+      setShowPaymentSuccess(true);
+      onSuccess?.(
+        {
+          ...treeData,
+          paymentReference: result?.payment_reference,
+          donorName: donorName || "Anonymous",
+          dedicationMessage: dedicationMessage || "Redeemed with Wavers Points",
+        },
+        result?.payment_reference
+      );
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Could not redeem points.");
+    } finally {
+      setRedeeming(false);
+    }
   };
 
   const handlePayment = () => {
@@ -290,6 +393,7 @@ const TreePayment = ({ treeData, onSuccess, onBack }) => {
       donor_name: donorName,
       dedication_message: dedicationMessage,
       selected_species: selectedSpecies,
+      ...(giftForUser?.id ? { gifted_to: Number(giftForUser.id) } : {}),
     };
     sessionStorage.setItem(`cw-pay-${config.reference}`, JSON.stringify(checkout));
 
@@ -306,7 +410,24 @@ const TreePayment = ({ treeData, onSuccess, onBack }) => {
         donor_name: donorName,
         dedication_message: dedicationMessage,
         selected_species: JSON.stringify(selectedSpecies),
-        custom_fields: config.metadata.custom_fields,
+        ...(giftForUser?.id
+          ? {
+              gifted_to: String(giftForUser.id),
+              gift_for_user_id: String(giftForUser.id),
+            }
+          : {}),
+        custom_fields: [
+          ...config.metadata.custom_fields,
+          ...(giftForUser?.id
+            ? [
+                {
+                  display_name: "Gifted To User Id",
+                  variable_name: "gifted_to",
+                  value: String(giftForUser.id),
+                },
+              ]
+            : []),
+        ],
       },
       callback: function(response) {
         console.log('Payment successful:', response);
@@ -362,6 +483,14 @@ const TreePayment = ({ treeData, onSuccess, onBack }) => {
 
         {/* Payment Form */}
         <div className="p-6">
+          {giftForUser?.id ? (
+            <div className="mb-6 border border-border bg-background p-4">
+              <p className="text-sm text-muted">Planting on behalf of</p>
+              <p className="font-semibold text-foreground">
+                {giftForUser.name || `User #${giftForUser.id}`}
+              </p>
+            </div>
+          ) : null}
           <h3 className="text-xl font-semibold text-gray-900 mb-6">
             Complete Your Tree Planting
           </h3>
@@ -504,9 +633,35 @@ const TreePayment = ({ treeData, onSuccess, onBack }) => {
               </p>
             </div>
 
+            {getAuthToken() && pointsPerTree ? (
+              <div className="border border-border bg-background p-3 text-sm">
+                <p className="font-medium text-foreground">
+                  Your Wavers Points: {pointsBalance.toLocaleString()}
+                </p>
+                <p className="text-muted mt-1">
+                  {totalQuantity > 0
+                    ? `Redeem cost: ${pointsNeeded.toLocaleString()} pts for ${totalQuantity} tree${totalQuantity > 1 ? "s" : ""}`
+                    : `1 tree = ${pointsPerTree.toLocaleString()} pts`}
+                </p>
+              </div>
+            ) : null}
+
+            {canRedeem ? (
+              <button
+                type="button"
+                onClick={handleRedeemWithPoints}
+                disabled={redeeming || loading}
+                className="w-full border border-border bg-surface text-foreground py-3 px-4 font-semibold text-lg disabled:opacity-50"
+              >
+                {redeeming
+                  ? "Redeeming..."
+                  : `Redeem ${totalQuantity} tree${totalQuantity > 1 ? "s" : ""} with ${pointsNeeded.toLocaleString()} points`}
+              </button>
+            ) : null}
+
             <button
               onClick={handlePayment}
-              disabled={loading || loadingExchangeRate || !convertedAmount || totalQuantity === 0}
+              disabled={loading || redeeming || loadingExchangeRate || !convertedAmount || totalQuantity === 0}
               className="w-full bg-green-600 text-white py-3 px-4 rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed font-semibold text-lg"
             >
               {loading ? 'Processing...' : loadingExchangeRate ? 'Loading exchange rate...' : totalQuantity === 0 ? 'Select trees to plant' : `🌱 Plant ${totalQuantity} Tree${totalQuantity > 1 ? 's' : ''} for KSh${convertedAmount ? convertedAmount.toLocaleString(undefined, {maximumFractionDigits: 0}) : '...'} ($${totalAmount.toLocaleString()})`}

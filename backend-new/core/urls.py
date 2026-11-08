@@ -9,7 +9,8 @@ from .views import (
     TreeProjectViewSet, TreeProjectUpdateViewSet, TreeProjectDonationViewSet,
     DisasterViewSet,
     FileUploadViewSet, verify_paystack_payment, paystack_webhook, mark_certificate_downloaded,
-    verify_payment
+    verify_payment,
+    wavers_points_rates, wavers_points_balance, wavers_points_ledger, wavers_points_redeem,
 )
 from .ai_views import generate_content, analyze_content, generate_hashtags
 from .newsletter import NewsletterSubscribeView
@@ -19,6 +20,7 @@ from .alert_preferences import (
     AlertPhoneVerifyConfirmView,
     AlertPhoneVerifyRequestView,
 )
+from .profile_share import public_profile
 
 
 # Initialize the default router
@@ -63,6 +65,11 @@ urlpatterns = [
          name='notification_list'),
     path('notifications/mark-read/', MarkNotificationsAsReadView.as_view(),
          name='mark_notifications_as_read'),
+    path(
+        "users/<int:user_id>/public/",
+        public_profile,
+        name="public-profile",
+    ),
 
     # Additional custom actions for PostViewSet
     path('search-by-hashtag/',
@@ -93,4 +100,10 @@ urlpatterns = [
     
     # Certificate download tracking
     path('mark-certificate-downloaded/', mark_certificate_downloaded, name='mark_certificate_downloaded'),
+
+    # Wavers Points loyalty
+    path('points/rates/', wavers_points_rates, name='wavers-points-rates'),
+    path('points/balance/', wavers_points_balance, name='wavers-points-balance'),
+    path('points/ledger/', wavers_points_ledger, name='wavers-points-ledger'),
+    path('points/redeem/', wavers_points_redeem, name='wavers-points-redeem'),
 ]

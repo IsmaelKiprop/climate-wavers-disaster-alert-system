@@ -29,4 +29,8 @@ export const endpoints = {
     "alertPreferences": "/api/v1/alerts/preferences/",
     "alertPhoneRequest": "/api/v1/alerts/phone/request-code/",
     "alertPhoneConfirm": "/api/v1/alerts/phone/confirm/",
+    "pointsRates": "/api/v1/points/rates/",
+    "pointsBalance": "/api/v1/points/balance/",
+    "pointsLedger": "/api/v1/points/ledger/",
+    "pointsRedeem": "/api/v1/points/redeem/",
 }

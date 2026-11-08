@@ -1,7 +1,7 @@
 from rest_framework import viewsets
 from django.db.models import Count, Q, Exists, OuterRef, Value, BooleanField
 from django.contrib.contenttypes.models import ContentType
-from rest_framework.decorators import action
+from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated, AllowAny
@@ -1338,3 +1338,119 @@ def mark_certificate_downloaded(request):
             "success": False,
             "message": f"Error marking certificate download: {exc}",
         }, status=500)
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def wavers_points_rates(request):
+    """Public market rates for the Wavers Points loyalty program."""
+    from .points import MARKET_NOTES, gift_earn_points, redeem_cost_points
+
+    project_id = request.query_params.get("project_id")
+    project = None
+    example = {
+        "tree_price_usd": 2.0,
+        "earn_per_gifted_tree": gift_earn_points(1, 2),
+        "redeem_one_tree": redeem_cost_points(2, 1),
+        "gifts_for_one_free_tree": 10,
+    }
+    if project_id:
+        project = TreeProject.objects.filter(id=project_id).first()
+        if project:
+            earn = gift_earn_points(1, project.tree_price)
+            cost = redeem_cost_points(project.tree_price, 1)
+            example = {
+                "project_id": project.id,
+                "project_name": project.name,
+                "tree_price_usd": float(project.tree_price),
+                "earn_per_gifted_tree": earn,
+                "redeem_one_tree": cost,
+                "gifts_for_one_free_tree": (cost + earn - 1) // earn if earn else None,
+            }
+    return Response({"rates": MARKET_NOTES, "example": example})
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def wavers_points_balance(request):
+    from .points import account_payload
+
+    project = None
+    project_id = request.query_params.get("project_id")
+    if project_id:
+        project = TreeProject.objects.filter(id=project_id).first()
+    return Response(account_payload(request.user, project))
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def wavers_points_ledger(request):
+    from .models import WaversPointsLedger
+
+    rows = (
+        WaversPointsLedger.objects.filter(user=request.user)
+        .order_by("-created_at")[:50]
+    )
+    return Response(
+        [
+            {
+                "id": row.id,
+                "delta": row.delta,
+                "balance_after": row.balance_after,
+                "reason": row.reason,
+                "note": row.note,
+                "created_at": row.created_at,
+                "donation_id": row.donation_id,
+            }
+            for row in rows
+        ]
+    )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def wavers_points_redeem(request):
+    """Redeem Wavers Points for one or more trees on a project."""
+    from .points import redeem_trees_with_points
+    from .paystack_payment import _donation_payload
+
+    project_id = request.data.get("project_id")
+    trees = request.data.get("trees", 1)
+    dedication = request.data.get("dedication_message", "")
+    gifted_to_id = request.data.get("gifted_to") or request.data.get("gift_for_user_id")
+
+    if not project_id:
+        return Response({"detail": "project_id is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+    project = TreeProject.objects.filter(id=project_id).first()
+    if not project:
+        return Response({"detail": "Project not found."}, status=status.HTTP_404_NOT_FOUND)
+
+    gifted_to = None
+    if gifted_to_id not in (None, ""):
+        gifted_to = User.objects.filter(id=gifted_to_id).first()
+        if gifted_to is None:
+            return Response({"detail": "Gift recipient not found."}, status=status.HTTP_404_NOT_FOUND)
+
+    try:
+        result = redeem_trees_with_points(
+            user=request.user,
+            project=project,
+            trees=trees,
+            dedication_message=dedication,
+            gifted_to=gifted_to,
+        )
+    except ValueError as exc:
+        return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+    donation = result["donation"]
+    payload = _donation_payload(donation, getattr(request.user, "email", "") or "")
+    payload.update(
+        {
+            "points_spent": result["points_spent"],
+            "points_balance": result["balance"],
+            "redeemed_with_points": True,
+            "message": f"Redeemed {result['trees']} tree(s) with {result['points_spent']} points.",
+        }
+    )
+    return Response(payload, status=status.HTTP_201_CREATED)

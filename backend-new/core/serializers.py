@@ -486,6 +486,7 @@ class TreeProjectUpdateSerializer(serializers.ModelSerializer):
 
 class TreeProjectDonationSerializer(serializers.ModelSerializer):
     donor_name = serializers.SerializerMethodField()
+    gifted_to_name = serializers.SerializerMethodField()
     project_name = serializers.CharField(source='project.name', read_only=True)
     project_city = serializers.CharField(source='project.city', read_only=True)
     project_country = serializers.CharField(source='project.country', read_only=True)
@@ -495,6 +496,7 @@ class TreeProjectDonationSerializer(serializers.ModelSerializer):
         model = TreeProjectDonation
         fields = ['id', 'amount', 'trees_purchased', 'payment_reference', 'payment_status', 
                  'dedication_message', 'is_anonymous', 'created_at', 'donor_name',
+                 'gifted_to', 'gifted_to_name',
                  'project_name', 'project_city', 'project_country', 'co2_absorption_per_tree']
         read_only_fields = ['payment_reference', 'created_at']
     
@@ -502,6 +504,14 @@ class TreeProjectDonationSerializer(serializers.ModelSerializer):
         if obj.is_anonymous or not obj.donor_id:
             return "Anonymous"
         return f"{obj.donor.first_name} {obj.donor.last_name}".strip() or obj.donor.username
+
+    def get_gifted_to_name(self, obj):
+        if not obj.gifted_to_id:
+            return None
+        return (
+            f"{obj.gifted_to.first_name} {obj.gifted_to.last_name}".strip()
+            or obj.gifted_to.username
+        )
 
 
 class TreeProjectSerializer(serializers.ModelSerializer):

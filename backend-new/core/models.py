@@ -557,6 +557,14 @@ class TreeProjectDonation(models.Model):
         null=True,
         blank=True,
     )
+    gifted_to = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name="gifted_tree_donations",
+        null=True,
+        blank=True,
+        help_text="User this tree gift is dedicated to (shared profile purchases)",
+    )
     payer_email = models.EmailField(blank=True, default="")
     amount = models.DecimalField(max_digits=10, decimal_places=2, help_text="Amount charged, in major units")
     trees_purchased = models.PositiveIntegerField()
@@ -581,6 +589,56 @@ class TreeProjectDonation(models.Model):
     def __str__(self):
         donor_label = self.donor.username if self.donor_id else (self.payer_email or "anonymous")
         return f"Donation to {self.project.name} by {donor_label}"
+
+
+class WaversPointsAccount(models.Model):
+    """Loyalty wallet: gift trees → earn points → redeem a free tree."""
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="wavers_points",
+    )
+    balance = models.PositiveIntegerField(default=0)
+    lifetime_earned = models.PositiveIntegerField(default=0)
+    lifetime_redeemed = models.PositiveIntegerField(default=0)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.user_id}: {self.balance} pts"
+
+
+class WaversPointsLedger(models.Model):
+    REASON_CHOICES = [
+        ("gift_earn", "Gift reward"),
+        ("redeem_tree", "Redeem tree"),
+        ("adjustment", "Adjustment"),
+    ]
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="wavers_points_ledger",
+    )
+    delta = models.IntegerField()
+    balance_after = models.PositiveIntegerField()
+    reason = models.CharField(max_length=32, choices=REASON_CHOICES)
+    note = models.CharField(max_length=255, blank=True, default="")
+    donation = models.ForeignKey(
+        TreeProjectDonation,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="points_entries",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.user_id} {self.delta} ({self.reason})"
+
 
 class Campaign(models.Model):
     """

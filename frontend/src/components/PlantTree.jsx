@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import TreePayment from './TreePayment';
 import TreeCertificate from './TreeCertificate';
 import SocialShare from './SocialShare';
 import ProjectSEO from './ProjectSEO';
+import WaversPointsCard from './WaversPointsCard';
 import { FaTree, FaLeaf, FaSeedling, FaGlobe, FaHeart, FaMapMarkerAlt, FaUsers, FaFilter, FaShare } from 'react-icons/fa';
 import { endpoints } from '../utils/endpoints';
 import { getAuthToken, getUser } from '../utils/factory';
@@ -14,6 +16,11 @@ import { apiUrl } from '../config/env';
 import { unwrapList } from '../utils/apiData';
 
 const PlantTree = () => {
+  const { userId: giftUserIdParam } = useParams();
+  const [searchParams] = useSearchParams();
+  const giftUserId = giftUserIdParam || searchParams.get("for") || "";
+  const giftName = searchParams.get("name") || "";
+  const [giftProfile, setGiftProfile] = useState(null);
   const [selectedTree, setSelectedTree] = useState(null);
   const [showCertificate, setShowCertificate] = useState(false);
   const [userTrees, setUserTrees] = useState([]);
@@ -37,6 +44,30 @@ const PlantTree = () => {
   });
 
   // Removed dummy tree types - now using real African projects only
+
+  useEffect(() => {
+    if (!giftUserId) {
+      setGiftProfile(null);
+      return;
+    }
+    let alive = true;
+    client
+      .run("get", `${endpoints.users}${giftUserId}/public/`, {}, false)
+      .then((data) => {
+        if (alive) setGiftProfile(data);
+      })
+      .catch(() => {
+        if (alive) {
+          setGiftProfile({
+            id: giftUserId,
+            display_name: giftName || "a Climate Wavers member",
+          });
+        }
+      });
+    return () => {
+      alive = false;
+    };
+  }, [giftUserId, giftName]);
 
   // Load user's tree data from database
   useEffect(() => {
@@ -199,14 +230,42 @@ const PlantTree = () => {
             <FaTree className="text-4xl sm:text-6xl text-green-600 mb-2 sm:mb-0 sm:mr-4" />
             <div>
               <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-900 mb-2">
-                Plant a Tree
+                {giftUserId ? "Gift a Tree" : "Plant a Tree"}
               </h1>
               <p className="text-lg sm:text-xl text-gray-600 px-4 sm:px-0">
-                Make a lasting impact on our planet, one tree at a time
+                {giftUserId
+                  ? `Plant trees for ${giftProfile?.display_name || giftName || "this Climate Wavers member"}`
+                  : "Make a lasting impact on our planet, one tree at a time"}
               </p>
             </div>
           </div>
+          {giftUserId ? (
+            <div className="mt-4 inline-flex flex-col sm:flex-row items-center gap-3 border border-border bg-surface px-4 py-3 text-left">
+              <img
+                src={giftProfile?.profile_picture || "/avatar.png"}
+                alt=""
+                className="h-12 w-12 object-cover"
+                style={{ borderRadius: "50%" }}
+                onError={(e) => {
+                  e.target.src = "/avatar.png";
+                }}
+              />
+              <div>
+                <p className="font-semibold text-foreground">
+                  {giftProfile?.display_name || giftName || "Climate Wavers member"}
+                </p>
+                {giftProfile?.username ? (
+                  <p className="text-sm text-muted">@{giftProfile.username}</p>
+                ) : null}
+              </div>
+              <Link to={`/u/${giftUserId}`} className="text-sm text-primary sm:ml-2">
+                View profile
+              </Link>
+            </div>
+          ) : null}
         </div>
+
+        <WaversPointsCard projectId={selectedProject?.id || selectedTree?.id || null} />
 
         {/* User Stats */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 mb-6 md:mb-8">
@@ -237,6 +296,14 @@ const PlantTree = () => {
         ) : selectedTree ? (
           <TreePayment 
             treeData={selectedTree}
+            giftForUser={
+              giftUserId
+                ? {
+                    id: Number(giftUserId),
+                    name: giftProfile?.display_name || giftName || "",
+                  }
+                : null
+            }
             onSuccess={handlePaymentSuccess}
             onBack={() => setSelectedTree(null)}
           />

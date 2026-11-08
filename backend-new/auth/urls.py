@@ -32,6 +32,8 @@ from drf_spectacular.views import (
     SpectacularSwaggerView,
 )
 
+from core.profile_share import share_profile_html
+
 urlpatterns = [
     path("health/", health, name="health"),
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
@@ -42,6 +44,7 @@ urlpatterns = [
         SpectacularSwaggerView.as_view(url_name="schema"),
         name="schema-swagger",
     ),
+    path("share/profile/<int:user_id>/", share_profile_html, name="share-profile"),
     path("api/v1/", include("core.urls")),
     path("api/v1/auth/", include("api.urls")),
     path("admin/", admin.site.urls),

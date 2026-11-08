@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { BsBriefcase } from "react-icons/bs";
 import { FiMapPin } from "react-icons/fi";
-import { IoCreateOutline, IoCamera, IoCallOutline, IoGlobeOutline, IoLeaf } from "react-icons/io5";
+import { IoCreateOutline, IoCamera, IoCallOutline, IoGlobeOutline, IoLeaf, IoShareOutline } from "react-icons/io5";
 import TreeBadge from "./TreeBadge";
 import { toast } from "react-toastify";
 import Feed from "./Feed";
@@ -13,6 +13,11 @@ import { endpoints } from "../utils/endpoints";
 import { client } from "../api";
 import { getUser, normalizeUser, setUser } from "../utils/factory";
 import { useFollow } from "../context/FollowContext";
+import ProfileShareModal from "./ProfileShareModal";
+import {
+  getProfileCompleteness,
+  giftTreesPath,
+} from "../utils/profileCompleteness";
 
 const seedOwnProfile = (userId) => {
   const me = normalizeUser(getUser()) || {};
@@ -32,8 +37,10 @@ const Profile = () => {
   const [feed, setFeed] = useState({});
   const [isFollowLocal, setIsFollowLocal] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
   const { isFollowing, setFollowing } = useFollow();
   const isFollow = isFollowing(profile?.id || userId, isFollowLocal);
+  const completeness = getProfileCompleteness(profile);
 
   const {
     error,
@@ -258,7 +265,7 @@ const Profile = () => {
                   {/* Action Button */}
                   <div className="flex-shrink-0">
                     {isOwnProfile ? (
-                      <div className="flex gap-3">
+                      <div className="flex flex-wrap gap-3">
                         <button
                           type="button"
                           onClick={() => navigate("/app/my-certificates")}
@@ -267,6 +274,16 @@ const Profile = () => {
                           <IoLeaf size={18} />
                           My Certificates
                         </button>
+                        {completeness.isComplete ? (
+                          <button
+                            type="button"
+                            onClick={() => setShowShareModal(true)}
+                            className="bg-white text-teal-700 border border-teal-200 px-6 py-3 rounded-full font-semibold text-sm hover:bg-teal-50 transition-all duration-200 flex items-center gap-2"
+                          >
+                            <IoShareOutline size={18} />
+                            Share profile
+                          </button>
+                        ) : null}
                         <button
                           type="button"
                           onClick={() => setIsEditModalOpen(true)}
@@ -277,20 +294,65 @@ const Profile = () => {
                         </button>
                       </div>
                     ) : profile?.id ? (
-                      <button
-                        type="button"
-                        onClick={() => handleFollow(profile?.id)}
-                        className={`px-6 py-3 rounded-full font-semibold text-sm transition-all duration-200 flex items-center gap-2 ${
-                          isFollow
-                            ? "bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200"
-                            : "bg-teal-500 text-white hover:bg-teal-600 shadow-lg hover:shadow-xl"
-                        }`}
-                      >
-                        {isFollow ? "Following" : "Follow"}
-                      </button>
+                      <div className="flex flex-wrap gap-3">
+                        <button
+                          type="button"
+                          onClick={() => handleFollow(profile?.id)}
+                          className={`px-6 py-3 rounded-full font-semibold text-sm transition-all duration-200 flex items-center gap-2 ${
+                            isFollow
+                              ? "bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200"
+                              : "bg-teal-500 text-white hover:bg-teal-600 shadow-lg hover:shadow-xl"
+                          }`}
+                        >
+                          {isFollow ? "Following" : "Follow"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            navigate(
+                              giftTreesPath(
+                                profile.id,
+                                displayName || profile.username || ""
+                              )
+                            )
+                          }
+                          className="bg-green-600 text-white px-6 py-3 rounded-full font-semibold text-sm hover:bg-green-700 transition-all duration-200 flex items-center gap-2"
+                        >
+                          <IoLeaf size={18} />
+                          Gift trees
+                        </button>
+                      </div>
                     ) : null}
       </div>
                 </div>
+
+                {isOwnProfile && !completeness.isComplete ? (
+                  <div className="mt-4 border border-border bg-background p-4">
+                    <p className="font-medium text-foreground">
+                      Finish your profile to unlock sharing
+                    </p>
+                    <p className="mt-1 text-sm text-muted">
+                      {completeness.completed}/{completeness.total} complete — add a photo, bio, and location to share a public preview and receive tree gifts.
+                    </p>
+                    <ul className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+                      {completeness.checks.map((item) => (
+                        <li
+                          key={item.key}
+                          className={item.done ? "text-primary" : "text-muted"}
+                        >
+                          {item.done ? "✓" : "○"} {item.label}
+                        </li>
+                      ))}
+                    </ul>
+                    <button
+                      type="button"
+                      onClick={() => setIsEditModalOpen(true)}
+                      className="mt-3 h-10 px-4 bg-primary text-primary-foreground text-sm"
+                    >
+                      Complete profile
+                    </button>
+                  </div>
+                ) : null}
 
                 {/* Bio Section */}
                 {profile?.bio && (
@@ -408,6 +470,14 @@ const Profile = () => {
         user={profile}
         onProfileUpdate={handleProfileUpdate}
       />
+
+      {showShareModal ? (
+        <ProfileShareModal
+          user={profile}
+          treesTotal={0}
+          onClose={() => setShowShareModal(false)}
+        />
+      ) : null}
     </div>
   );
 };
