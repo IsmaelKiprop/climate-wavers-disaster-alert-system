@@ -11,7 +11,11 @@ import EmojiPicker from "emoji-picker-react";
 import { IoSend, IoCloseSharp, IoLocationOutline, IoHappyOutline, IoVideocamOutline, IoImageOutline, IoSparklesOutline } from "react-icons/io5";
 import { MdEmojiEmotions, MdLocationOn, MdVideocam, MdImage, MdAutoAwesome } from "react-icons/md";
 import { env } from "../config/env";
-import { locationFieldValue, reverseGeocode } from "../utils/formatLocation";
+import {
+  locationFieldValue,
+  readDevicePosition,
+  reverseGeocode,
+} from "../utils/formatLocation";
 
 export default function Createpost({ type, postId, parentId, closeModal }) {
   const { register, handleSubmit, reset, watch, setValue } = useForm();
@@ -76,24 +80,11 @@ export default function Createpost({ type, postId, parentId, closeModal }) {
   };
 
   const getCurrentLocation = async () => {
-    if (!navigator.geolocation) {
-      setLocationError("Geolocation is not supported by this browser.");
-      return;
-    }
-
     setIsGettingLocation(true);
     setLocationError(null);
 
     try {
-      const position = await new Promise((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(resolve, reject, {
-          enableHighAccuracy: true,
-          timeout: 10000,
-          maximumAge: 0
-        });
-      });
-
-      const { latitude, longitude } = position.coords;
+      const { latitude, longitude, accuracy } = await readDevicePosition();
       let address = "";
       try {
         address = await reverseGeocode(latitude, longitude);
@@ -102,9 +93,12 @@ export default function Createpost({ type, postId, parentId, closeModal }) {
       }
 
       const currentLocation = {
-        name: address || `Current Location (${latitude.toFixed(4)}, ${longitude.toFixed(4)})`,
+        name:
+          address ||
+          `Current Location (${latitude.toFixed(4)}, ${longitude.toFixed(4)})`,
         type: "current",
         coordinates: { latitude, longitude },
+        accuracy,
         address,
       };
 
@@ -113,7 +107,11 @@ export default function Createpost({ type, postId, parentId, closeModal }) {
       setShowLocationPicker(false);
     } catch (error) {
       console.error("Error getting location:", error);
-      setLocationError("Unable to get your current location. Please try again or select a city manually.");
+      setLocationError(
+        error?.code === "LOW_ACCURACY"
+          ? error.message
+          : "Unable to get your current location. Please try again or select a city manually."
+      );
     } finally {
       setIsGettingLocation(false);
     }

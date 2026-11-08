@@ -23,7 +23,12 @@ function normalizeNotice(item) {
   if (!item || item.id == null) return null;
   return {
     ...item,
-    actor: item.actor || item.content?.user || item.user || null,
+    actor:
+      item.actor ||
+      item.content?.user ||
+      item.content?.follower ||
+      item.user ||
+      null,
     created_at: item.created_at || new Date().toISOString(),
     is_read: Boolean(item.is_read),
   };

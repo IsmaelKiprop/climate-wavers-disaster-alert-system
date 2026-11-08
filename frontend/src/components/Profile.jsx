@@ -12,6 +12,7 @@ import { useTrending } from "../hooks/useTrending";
 import { endpoints } from "../utils/endpoints";
 import { client } from "../api";
 import { getUser, normalizeUser, setUser } from "../utils/factory";
+import { useFollow } from "../context/FollowContext";
 
 const seedOwnProfile = (userId) => {
   const me = normalizeUser(getUser()) || {};
@@ -29,8 +30,10 @@ const Profile = () => {
   const me = normalizeUser(getUser()) || {};
   const [profile, setProfile] = useState(() => seedOwnProfile(userId));
   const [feed, setFeed] = useState({});
-  const [isFollow, setIsFollow] = useState(false);
+  const [isFollowLocal, setIsFollowLocal] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const { isFollowing, setFollowing } = useFollow();
+  const isFollow = isFollowing(profile?.id || userId, isFollowLocal);
 
   const {
     error,
@@ -78,7 +81,9 @@ const Profile = () => {
     const nextUser = normalizeUser(user?.user || loadedUser);
     if (nextUser?.id) {
       setProfile((prev) => ({ ...prev, ...nextUser }));
-      setIsFollow(Boolean(nextUser.is_following));
+      const following = Boolean(nextUser.is_following);
+      setIsFollowLocal(following);
+      setFollowing(nextUser.id, following);
     }
     if (user) {
       setFeed({
@@ -94,7 +99,7 @@ const Profile = () => {
       toast.dismiss();
       toast.error("We could not load this profile.");
     }
-  }, [isFetched, error, user, loadedUser]);
+  }, [isFetched, error, user, loadedUser, setFollowing]);
 
   const isOwnProfile = String(me.id || "") === String(profile?.id || userId || "");
   const avatarSrcRaw = profile?.profile_picture || profile?.profile_pic || profile?.picture || "";
@@ -136,51 +141,40 @@ const Profile = () => {
     });
   };
 
-  const follow = async (userId) => {
-    console.log("Profile - Attempting to follow user:", userId, "Current isFollow state:", isFollow);
+  const follow = async (targetId) => {
     try {
-    await client.run("post", endpoints?.follow, { following_id: userId }, true);
-      console.log("Profile - Follow successful, updating state to true");
-      setIsFollow(true);
+      await client.run("post", endpoints?.follow, { following_id: Number(targetId) }, true);
+      setIsFollowLocal(true);
+      setFollowing(targetId, true);
     } catch (error) {
-      console.log("Profile - Follow error:", error.response?.data);
-      // Handle specific follow errors
       if (error.response?.data?.detail === "You are already following this user.") {
-        // User is already following, update UI to reflect this
-        console.log("Profile - User already being followed, updating UI state");
-        setIsFollow(true);
+        setIsFollowLocal(true);
+        setFollowing(targetId, true);
         return;
       }
-      // Revert UI state on other errors
-      console.log("Profile - Other error, reverting state to false");
-      setIsFollow(false);
+      setIsFollowLocal(false);
+      setFollowing(targetId, false);
       throw error;
     }
   };
 
-  const unfollow = async (userId) => {
-    console.log("Profile - Attempting to unfollow user:", userId);
+  const unfollow = async (targetId) => {
     try {
-    await client.run("delete", `${endpoints?.follow}${userId}/`, {}, true);
-      console.log("Profile - Unfollow successful, updating state to false");
-      setIsFollow(false);
+      await client.run("delete", `${endpoints?.follow}${targetId}/`, {}, true);
+      setIsFollowLocal(false);
+      setFollowing(targetId, false);
     } catch (error) {
-      console.log("Profile - Unfollow error:", error.response?.data);
-      // Revert UI state on error
-      console.log("Profile - Unfollow error, reverting state to true");
-      setIsFollow(true);
+      setIsFollowLocal(true);
+      setFollowing(targetId, true);
       throw error;
     }
   };
-  
-  const handleFollow = async (userId) => {
-    console.log("Profile - handleFollow called - isFollow:", isFollow, "userId:", userId);
+
+  const handleFollow = async (targetId) => {
     if (!isFollow) {
-      console.log("Profile - User is not being followed, calling follow");
-      await follow(userId);
+      await follow(targetId);
     } else {
-      console.log("Profile - User is already being followed, calling unfollow");
-      await unfollow(userId);
+      await unfollow(targetId);
     }
   };
 
@@ -285,10 +279,7 @@ const Profile = () => {
                     ) : profile?.id ? (
                       <button
                         type="button"
-                        onClick={() => {
-                          setIsFollow(!isFollow);
-                          handleFollow(profile?.id);
-                        }}
+                        onClick={() => handleFollow(profile?.id)}
                         className={`px-6 py-3 rounded-full font-semibold text-sm transition-all duration-200 flex items-center gap-2 ${
                           isFollow
                             ? "bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200"

@@ -19,7 +19,11 @@ import {
 import { toast } from "react-toastify";
 import AuthStatus from "./AuthStatus";
 import { env } from "../config/env";
-import { reverseGeocode } from "../utils/formatLocation";
+import {
+  QUICK_CITIES,
+  readDevicePosition,
+  reverseGeocode,
+} from "../utils/formatLocation";
 
 const ModernPostCreator = ({ type = "post", postId, parentId, closeModal }) => {
   const { register, handleSubmit, reset, watch, setValue, formState: { errors } } = useForm();
@@ -258,38 +262,45 @@ const ModernPostCreator = ({ type = "post", postId, parentId, closeModal }) => {
     setShowEmojiPicker(false);
   };
 
-  // Location functionality
+  const applyLocationLabel = (label, coords = null) => {
+    setSelectedLocation(coords || { name: label });
+    setLocationAddress(label);
+    setValue("location", label);
+    setShowLocationPicker(false);
+  };
+
   const handleLocationClick = async () => {
-    if (!navigator.geolocation) {
-      toast.error("Geolocation is not supported by this browser.");
-      return;
+    setShowLocationPicker((open) => !open);
+  };
+
+  const handleUseCurrentLocation = async () => {
+    try {
+      const { latitude, longitude, accuracy } = await readDevicePosition();
+      setSelectedLocation({ latitude, longitude, accuracy });
+      try {
+        const address = await reverseGeocode(latitude, longitude);
+        applyLocationLabel(address, { latitude, longitude, accuracy });
+        toast.success(
+          accuracy
+            ? `Location added (±${Math.round(accuracy)} m)`
+            : "Location added"
+        );
+      } catch (error) {
+        console.error("Reverse geocoding error:", error);
+        const fallback = `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`;
+        applyLocationLabel(fallback, { latitude, longitude, accuracy });
+        toast.success("Coordinates added. Address lookup failed.");
+      }
+    } catch (error) {
+      console.error("Error getting location:", error);
+      if (error?.code === "LOW_ACCURACY") {
+        toast.error(error.message);
+        setShowLocationPicker(true);
+        return;
+      }
+      toast.error("Unable to get your location. Pick a city instead.");
+      setShowLocationPicker(true);
     }
-
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        const { latitude, longitude } = position.coords;
-        setSelectedLocation({ latitude, longitude });
-        setShowLocationPicker(false);
-
-        try {
-          const address = await reverseGeocode(latitude, longitude);
-          setLocationAddress(address);
-          setValue("location", address);
-          toast.success("Location added successfully!");
-        } catch (error) {
-          console.error("Reverse geocoding error:", error);
-          const fallback = `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`;
-          setLocationAddress(fallback);
-          setValue("location", fallback);
-          toast.success("Coordinates added. Address lookup failed.");
-        }
-      },
-      (error) => {
-        console.error("Error getting location:", error);
-        toast.error("Unable to get your location. Please try again.");
-      },
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
-    );
   };
 
   // Initialize location field with empty string
@@ -596,22 +607,64 @@ const ModernPostCreator = ({ type = "post", postId, parentId, closeModal }) => {
           </div>
         )}
 
+        {/* Location picker */}
+        {showLocationPicker && (
+          <div className="mt-4 p-3 border border-border bg-background">
+            <p className="text-sm font-medium text-foreground mb-2">Add location</p>
+            <button
+              type="button"
+              onClick={handleUseCurrentLocation}
+              className="w-full text-left px-3 py-2 text-sm border border-border hover:bg-surface mb-2"
+            >
+              Use my current GPS location
+            </button>
+            <p className="text-xs text-muted mb-2">Or choose a city</p>
+            <div className="flex flex-wrap gap-2">
+              {QUICK_CITIES.map((city) => (
+                <button
+                  key={city.name}
+                  type="button"
+                  onClick={() => {
+                    applyLocationLabel(city.name);
+                    toast.success(`Location set to ${city.name}`);
+                  }}
+                  className="px-3 py-1.5 text-xs border border-border hover:border-primary hover:text-primary"
+                >
+                  {city.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Location Display */}
-        {selectedLocation && (
-          <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-xl">
-            <div className="flex items-center space-x-2">
-              <IoLocationOutline className="w-4 h-4 text-green-600" />
-              <span className="text-sm text-green-700">
-                Location added: {locationAddress || 'Getting address...'}
-              </span>
+        {selectedLocation && locationAddress && (
+          <div className="mt-4 p-3 border border-border bg-surface">
+            <div className="flex items-start gap-2">
+              <IoLocationOutline className="w-4 h-4 text-primary mt-0.5 shrink-0" />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm text-foreground">
+                  Location added: {locationAddress}
+                </p>
+                {selectedLocation.latitude != null && selectedLocation.longitude != null ? (
+                  <p className="text-xs text-muted mt-1">
+                    {Number(selectedLocation.latitude).toFixed(5)},{" "}
+                    {Number(selectedLocation.longitude).toFixed(5)}
+                    {selectedLocation.accuracy
+                      ? ` · ±${Math.round(selectedLocation.accuracy)} m`
+                      : ""}
+                  </p>
+                ) : null}
+              </div>
               <button
                 type="button"
                 onClick={() => {
                   setSelectedLocation(null);
                   setLocationAddress(null);
-                  setValue('location', '');
+                  setValue("location", "");
                 }}
-                className="text-green-600 hover:text-green-800"
+                className="text-muted hover:text-foreground"
+                aria-label="Remove location"
               >
                 <IoCloseOutline className="w-4 h-4" />
               </button>

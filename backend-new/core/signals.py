@@ -11,25 +11,42 @@ channel_layer = get_channel_layer()
 
 
 def send_to_websocket(notification_id, group_name, message, noticee_user, notification_type, content=None):
-    # Prepare user details
+    """Best-effort live push; never break follow/comment saves if Channels is down."""
+    layer = channel_layer or get_channel_layer()
+    if layer is None:
+        return
+
+    profile = getattr(noticee_user, "profile_picture", None)
+    try:
+        profile_image = profile.url if profile and hasattr(profile, "url") else profile
+    except Exception:
+        profile_image = None
+
     user_details = {
-        'username': noticee_user.username,
-        'email': noticee_user.email,
-        'profile_image': noticee_user.profile_picture
+        "id": getattr(noticee_user, "id", None),
+        "username": noticee_user.username,
+        "email": getattr(noticee_user, "email", None),
+        "profile_image": profile_image,
+        "profile_picture": profile_image,
+        "first_name": getattr(noticee_user, "first_name", ""),
+        "last_name": getattr(noticee_user, "last_name", ""),
     }
 
-    # Send message to websocket
-    async_to_sync(channel_layer.group_send)(
-        f'notifications_{group_name}',
-        {
-            'id': notification_id,
-            'type': 'notification_message',
-            'message': message,
-            'content': content,
-            'notification_type': notification_type,
-            'user_details': user_details  # Send user details along with the message
-        }
-    )
+    try:
+        async_to_sync(layer.group_send)(
+            f"notifications_{group_name}",
+            {
+                "id": notification_id,
+                "type": "notification_message",
+                "message": message,
+                "content": content,
+                "notification_type": notification_type,
+                "user_details": user_details,
+            },
+        )
+    except Exception as exc:
+        logger = __import__("logging").getLogger(__name__)
+        logger.warning("Websocket notification failed: %s", exc)
 
 
 @receiver(post_save, sender=Post)
@@ -192,23 +209,36 @@ def notify_poll_participants(sender, instance, created, **kwargs):
 
 @receiver(post_save, sender=Follow)
 def notify_user_on_new_follower(sender, instance, created, **kwargs):
-    if created:
-        # Skip notification if the follower is following themselves (just in case)
-        if instance.following != instance.follower:
-            notification = Notification.objects.create(
-                user=instance.following,
-                notification_type='follow',
-                object_id=instance.id,
-                content_type=ContentType.objects.get_for_model(Follow),
-                message=f'{instance.follower.username} has started following you.'
-            )
-            send_to_websocket(
-                notification.id,
-                instance.following.username,
-                notification.message,
-                instance.follower,
-                notification.notification_type
-            )
+    if not created:
+        return
+    if instance.following_id == instance.follower_id:
+        return
+    try:
+        notification = Notification.objects.create(
+            user=instance.following,
+            notification_type="follow",
+            object_id=instance.id,
+            content_type=ContentType.objects.get_for_model(Follow),
+            message=f"{instance.follower.username} has started following you.",
+        )
+        send_to_websocket(
+            notification.id,
+            instance.following.username,
+            notification.message,
+            instance.follower,
+            notification.notification_type,
+            content={
+                "follower": {
+                    "id": instance.follower_id,
+                    "username": instance.follower.username,
+                    "first_name": getattr(instance.follower, "first_name", ""),
+                    "last_name": getattr(instance.follower, "last_name", ""),
+                }
+            },
+        )
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).warning("Follow notification failed: %s", exc)
 
 
 @receiver(post_save, sender=Bookmark)

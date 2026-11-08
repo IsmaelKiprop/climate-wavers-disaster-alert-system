@@ -34,19 +34,20 @@ class NotificationConsumer(AsyncWebsocketConsumer):
             await self.channel_layer.group_discard(group, self.channel_name)
 
     async def notification_message(self, event):
-        notification_id = event['id']
-        message = event['message']
-        notification_type = event['notification_type']
-        user_details = event['user_details']
-        content = event['content']
+        notification_id = event.get("id")
+        message = event.get("message")
+        notification_type = event.get("notification_type")
+        user_details = event.get("user_details") or {}
+        content = event.get("content")
         logger.info(
-            f"Notification sent to {user_details['username']}")
+            "Notification sent to %s", user_details.get("username")
+        )
 
-        # Send notification with user details
         await self.send(text_data=json.dumps({
-            'id': notification_id ,
-            'notification_type': notification_type,
-            'message': message,
-            'content': content,
-            'user': user_details  # Include user details in the WebSocket message
+            "id": notification_id,
+            "notification_type": notification_type,
+            "message": message,
+            "content": content,
+            "user": user_details,
+            "actor": user_details,
         }))

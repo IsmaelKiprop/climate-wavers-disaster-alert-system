@@ -26,9 +26,11 @@ def reverse_geocode(latitude, longitude):
     Convert latitude and longitude to a short place label (city/region/country).
     """
     try:
+        import re
+
         url = (
             "https://nominatim.openstreetmap.org/reverse"
-            f"?format=json&lat={latitude}&lon={longitude}&zoom=14&addressdetails=1"
+            f"?format=json&lat={latitude}&lon={longitude}&zoom=12&addressdetails=1"
         )
         headers = {
             "User-Agent": "ClimateWavers/1.0 (alerts.flowops.africa)",
@@ -39,28 +41,34 @@ def reverse_geocode(latitude, longitude):
         if response.status_code == 200:
             data = response.json()
             address = data.get("address") or {}
-            locality = (
-                address.get("city")
-                or address.get("town")
-                or address.get("village")
-                or address.get("municipality")
-                or address.get("suburb")
-                or address.get("county")
-                or address.get("hamlet")
+            ward_re = re.compile(r"\b(ward|r/n|sector|block|phase|colony|layout)\b", re.I)
+            candidates = [
+                address.get("city"),
+                address.get("town"),
+                address.get("village"),
+                address.get("municipality"),
+                address.get("city_district"),
+                address.get("state_district"),
+                address.get("county"),
+                address.get("suburb"),
+                address.get("neighbourhood"),
+                address.get("hamlet"),
+            ]
+            locality = next(
+                (name for name in candidates if name and not ward_re.search(str(name))),
+                next((name for name in candidates if name), None),
             )
-            region = address.get("state") or address.get("region")
+            region = address.get("state") or address.get("region") or address.get("state_district")
             country = address.get("country")
-            parts = [part for part in (locality, region, country) if part]
+            parts = []
+            for part in (locality, region, country):
+                if part and part not in parts:
+                    parts.append(part)
             if parts:
-                # Preserve order while dropping duplicates
-                ordered = []
-                for part in parts:
-                    if part not in ordered:
-                        ordered.append(part)
-                return ", ".join(ordered)
+                return ", ".join(parts)
             if data.get("display_name"):
                 return data["display_name"]
-        
+
         return f"{latitude}, {longitude}"
     except Exception as e:
         print(f"Reverse geocoding error: {e}")
@@ -461,7 +469,11 @@ class NotificationSerializer(serializers.ModelSerializer):
     def get_actor(self, obj):
         content = self.get_content(obj)
         if isinstance(content, dict):
-            return content.get("user")
+            return (
+                content.get("user")
+                or content.get("follower")
+                or content.get("actor")
+            )
         return None
 
 
