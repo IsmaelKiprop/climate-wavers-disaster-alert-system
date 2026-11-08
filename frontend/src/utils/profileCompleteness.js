@@ -36,18 +36,19 @@ export function getProfileCompleteness(user) {
 }
 
 export function profileAppUrl(userId) {
+  const configured = String(env.siteUrl || "").replace(/\/+$/, "");
   const origin =
-    typeof window !== "undefined" ? window.location.origin : env.siteUrl;
+    configured && !configured.includes("localhost")
+      ? configured
+      : typeof window !== "undefined"
+        ? window.location.origin
+        : "https://alerts.flowops.africa";
   return `${origin}/u/${userId}`;
 }
 
-/** Prefer API OG URL for WhatsApp/Facebook crawlers; humans redirect to /u/:id */
+/** Public share link — always the frontend profile URL (alerts.flowops.africa). */
 export function profileOgShareUrl(userId) {
-  const backend = (env.backendUrl || "https://climate-wavers-api.onrender.com").replace(
-    /\/+$/,
-    ""
-  );
-  return `${backend}/share/profile/${userId}/`;
+  return profileAppUrl(userId);
 }
 
 export function giftTreesPath(userId, displayName = "") {

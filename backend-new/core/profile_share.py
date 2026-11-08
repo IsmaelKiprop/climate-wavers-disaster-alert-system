@@ -14,10 +14,38 @@ from .models import Follow, TreeProjectDonation
 
 
 def frontend_base():
-    return (
-        os.getenv("FRONTEND_URL", "").strip().rstrip("/")
-        or "https://alerts.flowops.africa"
-    )
+    """
+    Always one origin. Never paste ALLOWED_ORIGINS into FRONTEND_URL —
+    a comma list breaks redirects (browser treats it as one hostname).
+    """
+    try:
+        from django.conf import settings
+
+        configured = str(getattr(settings, "FRONTEND_URL", "") or "").strip().rstrip("/")
+        if configured and "," not in configured and ";" not in configured:
+            return configured
+    except Exception:
+        pass
+
+    raw = os.getenv("FRONTEND_URL", "").strip()
+    parts = [
+        part.strip().rstrip("/")
+        for part in raw.replace(";", ",").split(",")
+        if part and part.strip()
+    ]
+    preferred = ("alerts.flowops.africa", "climatewavers.org")
+    https_parts = [
+        part
+        for part in parts
+        if part.startswith("https://") and "localhost" not in part
+    ]
+    for host in preferred:
+        for part in https_parts:
+            if host in part:
+                return part
+    if https_parts:
+        return https_parts[0]
+    return "https://alerts.flowops.africa"
 
 
 def https_url(url):

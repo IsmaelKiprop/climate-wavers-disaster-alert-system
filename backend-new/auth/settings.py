@@ -51,7 +51,7 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
-def _public_frontend_url(raw, fallback="https://climate-wavers-three.vercel.app"):
+def _public_frontend_url(raw, fallback="https://alerts.flowops.africa"):
     """FRONTEND_URL must be one origin. Render sometimes stores a CORS-style comma list."""
     parts = [
         part.strip().rstrip("/")
@@ -65,6 +65,16 @@ def _public_frontend_url(raw, fallback="https://climate-wavers-three.vercel.app"
         and "localhost" not in part
         and "127.0.0.1" not in part
     ]
+    # Prefer the live product domain over Vercel preview URLs.
+    preferred_hosts = (
+        "alerts.flowops.africa",
+        "climatewavers.org",
+        "www.climatewavers.org",
+    )
+    for host in preferred_hosts:
+        for part in public:
+            if host in part:
+                return part
     if public:
         return public[0]
     if os.environ.get("RENDER"):

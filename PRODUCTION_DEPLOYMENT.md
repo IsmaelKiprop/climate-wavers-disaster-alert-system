@@ -71,6 +71,7 @@ ALLOWED_HOSTS=your-api.onrender.com
 BASE_URL=https://your-api.onrender.com
 BACKEND_HOST=https://your-api.onrender.com
 FRONTEND_URL=https://alerts.flowops.africa
+# IMPORTANT: FRONTEND_URL must be ONE URL only. Do not paste ALLOWED_ORIGINS here.
 
 ALLOWED_ORIGINS=https://alerts.flowops.africa,https://climate-wavers-three.vercel.app
 ALLOW_ALL_ORIGINS=False

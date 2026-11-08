@@ -62,6 +62,17 @@
     }
   ],
   "rewrites": [
-    { "source": "/((?!assets/).*)", "destination": "/index.html" }
+    {
+      "source": "/u/:userId",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": "(?i).*(whatsapp|facebookexternalhit|facebot|twitterbot|linkedinbot|slackbot|discordbot|telegrambot|embedly|quora link preview|pinterest|bot|crawler|spider|preview).*"
+        }
+      ],
+      "destination": "/api/og-profile?id=:userId"
+    },
+    { "source": "/((?!assets/|api/).*)", "destination": "/index.html" }
   ]
 }
