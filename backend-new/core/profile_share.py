@@ -127,8 +127,7 @@ def public_profile_payload(user):
         "share_enabled": complete,
         "trees": trees,
         "share_url": f"{site}/u/{user.id}",
-        # Frontend path proxied to this HTML — WhatsApp shows alerts.flowops.africa
-        "og_share_url": f"{site}/share/profile/{user.id}",
+        "og_share_url": f"{site}/u/{user.id}",
     }
 
 

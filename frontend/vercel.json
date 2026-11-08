@@ -41,37 +41,30 @@
           "value": "strict-origin-when-cross-origin"
         }
       ]
-    },
-    {
-      "source": "/sitemap.xml",
-      "headers": [
-        {
-          "key": "Content-Type",
-          "value": "application/xml"
-        }
-      ]
-    },
-    {
-      "source": "/robots.txt",
-      "headers": [
-        {
-          "key": "Content-Type",
-          "value": "text/plain"
-        }
-      ]
     }
   ],
   "rewrites": [
     {
       "source": "/share/profile/:id",
-      "destination": "https://climate-wavers-api.onrender.com/share/profile/:id/"
+      "destination": "/api/share-profile?id=:id"
     },
     {
       "source": "/share/profile/:id/",
-      "destination": "https://climate-wavers-api.onrender.com/share/profile/:id/"
+      "destination": "/api/share-profile?id=:id"
     },
     {
-      "source": "/((?!assets/|api/|share/).*)",
+      "source": "/u/:id",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": "(?i).*(whatsapp|facebookexternalhit|facebot|twitterbot|linkedinbot|slackbot|discordbot|telegrambot|embedly|pinterest|quora|bot|crawler|spider|preview).*"
+        }
+      ],
+      "destination": "/api/share-profile?id=:id"
+    },
+    {
+      "source": "/((?!assets/|api/).*)",
       "destination": "/index.html"
     }
   ]

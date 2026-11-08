@@ -50,11 +50,12 @@ export function profileAppUrl(userId) {
 
 /**
  * WhatsApp/Facebook share link.
- * Uses /share/profile/:id on the frontend domain, which Vercel proxies to
- * the API OG HTML that already works — so previews show alerts.flowops.africa.
+ * /u/:id for people; crawlers are rewritten on Vercel to /api/share-profile
+ * which returns that user's OG title, bio, and photo.
  */
 export function profileOgShareUrl(userId) {
-  return `${siteOrigin()}/share/profile/${userId}`;
+  // Cache-buster so WhatsApp re-scrapes after OG fixes (old /u/48 had homepage meta).
+  return `${siteOrigin()}/u/${userId}?v=profile`;
 }
 
 export function giftTreesPath(userId, displayName = "") {
