@@ -54,8 +54,8 @@ export function profileAppUrl(userId) {
  * which returns that user's OG title, bio, and photo.
  */
 export function profileOgShareUrl(userId) {
-  // Cache-buster so WhatsApp re-scrapes after OG fixes (old /u/48 had homepage meta).
-  return `${siteOrigin()}/u/${userId}?v=profile`;
+  // Cache-buster so WhatsApp re-scrapes after OG fixes.
+  return `${siteOrigin()}/u/${userId}?v=og2`;
 }
 
 export function giftTreesPath(userId, displayName = "") {

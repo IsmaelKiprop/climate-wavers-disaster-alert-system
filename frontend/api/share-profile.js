@@ -1,8 +1,7 @@
-/**
- * Serves user-specific Open Graph HTML for WhatsApp/Facebook.
- * Fetches Django share page with the API Host header (Vercel external
- * rewrites forward alerts.flowops.africa and Django returns 400).
- */
+export const config = {
+  runtime: "edge",
+};
+
 const API_BASE = (
   process.env.VITE_APP_BACKEND_URL ||
   process.env.BACKEND_URL ||
@@ -21,103 +20,108 @@ function escapeHtml(value) {
     .replace(/"/g, "&quot;");
 }
 
-function fallbackHtml(userId, title, description, image) {
+function buildHtml({ userId, title, description, image }) {
   const url = `${SITE}/u/${userId}`;
+  const safeTitle = escapeHtml(title);
+  const safeDescription = escapeHtml(description);
+  const safeImage = escapeHtml(image);
+  const safeUrl = escapeHtml(url);
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>${escapeHtml(title)}</title>
-  <meta name="description" content="${escapeHtml(description)}" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${safeTitle}</title>
+  <meta name="description" content="${safeDescription}" />
+  <link rel="canonical" href="${safeUrl}" />
   <meta property="og:type" content="profile" />
   <meta property="og:site_name" content="Climate Wavers" />
-  <meta property="og:title" content="${escapeHtml(title)}" />
-  <meta property="og:description" content="${escapeHtml(description)}" />
-  <meta property="og:url" content="${escapeHtml(url)}" />
-  <meta property="og:image" content="${escapeHtml(image)}" />
-  <meta property="og:image:secure_url" content="${escapeHtml(image)}" />
+  <meta property="og:title" content="${safeTitle}" />
+  <meta property="og:description" content="${safeDescription}" />
+  <meta property="og:url" content="${safeUrl}" />
+  <meta property="og:image" content="${safeImage}" />
+  <meta property="og:image:secure_url" content="${safeImage}" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="${safeTitle}" />
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="${escapeHtml(title)}" />
-  <meta name="twitter:description" content="${escapeHtml(description)}" />
-  <meta name="twitter:image" content="${escapeHtml(image)}" />
+  <meta name="twitter:title" content="${safeTitle}" />
+  <meta name="twitter:description" content="${safeDescription}" />
+  <meta name="twitter:image" content="${safeImage}" />
 </head>
-<body><p><a href="${escapeHtml(url)}">${escapeHtml(title)}</a></p></body>
+<body>
+  <main>
+    <h1>${safeTitle}</h1>
+    <p>${safeDescription}</p>
+    <p><a href="${safeUrl}">Open profile</a></p>
+  </main>
+</body>
 </html>`;
 }
 
-module.exports = async function handler(req, res) {
-  const userId = String(req.query.id || req.query.userId || "").trim();
-  if (!/^\d+$/.test(userId)) {
-    res.statusCode = 400;
-    res.setHeader("Content-Type", "text/plain; charset=utf-8");
-    res.end("Missing profile id");
-    return;
-  }
+function htmlResponse(body, status = 200) {
+  return new Response(body, {
+    status,
+    headers: {
+      "Content-Type": "text/html; charset=utf-8",
+      "Cache-Control": "public, s-maxage=120, stale-while-revalidate=600",
+    },
+  });
+}
 
-  const crawlerUa = req.headers["user-agent"] || "WhatsApp/2.0";
-
+export default async function handler(request) {
   try {
-    const upstream = await fetch(`${API_BASE}/share/profile/${userId}/`, {
-      headers: {
-        Accept: "text/html",
-        "User-Agent": crawlerUa,
-      },
-      redirect: "follow",
-    });
+    const requestUrl = new URL(request.url);
+    const userId = String(
+      requestUrl.searchParams.get("id") ||
+        requestUrl.searchParams.get("userId") ||
+        ""
+    ).trim();
 
-    if (upstream.ok) {
-      let html = await upstream.text();
-      // Prefer /u/:id as the public share URL in previews.
-      const profileUrl = `${SITE}/u/${userId}`;
-      html = html
-        .split(`${SITE}/share/profile/${userId}`)
-        .join(profileUrl)
-        .split(`https://climate-wavers-api.onrender.com/share/profile/${userId}/`)
-        .join(profileUrl);
-      res.statusCode = 200;
-      res.setHeader("Content-Type", "text/html; charset=utf-8");
-      res.setHeader(
-        "Cache-Control",
-        "public, s-maxage=120, stale-while-revalidate=600"
-      );
-      res.end(html);
-      return;
+    if (!/^\d+$/.test(userId)) {
+      return new Response("Missing profile id", { status: 400 });
     }
-  } catch {
-    // Fall through to JSON public profile.
-  }
 
-  try {
-    const response = await fetch(`${API_BASE}/api/v1/users/${userId}/public/`, {
-      headers: { Accept: "application/json", "User-Agent": "ClimateWavers-OG/1.0" },
-    });
-    const profile = response.ok ? await response.json() : null;
+    let profile = null;
+    try {
+      const response = await fetch(`${API_BASE}/api/v1/users/${userId}/public/`, {
+        headers: {
+          Accept: "application/json",
+          "User-Agent": "ClimateWavers-OG/1.0",
+        },
+      });
+      if (response.ok) {
+        profile = await response.json();
+      }
+    } catch {
+      profile = null;
+    }
+
     const title = profile
-      ? `${profile.display_name || profile.username} (@${profile.username}) on Climate Wavers`
+      ? `${profile.display_name || profile.username || "Member"} (@${
+          profile.username || "user"
+        }) on Climate Wavers`
       : "Climate Wavers profile";
     const description =
-      profile?.bio ||
+      (profile && profile.bio) ||
       "Climate action profile on Climate Wavers. Gift a tree to support their impact.";
     const image =
-      profile?.profile_picture || `${SITE}/og-image.jpg`;
+      (profile && profile.profile_picture) || `${SITE}/og-image.jpg`;
 
-    res.statusCode = profile ? 200 : 404;
-    res.setHeader("Content-Type", "text/html; charset=utf-8");
-    res.setHeader(
-      "Cache-Control",
-      "public, s-maxage=120, stale-while-revalidate=600"
+    return htmlResponse(
+      buildHtml({ userId, title, description, image }),
+      profile ? 200 : 404
     );
-    res.end(fallbackHtml(userId, title, description, image));
-  } catch (error) {
-    res.statusCode = 500;
-    res.setHeader("Content-Type", "text/html; charset=utf-8");
-    res.end(
-      fallbackHtml(
-        userId,
-        "Climate Wavers",
-        "Disaster alerts and climate action.",
-        `${SITE}/og-image.jpg`
-      )
+  } catch {
+    return htmlResponse(
+      buildHtml({
+        userId: "0",
+        title: "Climate Wavers",
+        description: "Disaster alerts and climate action.",
+        image: `${SITE}/og-image.jpg`,
+      }),
+      500
     );
   }
-};
+}
