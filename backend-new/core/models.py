@@ -1281,8 +1281,14 @@ class EmergencyAgency(models.Model):
     class Meta:
         ordering = ["name"]
         indexes = [
-            models.Index(fields=["latitude", "longitude"]),
-            models.Index(fields=["country", "is_active"]),
+            models.Index(
+                fields=["latitude", "longitude"],
+                name="core_emerge_latitud_idx",
+            ),
+            models.Index(
+                fields=["country", "is_active"],
+                name="core_emerge_country_idx",
+            ),
         ]
 
     def __str__(self):

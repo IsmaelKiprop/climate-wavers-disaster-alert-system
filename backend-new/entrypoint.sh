@@ -1,7 +1,7 @@
 #!/bin/sh
 set -e
 
-python manage.py makemigrations --noinput
+# Never run makemigrations in production — it invents index renames that break migrate.
 python manage.py migrate --noinput
 python manage.py collectstatic --noinput
 python manage.py create_admins
