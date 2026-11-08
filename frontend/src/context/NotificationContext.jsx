@@ -4,6 +4,10 @@ import { endpoints } from "../utils/endpoints";
 import { getAuthToken } from "../utils/factory";
 import { notificationsSocketUrl } from "../config/env";
 import { unwrapList } from "../utils/apiData";
+import {
+  bindNotificationSoundUnlock,
+  playNotificationSound,
+} from "../utils/notificationSound";
 
 const NotificationContext = createContext();
 
@@ -39,19 +43,30 @@ export const NotificationProvider = ({ children }) => {
       .map(normalizeNotice)
       .filter(Boolean);
 
+    let added = 0;
+    let nextHasUnread = false;
+
     setNotifications((prev) => {
       const byId = replace ? new Map() : new Map(prev.map((item) => [item.id, item]));
-      let added = 0;
+      added = 0;
       list.forEach((item) => {
         if (!byId.has(item.id)) added += 1;
         byId.set(item.id, { ...byId.get(item.id), ...item });
       });
-      idsRef.current = new Set(byId.keys());
       const next = sortNotices([...byId.values()]);
-      if (added > 0 && !replace) setHasNewNotification(true);
-      else if (next.some((item) => item.is_read === false)) setHasNewNotification(true);
+      nextHasUnread = next.some((item) => item.is_read === false);
+      idsRef.current = new Set(byId.keys());
       return next;
     });
+
+    if (added > 0 && !replace) {
+      setHasNewNotification(true);
+      playNotificationSound();
+    } else if (nextHasUnread) {
+      setHasNewNotification(true);
+    } else if (replace) {
+      setHasNewNotification(false);
+    }
   }, []);
 
   const loadNotifications = useCallback(async () => {
@@ -141,7 +156,12 @@ export const NotificationProvider = ({ children }) => {
   }, [mergeNotices, startPolling, stopPolling]);
 
   useEffect(() => {
-    if (!getAuthToken()) return undefined;
+    const unbindSound = bindNotificationSoundUnlock();
+    if (!getAuthToken()) {
+      return () => {
+        unbindSound();
+      };
+    }
 
     const boot = () => {
       loadNotifications();
@@ -169,6 +189,7 @@ export const NotificationProvider = ({ children }) => {
     document.addEventListener("visibilitychange", onVisible);
 
     return () => {
+      unbindSound();
       window.removeEventListener("userUpdated", onUser);
       document.removeEventListener("visibilitychange", onVisible);
       if (window.cancelIdleCallback && typeof idleId === "number") {
