@@ -11,6 +11,7 @@ import EmojiPicker from "emoji-picker-react";
 import { IoSend, IoCloseSharp, IoLocationOutline, IoHappyOutline, IoVideocamOutline, IoImageOutline, IoSparklesOutline } from "react-icons/io5";
 import { MdEmojiEmotions, MdLocationOn, MdVideocam, MdImage, MdAutoAwesome } from "react-icons/md";
 import { env } from "../config/env";
+import { locationFieldValue, reverseGeocode } from "../utils/formatLocation";
 
 export default function Createpost({ type, postId, parentId, closeModal }) {
   const { register, handleSubmit, reset, watch, setValue } = useForm();
@@ -93,15 +94,18 @@ export default function Createpost({ type, postId, parentId, closeModal }) {
       });
 
       const { latitude, longitude } = position.coords;
-      
-      // Reverse geocoding to get address
-      const address = await reverseGeocode(latitude, longitude);
-      
+      let address = "";
+      try {
+        address = await reverseGeocode(latitude, longitude);
+      } catch (geocodeError) {
+        console.error("Reverse geocoding failed:", geocodeError);
+      }
+
       const currentLocation = {
         name: address || `Current Location (${latitude.toFixed(4)}, ${longitude.toFixed(4)})`,
         type: "current",
         coordinates: { latitude, longitude },
-        address
+        address,
       };
 
       setSelectedLocation(currentLocation);
@@ -112,28 +116,6 @@ export default function Createpost({ type, postId, parentId, closeModal }) {
       setLocationError("Unable to get your current location. Please try again or select a city manually.");
     } finally {
       setIsGettingLocation(false);
-    }
-  };
-
-  const reverseGeocode = async (lat, lng) => {
-    try {
-      // Using OpenStreetMap Nominatim API (free, no API key required)
-      const response = await fetch(
-        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`
-      );
-      const data = await response.json();
-      
-      if (data.display_name) {
-        // Extract city and country from the full address
-        const parts = data.display_name.split(', ');
-        const city = parts[0];
-        const country = parts[parts.length - 1];
-        return `${city}, ${country}`;
-      }
-      return null;
-    } catch (error) {
-      console.error("Reverse geocoding failed:", error);
-      return null;
     }
   };
 
@@ -399,7 +381,10 @@ export default function Createpost({ type, postId, parentId, closeModal }) {
       // Add text content
       formData.append('content', data.content || '');
       formData.append('visibility', data.visibility || 'Everyone');
-      formData.append('location', selectedLocation || '');
+      formData.append(
+        "location",
+        locationFieldValue(selectedLocation, data.location || "")
+      );
       
       // Add post/comment relationships
       if (postId) formData.append('post_id', postId);

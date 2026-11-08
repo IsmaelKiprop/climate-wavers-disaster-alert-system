@@ -97,7 +97,10 @@ const Profile = () => {
   }, [isFetched, error, user, loadedUser]);
 
   const isOwnProfile = String(me.id || "") === String(profile?.id || userId || "");
-  const avatarSrc = profile?.profile_picture || profile?.profile_pic || profile?.picture || "";
+  const avatarSrcRaw = profile?.profile_picture || profile?.profile_pic || profile?.picture || "";
+  const avatarSrc = avatarSrcRaw.startsWith("http://")
+    ? `https://${avatarSrcRaw.slice(7)}`
+    : avatarSrcRaw;
   const coverSrc = profile?.cover || profile?.cover_image || "";
   const displayName =
     [profile?.first_name, profile?.last_name].filter(Boolean).join(" ") ||

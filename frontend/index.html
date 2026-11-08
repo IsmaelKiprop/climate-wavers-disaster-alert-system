@@ -11,9 +11,6 @@
         }
       })();
     </script>
-    <link rel="preload" as="image" href="/logo.jpg" fetchpriority="high" />
-    <link rel="preload" as="image" href="/ai-disaster-sm.jpg" media="(max-width: 959px)" fetchpriority="high" />
-    <link rel="preload" as="image" href="/ai-disaster.jpg" media="(min-width: 960px)" fetchpriority="high" />
     <style>
       html[data-route="home"] body {
         background-color: #111111;
@@ -28,6 +25,23 @@
         }
       }
     </style>
+    <script>
+      (function () {
+        if (document.documentElement.getAttribute("data-route") !== "home") return;
+        function preload(href, media) {
+          var link = document.createElement("link");
+          link.rel = "preload";
+          link.as = "image";
+          link.href = href;
+          link.fetchPriority = "high";
+          if (media) link.media = media;
+          document.head.appendChild(link);
+        }
+        preload("/logo.jpg");
+        preload("/ai-disaster-sm.jpg", "(max-width: 959px)");
+        preload("/ai-disaster.jpg", "(min-width: 960px)");
+      })();
+    </script>
     
     <!-- Primary Meta Tags -->
     <title>Climate Wavers - Disaster Alert & Climate Action Platform</title>

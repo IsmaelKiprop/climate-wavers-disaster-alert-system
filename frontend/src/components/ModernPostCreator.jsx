@@ -19,6 +19,7 @@ import {
 import { toast } from "react-toastify";
 import AuthStatus from "./AuthStatus";
 import { env } from "../config/env";
+import { reverseGeocode } from "../utils/formatLocation";
 
 const ModernPostCreator = ({ type = "post", postId, parentId, closeModal }) => {
   const { register, handleSubmit, reset, watch, setValue, formState: { errors } } = useForm();
@@ -257,67 +258,38 @@ const ModernPostCreator = ({ type = "post", postId, parentId, closeModal }) => {
     setShowEmojiPicker(false);
   };
 
-  // Frontend reverse geocoding function
-  const reverseGeocode = async (latitude, longitude) => {
-    try {
-      const response = await fetch(
-        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1`,
-        {
-          headers: {
-            'User-Agent': 'ClimateWavers/1.0'
-          }
-        }
-      );
-      
-      if (response.ok) {
-        const data = await response.json();
-        if (data.display_name) {
-          return data.display_name;
-        } else if (data.address) {
-          const address = data.address;
-          const parts = [];
-          if (address.city) parts.push(address.city);
-          else if (address.town) parts.push(address.town);
-          else if (address.village) parts.push(address.village);
-          
-          if (address.state) parts.push(address.state);
-          if (address.country) parts.push(address.country);
-          
-          return parts.length > 0 ? parts.join(', ') : `${latitude}, ${longitude}`;
-        }
-      }
-      return `${latitude}, ${longitude}`;
-    } catch (error) {
-      console.error('Reverse geocoding error:', error);
-      return `${latitude}, ${longitude}`;
-    }
-  };
-
   // Location functionality
   const handleLocationClick = async () => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        async (position) => {
-          const { latitude, longitude } = position.coords;
-          setSelectedLocation({ latitude, longitude });
-          setValue('location', `${latitude}, ${longitude}`);
-          setShowLocationPicker(false);
-          
-          // Get address from coordinates
+    if (!navigator.geolocation) {
+      toast.error("Geolocation is not supported by this browser.");
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude, longitude } = position.coords;
+        setSelectedLocation({ latitude, longitude });
+        setShowLocationPicker(false);
+
+        try {
           const address = await reverseGeocode(latitude, longitude);
           setLocationAddress(address);
-          setValue('location', address); // Update with the address
-          
+          setValue("location", address);
           toast.success("Location added successfully!");
-        },
-        (error) => {
-          console.error('Error getting location:', error);
-          toast.error("Unable to get your location. Please try again.");
+        } catch (error) {
+          console.error("Reverse geocoding error:", error);
+          const fallback = `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`;
+          setLocationAddress(fallback);
+          setValue("location", fallback);
+          toast.success("Coordinates added. Address lookup failed.");
         }
-      );
-    } else {
-      toast.error("Geolocation is not supported by this browser.");
-    }
+      },
+      (error) => {
+        console.error("Error getting location:", error);
+        toast.error("Unable to get your location. Please try again.");
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    );
   };
 
   // Initialize location field with empty string

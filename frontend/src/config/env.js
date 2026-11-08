@@ -43,13 +43,18 @@ export function chatbotApiUrl(path = "") {
 
 export function mediaUrl(url) {
   if (!url) return "";
-  if (/^https?:\/\//i.test(url) || url.startsWith("blob:") || url.startsWith("data:")) {
-    return url;
+  let value = String(url).trim();
+  // Avoid mixed-content warnings for legacy http:// Cloudinary / CDN URLs.
+  if (value.startsWith("http://")) {
+    value = `https://${value.slice(7)}`;
   }
-  if (url.startsWith("/")) {
-    return `${env.backendUrl}${url}`;
+  if (/^https?:\/\//i.test(value) || value.startsWith("blob:") || value.startsWith("data:")) {
+    return value;
   }
-  return url;
+  if (value.startsWith("/")) {
+    return `${env.backendUrl}${value}`;
+  }
+  return value;
 }
 
 export function wsHttpUrl(path = "") {

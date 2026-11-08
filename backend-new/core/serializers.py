@@ -23,35 +23,43 @@ import time
 
 def reverse_geocode(latitude, longitude):
     """
-    Convert latitude and longitude to a human-readable address using OpenStreetMap Nominatim API
+    Convert latitude and longitude to a short place label (city/region/country).
     """
     try:
-        url = f"https://nominatim.openstreetmap.org/reverse?format=json&lat={latitude}&lon={longitude}&zoom=18&addressdetails=1"
+        url = (
+            "https://nominatim.openstreetmap.org/reverse"
+            f"?format=json&lat={latitude}&lon={longitude}&zoom=14&addressdetails=1"
+        )
         headers = {
-            'User-Agent': 'ClimateWavers/1.0'
+            "User-Agent": "ClimateWavers/1.0 (alerts.flowops.africa)",
+            "Accept": "application/json",
         }
-        
+
         response = requests.get(url, headers=headers, timeout=5)
         if response.status_code == 200:
             data = response.json()
-            if 'display_name' in data:
-                return data['display_name']
-            elif 'address' in data:
-                address = data['address']
-                parts = []
-                if 'city' in address:
-                    parts.append(address['city'])
-                elif 'town' in address:
-                    parts.append(address['town'])
-                elif 'village' in address:
-                    parts.append(address['village'])
-                
-                if 'state' in address:
-                    parts.append(address['state'])
-                if 'country' in address:
-                    parts.append(address['country'])
-                
-                return ', '.join(parts) if parts else f"{latitude}, {longitude}"
+            address = data.get("address") or {}
+            locality = (
+                address.get("city")
+                or address.get("town")
+                or address.get("village")
+                or address.get("municipality")
+                or address.get("suburb")
+                or address.get("county")
+                or address.get("hamlet")
+            )
+            region = address.get("state") or address.get("region")
+            country = address.get("country")
+            parts = [part for part in (locality, region, country) if part]
+            if parts:
+                # Preserve order while dropping duplicates
+                ordered = []
+                for part in parts:
+                    if part not in ordered:
+                        ordered.append(part)
+                return ", ".join(ordered)
+            if data.get("display_name"):
+                return data["display_name"]
         
         return f"{latitude}, {longitude}"
     except Exception as e:

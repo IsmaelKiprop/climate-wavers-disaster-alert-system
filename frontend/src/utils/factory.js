@@ -103,8 +103,14 @@ export const getUser = () => {
   return false;
 };
 
-export const avatarUrl = (user) =>
-  user?.profile_picture || user?.profile_pic || user?.picture || "/avatar.png";
+export const avatarUrl = (user) => {
+  const raw =
+    user?.profile_picture || user?.profile_pic || user?.picture || "/avatar.png";
+  if (typeof raw === "string" && raw.startsWith("http://")) {
+    return `https://${raw.slice(7)}`;
+  }
+  return raw;
+};
 
 export const getAuthToken = () => {
   const token = Cookies.get("accessToken");
