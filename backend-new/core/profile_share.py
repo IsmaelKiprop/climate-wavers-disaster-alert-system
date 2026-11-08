@@ -2,6 +2,7 @@
 
 import html
 import os
+import re
 from django.db.models import Sum
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
@@ -11,6 +12,13 @@ from rest_framework.response import Response
 
 from api.models import User
 from .models import Follow, TreeProjectDonation
+
+CRAWLER_UA = re.compile(
+    r"whatsapp|facebookexternalhit|facebot|twitterbot|linkedinbot|"
+    r"slackbot|discordbot|telegrambot|embedly|pinterest|quora link preview|"
+    r"googlebot|bingbot|duckduckbot|baiduspider|yandex|crawler|spider|bot|preview",
+    re.I,
+)
 
 
 def frontend_base():
@@ -95,9 +103,10 @@ def trees_for_user(user):
 def public_profile_payload(user):
     trees = trees_for_user(user)
     display_name = f"{user.first_name} {user.last_name}".strip() or user.username
-    photo = https_url(user.profile_picture) or f"{frontend_base()}/avatar.png"
+    photo = https_url(user.profile_picture) or f"{frontend_base()}/og-image.jpg"
     cover = https_url(getattr(user, "cover", None)) or f"{frontend_base()}/environment.jpg"
     complete = profile_is_complete(user)
+    site = frontend_base()
     return {
         "id": user.id,
         "username": user.username,
@@ -117,9 +126,15 @@ def public_profile_payload(user):
         "is_profile_complete": complete,
         "share_enabled": complete,
         "trees": trees,
-        "share_url": f"{frontend_base()}/u/{user.id}",
-        "og_share_url": f"{os.getenv('BACKEND_PUBLIC_URL', 'https://climate-wavers-api.onrender.com').rstrip('/')}/share/profile/{user.id}/",
+        "share_url": f"{site}/u/{user.id}",
+        # Frontend path proxied to this HTML — WhatsApp shows alerts.flowops.africa
+        "og_share_url": f"{site}/share/profile/{user.id}",
     }
+
+
+def _is_crawler(request):
+    ua = request.META.get("HTTP_USER_AGENT") or ""
+    return bool(CRAWLER_UA.search(ua))
 
 
 @api_view(["GET"])
@@ -134,20 +149,28 @@ def share_profile_html(request, user_id):
     """
     Crawler-friendly HTML with Open Graph tags.
     Humans are redirected to the public frontend profile page.
+    Crawlers get static OG tags only (no redirect) so WhatsApp previews work.
     """
     user = get_object_or_404(User, pk=user_id, is_active=True)
     payload = public_profile_payload(user)
+    site = frontend_base()
+    profile_url = payload["share_url"]
+    share_url = payload["og_share_url"]
+
     if not payload["share_enabled"]:
-        app_url = frontend_base()
         return HttpResponse(
             f"""<!DOCTYPE html><html><head><meta charset="utf-8" />
 <title>Profile not ready</title>
-<meta http-equiv="refresh" content="0;url={html.escape(app_url)}" />
+<meta property="og:title" content="Profile not ready | Climate Wavers" />
+<meta property="og:description" content="This Climate Wavers profile is still being set up." />
+<meta property="og:url" content="{html.escape(share_url)}" />
+<meta property="og:image" content="{html.escape(site + '/og-image.jpg')}" />
+<meta http-equiv="refresh" content="0;url={html.escape(site)}" />
 </head><body><p>This profile is not ready to share.</p></body></html>""",
             content_type="text/html; charset=utf-8",
             status=403,
         )
-    app_url = payload["share_url"]
+
     title = html.escape(f"{payload['display_name']} (@{payload['username']}) on Climate Wavers")
     trees = payload["trees"]["trees_total"]
     place = payload["location"] or payload["country"] or "Africa"
@@ -156,9 +179,18 @@ def share_profile_html(request, user_id):
         bio
         or f"Climate Wavers member from {place}. {trees} trees planted for climate action. Gift a tree to support their impact."
     )
-    image = html.escape(payload["profile_picture"] or f"{frontend_base()}/og-image.jpg")
-    canonical = html.escape(app_url)
-    api_share = html.escape(request.build_absolute_uri())
+    image = html.escape(payload["profile_picture"] or f"{site}/og-image.jpg")
+    canonical = html.escape(share_url)
+    profile_href = html.escape(profile_url)
+    crawler = _is_crawler(request)
+
+    # WhatsApp/Facebook must see meta tags without being redirected away.
+    redirect_bits = ""
+    if not crawler:
+        redirect_bits = f"""
+  <meta http-equiv="refresh" content="0;url={profile_href}" />
+  <script>window.location.replace({html.escape(repr(profile_url))});</script>
+"""
 
     body = f"""<!DOCTYPE html>
 <html lang="en">
@@ -175,19 +207,24 @@ def share_profile_html(request, user_id):
   <meta property="og:url" content="{canonical}" />
   <meta property="og:image" content="{image}" />
   <meta property="og:image:secure_url" content="{image}" />
+  <meta property="og:image:type" content="image/jpeg" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
   <meta property="og:image:alt" content="{title}" />
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="{title}" />
   <meta name="twitter:description" content="{description}" />
   <meta name="twitter:image" content="{image}" />
-  <meta http-equiv="refresh" content="0;url={canonical}" />
-  <script>window.location.replace({html.escape(repr(app_url))});</script>
+  {redirect_bits}
 </head>
 <body style="font-family: system-ui, sans-serif; background:#0f172a; color:#e2e8f0; padding:2rem;">
   <main>
-    <p>Opening <a href="{canonical}" style="color:#5eead4;">{html.escape(payload['display_name'])}</a> on Climate Wavers…</p>
-    <p style="opacity:.7;font-size:.875rem;">Preview source: {api_share}</p>
+    <h1>{title}</h1>
+    <p>{description}</p>
+    <p><a href="{profile_href}" style="color:#5eead4;">Open profile</a></p>
   </main>
 </body>
 </html>"""
-    return HttpResponse(body, content_type="text/html; charset=utf-8")
+    response = HttpResponse(body, content_type="text/html; charset=utf-8")
+    response["Cache-Control"] = "public, max-age=300"
+    return response

@@ -63,16 +63,16 @@
   ],
   "rewrites": [
     {
-      "source": "/u/:userId",
-      "has": [
-        {
-          "type": "header",
-          "key": "user-agent",
-          "value": "(?i).*(whatsapp|facebookexternalhit|facebot|twitterbot|linkedinbot|slackbot|discordbot|telegrambot|embedly|quora link preview|pinterest|bot|crawler|spider|preview).*"
-        }
-      ],
-      "destination": "/api/og-profile?id=:userId"
+      "source": "/share/profile/:id",
+      "destination": "https://climate-wavers-api.onrender.com/share/profile/:id/"
     },
-    { "source": "/((?!assets/|api/).*)", "destination": "/index.html" }
+    {
+      "source": "/share/profile/:id/",
+      "destination": "https://climate-wavers-api.onrender.com/share/profile/:id/"
+    },
+    {
+      "source": "/((?!assets/|api/|share/).*)",
+      "destination": "/index.html"
+    }
   ]
 }

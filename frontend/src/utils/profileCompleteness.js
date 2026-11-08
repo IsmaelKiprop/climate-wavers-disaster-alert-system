@@ -35,20 +35,26 @@ export function getProfileCompleteness(user) {
   };
 }
 
-export function profileAppUrl(userId) {
+function siteOrigin() {
   const configured = String(env.siteUrl || "").replace(/\/+$/, "");
-  const origin =
-    configured && !configured.includes("localhost")
-      ? configured
-      : typeof window !== "undefined"
-        ? window.location.origin
-        : "https://alerts.flowops.africa";
-  return `${origin}/u/${userId}`;
+  if (configured && !configured.includes("localhost")) return configured;
+  if (typeof window !== "undefined" && window.location?.origin) {
+    return window.location.origin;
+  }
+  return "https://alerts.flowops.africa";
 }
 
-/** Public share link — always the frontend profile URL (alerts.flowops.africa). */
+export function profileAppUrl(userId) {
+  return `${siteOrigin()}/u/${userId}`;
+}
+
+/**
+ * WhatsApp/Facebook share link.
+ * Uses /share/profile/:id on the frontend domain, which Vercel proxies to
+ * the API OG HTML that already works — so previews show alerts.flowops.africa.
+ */
 export function profileOgShareUrl(userId) {
-  return profileAppUrl(userId);
+  return `${siteOrigin()}/share/profile/${userId}`;
 }
 
 export function giftTreesPath(userId, displayName = "") {
