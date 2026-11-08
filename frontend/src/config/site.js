@@ -1,11 +1,15 @@
+const liveOrigin =
+  (typeof import.meta !== "undefined" && import.meta.env?.VITE_SITE_URL) ||
+  "https://alerts.flowops.africa";
+
 export const SITE = {
   name: "Climate Wavers",
-  domain: "climatewavers.org",
-  url: "https://climatewavers.org",
+  domain: String(liveOrigin).replace(/^https?:\/\//, "").replace(/\/$/, ""),
+  url: String(liveOrigin).replace(/\/$/, ""),
   emails: {
-    hello: "hello@climatewavers.org",
-    support: "support@climatewavers.org",
-    privacy: "privacy@climatewavers.org",
+    hello: "hello@flowops.africa",
+    support: "hello@flowops.africa",
+    privacy: "hello@flowops.africa",
   },
   sources: [
     { name: "USGS Earthquake Hazards Program", url: "https://earthquake.usgs.gov/" },

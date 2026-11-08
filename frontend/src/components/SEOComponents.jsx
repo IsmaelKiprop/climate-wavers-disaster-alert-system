@@ -3,31 +3,11 @@ import SEO from './SEO';
 // Landing Page SEO
 export const LandingPageSEO = () => (
   <SEO
-    title="Climate Wavers - Disaster Alert & Climate Action Platform"
-    description="Join Climate Wavers, the leading platform for disaster alerts, climate action, and environmental community engagement. Get real-time disaster warnings, connect with climate activists, and make a positive impact on our planet."
-    keywords="climate change, disaster alerts, environmental action, climate activism, disaster preparedness, environmental community, climate awareness, natural disasters, emergency alerts, climate solutions"
+    title="Climate Wavers — Disaster Alerts & Climate Action"
+    description="Real-time disaster alerts, community response, and climate action. Track hazards, plant trees, and coordinate with communities across Africa."
+    keywords="climate change, disaster alerts, environmental action, climate activism, disaster preparedness, Kenya, Africa, early warning"
     url="/"
-    structuredData={{
-      "@context": "https://schema.org",
-      "@type": "WebSite",
-      "name": "Climate Wavers",
-      "url": "https://climatewavers.org",
-      "description": "Join Climate Wavers, the leading platform for disaster alerts, climate action, and environmental community engagement.",
-      "publisher": {
-        "@type": "Organization",
-        "name": "Climate Wavers",
-        "url": "https://climatewavers.org",
-        "logo": {
-          "@type": "ImageObject",
-          "url": "https://climatewavers.org/Vector.png"
-        }
-      },
-      "potentialAction": {
-        "@type": "SearchAction",
-        "target": "https://climatewavers.org/search?q={search_term_string}",
-        "query-input": "required name=search_term_string"
-      }
-    }}
+    image="/og-image.jpg"
   />
 );
 

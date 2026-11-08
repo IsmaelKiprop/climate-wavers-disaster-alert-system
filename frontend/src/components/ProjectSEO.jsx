@@ -6,7 +6,10 @@ const ProjectSEO = ({ project }) => {
   const shareUrl = `${window.location.origin}/app/plant-tree?project=${project.id}`;
   const shareTitle = `Plant Trees with Climate Wavers - ${project.name}`;
   const shareDescription = `Join the ${project.name} tree planting project in ${project.country}. Help combat climate change by planting trees and making a positive environmental impact. ${project.description}`;
-  const shareImage = project.image_url || `${window.location.origin}/assets/og-image.jpg`;
+  const shareImage =
+    project.cover_image_url ||
+    project.image_url ||
+    `${window.location.origin}/og-image.jpg`;
 
   return (
     <Helmet>

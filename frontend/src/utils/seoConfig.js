@@ -1,17 +1,24 @@
 // SEO Configuration for Climate Wavers Platform
 
+const SITE_URL = (
+  (typeof import.meta !== "undefined" && import.meta.env?.VITE_SITE_URL) ||
+  "https://alerts.flowops.africa"
+).replace(/\/$/, "");
+
 export const seoConfig = {
   // Default SEO settings
   default: {
-    title: "Climate Wavers - Disaster Alert & Climate Action Platform",
-    description: "Join Climate Wavers, the leading platform for disaster alerts, climate action, and environmental community engagement. Get real-time disaster warnings, connect with climate activists, and make a positive impact on our planet.",
-    keywords: "climate change, disaster alerts, environmental action, climate activism, disaster preparedness, environmental community, climate awareness, natural disasters, emergency alerts, climate solutions",
+    title: "Climate Wavers — Disaster Alerts & Climate Action",
+    description:
+      "Real-time disaster alerts, community response, and climate action. Track hazards, plant trees, and coordinate with communities across Africa.",
+    keywords:
+      "climate change, disaster alerts, environmental action, climate activism, disaster preparedness, Kenya, Africa, early warning",
     author: "Climate Wavers",
-    url: "https://climatewavers.org",
-    image: "https://climatewavers.org/assets/og-image.jpg",
+    url: SITE_URL,
+    image: `${SITE_URL}/og-image.jpg`,
     type: "website",
     siteName: "Climate Wavers",
-    locale: "en_US"
+    locale: "en_US",
   },
 
   // Page-specific SEO configurations
