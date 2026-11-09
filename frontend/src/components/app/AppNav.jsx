@@ -87,7 +87,7 @@ const AppNav = ({ onNavigate, compact = false }) => {
         },
         {
           to: "/app/responder",
-          label: "Responder",
+          label: "Responder Desk",
           Icon: IoShieldOutline,
           ActiveIcon: IoShieldCheckmark,
         },

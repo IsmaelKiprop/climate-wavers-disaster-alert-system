@@ -32,6 +32,7 @@ export const endpoints = {
     "alertPhoneRequest": "/api/v1/alerts/phone/request-code/",
     "alertPhoneConfirm": "/api/v1/alerts/phone/confirm/",
     "responderApply": "/api/v1/responder/apply/",
+    "responderApplyPublic": "/api/v1/responder/apply-public/",
     "responderMe": "/api/v1/responder/me/",
     "responderOrg": "/api/v1/responder/org/",
     "responderDispatches": "/api/v1/responder/dispatches/",

@@ -15,8 +15,8 @@ Climate Wavers sends **source-tagged operational alerts**. They are not governme
 
 ## RapidBrief onboarding
 
-1. Org user signs in and opens **Responder** in the app nav (or `/app/responder/apply`).
-2. Submits name, type, coverage HQ coordinates, radius, disaster types, contact email/phone.
+1. **New organizations (no account yet):** open public `/responders/apply` — creates an org workspace account + pending RapidBrief application in one step (not a personal social signup). API: `POST /api/v1/responder/apply-public/`.
+2. **Existing users:** sign in → **Responder Desk** / `/app/responder/apply` (`POST /api/v1/responder/apply/`).
 3. Admin opens **Responder organizations** → Approve selected.
 4. On the next official or community fanout within coverage, a `ResponderDispatch` is created with an AI RapidBrief; members get in-app notifications; contact email/WhatsApp fire when configured.
 5. Desk workflow: **Acknowledge → Mobilizing → On scene / Declined / Resolved**.

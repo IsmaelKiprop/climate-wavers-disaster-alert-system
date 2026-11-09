@@ -150,17 +150,26 @@ const AlertSettings = () => {
           Climate Wavers sends source-tagged operational alerts from USGS, NASA, and community
           reports. This is not a government emergency warning system.
         </p>
-        <p className="mt-3 text-sm">
-          Response organization?{" "}
-          <Link to="/app/responder" className="text-primary font-medium">
-            Open RapidBrief Desk
-          </Link>{" "}
-          or{" "}
-          <Link to="/app/responder/apply" className="text-primary font-medium">
-            apply as a responder
-          </Link>
-          .
-        </p>
+        <div className="mt-4 border border-border bg-surface p-4">
+          <p className="text-sm font-medium text-foreground">Response organization?</p>
+          <p className="mt-1 text-sm text-muted">
+            Apply for RapidBrief to receive AI disaster dispatches for your agency or NGO.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Link
+              to="/responders/apply"
+              className="inline-flex min-h-10 items-center px-4 bg-primary text-primary-foreground text-sm font-medium"
+            >
+              Apply as Responder
+            </Link>
+            <Link
+              to="/app/responder"
+              className="inline-flex min-h-10 items-center px-4 border border-border bg-background text-sm font-medium"
+            >
+              Open Responder Desk
+            </Link>
+          </div>
+        </div>
       </header>
 
       <form onSubmit={save} className="space-y-5">

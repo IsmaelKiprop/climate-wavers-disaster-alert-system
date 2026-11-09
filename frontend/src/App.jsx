@@ -26,6 +26,7 @@ const Support = lazy(() => import("./pages/Support"));
 const TrafficReport = lazy(() => import("./pages/TrafficReport"));
 const TransparencyReport = lazy(() => import("./pages/TransparencyReport"));
 const Consulting = lazy(() => import("./pages/Consulting"));
+const PublicResponderApply = lazy(() => import("./pages/PublicResponderApply"));
 const DisasterPage = lazy(() => import("./pages/DisasterPage"));
 const Donations = lazy(() => import("./components/Donations"));
 const PlantTree = lazy(() => import("./components/PlantTree"));
@@ -139,6 +140,7 @@ function App() {
               <Route path="/traffic-report" element={<TrafficReport />} />
               <Route path="/transparency-report" element={<TransparencyReport />} />
               <Route path="/consulting" element={<Consulting />} />
+              <Route path="/responders/apply" element={<PublicResponderApply />} />
               <Route path="/project" element={<PublicProjectView />} />
               <Route path="/u/:userId" element={<SharedProfilePage />} />
               <Route path="/gift/:userId" element={<PlantTree />} />

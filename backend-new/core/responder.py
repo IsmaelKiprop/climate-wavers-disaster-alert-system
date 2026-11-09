@@ -1,20 +1,95 @@
 """Responder org onboarding + RapidBrief dispatch desk APIs."""
 
+import re
+
+from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.utils import timezone
 from rest_framework import serializers, status
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .models import ResponderDispatch, ResponderMembership, ResponderOrganization
 from .rapid_brief import generate_rapid_brief
 
+User = get_user_model()
 
 ORG_TYPES = [c[0] for c in ResponderOrganization.ORG_TYPES]
 DISPATCH_STATUSES = [c[0] for c in ResponderDispatch.STATUS_CHOICES]
 ACTIVE_ROLES = ("owner", "dispatcher", "viewer")
 WRITE_ROLES = ("owner", "dispatcher")
+
+
+def _parse_disaster_types(raw):
+    if isinstance(raw, str):
+        return [t.strip() for t in raw.split(",") if t.strip()]
+    if isinstance(raw, list):
+        return raw
+    return []
+
+
+def _parse_org_apply_fields(data):
+    """Validate shared org fields for authenticated + public apply."""
+    name = (data.get("name") or "").strip()
+    if not name:
+        return None, Response({"detail": "Organization name is required"}, status=400)
+
+    org_type = (data.get("org_type") or "other").strip()
+    if org_type not in ORG_TYPES:
+        return None, Response({"detail": "invalid org_type"}, status=400)
+
+    try:
+        lat = float(data.get("latitude"))
+        lng = float(data.get("longitude"))
+    except (TypeError, ValueError):
+        return None, Response(
+            {"detail": "latitude and longitude are required"}, status=400
+        )
+
+    try:
+        radius = int(data.get("coverage_radius_km") or 150)
+    except (TypeError, ValueError):
+        radius = 150
+    radius = max(10, min(radius, 2000))
+
+    return {
+        "name": name[:200],
+        "org_type": org_type,
+        "website": (data.get("website") or "").strip() or None,
+        "logo": (data.get("logo") or "").strip() or None,
+        "country": (data.get("country") or "Kenya").strip()[:100] or "Kenya",
+        "city": (data.get("city") or "").strip()[:100] or None,
+        "latitude": lat,
+        "longitude": lng,
+        "coverage_radius_km": radius,
+        "disaster_types": _parse_disaster_types(data.get("disaster_types")),
+        "contact_email": (data.get("contact_email") or "").strip() or None,
+        "contact_phone": (data.get("contact_phone") or "").strip() or None,
+        "whatsapp_opt_in": bool(data.get("whatsapp_opt_in")),
+    }, None
+
+
+def _unique_username(base):
+    cleaned = re.sub(r"[^a-zA-Z0-9_]", "", (base or "responder").lower())[:18] or "responder"
+    candidate = cleaned
+    n = 1
+    while User.objects.filter(username__iexact=candidate).exists():
+        n += 1
+        candidate = f"{cleaned}{n}"[:100]
+    return candidate
+
+
+def _create_pending_org(user, fields):
+    org = ResponderOrganization.objects.create(
+        **fields,
+        verification_status="pending",
+        created_by=user,
+    )
+    membership = ResponderMembership.objects.create(
+        org=org, user=user, role="owner"
+    )
+    return org, membership
 
 
 class ResponderOrgSerializer(serializers.ModelSerializer):
@@ -117,33 +192,12 @@ class ResponderApplyView(APIView):
 
     def post(self, request):
         data = request.data or {}
-        name = (data.get("name") or "").strip()
-        if not name:
-            return Response({"detail": "name is required"}, status=400)
+        fields, error = _parse_org_apply_fields(data)
+        if error:
+            return error
 
-        org_type = (data.get("org_type") or "other").strip()
-        if org_type not in ORG_TYPES:
-            return Response({"detail": "invalid org_type"}, status=400)
-
-        try:
-            lat = float(data.get("latitude"))
-            lng = float(data.get("longitude"))
-        except (TypeError, ValueError):
-            return Response(
-                {"detail": "latitude and longitude are required"}, status=400
-            )
-
-        disaster_types = data.get("disaster_types") or []
-        if isinstance(disaster_types, str):
-            disaster_types = [t.strip() for t in disaster_types.split(",") if t.strip()]
-        if not isinstance(disaster_types, list):
-            disaster_types = []
-
-        try:
-            radius = int(data.get("coverage_radius_km") or 150)
-        except (TypeError, ValueError):
-            radius = 150
-        radius = max(10, min(radius, 2000))
+        if not fields["contact_email"]:
+            fields["contact_email"] = request.user.email
 
         existing = ResponderMembership.objects.filter(
             user=request.user,
@@ -159,32 +213,107 @@ class ResponderApplyView(APIView):
             )
 
         with transaction.atomic():
-            org = ResponderOrganization.objects.create(
-                name=name[:200],
-                org_type=org_type,
-                website=(data.get("website") or "").strip() or None,
-                logo=(data.get("logo") or "").strip() or None,
-                country=(data.get("country") or "Kenya").strip()[:100] or "Kenya",
-                city=(data.get("city") or "").strip()[:100] or None,
-                latitude=lat,
-                longitude=lng,
-                coverage_radius_km=radius,
-                disaster_types=disaster_types,
-                contact_email=(data.get("contact_email") or request.user.email or "").strip()
-                or None,
-                contact_phone=(data.get("contact_phone") or "").strip() or None,
-                whatsapp_opt_in=bool(data.get("whatsapp_opt_in")),
-                verification_status="pending",
-                created_by=request.user,
-            )
-            membership = ResponderMembership.objects.create(
-                org=org, user=request.user, role="owner"
-            )
+            _org, membership = _create_pending_org(request.user, fields)
 
         return Response(
             {
                 "membership": ResponderMembershipSerializer(membership).data,
                 "message": "Application submitted. An admin will verify your organization.",
+            },
+            status=201,
+        )
+
+
+class ResponderPublicApplyView(APIView):
+    """
+    Org-first RapidBrief apply for teams that do not have a personal account yet.
+    Creates an organization workspace owner account + pending ResponderOrganization.
+    """
+
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    def post(self, request):
+        data = request.data or {}
+        fields, error = _parse_org_apply_fields(data)
+        if error:
+            return error
+
+        contact_email = (
+            fields["contact_email"]
+            or (data.get("email") or "").strip()
+            or ""
+        ).lower()
+        if not contact_email:
+            return Response(
+                {"detail": "Organization contact email is required"}, status=400
+            )
+        fields["contact_email"] = contact_email
+
+        password = data.get("password") or ""
+        if len(str(password)) < 8:
+            return Response(
+                {"detail": "Password must be at least 8 characters"}, status=400
+            )
+
+        if User.objects.filter(email__iexact=contact_email).exists():
+            return Response(
+                {
+                    "detail": (
+                        "An account with this email already exists. "
+                        "Sign in, then open Apply as Responder in the app."
+                    ),
+                    "login_path": "/login?redirect=/app/responder/apply",
+                },
+                status=400,
+            )
+
+        contact_first = (data.get("contact_first_name") or data.get("first_name") or "").strip()
+        contact_last = (data.get("contact_last_name") or data.get("last_name") or "").strip()
+        if not contact_first:
+            contact_first = fields["name"].split(" ")[0][:100]
+        if not contact_last:
+            contact_last = "Responder"
+
+        username_base = (data.get("username") or "").strip() or re.sub(
+            r"[^a-zA-Z0-9_]", "", fields["name"].lower()
+        )[:18]
+        username = _unique_username(username_base)
+
+        with transaction.atomic():
+            user = User.objects.create_user(
+                email=contact_email,
+                first_name=contact_first[:100],
+                last_name=contact_last[:100],
+                country=fields["country"],
+                state=(fields["city"] or fields["country"])[:100],
+                password=password,
+                username=username,
+                profession="Responder organization",
+                is_onboarded=True,
+                is_verified=False,
+            )
+            _org, membership = _create_pending_org(user, fields)
+
+        try:
+            from api.tasks import send_activation_email
+
+            send_activation_email(user.email)
+            mail_note = " Check your email for a verification code."
+        except Exception:
+            mail_note = " You can sign in and verify your email from the app."
+
+        return Response(
+            {
+                "membership": ResponderMembershipSerializer(membership).data,
+                "email": user.email,
+                "username": user.username,
+                "message": (
+                    "Organization application submitted and workspace account created. "
+                    "An admin will verify your organization before live dispatches start."
+                    + mail_note
+                ),
+                "next": "/emailcode",
             },
             status=201,
         )

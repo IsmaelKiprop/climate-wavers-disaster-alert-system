@@ -35,6 +35,27 @@ const Consulting = () => {
       <p className="mt-3 text-muted">
         We work from the live product, not from invented city case studies.
       </p>
+      <div className="mt-8 border border-border bg-surface p-5 sm:p-6">
+        <h2 className="text-xl font-semibold">Apply as a responder organization</h2>
+        <p className="mt-2 text-sm text-muted max-w-2xl">
+          Red Cross, county emergency, UN, government, and NGO teams can join RapidBrief:
+          get matched disaster dispatches, AI mobilization briefs, and a live response desk.
+          Applications are reviewed by Climate Wavers admins before unlock.
+        </p>
+        <Link
+          to="/responders/apply"
+          className="inline-flex mt-4 min-h-11 items-center px-5 bg-primary text-primary-foreground text-sm font-medium"
+        >
+          Apply as Responder
+        </Link>
+        <p className="mt-3 text-xs text-muted">
+          No personal account needed. Organizations create a workspace and apply in one step.{" "}
+          <Link to="/login?redirect=/app/responder/apply" className="text-primary">
+            Already registered? Sign in
+          </Link>
+        </p>
+      </div>
+
       <div className="mt-8 space-y-4">
         {SERVICES.map((service) => (
           <article key={service.title} className="border border-border bg-surface p-5">
@@ -44,13 +65,9 @@ const Consulting = () => {
         ))}
       </div>
       <p className="mt-8 text-sm">
-        Response organizations can{" "}
-        <Link to="/app/responder/apply" className="text-primary">
-          apply for RapidBrief
-        </Link>
-        . Or describe your group by emailing{" "}
+        Or email{" "}
         <a className="text-primary" href={`mailto:${SITE.emails.hello}`}>{SITE.emails.hello}</a>
-        {" "}or using the <Link to="/contact" className="text-primary">contact form</Link>.
+        {" "}or use the <Link to="/contact" className="text-primary">contact form</Link>.
       </p>
     </PublicPage>
   );

@@ -22,6 +22,7 @@ from .alert_preferences import (
 )
 from .responder import (
     ResponderApplyView,
+    ResponderPublicApplyView,
     ResponderMeView,
     ResponderOrgView,
     ResponderDispatchListView,
@@ -71,6 +72,11 @@ urlpatterns = [
         name="alert-phone-confirm",
     ),
     path("responder/apply/", ResponderApplyView.as_view(), name="responder-apply"),
+    path(
+        "responder/apply-public/",
+        ResponderPublicApplyView.as_view(),
+        name="responder-apply-public",
+    ),
     path("responder/me/", ResponderMeView.as_view(), name="responder-me"),
     path("responder/org/", ResponderOrgView.as_view(), name="responder-org"),
     path(

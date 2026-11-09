@@ -228,8 +228,15 @@ const ResponderDesk = () => {
       <div className="p-4 sm:p-6 max-w-2xl mx-auto">
         <h1 className="text-2xl font-semibold">Apply as Responder</h1>
         <p className="mt-2 text-sm text-muted">
-          Red Cross, UN, county emergency, and other response orgs can join RapidBrief.
-          An admin verifies your organization before live dispatches start.
+          Register your organization for RapidBrief. This is an org workspace application,
+          not a personal profile. An admin verifies you before live dispatches start.
+        </p>
+        <p className="mt-2 text-sm">
+          Applying for a new org without an account?{" "}
+          <a href="/responders/apply" className="text-primary font-medium">
+            Use the public organization form
+          </a>
+          .
         </p>
         <form className="mt-6 space-y-4" onSubmit={submitApply}>
           <label className="block text-sm">
