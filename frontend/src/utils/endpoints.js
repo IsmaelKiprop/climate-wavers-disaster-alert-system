@@ -12,6 +12,7 @@ export const endpoints = {
     "follow": "/api/v1/follows/",
     "profile": "/api/v1/users/activity/",
     "users": "/api/v1/users/",
+    "popularUsers": "/api/v1/users/popular/",
     "notifications": "/api/v1/notifications/",
     "notificationsRead": "/api/v1/notifications/mark-read/",
     "ai_generate_content": "/api/v1/ai/generate-content/",

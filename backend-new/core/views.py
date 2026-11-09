@@ -340,6 +340,17 @@ class PostViewSet(viewsets.ModelViewSet):
         return Response({"status": "bookmark removed"})
 
 
+# Demo / org accounts that should not dominate "Popular accounts"
+ORG_USERNAME_BLOCKLIST = {
+    "unnnigeria",
+    "redcrossng",
+    "redcross",
+    "lawma",
+    "unfcccnigeria",
+    "unfccc",
+}
+
+
 # ViewSet for User model
 class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all()
@@ -348,6 +359,42 @@ class UserViewSet(viewsets.ModelViewSet):
 
     def get_object(self):
         return User.objects.get(pk=self.kwargs["pk"])
+
+    @action(detail=False, methods=["get"], permission_classes=[AllowAny])
+    def popular(self, request):
+        """
+        Real community accounts ranked by followers.
+        Excludes the current user, staff, and known org/demo handles.
+        Prefers accounts the viewer is not already following.
+        """
+        limit = min(int(request.query_params.get("limit", 8) or 8), 20)
+        qs = (
+            User.objects.filter(is_active=True, is_staff=False, is_superuser=False)
+            .exclude(username__iexact="")
+            .annotate(followers_count=Count("followers", distinct=True))
+        )
+
+        if request.user and request.user.is_authenticated:
+            qs = qs.exclude(pk=request.user.pk)
+            already_following = Follow.objects.filter(
+                follower=request.user, following_id=OuterRef("pk")
+            )
+            qs = qs.annotate(viewer_follows=Exists(already_following))
+        else:
+            qs = qs.annotate(
+                viewer_follows=Value(False, output_field=BooleanField())
+            )
+
+        # Drop known organization / placeholder handles
+        for handle in ORG_USERNAME_BLOCKLIST:
+            qs = qs.exclude(username__iexact=handle)
+
+        # Prefer people you don't follow yet, then by follower count, then recency
+        qs = qs.order_by("viewer_follows", "-followers_count", "-date_joined")
+
+        users = list(qs[:limit])
+        serializer = self.get_serializer(users, many=True)
+        return Response(serializer.data)
 
     def update(self, request, *args, **kwargs):
         """
