@@ -9,8 +9,25 @@ exports.createDisaster = catchAsyncErrors(async (req, res) => {
   const validateResponse = validator.validateCreateDisasterPayload(req.body);
   if (validateResponse.error)
     return res.status(400).json({ message: validateResponse.error.message });
+  const body = validateResponse.value;
+  const latitude =
+    body.latitude ??
+    body.lat ??
+    body.coordinate?.lat ??
+    req.body?.latitude ??
+    req.body?.lat ??
+    null;
+  const longitude =
+    body.longitude ??
+    body.lng ??
+    body.coordinate?.lng ??
+    req.body?.longitude ??
+    req.body?.lng ??
+    null;
+
   const disaster = await disasterService.createDisaster({
-    ...validateResponse.value,
+    ...body,
+    ...(latitude != null && longitude != null ? { latitude, longitude } : {}),
   });
 
   let vision = null;
@@ -44,8 +61,8 @@ exports.createDisaster = catchAsyncErrors(async (req, res) => {
     details: disaster.details,
     id: disaster.id,
     vision,
-    latitude: disaster.latitude ?? disaster.lat ?? req.body?.latitude,
-    longitude: disaster.longitude ?? disaster.lng ?? req.body?.longitude,
+    latitude: disaster.latitude ?? disaster.lat ?? latitude,
+    longitude: disaster.longitude ?? disaster.lng ?? longitude,
     magnitude: disaster.magnitude ?? req.body?.magnitude,
   });
   return res.status(201).json({ disaster, recommendation, vision, alert });

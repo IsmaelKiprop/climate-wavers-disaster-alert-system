@@ -310,6 +310,28 @@ def dispatch_disaster_alert(payload):
         except Exception as exc:
             logger.exception("Agency WhatsApp alert failed: %s", exc)
 
+    responder_stats = {}
+    try:
+        from .responder_dispatch import create_responder_dispatches
+
+        responder_stats = create_responder_dispatches(
+            payload,
+            place=place,
+            disaster_type=disaster_type,
+            confidence=confidence,
+            lat=lat,
+            lng=lng,
+            city=city,
+            country=country,
+            magnitude=magnitude,
+            is_official=is_official,
+            ai_summary=ai_summary,
+            source=source,
+        )
+    except Exception as exc:
+        logger.exception("Responder RapidBrief dispatch failed: %s", exc)
+        responder_stats = {"error": str(exc)}
+
     return {
         "ok": True,
         "notifications": created,
@@ -320,6 +342,7 @@ def dispatch_disaster_alert(payload):
         "agencies": agencies,
         "message": in_app_message,
         "matched_users": len(prefs),
+        **responder_stats,
     }
 
 

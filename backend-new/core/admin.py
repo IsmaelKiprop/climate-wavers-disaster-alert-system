@@ -1,4 +1,5 @@
 from django.contrib import admin
+from django.utils import timezone
 from .models import (
     Post,
     Poll,
@@ -14,6 +15,9 @@ from .models import (
     UserAlertPreference,
     EmergencyAgency,
     OfficialAlertEvent,
+    ResponderOrganization,
+    ResponderMembership,
+    ResponderDispatch,
 )
 from unfold.admin import ModelAdmin
 
@@ -99,4 +103,55 @@ class OfficialAlertEventAdmin(ModelAdmin):
     list_display = ("event_id", "source", "title", "disaster_type", "created_at")
     list_filter = ("source", "disaster_type")
     search_fields = ("event_id", "title")
+
+
+@admin.register(ResponderOrganization)
+class ResponderOrganizationAdmin(ModelAdmin):
+    list_display = (
+        "name",
+        "org_type",
+        "city",
+        "country",
+        "verification_status",
+        "contact_email",
+        "whatsapp_opt_in",
+        "created_at",
+    )
+    list_filter = ("verification_status", "org_type", "country", "whatsapp_opt_in")
+    search_fields = ("name", "city", "contact_email", "contact_phone")
+    actions = ["approve_organizations", "reject_organizations"]
+
+    @admin.action(description="Approve selected responder organizations")
+    def approve_organizations(self, request, queryset):
+        queryset.update(
+            verification_status="approved",
+            verified_at=timezone.now(),
+        )
+
+    @admin.action(description="Reject selected responder organizations")
+    def reject_organizations(self, request, queryset):
+        queryset.update(verification_status="rejected", verified_at=None)
+
+
+@admin.register(ResponderMembership)
+class ResponderMembershipAdmin(ModelAdmin):
+    list_display = ("org", "user", "role", "created_at")
+    list_filter = ("role",)
+    search_fields = ("org__name", "user__email", "user__username")
+
+
+@admin.register(ResponderDispatch)
+class ResponderDispatchAdmin(ModelAdmin):
+    list_display = (
+        "event_key",
+        "org",
+        "disaster_type",
+        "place",
+        "status",
+        "is_official",
+        "created_at",
+    )
+    list_filter = ("status", "is_official", "disaster_type")
+    search_fields = ("event_key", "place", "org__name")
+
 

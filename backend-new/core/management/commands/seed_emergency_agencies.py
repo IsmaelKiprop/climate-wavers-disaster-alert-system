@@ -1,6 +1,7 @@
 from django.core.management.base import BaseCommand
+from django.utils import timezone
 
-from core.models import EmergencyAgency
+from core.models import EmergencyAgency, ResponderOrganization
 
 # Starter Kenya / Nairobi directory — editable in admin.
 KENYA_SEED = [
@@ -63,10 +64,11 @@ KENYA_SEED = [
 
 
 class Command(BaseCommand):
-    help = "Seed starter EmergencyAgency rows for Kenya / Nairobi."
+    help = "Seed starter EmergencyAgency rows and approved RapidBrief sample for Kenya Red Cross."
 
     def handle(self, *args, **options):
         created = 0
+        red_cross = None
         for row in KENYA_SEED:
             obj, was_created = EmergencyAgency.objects.update_or_create(
                 name=row["name"],
@@ -84,8 +86,35 @@ class Command(BaseCommand):
             )
             if was_created:
                 created += 1
+            if row["agency_type"] == "red_cross" and row.get("email"):
+                red_cross = obj
+
+        responder_msg = "No RapidBrief sample (need Red Cross with email)."
+        if red_cross:
+            org, org_created = ResponderOrganization.objects.update_or_create(
+                name=red_cross.name,
+                defaults={
+                    "org_type": "red_cross",
+                    "agency": red_cross,
+                    "country": red_cross.country,
+                    "city": red_cross.city,
+                    "latitude": red_cross.latitude,
+                    "longitude": red_cross.longitude,
+                    "coverage_radius_km": 150,
+                    "disaster_types": [],
+                    "contact_email": red_cross.email,
+                    "contact_phone": red_cross.phone,
+                    "whatsapp_opt_in": False,
+                    "verification_status": "approved",
+                    "verified_at": timezone.now(),
+                },
+            )
+            responder_msg = (
+                f"RapidBrief sample {'created' if org_created else 'updated'}: {org.name} (approved)."
+            )
+
         self.stdout.write(
             self.style.SUCCESS(
-                f"Emergency agencies ready. Created {created}, total {EmergencyAgency.objects.count()}."
+                f"Emergency agencies ready. Created {created}, total {EmergencyAgency.objects.count()}. {responder_msg}"
             )
         )

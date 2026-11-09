@@ -20,6 +20,15 @@ from .alert_preferences import (
     AlertPhoneVerifyConfirmView,
     AlertPhoneVerifyRequestView,
 )
+from .responder import (
+    ResponderApplyView,
+    ResponderMeView,
+    ResponderOrgView,
+    ResponderDispatchListView,
+    ResponderDispatchDetailView,
+    ResponderDispatchStatusView,
+    ResponderBriefView,
+)
 from .profile_share import public_profile
 
 
@@ -61,6 +70,25 @@ urlpatterns = [
         AlertPhoneVerifyConfirmView.as_view(),
         name="alert-phone-confirm",
     ),
+    path("responder/apply/", ResponderApplyView.as_view(), name="responder-apply"),
+    path("responder/me/", ResponderMeView.as_view(), name="responder-me"),
+    path("responder/org/", ResponderOrgView.as_view(), name="responder-org"),
+    path(
+        "responder/dispatches/",
+        ResponderDispatchListView.as_view(),
+        name="responder-dispatches",
+    ),
+    path(
+        "responder/dispatches/<int:dispatch_id>/",
+        ResponderDispatchDetailView.as_view(),
+        name="responder-dispatch-detail",
+    ),
+    path(
+        "responder/dispatches/<int:dispatch_id>/status/",
+        ResponderDispatchStatusView.as_view(),
+        name="responder-dispatch-status",
+    ),
+    path("responder/brief/", ResponderBriefView.as_view(), name="responder-brief"),
     path('notifications/', NotificationListView.as_view(),
          name='notification_list'),
     path('notifications/mark-read/', MarkNotificationsAsReadView.as_view(),

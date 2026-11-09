@@ -12,6 +12,16 @@ const apiUrl = chatbotApiUrl("/api/v1/disasters");
 
 const TYPES = ["Floods", "Earthquake", "Wildfire", "Storm", "Drought", "Landslide", "Other"];
 
+const parseIpinfoCoords = (info) => {
+  const loc = String(info?.loc || "").trim();
+  if (!loc.includes(",")) return null;
+  const [latRaw, lngRaw] = loc.split(",");
+  const latitude = Number(latRaw);
+  const longitude = Number(lngRaw);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+  return { latitude, longitude };
+};
+
 const CreateReport = ({ onSubmitted }) => {
   const queryClient = useQueryClient();
   const [region, setRegion] = useState("");
@@ -19,6 +29,9 @@ const CreateReport = ({ onSubmitted }) => {
   const [disasterType, setDisasterType] = useState("Floods");
   const [details, setDetails] = useState("");
   const [magnitude, setMagnitude] = useState(5);
+  const [latitude, setLatitude] = useState(null);
+  const [longitude, setLongitude] = useState(null);
+  const [geoStatus, setGeoStatus] = useState("");
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState("");
   const [vision, setVision] = useState(null);
@@ -27,10 +40,45 @@ const CreateReport = ({ onSubmitted }) => {
   const [error, setError] = useState("");
 
   useEffect(() => {
+    let cancelled = false;
+    setGeoStatus("Detecting location for nearby responders...");
+
+    if (typeof navigator !== "undefined" && navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          if (cancelled) return;
+          setLatitude(pos.coords.latitude);
+          setLongitude(pos.coords.longitude);
+          setGeoStatus("Precise location attached for responder matching.");
+        },
+        () => {
+          if (!cancelled) {
+            setGeoStatus("Browser location unavailable — using network estimate if possible.");
+          }
+        },
+        { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 }
+      );
+    }
+
     getLocation().then((info) => {
+      if (cancelled || !info) return;
       if (info?.city) setRegion((current) => current || info.city);
       if (info?.country) setCountry((current) => current || info.country);
+      const coords = parseIpinfoCoords(info);
+      if (coords) {
+        setLatitude((current) => (current == null ? coords.latitude : current));
+        setLongitude((current) => (current == null ? coords.longitude : current));
+        setGeoStatus((current) =>
+          current.includes("Precise")
+            ? current
+            : "Approximate location attached for responder matching."
+        );
+      }
     });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const onFile = async (event) => {
@@ -64,6 +112,13 @@ const CreateReport = ({ onSubmitted }) => {
         magnitude,
         status: "unconfirmed",
         images,
+        ...(latitude != null && longitude != null
+          ? {
+              latitude,
+              longitude,
+              coordinate: { lat: latitude, lng: longitude },
+            }
+          : {}),
       });
       if (data?.disaster) {
         prependCachedDisaster(data.disaster);
@@ -84,8 +139,9 @@ const CreateReport = ({ onSubmitted }) => {
   return (
     <form className="p-4 sm:p-5 space-y-4" onSubmit={onSubmit}>
       <p className="text-sm text-muted">
-        Reports stay unconfirmed until they are reviewed. Computer vision reads the photo, then we send alerts for that city.
+        Reports stay unconfirmed until they are reviewed. Computer vision reads the photo, then we alert nearby verified responders.
       </p>
+      {geoStatus ? <p className="text-xs text-muted">{geoStatus}</p> : null}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <label className="block text-sm">

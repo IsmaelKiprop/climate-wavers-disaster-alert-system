@@ -19,6 +19,10 @@ const SERVICES = [
     title: "Member community",
     detail: "Accounts, posts, and WaverX for organizations that want a climate-action workspace on top of the public feeds.",
   },
+  {
+    title: "RapidBrief responder desk",
+    detail: "Verified response orgs (Red Cross, county, UN, NGOs) get AI mobilization briefs and a live dispatch inbox when disasters are reported nearby.",
+  },
 ];
 
 const Consulting = () => {
@@ -40,9 +44,13 @@ const Consulting = () => {
         ))}
       </div>
       <p className="mt-8 text-sm">
-        Describe your group and what you want to run. Email{" "}
+        Response organizations can{" "}
+        <Link to="/app/responder/apply" className="text-primary">
+          apply for RapidBrief
+        </Link>
+        . Or describe your group by emailing{" "}
         <a className="text-primary" href={`mailto:${SITE.emails.hello}`}>{SITE.emails.hello}</a>
-        {" "}or use the <Link to="/contact" className="text-primary">contact form</Link>.
+        {" "}or using the <Link to="/contact" className="text-primary">contact form</Link>.
       </p>
     </PublicPage>
   );

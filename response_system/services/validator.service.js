@@ -70,6 +70,10 @@ class Validator{
                 lng: Joi.number().required(),
                 lat: Joi.number().required()
             }),
+            latitude: Joi.number(),
+            longitude: Joi.number(),
+            lat: Joi.number(),
+            lng: Joi.number(),
             disasterType: Joi.string().required(),
             country: Joi.string().required(),
             region: Joi.string().required(),

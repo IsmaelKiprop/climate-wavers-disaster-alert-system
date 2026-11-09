@@ -1381,3 +1381,164 @@ class OfficialAlertEvent(models.Model):
     def __str__(self):
         return f"{self.source}:{self.event_id}"
 
+
+class ResponderOrganization(models.Model):
+    """Verified disaster-response org (Red Cross, county, UN, NGO, etc.)."""
+
+    ORG_TYPES = [
+        ("fire", "Fire"),
+        ("police", "Police"),
+        ("medical", "Medical"),
+        ("red_cross", "Red Cross"),
+        ("county", "County Emergency"),
+        ("government", "Government"),
+        ("un", "United Nations"),
+        ("ngo", "NGO"),
+        ("other", "Other"),
+    ]
+    VERIFICATION_STATUSES = [
+        ("pending", "Pending"),
+        ("approved", "Approved"),
+        ("rejected", "Rejected"),
+    ]
+
+    name = models.CharField(max_length=200)
+    org_type = models.CharField(max_length=20, choices=ORG_TYPES, default="other")
+    agency = models.ForeignKey(
+        EmergencyAgency,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="responder_orgs",
+    )
+    logo = models.URLField(max_length=500, blank=True, null=True)
+    website = models.URLField(max_length=500, blank=True, null=True)
+    country = models.CharField(max_length=100, default="Kenya")
+    city = models.CharField(max_length=100, blank=True, null=True)
+    latitude = models.DecimalField(max_digits=9, decimal_places=6)
+    longitude = models.DecimalField(max_digits=9, decimal_places=6)
+    coverage_radius_km = models.PositiveIntegerField(default=150)
+    disaster_types = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Disaster types this org responds to; empty = all",
+    )
+    contact_email = models.EmailField(blank=True, null=True)
+    contact_phone = models.CharField(max_length=32, blank=True, null=True)
+    whatsapp_opt_in = models.BooleanField(default=False)
+    verification_status = models.CharField(
+        max_length=20, choices=VERIFICATION_STATUSES, default="pending"
+    )
+    verified_at = models.DateTimeField(null=True, blank=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_responder_orgs",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["name"]
+        indexes = [
+            models.Index(fields=["verification_status"]),
+            models.Index(fields=["latitude", "longitude"]),
+            models.Index(fields=["country", "verification_status"]),
+        ]
+
+    def __str__(self):
+        return f"{self.name} ({self.verification_status})"
+
+
+class ResponderMembership(models.Model):
+    ROLE_CHOICES = [
+        ("owner", "Owner"),
+        ("dispatcher", "Dispatcher"),
+        ("viewer", "Viewer"),
+    ]
+
+    org = models.ForeignKey(
+        ResponderOrganization,
+        on_delete=models.CASCADE,
+        related_name="memberships",
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="responder_memberships",
+    )
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES, default="owner")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("org", "user")
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.user_id} @ {self.org_id} ({self.role})"
+
+
+class ResponderDispatch(models.Model):
+    STATUS_CHOICES = [
+        ("new", "New"),
+        ("acknowledged", "Acknowledged"),
+        ("mobilizing", "Mobilizing"),
+        ("on_scene", "On scene"),
+        ("declined", "Declined"),
+        ("resolved", "Resolved"),
+    ]
+
+    org = models.ForeignKey(
+        ResponderOrganization,
+        on_delete=models.CASCADE,
+        related_name="dispatches",
+    )
+    event_key = models.CharField(max_length=200)
+    source = models.CharField(max_length=40, blank=True, default="")
+    disaster_type = models.CharField(max_length=80, blank=True, default="")
+    place = models.CharField(max_length=300, blank=True, default="")
+    city = models.CharField(max_length=100, blank=True, default="")
+    country = models.CharField(max_length=100, blank=True, default="")
+    latitude = models.DecimalField(
+        max_digits=9, decimal_places=6, null=True, blank=True
+    )
+    longitude = models.DecimalField(
+        max_digits=9, decimal_places=6, null=True, blank=True
+    )
+    magnitude = models.DecimalField(
+        max_digits=4, decimal_places=1, null=True, blank=True
+    )
+    is_official = models.BooleanField(default=False)
+    confidence = models.CharField(max_length=120, blank=True, default="")
+    ai_summary = models.TextField(blank=True, default="")
+    ai_brief = models.TextField(blank=True, default="")
+    payload = models.JSONField(default=dict, blank=True)
+    distance_km = models.DecimalField(
+        max_digits=8, decimal_places=1, null=True, blank=True
+    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="new")
+    notified_at = models.DateTimeField(null=True, blank=True)
+    acknowledged_at = models.DateTimeField(null=True, blank=True)
+    acknowledged_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="acknowledged_dispatches",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        unique_together = ("org", "event_key")
+        indexes = [
+            models.Index(fields=["status", "created_at"]),
+            models.Index(fields=["event_key"]),
+        ]
+
+    def __str__(self):
+        return f"Dispatch {self.event_key} → {self.org_id} ({self.status})"
+

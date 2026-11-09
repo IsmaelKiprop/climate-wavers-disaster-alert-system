@@ -246,223 +246,187 @@ const Profile = () => {
         </div>
 
         {/* Profile Info Section */}
-        <div className="bg-white rounded-t-3xl -mt-1 md:-mt-2 lg:-mt-3 relative z-[1] shadow-xl">
-          <div className="px-4 md:px-6 lg:px-8 pt-10 md:pt-14 lg:pt-18 pb-6">
-            {/* User Info Header */}
-            <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
-              <div className="flex-1">
-                <div className="flex flex-col md:flex-row md:items-center gap-3">
-                  {/* User Info */}
-                  <div className="flex items-center gap-3">
-                    <div>
-                      <h1 className="text-2xl md:text-3xl lg:text-4xl font-bold text-gray-900 mb-1">
-                        {displayName || "Profile"}
-                      </h1>
-                      <p className="text-lg text-gray-500 font-medium">
-                        {profile?.username ? `@${profile.username}` : ""}
-                      </p>
-                    </div>
-                  </div>
-                  
-                  {/* Action Button */}
-                  <div className="flex-shrink-0">
-                    {isOwnProfile ? (
-                      <div className="flex flex-wrap gap-3">
-                        <button
-                          type="button"
-                          onClick={() => navigate("/app/my-certificates")}
-                          className="bg-green-500 text-white px-6 py-3 rounded-full font-semibold text-sm hover:bg-green-600 transition-all duration-200 flex items-center gap-2 shadow-lg hover:shadow-xl"
-                        >
-                          <IoLeaf size={18} />
-                          My Certificates
-                        </button>
-                        {completeness.isComplete ? (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() => setShowShareModal(true)}
-                              className="bg-white text-teal-700 border border-teal-200 px-6 py-3 rounded-full font-semibold text-sm hover:bg-teal-50 transition-all duration-200 flex items-center gap-2"
-                            >
-                              <IoShareOutline size={18} />
-                              Share profile
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setShowGiftQrModal(true)}
-                              className="bg-white text-green-700 border border-green-200 px-6 py-3 rounded-full font-semibold text-sm hover:bg-green-50 transition-all duration-200 flex items-center gap-2"
-                            >
-                              <IoQrCodeOutline size={18} />
-                              Buy me a tree QR
-                            </button>
-                          </>
-                        ) : null}
-                        <button
-                          type="button"
-                          onClick={() => setIsEditModalOpen(true)}
-                          className="bg-teal-500 text-white px-6 py-3 rounded-full font-semibold text-sm hover:bg-teal-600 transition-all duration-200 flex items-center gap-2 shadow-lg hover:shadow-xl"
-                        >
-                          <IoCreateOutline size={18} />
-                          Edit Profile
-                        </button>
-                      </div>
-                    ) : profile?.id ? (
-                      <div className="flex flex-wrap gap-3">
-                        <button
-                          type="button"
-                          onClick={() => handleFollow(profile?.id)}
-                          className={`px-6 py-3 rounded-full font-semibold text-sm transition-all duration-200 flex items-center gap-2 ${
-                            isFollow
-                              ? "bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200"
-                              : "bg-teal-500 text-white hover:bg-teal-600 shadow-lg hover:shadow-xl"
-                          }`}
-                        >
-                          {isFollow ? "Following" : "Follow"}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            navigate(
-                              giftTreesPath(
-                                profile.id,
-                                displayName || profile.username || ""
-                              )
-                            )
-                          }
-                          className="bg-green-600 text-white px-6 py-3 rounded-full font-semibold text-sm hover:bg-green-700 transition-all duration-200 flex items-center gap-2"
-                        >
-                          <IoLeaf size={18} />
-                          Gift trees
-                        </button>
-                      </div>
-                    ) : null}
-      </div>
-                </div>
+        <div className="bg-surface border-t border-border -mt-1 md:-mt-2 lg:-mt-3 relative z-[1]">
+          <div className="px-4 md:px-6 lg:px-8 pt-12 md:pt-14 pb-6">
+            <div className="flex flex-col gap-5 max-w-3xl">
+              <div>
+                <h1 className="text-2xl md:text-3xl font-semibold text-foreground tracking-tight">
+                  {displayName || "Profile"}
+                </h1>
+                {profile?.username ? (
+                  <p className="mt-1 text-sm text-muted">@{profile.username}</p>
+                ) : null}
+                {profile?.bio ? (
+                  <p className="mt-3 text-sm md:text-base text-foreground leading-relaxed max-w-2xl">
+                    {profile.bio}
+                  </p>
+                ) : null}
+              </div>
 
-                {isOwnProfile && !completeness.isComplete ? (
-                  <div className="mt-4 border border-border bg-background p-4">
-                    <p className="font-medium text-foreground">
-                      Finish your profile to unlock sharing
-                    </p>
-                    <p className="mt-1 text-sm text-muted">
-                      {completeness.completed}/{completeness.total} complete — add a photo, bio, and location to share a public preview and receive tree gifts.
-                    </p>
-                    <ul className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
-                      {completeness.checks.map((item) => (
-                        <li
-                          key={item.key}
-                          className={item.done ? "text-primary" : "text-muted"}
-                        >
-                          {item.done ? "✓" : "○"} {item.label}
-                        </li>
-                      ))}
-                    </ul>
+              {isOwnProfile ? (
+                <div className="flex flex-col gap-3">
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    {completeness.isComplete ? (
+                      <button
+                        type="button"
+                        onClick={() => setShowGiftQrModal(true)}
+                        className="h-11 px-4 bg-primary text-primary-foreground text-sm font-medium inline-flex items-center justify-center gap-2"
+                      >
+                        <IoQrCodeOutline size={18} />
+                        Buy me a tree
+                      </button>
+                    ) : null}
                     <button
                       type="button"
                       onClick={() => setIsEditModalOpen(true)}
-                      className="mt-3 h-10 px-4 bg-primary text-primary-foreground text-sm"
+                      className="h-11 px-4 border border-border bg-surface text-foreground text-sm font-medium inline-flex items-center justify-center gap-2"
                     >
-                      Complete profile
+                      <IoCreateOutline size={18} />
+                      Edit profile
                     </button>
                   </div>
-                ) : null}
-
-                {/* Bio Section */}
-                {profile?.bio && (
-                  <div className="mt-4">
-                    <p className="text-gray-700 text-base leading-relaxed max-w-2xl">
-          {profile?.bio}
-        </p>
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+                    <button
+                      type="button"
+                      onClick={() => navigate("/app/my-certificates")}
+                      className="text-muted hover:text-foreground inline-flex items-center gap-1.5"
+                    >
+                      <IoLeaf size={16} />
+                      Certificates
+                    </button>
+                    {completeness.isComplete ? (
+                      <button
+                        type="button"
+                        onClick={() => setShowShareModal(true)}
+                        className="text-muted hover:text-foreground inline-flex items-center gap-1.5"
+                      >
+                        <IoShareOutline size={16} />
+                        Share profile
+                      </button>
+                    ) : null}
                   </div>
-                )}
-
-                {/* User Details Grid */}
-                <div className="mt-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {/* Location */}
-                  {profile?.country && (
-                    <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors duration-200">
-                      <div className="flex-shrink-0 w-10 h-10 bg-teal-100 rounded-full flex items-center justify-center">
-                        <FiMapPin className="text-teal-600" size={18} />
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-500 font-medium">Location</p>
-                        <p className="text-gray-900 font-semibold">{profile?.country}</p>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Profession */}
-                  {profile?.profession && (
-                    <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors duration-200">
-                      <div className="flex-shrink-0 w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                        <BsBriefcase className="text-blue-600" size={18} />
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-500 font-medium">Profession</p>
-                        <p className="text-gray-900 font-semibold">{profile?.profession}</p>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* State */}
-                  {profile?.state && (
-                    <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors duration-200">
-                      <div className="flex-shrink-0 w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center">
-                        <FiMapPin className="text-purple-600" size={18} />
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-500 font-medium">State</p>
-                        <p className="text-gray-900 font-semibold">{profile?.state}</p>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Phone */}
-                  {profile?.phone && (
-                    <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors duration-200">
-                      <div className="flex-shrink-0 w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
-                        <IoCallOutline className="text-green-600" size={18} />
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-500 font-medium">Phone</p>
-                        <p className="text-gray-900 font-semibold">{profile?.phone}</p>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Website */}
-                  {profile?.website && (
-                    <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors duration-200">
-                      <div className="flex-shrink-0 w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center">
-                        <IoGlobeOutline className="text-orange-600" size={18} />
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-500 font-medium">Website</p>
-                        <a 
-                          href={profile?.website} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="text-teal-600 hover:text-teal-700 font-semibold transition-colors duration-200"
-                        >
-                          Visit Website
-                        </a>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Location */}
-                  {profile?.location && (
-                    <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors duration-200">
-                      <div className="flex-shrink-0 w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center">
-                        <FiMapPin className="text-indigo-600" size={18} />
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-500 font-medium">Address</p>
-                        <p className="text-gray-900 font-semibold">{profile?.location}</p>
-                      </div>
-                    </div>
-                  )}
                 </div>
-              </div>
+              ) : profile?.id ? (
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      navigate(
+                        giftTreesPath(
+                          profile.id,
+                          displayName || profile.username || ""
+                        )
+                      )
+                    }
+                    className="h-11 px-4 bg-primary text-primary-foreground text-sm font-medium inline-flex items-center justify-center gap-2"
+                  >
+                    <IoLeaf size={18} />
+                    Gift a tree
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleFollow(profile?.id)}
+                    className={`h-11 px-4 text-sm font-medium inline-flex items-center justify-center gap-2 border ${
+                      isFollow
+                        ? "border-border bg-surface text-foreground"
+                        : "border-transparent bg-foreground text-background"
+                    }`}
+                  >
+                    {isFollow ? "Following" : "Follow"}
+                  </button>
+                </div>
+              ) : null}
+
+              {isOwnProfile && !completeness.isComplete ? (
+                <div className="border border-border bg-background p-4">
+                  <p className="font-medium text-foreground">
+                    Finish your profile to unlock sharing
+                  </p>
+                  <p className="mt-1 text-sm text-muted">
+                    {completeness.completed}/{completeness.total} complete — add a photo, bio, and location to share and receive tree gifts.
+                  </p>
+                  <ul className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+                    {completeness.checks.map((item) => (
+                      <li
+                        key={item.key}
+                        className={item.done ? "text-primary" : "text-muted"}
+                      >
+                        {item.done ? "✓" : "○"} {item.label}
+                      </li>
+                    ))}
+                  </ul>
+                  <button
+                    type="button"
+                    onClick={() => setIsEditModalOpen(true)}
+                    className="mt-3 h-10 px-4 bg-primary text-primary-foreground text-sm"
+                  >
+                    Complete profile
+                  </button>
+                </div>
+              ) : null}
+
+              {(profile?.country ||
+                profile?.state ||
+                profile?.location ||
+                profile?.profession ||
+                profile?.phone ||
+                profile?.website) && (
+                <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3 border-t border-border pt-5 text-sm">
+                  {(profile?.location || profile?.state || profile?.country) && (
+                    <div className="flex gap-3 min-w-0">
+                      <FiMapPin className="mt-0.5 shrink-0 text-muted" size={16} />
+                      <div className="min-w-0">
+                        <dt className="text-muted">Location</dt>
+                        <dd className="text-foreground font-medium truncate">
+                          {[profile.location, profile.state, profile.country]
+                            .filter(Boolean)
+                            .join(", ")}
+                        </dd>
+                      </div>
+                    </div>
+                  )}
+                  {profile?.profession ? (
+                    <div className="flex gap-3 min-w-0">
+                      <BsBriefcase className="mt-0.5 shrink-0 text-muted" size={16} />
+                      <div className="min-w-0">
+                        <dt className="text-muted">Profession</dt>
+                        <dd className="text-foreground font-medium truncate">
+                          {profile.profession}
+                        </dd>
+                      </div>
+                    </div>
+                  ) : null}
+                  {profile?.phone ? (
+                    <div className="flex gap-3 min-w-0">
+                      <IoCallOutline className="mt-0.5 shrink-0 text-muted" size={16} />
+                      <div className="min-w-0">
+                        <dt className="text-muted">Phone</dt>
+                        <dd className="text-foreground font-medium truncate">
+                          {profile.phone}
+                        </dd>
+                      </div>
+                    </div>
+                  ) : null}
+                  {profile?.website ? (
+                    <div className="flex gap-3 min-w-0">
+                      <IoGlobeOutline className="mt-0.5 shrink-0 text-muted" size={16} />
+                      <div className="min-w-0">
+                        <dt className="text-muted">Website</dt>
+                        <dd>
+                          <a
+                            href={profile.website}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-primary font-medium break-all"
+                          >
+                            Visit website
+                          </a>
+                        </dd>
+                      </div>
+                    </div>
+                  ) : null}
+                </dl>
+              )}
             </div>
           </div>
         </div>

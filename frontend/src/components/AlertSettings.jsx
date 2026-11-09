@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { toast } from "react-toastify";
 import { client } from "../api";
 import { endpoints } from "../utils/endpoints";
@@ -148,6 +149,17 @@ const AlertSettings = () => {
         <p className="mt-2 text-sm text-muted">
           Climate Wavers sends source-tagged operational alerts from USGS, NASA, and community
           reports. This is not a government emergency warning system.
+        </p>
+        <p className="mt-3 text-sm">
+          Response organization?{" "}
+          <Link to="/app/responder" className="text-primary font-medium">
+            Open RapidBrief Desk
+          </Link>{" "}
+          or{" "}
+          <Link to="/app/responder/apply" className="text-primary font-medium">
+            apply as a responder
+          </Link>
+          .
         </p>
       </header>
 
