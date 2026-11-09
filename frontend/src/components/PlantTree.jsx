@@ -222,10 +222,11 @@ const PlantTree = () => {
 
   const selectGiftRecipient = (user) => {
     if (!user?.id) return;
-    const name = [user.first_name, user.last_name].filter(Boolean).join(" ").trim()
-      || user.display_name
-      || user.username
-      || "";
+    const name =
+      user.display_name ||
+      [user.first_name, user.last_name].filter(Boolean).join(" ").trim() ||
+      user.username ||
+      "";
     const params = new URLSearchParams();
     params.set("for", String(user.id));
     if (name) params.set("name", name);
@@ -265,27 +266,55 @@ const PlantTree = () => {
             </div>
           </div>
           {giftUserId ? (
-            <div className="mt-4 inline-flex flex-col sm:flex-row items-center gap-3 border border-border bg-surface px-4 py-3 text-left">
-              <img
-                src={giftProfile?.profile_picture || "/avatar.png"}
-                alt=""
-                className="h-12 w-12 object-cover"
-                style={{ borderRadius: "50%" }}
-                onError={(e) => {
-                  e.target.src = "/avatar.png";
-                }}
-              />
-              <div>
-                <p className="font-semibold text-foreground">
-                  {giftProfile?.display_name || giftName || "Climate Wavers member"}
-                </p>
-                {giftProfile?.username ? (
-                  <p className="text-sm text-muted">@{giftProfile.username}</p>
-                ) : null}
+            <div className="mt-5 mx-auto max-w-xl border border-border bg-surface p-4 sm:p-5 text-left">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted mb-3">
+                Gifting to
+              </p>
+              <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                <img
+                  src={
+                    giftProfile?.profile_picture &&
+                    !String(giftProfile.profile_picture).includes("og-image")
+                      ? giftProfile.profile_picture
+                      : "/avatar.png"
+                  }
+                  alt=""
+                  className="h-16 w-16 object-cover border border-border bg-background"
+                  style={{ borderRadius: "50%" }}
+                  onError={(e) => {
+                    e.target.src = "/avatar.png";
+                  }}
+                />
+                <div className="min-w-0 flex-1">
+                  <p className="text-lg font-semibold text-foreground">
+                    {giftProfile?.display_name || giftName || "Climate Wavers member"}
+                  </p>
+                  {giftProfile?.username ? (
+                    <p className="text-sm text-muted">@{giftProfile.username}</p>
+                  ) : null}
+                  {(giftProfile?.state || giftProfile?.country || giftProfile?.location) ? (
+                    <p className="text-sm text-muted mt-1">
+                      {[giftProfile?.location, giftProfile?.state, giftProfile?.country]
+                        .filter(Boolean)
+                        .filter((v, i, arr) => arr.indexOf(v) === i)
+                        .slice(0, 2)
+                        .join(", ")}
+                    </p>
+                  ) : null}
+                  {giftProfile?.trees ? (
+                    <p className="text-xs text-muted mt-2">
+                      {giftProfile.trees.trees_total || 0} trees ·{" "}
+                      {giftProfile.trees.trees_gifted_to_them || 0} gifted to them
+                    </p>
+                  ) : null}
+                </div>
+                <Link
+                  to={`/u/${giftUserId}`}
+                  className="min-h-11 inline-flex items-center justify-center px-4 text-sm font-medium border border-border bg-background hover:bg-background/80"
+                >
+                  View full profile
+                </Link>
               </div>
-              <Link to={`/u/${giftUserId}`} className="text-sm text-primary sm:ml-2">
-                View profile
-              </Link>
             </div>
           ) : null}
         </div>
