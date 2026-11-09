@@ -1,15 +1,10 @@
 import masked from "../assets/images/maskedEmo.png";
 import menu from "../assets/Icons/menu.svg";
-import fb from "../assets/Icons/fb.webp";
-import exx from "../assets/Icons/x.png";
-import linkedIn from "../assets/Icons/lin.webp";
-import yt from "../assets/Icons/yt.svg";
 import { useState, useEffect, useMemo, useRef, lazy, Suspense } from "react";
 import { Link } from "react-router-dom";
 import { LandingPageSEO } from "../components/SEOComponents";
+import SiteFooter from "../components/SiteFooter";
 import { SITE } from "../config/site";
-import { client } from "../api";
-import { endpoints } from "../utils/endpoints";
 import { fetchDisasters, fetchTreeStats, mapDisasterForMap, buildLiveCharts, formatTimeAgo } from "../utils/apiData";
 
 const LeafletMap = lazy(() => import("../components/LeafletMap"));
@@ -58,10 +53,6 @@ const LandingPage = () => {
   const [showDisasterMap, setShowDisasterMap] = useState(false);
   const [showDonationModal, setShowDonationModal] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [updateEmail, setUpdateEmail] = useState("");
-  const [updateStatus, setUpdateStatus] = useState("");
-  const [updateMessage, setUpdateMessage] = useState("");
-  const [updateBusy, setUpdateBusy] = useState(false);
   const firstHeroRef = useRef(null);
 
   useEffect(() => {
@@ -196,42 +187,6 @@ const LandingPage = () => {
 
   const markHeroReady = () => {
     setHeroReady(true);
-  };
-
-  const onSubscribe = async (event) => {
-    event.preventDefault();
-    const email = updateEmail.trim();
-    if (!email) return;
-    setUpdateBusy(true);
-    setUpdateStatus("");
-    setUpdateMessage("");
-    try {
-      const result = await client.run(
-        "post",
-        endpoints.newsletter,
-        { email, source: "footer" },
-        false,
-        false,
-        false,
-        false
-      );
-      setUpdateStatus("success");
-      setUpdateMessage(result?.message || "You're on the Climate Wavers update list.");
-      setUpdateEmail("");
-    } catch (error) {
-      const apiMessage =
-        error?.response?.data?.email?.[0] ||
-        error?.response?.data?.detail ||
-        error?.response?.data?.message;
-      setUpdateStatus("error");
-      setUpdateMessage(
-        typeof apiMessage === "string"
-          ? apiMessage
-          : "Could not subscribe. Try again in a moment."
-      );
-    } finally {
-      setUpdateBusy(false);
-    }
   };
 
   return (
@@ -794,227 +749,79 @@ const LandingPage = () => {
 
 
 
-      <footer className="relative text-white overflow-hidden bg-[#2F4F4F]">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 md:py-16 relative z-10">
-          {/* Partners Section */}
-          <div className="mb-12 md:mb-16">
-            <h3 className="text-xl md:text-2xl font-bold text-center mb-6 md:mb-8 text-white">Trusted by Global Partners</h3>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-6 gap-4 md:gap-6 lg:gap-8 items-center justify-items-center">
-              {/* Red Cross */}
+      <div className="bg-[#2F4F4F] text-white overflow-x-hidden">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-12 md:pt-16">
+          <div className="mb-10 md:mb-12">
+            <h3 className="text-xl md:text-2xl font-bold text-center mb-6 md:mb-8 text-white">
+              Trusted by Global Partners
+            </h3>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 md:gap-6 lg:gap-8 items-center justify-items-center">
               <div className="bg-white/10 backdrop-blur-sm rounded-lg p-2 md:p-4 hover:bg-white/20 w-full max-w-[120px]">
                 <img src="/red-cross.jpg" alt="Red Cross" className="h-6 md:h-8 w-auto mx-auto" loading="lazy" decoding="async" />
                 <div className="text-white text-xs text-center mt-1">Red Cross</div>
               </div>
-              
-              {/* World Bank */}
               <div className="bg-white/10 backdrop-blur-sm rounded-lg p-2 md:p-4 hover:bg-white/20 w-full max-w-[120px]">
                 <img src="/world-bank.webp" alt="World Bank" className="h-6 md:h-8 w-auto mx-auto" loading="lazy" decoding="async" />
                 <div className="text-white text-xs text-center mt-1">World Bank</div>
               </div>
-              
-              {/* UNFCCC */}
               <div className="bg-white/10 backdrop-blur-sm rounded-lg p-2 md:p-4 hover:bg-white/20 w-full max-w-[120px]">
                 <img src="/unfcc.png" alt="UNFCCC" className="h-6 md:h-8 w-auto mx-auto" loading="lazy" decoding="async" />
                 <div className="text-white text-xs text-center mt-1">UNFCCC</div>
               </div>
-              
-              {/* UNDP */}
               <div className="bg-white/10 backdrop-blur-sm rounded-lg p-2 md:p-4 hover:bg-white/20 w-full max-w-[120px]">
                 <img src="/undp.png" alt="UNDP" className="h-6 md:h-8 w-auto mx-auto" loading="lazy" decoding="async" />
                 <div className="text-white text-xs text-center mt-1">UNDP</div>
               </div>
-              
-              {/* Green Climate Fund */}
               <div className="bg-white/10 backdrop-blur-sm rounded-lg p-2 md:p-4 hover:bg-white/20 w-full max-w-[120px]">
                 <img src="/gef.png" alt="Green Climate Fund" className="h-6 md:h-8 w-auto mx-auto" loading="lazy" decoding="async" />
                 <div className="text-white text-xs text-center mt-1">Green Climate Fund</div>
               </div>
-              
-              {/* UN Environment Programme */}
               <div className="bg-white/10 backdrop-blur-sm rounded-lg p-2 md:p-4 hover:bg-white/20 w-full max-w-[120px]">
                 <img src="/unep.png" alt="UNEP" className="h-6 md:h-8 w-auto mx-auto" loading="lazy" decoding="async" />
                 <div className="text-white text-xs text-center mt-1">UNEP</div>
               </div>
-              
-              {/* World Health Organization */}
               <div className="bg-white/10 backdrop-blur-sm rounded-lg p-2 md:p-4 hover:bg-white/20 w-full max-w-[120px]">
                 <img src="/who.png" alt="WHO" className="h-6 md:h-8 w-auto mx-auto" loading="lazy" decoding="async" />
                 <div className="text-white text-xs text-center mt-1">WHO</div>
               </div>
-              
-              {/* International Federation of Red Cross */}
               <div className="bg-white/10 backdrop-blur-sm rounded-lg p-2 md:p-4 hover:bg-white/20 w-full max-w-[120px]">
                 <img src="/IFRC.png" alt="IFRC" className="h-6 md:h-8 w-auto mx-auto" loading="lazy" decoding="async" />
                 <div className="text-white text-xs text-center mt-1">IFRC</div>
               </div>
-              
-              {/* UNN */}
               <div className="bg-white/10 backdrop-blur-sm rounded-lg p-2 md:p-4 hover:bg-white/20 w-full max-w-[120px]">
                 <img src="/unn.png" alt="UNN" className="h-6 md:h-8 w-auto mx-auto" loading="lazy" decoding="async" />
                 <div className="text-white text-xs text-center mt-1">UNN</div>
               </div>
-              
-              {/* Global Environment Facility */}
               <div className="bg-white/10 backdrop-blur-sm rounded-lg p-2 md:p-4 hover:bg-white/20 w-full max-w-[120px]">
                 <div className="text-white font-bold text-xs md:text-sm text-center">
                   <div className="w-6 h-6 md:w-8 md:h-8 mx-auto mb-1 md:mb-2 bg-teal-500 rounded-full flex items-center justify-center">
-                  <span className="text-white text-xs font-bold">GEF</span>
+                    <span className="text-white text-xs font-bold">GEF</span>
                   </div>
-                  <div className="hidden sm:block">GEF</div>
-                  <div className="sm:hidden text-xs">GEF</div>
+                  <div className="text-xs sm:text-sm">GEF</div>
                 </div>
               </div>
-              
-              {/* Climate Action Network */}
               <div className="bg-white/10 backdrop-blur-sm rounded-lg p-2 md:p-4 hover:bg-white/20 w-full max-w-[120px]">
                 <div className="text-white font-bold text-xs md:text-sm text-center">
                   <div className="w-6 h-6 md:w-8 md:h-8 mx-auto mb-1 md:mb-2 bg-orange-500 rounded-full flex items-center justify-center">
-                  <span className="text-white text-xs font-bold">CAN</span>
+                    <span className="text-white text-xs font-bold">CAN</span>
                   </div>
                   <div className="hidden sm:block">Climate Action Network</div>
                   <div className="sm:hidden text-xs">CAN</div>
                 </div>
               </div>
-              
-              {/* World Meteorological Organization */}
               <div className="bg-white/10 backdrop-blur-sm rounded-lg p-2 md:p-4 hover:bg-white/20 w-full max-w-[120px]">
                 <div className="text-white font-bold text-xs md:text-sm text-center">
                   <div className="w-6 h-6 md:w-8 md:h-8 mx-auto mb-1 md:mb-2 bg-cyan-500 rounded-full flex items-center justify-center">
-                  <span className="text-white text-xs font-bold">WMO</span>
+                    <span className="text-white text-xs font-bold">WMO</span>
                   </div>
-                  <div className="hidden sm:block">WMO</div>
-                  <div className="sm:hidden text-xs">WMO</div>
+                  <div className="text-xs sm:text-sm">WMO</div>
                 </div>
               </div>
             </div>
           </div>
-          
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 sm:gap-8 md:gap-12">
-            {/* Company Info */}
-            <div className="col-span-2">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center mb-4 md:mb-6">
-                <img alt="logo" src="/logo.jpg" className="h-8 md:h-10 w-auto mr-0 sm:mr-4 mb-2 sm:mb-0" />
-                <h3 className="text-xl md:text-2xl lg:text-3xl font-bold text-[#067d83]">Climate Wavers</h3>
-              </div>
-              <p className="text-gray-300 mb-6 md:mb-8 max-w-lg text-sm md:text-base lg:text-lg leading-relaxed">
-                Live USGS and NASA monitoring from Nairobi. Verify disaster alerts. Do not amplify them.
-              </p>
-              
-              <form onSubmit={onSubscribe} className="mb-6 md:mb-8">
-                <h4 className="text-base md:text-lg font-semibold mb-2 text-white">Stay Updated</h4>
-                <p className="text-sm text-white/75 mb-3">
-                  We email live USGS and NASA notes and campaign news. This is not a government siren.
-                </p>
-                <div className="flex flex-col sm:flex-row gap-2 md:gap-3">
-                  <label htmlFor="footer-update-email" className="sr-only">
-                    Email address
-                  </label>
-                <input
-                    id="footer-update-email"
-                  type="email"
-                    required
-                    autoComplete="email"
-                    value={updateEmail}
-                    onChange={(event) => setUpdateEmail(event.target.value)}
-                    placeholder="Enter your email address"
-                    disabled={updateBusy}
-                    className="min-h-11 flex-1 px-3 md:px-4 py-2 md:py-3 bg-secondary border border-white/20 text-white placeholder:text-white/50 text-sm md:text-base disabled:opacity-60"
-                  />
-                  <button
-                    type="submit"
-                    disabled={updateBusy}
-                    className="bg-primary hover:bg-primary-dark text-primary-foreground px-4 md:px-6 py-2 md:py-3 text-sm md:text-base min-h-11 disabled:opacity-60 disabled:cursor-not-allowed"
-                  >
-                    {updateBusy ? "Subscribing..." : "Subscribe"}
-                </button>
-                </div>
-                {updateMessage ? (
-                  <p
-                    role="status"
-                    className="mt-2 text-sm text-white"
-                  >
-                    {updateMessage}
-                  </p>
-                ) : null}
-              </form>
-
-              {/* Social Links */}
-              <div>
-                <h4 className="text-base md:text-lg font-semibold mb-3 md:mb-4 text-white">Follow Us</h4>
-                <div className="flex flex-wrap gap-2 md:gap-4">
-                  <a 
-                    href="https://facebook.com/climatewavers" 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="w-11 h-11 bg-white/15 hover:bg-white/25 border border-white/30 flex items-center justify-center"
-                    aria-label="Follow us on Facebook"
-                  >
-                    <img src={fb} alt="Facebook" className="w-4 h-4 md:w-6 md:h-6 filter brightness-0 invert" />
-                  </a>
-                  <a 
-                    href="https://youtube.com/@climatewavers" 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="w-11 h-11 bg-white/15 hover:bg-white/25 border border-white/30 flex items-center justify-center"
-                    aria-label="Subscribe to our YouTube channel"
-                  >
-                    <img src={yt} alt="YouTube" className="w-4 h-4 md:w-6 md:h-6 filter brightness-0 invert" />
-                  </a>
-                  <a 
-                    href="https://x.com/climatewavers" 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="w-11 h-11 bg-white/15 hover:bg-white/25 border border-white/30 flex items-center justify-center"
-                    aria-label="Follow us on X (Twitter)"
-                  >
-                    <img src={exx} alt="X" className="w-4 h-4 md:w-6 md:h-6 filter brightness-0 invert" />
-                  </a>
-                  <a 
-                    href="https://linkedin.com/company/climatewavers" 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="w-11 h-11 bg-white/15 hover:bg-white/25 border border-white/30 flex items-center justify-center"
-                    aria-label="Connect with us on LinkedIn"
-                  >
-                    <img src={linkedIn} alt="LinkedIn" className="w-4 h-4 md:w-6 md:h-6" />
-                  </a>
-                </div>
-              </div>
         </div>
-
-            {/* Information */}
-            <div className="min-w-0">
-              <h4 className="text-base md:text-lg font-semibold mb-3 md:mb-4 text-white">Information</h4>
-              <ul className="space-y-2">
-                <li><Link to="/traffic-report" className="text-gray-300 hover:text-[#067d83] transition-colors text-sm md:text-base">Traffic Report</Link></li>
-                <li><Link to="/transparency-report" className="text-gray-300 hover:text-[#067d83] transition-colors text-sm md:text-base">Transparency Report</Link></li>
-                <li><Link to="/faq" className="text-gray-300 hover:text-[#067d83] transition-colors text-sm md:text-base">FAQ</Link></li>
-                <li><Link to="/privacy-policy" className="text-gray-300 hover:text-[#067d83] transition-colors text-sm md:text-base">Privacy Policy</Link></li>
-          </ul>
-        </div>
-
-            {/* Services */}
-            <div className="min-w-0">
-              <h4 className="text-base md:text-lg font-semibold mb-3 md:mb-4 text-white">Services</h4>
-              <ul className="space-y-2">
-                <li><Link to="/about" className="text-gray-300 hover:text-[#067d83] transition-colors text-sm md:text-base">About Us</Link></li>
-                <li><Link to="/contact" className="text-gray-300 hover:text-[#067d83] transition-colors text-sm md:text-base">Contact Us</Link></li>
-                <li><Link to="/consulting" className="text-gray-300 hover:text-[#067d83] transition-colors text-sm md:text-base">Consulting</Link></li>
-                <li><Link to="/support" className="text-gray-300 hover:text-[#067d83] transition-colors text-sm md:text-base">Support</Link></li>
-          </ul>
-        </div>
-          </div>
-
-          {/* Bottom section */}
-          <div className="border-t border-gray-700 mt-8 md:mt-12 pt-6 md:pt-8">
-            <div className="flex flex-col md:flex-row justify-between items-center text-center md:text-left">
-              <p className="text-gray-400 text-xs md:text-sm mb-2 md:mb-0">
-                © {new Date().getFullYear()} Climate Wavers
-              </p>
-            </div>
-          </div>
-        </div>
-      </footer>
+        <SiteFooter />
+      </div>
 
       {showDisasterMap && (
         <div className="fixed inset-0 z-50 bg-black/80 flex items-stretch sm:items-center justify-center p-0 sm:p-4">
