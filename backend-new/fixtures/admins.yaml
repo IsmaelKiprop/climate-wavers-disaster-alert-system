@@ -6,7 +6,7 @@
     is_staff: true
     is_active: true
     email: admin@climatewavers.dev
-    password: pbkdf2_sha256$600000$CungeJjzVwg9fD9LWNPYOF$4NJM4JEu4QzxGudCXOcvNzp6Hdl93NqDsE96m3k+xCg=
+    password: pbkdf2_sha256$1000000$SfSw3F37xxrC9rYSbq0YCf$ef9aDx6evBVLWzgv/F9BXNGQZE31eubfS8gecw4xzmM=
     is_verified: true
     country: "Nigeria"
     state: "Lagos"
@@ -22,7 +22,7 @@
     username: abdul123
     is_active: true
     email: abdul@climatewavers.dev
-    password: pbkdf2_sha256$600000$CungeJjzVwg9fD9LWNPYOF$4NJM4JEu4QzxGudCXOcvNzp6Hdl93NqDsE96m3k+xCg=
+    password: pbkdf2_sha256$1000000$SfSw3F37xxrC9rYSbq0YCf$ef9aDx6evBVLWzgv/F9BXNGQZE31eubfS8gecw4xzmM=
     is_verified: true
     country: "Nigeria"
     state: "Lagos"
@@ -38,7 +38,7 @@
     is_staff: true
     is_active: true
     email: ismael@climatewavers.dev
-    password: pbkdf2_sha256$600000$CungeJjzVwg9fD9LWNPYOF$4NJM4JEu4QzxGudCXOcvNzp6Hdl93NqDsE96m3k+xCg=
+    password: pbkdf2_sha256$1000000$SfSw3F37xxrC9rYSbq0YCf$ef9aDx6evBVLWzgv/F9BXNGQZE31eubfS8gecw4xzmM=
     is_verified: true
     country: "Kenya"
     state: "Nairobi"
@@ -54,7 +54,7 @@
     is_staff: true
     is_active: true
     email: farouq@climatewavers.dev
-    password: pbkdf2_sha256$600000$CungeJjzVwg9fD9LWNPYOF$4NJM4JEu4QzxGudCXOcvNzp6Hdl93NqDsE96m3k+xCg=
+    password: pbkdf2_sha256$1000000$SfSw3F37xxrC9rYSbq0YCf$ef9aDx6evBVLWzgv/F9BXNGQZE31eubfS8gecw4xzmM=
     is_verified: true
     country: "Nigeria"
     state: "Lagos"
@@ -70,7 +70,7 @@
     is_staff: true
     is_active: true
     email: waverx@climatewavers.dev
-    password: pbkdf2_sha256$600000$CungeJjzVwg9fD9LWNPYOF$4NJM4JEu4QzxGudCXOcvNzp6Hdl93NqDsE96m3k+xCg=
+    password: pbkdf2_sha256$1000000$SfSw3F37xxrC9rYSbq0YCf$ef9aDx6evBVLWzgv/F9BXNGQZE31eubfS8gecw4xzmM=
     is_verified: true
     country: "Nigeria"
     state: "Lagos"
