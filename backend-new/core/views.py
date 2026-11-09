@@ -1268,7 +1268,13 @@ def verify_paystack_payment(request):
     except PaymentRecordError as exc:
         return JsonResponse({"success": False, "message": str(exc)}, status=exc.status)
     except Exception as exc:
-        return JsonResponse({"success": False, "message": f"Error processing payment: {exc}"}, status=500)
+        import logging
+
+        logging.getLogger(__name__).exception("verify-payment failed: %s", exc)
+        return JsonResponse(
+            {"success": False, "message": f"Error processing payment: {exc}"},
+            status=500,
+        )
 
     return JsonResponse(payload)
 

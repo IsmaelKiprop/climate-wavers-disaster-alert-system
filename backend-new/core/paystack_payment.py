@@ -3,16 +3,30 @@
 import hashlib
 import hmac
 import json
+import logging
 import os
 from decimal import Decimal, InvalidOperation
 
 import requests
 from django.contrib.auth import get_user_model
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, connection, transaction
 from django.db.models import Sum
+from django.db.utils import OperationalError, ProgrammingError
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
 from .models import TreeProject, TreeProjectDonation
+
+logger = logging.getLogger(__name__)
+
+
+def _gifted_to_column_ready():
+    """True once migration 0036 has added core_treeprojectdonation.gifted_to_id."""
+    try:
+        table = TreeProjectDonation._meta.db_table
+        columns = {column.name for column in connection.introspection.get_table_description(connection.cursor(), table)}
+        return "gifted_to_id" in columns
+    except Exception:
+        return False
 
 
 class PaymentRecordError(Exception):
@@ -182,7 +196,8 @@ def record_tree_payment(reference, request_user=None, client_data=None):
     payer_email = (customer.get("email") or client_data.get("email") or "").strip()
     donor = _resolve_donor(request_user, payer_email)
 
-    gifted_to_early = _resolve_gifted_to(metadata, client_data)
+    supports_gifted_to = _gifted_to_column_ready()
+    gifted_to = _resolve_gifted_to(metadata, client_data) if supports_gifted_to else None
 
     existing = TreeProjectDonation.objects.filter(payment_reference=reference).select_related("project", "donor").first()
     if existing:
@@ -190,15 +205,20 @@ def record_tree_payment(reference, request_user=None, client_data=None):
         if existing.donor_id is None and donor is not None:
             existing.donor = donor
             updates.append("donor")
-        if existing.gifted_to_id is None and gifted_to_early is not None:
-            existing.gifted_to = gifted_to_early
+        if (
+            supports_gifted_to
+            and gifted_to is not None
+            and getattr(existing, "gifted_to_id", None) is None
+        ):
+            existing.gifted_to = gifted_to
             updates.append("gifted_to")
         if not existing.payer_email and payer_email:
             existing.payer_email = payer_email
             updates.append("payer_email")
         if updates:
             existing.save(update_fields=updates)
-        return _donation_payload(existing, payer_email)
+        payload = _donation_payload(existing, payer_email)
+        return _attach_points(payload, existing)
 
     project_id = _metadata_value(metadata, "project_id") or client_data.get("project_id")
     if not project_id:
@@ -222,7 +242,6 @@ def record_tree_payment(reference, request_user=None, client_data=None):
         or client_data.get("dedication_message")
         or ""
     )
-    gifted_to = _resolve_gifted_to(metadata, client_data)
     selected_species = _as_dict(
         _metadata_value(metadata, "selected_species", {}) or client_data.get("selected_species")
     )
@@ -238,27 +257,56 @@ def record_tree_payment(reference, request_user=None, client_data=None):
             or gifted_to.username
         )
         dedication = f"{dedication}\n\nGifted to: {gift_label}".strip()
+    elif not supports_gifted_to:
+        # Keep gift intent in the dedication until migration 0036 is applied.
+        raw_gift = (
+            _metadata_value(metadata, "gifted_to")
+            or _metadata_value(metadata, "gift_for_user_id")
+            or client_data.get("gifted_to")
+            or client_data.get("gift_for_user_id")
+        )
+        if raw_gift not in (None, ""):
+            dedication = f"{dedication}\n\nGifted to user id: {raw_gift}".strip()
+
+    create_kwargs = {
+        "project": project,
+        "donor": donor,
+        "payer_email": payer_email,
+        "amount": amount,
+        "trees_purchased": trees_purchased,
+        "payment_reference": reference,
+        "payment_status": "completed",
+        "dedication_message": dedication,
+        "is_anonymous": donor is None,
+    }
+    if supports_gifted_to and gifted_to is not None:
+        create_kwargs["gifted_to"] = gifted_to
 
     try:
         with transaction.atomic():
-            donation = TreeProjectDonation.objects.create(
-                project=project,
-                donor=donor,
-                gifted_to=gifted_to,
-                payer_email=payer_email,
-                amount=amount,
-                trees_purchased=trees_purchased,
-                payment_reference=reference,
-                payment_status="completed",
-                dedication_message=dedication,
-                is_anonymous=donor is None,
-            )
+            donation = TreeProjectDonation.objects.create(**create_kwargs)
             project.trees_planted += trees_purchased
             project.funds_raised += amount
             project.save(update_fields=["trees_planted", "funds_raised"])
     except IntegrityError:
-        donation = TreeProjectDonation.objects.select_related("project", "donor").get(payment_reference=reference)
+        donation = TreeProjectDonation.objects.select_related("project", "donor").get(
+            payment_reference=reference
+        )
+    except (ProgrammingError, OperationalError) as exc:
+        # Migration lag: retry without gifted_to rather than failing a paid charge.
+        logger.exception("Donation create failed; retrying without gifted_to: %s", exc)
+        create_kwargs.pop("gifted_to", None)
+        with transaction.atomic():
+            donation = TreeProjectDonation.objects.create(**create_kwargs)
+            project.trees_planted += trees_purchased
+            project.funds_raised += amount
+            project.save(update_fields=["trees_planted", "funds_raised"])
 
+    payload = _donation_payload(donation, payer_email)
+    return _attach_points(payload, donation)
+
+
+def _attach_points(payload, donation):
     points_earned = 0
     points_balance = None
     try:
@@ -267,10 +315,9 @@ def record_tree_payment(reference, request_user=None, client_data=None):
         points_earned = credit_gift_points(donation) or 0
         if donation.donor_id:
             points_balance = get_or_create_account(donation.donor).balance
-    except Exception:
+    except Exception as exc:
+        logger.warning("Points credit skipped: %s", exc)
         points_earned = 0
-
-    payload = _donation_payload(donation, payer_email)
     payload["points_earned"] = points_earned
     payload["points_balance"] = points_balance
     return payload

@@ -64,3 +64,8 @@ export function giftTreesPath(userId, displayName = "") {
   const query = params.toString();
   return `/gift/${userId}${query ? `?${query}` : ""}`;
 }
+
+/** Absolute gift link for QR codes and external sharing. */
+export function giftTreesUrl(userId, displayName = "") {
+  return `${siteOrigin()}${giftTreesPath(userId, displayName)}`;
+}

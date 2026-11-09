@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { BsBriefcase } from "react-icons/bs";
 import { FiMapPin } from "react-icons/fi";
-import { IoCreateOutline, IoCamera, IoCallOutline, IoGlobeOutline, IoLeaf, IoShareOutline } from "react-icons/io5";
+import { IoCreateOutline, IoCamera, IoCallOutline, IoGlobeOutline, IoLeaf, IoShareOutline, IoQrCodeOutline } from "react-icons/io5";
 import TreeBadge from "./TreeBadge";
 import { toast } from "react-toastify";
 import Feed from "./Feed";
@@ -14,6 +14,7 @@ import { client } from "../api";
 import { getUser, normalizeUser, setUser } from "../utils/factory";
 import { useFollow } from "../context/FollowContext";
 import ProfileShareModal from "./ProfileShareModal";
+import BuyMeATreeQrModal from "./BuyMeATreeQrModal";
 import {
   getProfileCompleteness,
   giftTreesPath,
@@ -38,6 +39,7 @@ const Profile = () => {
   const [isFollowLocal, setIsFollowLocal] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
+  const [showGiftQrModal, setShowGiftQrModal] = useState(false);
   const { isFollowing, setFollowing } = useFollow();
   const isFollow = isFollowing(profile?.id || userId, isFollowLocal);
   const completeness = getProfileCompleteness(profile);
@@ -275,14 +277,24 @@ const Profile = () => {
                           My Certificates
                         </button>
                         {completeness.isComplete ? (
-                          <button
-                            type="button"
-                            onClick={() => setShowShareModal(true)}
-                            className="bg-white text-teal-700 border border-teal-200 px-6 py-3 rounded-full font-semibold text-sm hover:bg-teal-50 transition-all duration-200 flex items-center gap-2"
-                          >
-                            <IoShareOutline size={18} />
-                            Share profile
-                          </button>
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => setShowShareModal(true)}
+                              className="bg-white text-teal-700 border border-teal-200 px-6 py-3 rounded-full font-semibold text-sm hover:bg-teal-50 transition-all duration-200 flex items-center gap-2"
+                            >
+                              <IoShareOutline size={18} />
+                              Share profile
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setShowGiftQrModal(true)}
+                              className="bg-white text-green-700 border border-green-200 px-6 py-3 rounded-full font-semibold text-sm hover:bg-green-50 transition-all duration-200 flex items-center gap-2"
+                            >
+                              <IoQrCodeOutline size={18} />
+                              Buy me a tree QR
+                            </button>
+                          </>
                         ) : null}
                         <button
                           type="button"
@@ -476,6 +488,17 @@ const Profile = () => {
           user={profile}
           treesTotal={0}
           onClose={() => setShowShareModal(false)}
+          onOpenGiftQr={() => {
+            setShowShareModal(false);
+            setShowGiftQrModal(true);
+          }}
+        />
+      ) : null}
+
+      {showGiftQrModal ? (
+        <BuyMeATreeQrModal
+          user={profile}
+          onClose={() => setShowGiftQrModal(false)}
         />
       ) : null}
     </div>

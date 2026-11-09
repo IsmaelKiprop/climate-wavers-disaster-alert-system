@@ -265,7 +265,11 @@ const TreePayment = ({ treeData, onSuccess, onBack, giftForUser = null }) => {
         
         onSuccess(treeWithPayment, reference);
       } else {
-        toast.error('❌ Payment verification failed. Please contact support.');
+        toast.error(
+          result.message
+            ? `❌ ${result.message}`
+            : '❌ Payment verification failed. Please contact support.'
+        );
         console.error('Payment verification failed:', result.message);
       }
     } catch (error) {

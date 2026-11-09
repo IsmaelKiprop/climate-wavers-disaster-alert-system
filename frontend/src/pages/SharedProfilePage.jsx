@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { FaTree } from "react-icons/fa";
 import { FiMapPin } from "react-icons/fi";
 import SEO from "../components/SEO";
+import BuyMeATreeQrModal from "../components/BuyMeATreeQrModal";
 import { client } from "../api";
 import { endpoints } from "../utils/endpoints";
 import { getAuthToken, getUser, secureMediaUrl } from "../utils/factory";
@@ -15,7 +16,9 @@ const SharedProfilePage = () => {
   const [profile, setProfile] = useState(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [showGiftQr, setShowGiftQr] = useState(false);
   const me = getUser();
+  const isOwnPublicProfile = String(me?.id || "") === String(userId || "");
 
   useEffect(() => {
     let alive = true;
@@ -152,6 +155,15 @@ const SharedProfilePage = () => {
                   >
                     <FaTree /> Gift trees
                   </Link>
+                  {isOwnPublicProfile ? (
+                    <button
+                      type="button"
+                      onClick={() => setShowGiftQr(true)}
+                      className="h-11 px-4 border border-border text-sm font-medium"
+                    >
+                      Buy me a tree QR
+                    </button>
+                  ) : null}
                   {loggedIn && String(me?.id) !== String(userId) ? (
                     <Link
                       to={inAppProfile}
@@ -227,6 +239,10 @@ const SharedProfilePage = () => {
           </article>
         )}
       </main>
+
+      {showGiftQr && profile ? (
+        <BuyMeATreeQrModal user={profile} onClose={() => setShowGiftQr(false)} />
+      ) : null}
     </div>
   );
 };

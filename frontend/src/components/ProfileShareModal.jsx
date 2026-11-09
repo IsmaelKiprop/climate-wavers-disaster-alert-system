@@ -11,7 +11,7 @@ import { FaTwitter } from "react-icons/fa";
 import { giftTreesPath, profileAppUrl, profileOgShareUrl } from "../utils/profileCompleteness";
 import { secureMediaUrl } from "../utils/factory";
 
-const ProfileShareModal = ({ user, treesTotal = 0, onClose }) => {
+const ProfileShareModal = ({ user, treesTotal = 0, onClose, onOpenGiftQr }) => {
   const [copied, setCopied] = useState(false);
   const displayName =
     [user?.first_name, user?.last_name].filter(Boolean).join(" ") ||
@@ -151,12 +151,21 @@ const ProfileShareModal = ({ user, treesTotal = 0, onClose }) => {
             </a>
           </div>
 
-          <a
-            href={giftTreesPath(user?.id, displayName)}
-            className="block h-11 bg-primary text-primary-foreground text-sm font-medium text-center leading-[2.75rem]"
-          >
-            Gift trees from this profile
-          </a>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <a
+              href={giftTreesPath(user?.id, displayName)}
+              className="h-11 bg-primary text-primary-foreground text-sm font-medium text-center leading-[2.75rem]"
+            >
+              Open gift link
+            </a>
+            <button
+              type="button"
+              onClick={() => (onOpenGiftQr ? onOpenGiftQr() : null)}
+              className="h-11 border border-border text-sm font-medium"
+            >
+              Buy me a tree QR
+            </button>
+          </div>
         </div>
       </div>
     </div>
