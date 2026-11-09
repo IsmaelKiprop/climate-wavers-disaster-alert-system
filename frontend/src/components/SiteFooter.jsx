@@ -29,7 +29,7 @@ const SOCIAL = [
     invert: true,
   },
   {
-    href: "https://linkedin.com/company/climatewavers",
+    href: "https://www.linkedin.com/company/climate-wavers-by-flowops-africa/",
     label: "Connect with us on LinkedIn",
     icon: linkedIn,
     invert: false,
