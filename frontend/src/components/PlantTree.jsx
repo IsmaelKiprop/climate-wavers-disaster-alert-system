@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
-import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import TreePayment from './TreePayment';
 import TreeCertificate from './TreeCertificate';
 import SocialShare from './SocialShare';
 import ProjectSEO from './ProjectSEO';
 import WaversPointsCard from './WaversPointsCard';
+import GiftRecipientPicker from './GiftRecipientPicker';
 import { FaTree, FaLeaf, FaSeedling, FaGlobe, FaHeart, FaMapMarkerAlt, FaUsers, FaFilter, FaShare } from 'react-icons/fa';
 import { endpoints } from '../utils/endpoints';
 import { getAuthToken, getUser } from '../utils/factory';
@@ -16,6 +17,7 @@ import { apiUrl } from '../config/env';
 import { unwrapList } from '../utils/apiData';
 
 const PlantTree = () => {
+  const navigate = useNavigate();
   const { userId: giftUserIdParam } = useParams();
   const [searchParams] = useSearchParams();
   const giftUserId = giftUserIdParam || searchParams.get("for") || "";
@@ -218,6 +220,29 @@ const PlantTree = () => {
     return Math.min((current / target) * 100, 100);
   };
 
+  const selectGiftRecipient = (user) => {
+    if (!user?.id) return;
+    const name = [user.first_name, user.last_name].filter(Boolean).join(" ").trim()
+      || user.display_name
+      || user.username
+      || "";
+    const params = new URLSearchParams();
+    params.set("for", String(user.id));
+    if (name) params.set("name", name);
+    // Stay on plant-tree so project browsing continues with a selected recipient
+    navigate(`/app/plant-tree?${params.toString()}`, { replace: false });
+    setGiftProfile({
+      ...user,
+      display_name: name || "Climate Wavers member",
+    });
+    toast.success(`Gifting trees to ${name || "this member"}`);
+  };
+
+  const clearGiftRecipient = () => {
+    navigate("/app/plant-tree", { replace: false });
+    setGiftProfile(null);
+  };
+
   return (
     <main className="min-h-screen bg-background py-6 sm:py-8">
       {/* SEO for shared project pages */}
@@ -264,6 +289,14 @@ const PlantTree = () => {
             </div>
           ) : null}
         </div>
+
+        {!giftUserIdParam ? (
+          <GiftRecipientPicker
+            selectedId={giftUserId || null}
+            onSelect={selectGiftRecipient}
+            onClear={clearGiftRecipient}
+          />
+        ) : null}
 
         <WaversPointsCard projectId={selectedProject?.id || selectedTree?.id || null} />
 

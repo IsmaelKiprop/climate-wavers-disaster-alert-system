@@ -21,7 +21,7 @@ const isOrgAccount = (user) => {
   return false;
 };
 
-const pickPopularUsers = (list) => {
+const pickPopularUsers = (list, limit = 4) => {
   const me = getUser();
   const meId = me?.id != null ? String(me.id) : null;
 
@@ -30,25 +30,28 @@ const pickPopularUsers = (list) => {
     .filter((user) => !meId || String(user.id) !== meId)
     .filter((user) => !isOrgAccount(user))
     .filter((user) => String(user.first_name || user.username || '').trim().length > 0)
-    .slice(0, 4);
+    .slice(0, limit);
 };
 
-const usePopularUsers = () => {
+const usePopularUsers = (options = {}) => {
+  const limit = options.limit ?? 4;
+  const fetchLimit = Math.max(limit, 12);
+
   return useQuery({
-    queryKey: ['popularUsers'],
+    queryKey: ['popularUsers', limit],
     queryFn: async () => {
       try {
         const data = await client.run(
           'get',
-          `${endpoints.popularUsers}?limit=12`,
+          `${endpoints.popularUsers}?limit=${fetchLimit}`,
           {},
           true
         );
-        return pickPopularUsers(unwrapList(data));
+        return pickPopularUsers(unwrapList(data), limit);
       } catch {
         // Fallback: plain users list, still filter out orgs / self
         const data = await client.run('get', endpoints.users, {}, true);
-        return pickPopularUsers(unwrapList(data));
+        return pickPopularUsers(unwrapList(data), limit);
       }
     },
     refetchInterval: 300000,
