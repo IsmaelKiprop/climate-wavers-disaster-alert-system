@@ -1,7 +1,7 @@
 import axios from "axios";
 import { toast } from "react-toastify";
 import Cookies from "js-cookie";
-import { getAuthToken, setUser } from "../utils/factory";
+import { getAuthToken, logout, setUser } from "../utils/factory";
 import Swal from "sweetalert2";
 import { env } from "../config/env";
 
@@ -9,23 +9,68 @@ class Client {
   constructor(baseURL, domain) {
     this.baseUrl = baseURL;
     this.domain = domain;
+    this._sessionExpiredPrompt = false;
+  }
+
+  formatErrorValue(value) {
+    if (value == null) return "";
+    if (typeof value === "string") return value;
+    if (typeof value === "number" || typeof value === "boolean") return String(value);
+    if (Array.isArray(value)) {
+      return value.map((item) => this.formatErrorValue(item)).filter(Boolean).join("; ");
+    }
+    if (typeof value === "object") {
+      if (value.message) return String(value.message);
+      if (value.detail) return String(value.detail);
+      try {
+        return JSON.stringify(value);
+      } catch {
+        return "";
+      }
+    }
+    return String(value);
+  }
+
+  handleSessionExpired() {
+    if (this._sessionExpiredPrompt) return true;
+    this._sessionExpiredPrompt = true;
+    Swal.fire({
+      icon: "warning",
+      title: "Session expired",
+      text: "Please sign in again to continue.",
+      confirmButtonText: "Sign in",
+      confirmButtonColor: "#067d83",
+    }).then(() => {
+      logout();
+    });
+    return true;
   }
 
   // Method to handle validation errors with SweetAlert
   handleValidationErrors(error) {
     if (error.response && error.response.data) {
       const errorData = error.response.data;
+      const status = error.response.status;
       
+      // Expired / invalid JWT — never show as "Validation Error"
+      if (
+        status === 401 ||
+        errorData.code === "token_not_valid" ||
+        String(errorData.detail || "").toLowerCase().includes("token not valid")
+      ) {
+        return this.handleSessionExpired();
+      }
+
       // Skip showing popup for follow-related errors (these are handled by components)
       if (errorData.detail === "You are already following this user.") {
         return false;
       }
       
       // Skip showing popup for 404 errors on post endpoints (these are handled by components)
-      if (error.response.status === 404 && error.config?.url?.includes('/post/')) {
+      if (status === 404 && error.config?.url?.includes('/post/')) {
         return false;
       }
-      if (error.response.status >= 500) {
+      if (status >= 500) {
         return false;
       }
       if (error.config?.url?.includes("/users/activity/")) {
@@ -34,7 +79,7 @@ class Client {
       if (error.config?.url?.includes("/auth/password-reset")) {
         return false;
       }
-      if (error.response.status === 503) {
+      if (status === 503) {
         return false;
       }
       
@@ -43,13 +88,18 @@ class Client {
       // Handle different types of validation errors
       if (typeof errorData === 'object') {
         Object.keys(errorData).forEach(field => {
+          if (field === "code") return;
           const fieldErrors = errorData[field];
           if (Array.isArray(fieldErrors)) {
             fieldErrors.forEach(errorMsg => {
-              errorMessages.push(`${this.formatFieldName(field)}: ${errorMsg}`);
+              const text = this.formatErrorValue(errorMsg);
+              if (text) errorMessages.push(`${this.formatFieldName(field)}: ${text}`);
             });
           } else if (typeof fieldErrors === 'string') {
             errorMessages.push(`${this.formatFieldName(field)}: ${fieldErrors}`);
+          } else {
+            const text = this.formatErrorValue(fieldErrors);
+            if (text) errorMessages.push(`${this.formatFieldName(field)}: ${text}`);
           }
         });
       }
@@ -127,9 +177,12 @@ class Client {
 
     if (authheaders) {
       config.headers = {
-        Authorization: `Bearer ${token}`,
-        "X-CSRFToken": `${Cookies.get("csrftoken")}`,
+        "X-CSRFToken": `${Cookies.get("csrftoken") || ""}`,
       };
+      // Only send Bearer when a real token exists (avoids "Bearer undefined" → token_not_valid).
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
       if (!(data instanceof FormData)) {
         config.headers["Content-Type"] = "application/json";
       }
