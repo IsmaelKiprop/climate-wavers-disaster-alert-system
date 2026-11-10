@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import Swal from 'sweetalert2';
 import { client } from "../api";
 import { endpoints } from "../utils/endpoints";
+import { fetchUsdToKesRate } from "../utils/exchangeRate";
 import { getUser } from "../utils/factory";
 
 const PaystackDonation = ({ campaign, onSuccess, onClose: onModalClose }) => {
@@ -40,21 +41,8 @@ const PaystackDonation = ({ campaign, onSuccess, onClose: onModalClose }) => {
   const fetchExchangeRate = async () => {
     setLoadingExchangeRate(true);
     try {
-      // Use environment variable or fallback to hardcoded URL
-      const apiUrl = import.meta.env.VITE_EXCHANGE_RATE_API_URL || 'https://v6.exchangerate-api.com/v6/ee458d7d826fdfbd0b1ec343/latest/USD';
-      const response = await fetch(apiUrl);
-      const data = await response.json();
-      
-      if (data.result === 'success') {
-        const usdToKesRate = data.conversion_rates.KES;
-        setExchangeRate(usdToKesRate);
-        
-        console.log(`Exchange rate: 1 USD = ${usdToKesRate} KES`);
-      }
-    } catch (error) {
-      console.error('Failed to fetch exchange rate:', error);
-      // Fallback to approximate rate if API fails
-      setExchangeRate(150); // Approximate USD to KES rate
+      const usdToKesRate = await fetchUsdToKesRate();
+      setExchangeRate(usdToKesRate);
     } finally {
       setLoadingExchangeRate(false);
     }

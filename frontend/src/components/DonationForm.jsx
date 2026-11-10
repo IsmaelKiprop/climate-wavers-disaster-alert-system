@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { toast } from 'react-toastify';
+import { fetchUsdToKesRate } from '../utils/exchangeRate';
 import { getUser } from '../utils/factory';
 
 const DonationForm = ({ onClose }) => {
@@ -27,21 +28,9 @@ const DonationForm = ({ onClose }) => {
 
   // Fetch exchange rate
   const fetchExchangeRate = async () => {
-    try {
-      const apiUrl = import.meta.env.VITE_EXCHANGE_RATE_API_URL || 'https://v6.exchangerate-api.com/v6/ee458d7d826fdfbd0b1ec343/latest/USD';
-      const response = await fetch(apiUrl);
-      const data = await response.json();
-      
-      if (data.result === 'success') {
-        const usdToKesRate = data.conversion_rates.KES;
-        setExchangeRate(usdToKesRate);
-        return usdToKesRate;
-      }
-    } catch (error) {
-      console.error('Failed to fetch exchange rate:', error);
-      setExchangeRate(150); // Fallback rate
-      return 150;
-    }
+    const usdToKesRate = await fetchUsdToKesRate();
+    setExchangeRate(usdToKesRate);
+    return usdToKesRate;
   };
 
   // Load Paystack script

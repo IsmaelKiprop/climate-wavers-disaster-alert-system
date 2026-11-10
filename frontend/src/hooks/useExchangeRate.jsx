@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect } from "react";
+import { fetchUsdToKesRate } from "../utils/exchangeRate";
 
 export const useExchangeRate = (usdAmount) => {
   const [exchangeRate, setExchangeRate] = useState(null);
@@ -7,55 +8,39 @@ export const useExchangeRate = (usdAmount) => {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    const fetchExchangeRate = async () => {
+    let alive = true;
+
+    const load = async () => {
       setLoading(true);
       setError(null);
-      
+
       try {
-        // Use environment variable or fallback to hardcoded URL
-        const apiUrl = import.meta.env.VITE_EXCHANGE_RATE_API_URL || 'test_url';
-        const response = await fetch(apiUrl);
-        const data = await response.json();
-        
-        if (data.result === 'success') {
-          const usdToKesRate = data.conversion_rates.KES;
-          setExchangeRate(usdToKesRate);
-          
-          // Convert USD amount to KES
-          if (usdAmount) {
-            const converted = usdAmount * usdToKesRate;
-            setConvertedAmount(converted);
-            console.log(`Converted amount: $${usdAmount} = KSh${converted.toFixed(2)}`);
-          }
-          
-          console.log(`Exchange rate: 1 USD = ${usdToKesRate} KES`);
-        } else {
-          throw new Error('Failed to fetch exchange rate');
-        }
-      } catch (error) {
-        console.error('Failed to fetch exchange rate:', error);
-        setError(error.message);
-        
-        // Fallback to approximate rate if API fails
-        const fallbackRate = 150; // Approximate USD to KES rate
-        setExchangeRate(fallbackRate);
-        
+        const usdToKesRate = await fetchUsdToKesRate();
+        if (!alive) return;
+
+        setExchangeRate(usdToKesRate);
         if (usdAmount) {
-          const converted = usdAmount * fallbackRate;
-          setConvertedAmount(converted);
+          setConvertedAmount(usdAmount * usdToKesRate);
         }
+      } catch (err) {
+        if (!alive) return;
+        console.error("Failed to fetch exchange rate:", err);
+        setError(err.message);
       } finally {
-        setLoading(false);
+        if (alive) setLoading(false);
       }
     };
 
-    fetchExchangeRate();
+    load();
+    return () => {
+      alive = false;
+    };
   }, [usdAmount]);
 
   return {
     exchangeRate,
     convertedAmount,
     loading,
-    error
+    error,
   };
 };

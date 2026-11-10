@@ -6,6 +6,7 @@ import PaymentSuccess from './PaymentSuccess';
 import { apiUrl } from '../config/env';
 import { client } from '../api';
 import { endpoints } from '../utils/endpoints';
+import { fetchUsdToKesRate } from '../utils/exchangeRate';
 import { getAuthToken, getUser } from '../utils/factory';
 
 const TreePayment = ({ treeData, onSuccess, onBack, giftForUser = null }) => {
@@ -71,28 +72,11 @@ const TreePayment = ({ treeData, onSuccess, onBack, giftForUser = null }) => {
   const fetchExchangeRate = async () => {
     setLoadingExchangeRate(true);
     try {
-      // Use environment variable or fallback to hardcoded URL
-      const apiUrl = import.meta.env.VITE_EXCHANGE_RATE_API_URL || 'https://v6.exchangerate-api.com/v6/ee458d7d826fdfbd0b1ec343/latest/USD';
-      const response = await fetch(apiUrl);
-      const data = await response.json();
-      
-      if (data.result === 'success') {
-        const usdToKesRate = data.conversion_rates.KES;
-        setExchangeRate(usdToKesRate);
-        
-        // Convert USD total amount to KES (use treeData.price as fallback)
-        const amountToConvert = totalAmount > 0 ? totalAmount : treeData.price;
-        const converted = amountToConvert * usdToKesRate;
-        setConvertedAmount(converted);
-        
-        console.log(`Exchange rate: 1 USD = ${usdToKesRate} KES`);
-        console.log(`Converted amount: $${amountToConvert} = KSh${converted.toFixed(2)}`);
-      }
-    } catch (error) {
-      console.error('Failed to fetch exchange rate:', error);
-      // Fallback to approximate rate if API fails
-      setExchangeRate(150); // Approximate USD to KES rate
-      setConvertedAmount(treeData.price * 150);
+      const usdToKesRate = await fetchUsdToKesRate();
+      setExchangeRate(usdToKesRate);
+
+      const amountToConvert = totalAmount > 0 ? totalAmount : treeData.price;
+      setConvertedAmount(amountToConvert * usdToKesRate);
     } finally {
       setLoadingExchangeRate(false);
     }
