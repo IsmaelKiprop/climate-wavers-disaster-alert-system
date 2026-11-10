@@ -9,7 +9,8 @@ import {
 } from "react-icons/io5";
 import { RiAlarmWarningLine, RiAlarmWarningFill } from "react-icons/ri";
 
-const itemClass = "flex flex-col items-center justify-center min-w-0 flex-1 py-2 text-[11px]";
+const itemClass =
+  "flex flex-col items-center justify-center gap-0.5 min-w-0 flex-1 h-full pt-1.5 pb-1 text-[10px] leading-tight font-medium";
 
 const Footer = () => {
   const onboarding = useLocation().pathname.startsWith("/onboarding");
@@ -31,7 +32,11 @@ const Footer = () => {
 
   return (
     <nav
-      className="fixed z-30 bg-navbar border-t border-border bottom-0 left-0 right-0 h-16 flex items-stretch px-1 pb-[env(safe-area-inset-bottom)]"
+      className="relative z-40 w-full bg-navbar border-t border-border flex items-stretch px-1 pt-0.5"
+      style={{
+        paddingBottom: "env(safe-area-inset-bottom, 0px)",
+        minHeight: "calc(3.5rem + env(safe-area-inset-bottom, 0px))",
+      }}
       aria-label="Mobile"
     >
       {items.map(({ to, label, Icon, ActiveIcon, end }) => (
@@ -40,8 +45,10 @@ const Footer = () => {
             const Glyph = isActive ? ActiveIcon : Icon;
             return (
               <>
-                <Glyph size={20} className={isActive ? "text-primary" : "text-muted"} aria-hidden="true" />
-                <span className={isActive ? "text-primary" : "text-muted"}>{label}</span>
+                <Glyph size={20} className={isActive ? "text-primary" : "text-foreground/70"} aria-hidden="true" />
+                <span className={`truncate max-w-full ${isActive ? "text-primary" : "text-foreground/70"}`}>
+                  {label}
+                </span>
               </>
             );
           }}

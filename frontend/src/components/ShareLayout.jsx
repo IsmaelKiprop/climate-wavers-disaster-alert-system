@@ -37,7 +37,7 @@ const SharedLayout = ({ showRight = true }) => {
         </DashboardSidebar>
 
         <main className="flex-1 min-w-0 overflow-y-auto overscroll-contain">
-          <div className={isChat ? "h-full px-4 sm:px-6 py-4 pb-20 md:pb-4" : "max-w-4xl mx-auto px-4 sm:px-6 py-5 pb-24 md:pb-8"}>
+          <div className={isChat ? "h-full px-4 sm:px-6 py-4 pb-4" : "max-w-4xl mx-auto px-4 sm:px-6 py-5 pb-6 md:pb-8"}>
             <Outlet />
           </div>
         </main>

@@ -79,7 +79,7 @@ const CampaignsPage = () => {
           <DashboardSidebar>
             <Menu />
           </DashboardSidebar>
-          <main className="flex-1 min-w-0 overflow-y-auto overscroll-contain px-4 sm:px-6 py-5 pb-24 md:pb-8">
+          <main className="flex-1 min-w-0 overflow-y-auto overscroll-contain px-4 sm:px-6 py-5 pb-6 md:pb-8">
             <h1 className="text-xl sm:text-2xl font-semibold text-foreground">
               Support live climate projects
             </h1>

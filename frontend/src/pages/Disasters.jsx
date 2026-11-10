@@ -52,7 +52,7 @@ const DisasterPage = () => {
           <DashboardSidebar>
             <Menu />
           </DashboardSidebar>
-          <main className="flex-1 min-w-0 overflow-y-auto overscroll-contain px-3 sm:px-5 py-5 pb-24 md:pb-8">
+          <main className="flex-1 min-w-0 overflow-y-auto overscroll-contain px-3 sm:px-5 py-5 pb-6 md:pb-8">
             <div className="max-w-4xl mx-auto">
               <div className="mb-5">
                 <p className="text-sm text-muted">Live USGS and NASA events</p>

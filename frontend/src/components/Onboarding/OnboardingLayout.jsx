@@ -17,13 +17,13 @@ const OnboardingLayout = () => {
         </DashboardSidebar>
 
         <main className="flex-1 min-w-0 overflow-x-hidden">
-          <div className="max-w-4xl mx-auto px-4 sm:px-6 py-5 pb-24 md:pb-8">
+          <div className="max-w-4xl mx-auto px-4 sm:px-6 py-5 pb-6 md:pb-8">
             <Outlet />
           </div>
         </main>
       </div>
 
-      <div className="md:hidden">
+      <div className="md:hidden shrink-0">
         <Footer />
       </div>
     </div>

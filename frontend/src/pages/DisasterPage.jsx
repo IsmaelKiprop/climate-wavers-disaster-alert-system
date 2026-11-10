@@ -167,7 +167,7 @@ const DisasterPage = () => {
           <DashboardSidebar>
             <Menu />
           </DashboardSidebar>
-          <main className="flex-1 min-w-0 overflow-y-auto overscroll-contain px-4 sm:px-6 py-5 pb-24 md:pb-8">
+          <main className="flex-1 min-w-0 overflow-y-auto overscroll-contain px-4 sm:px-6 py-5 pb-6 md:pb-8">
             <div className="max-w-3xl">{report}</div>
           </main>
         </div>
