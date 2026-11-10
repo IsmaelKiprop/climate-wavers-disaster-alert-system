@@ -183,14 +183,33 @@ class PostViewSet(viewsets.ModelViewSet):
                 is_reposted=Exists(
                     Repost.objects.filter(post_id=OuterRef("pk"), user=user)
                 ),
+                author_is_following=Exists(
+                    Follow.objects.filter(
+                        follower=user, following_id=OuterRef("user_id")
+                    )
+                ),
             )
         else:
             queryset = queryset.annotate(
                 is_reacted=Value(False, output_field=BooleanField()),
                 is_bookmarked=Value(False, output_field=BooleanField()),
                 is_reposted=Value(False, output_field=BooleanField()),
+                author_is_following=Value(False, output_field=BooleanField()),
             )
         return queryset
+
+    def get_serializer_context(self):
+        ctx = super().get_serializer_context()
+        user = getattr(self.request, "user", None)
+        if user is not None and user.is_authenticated:
+            ctx["following_ids"] = set(
+                Follow.objects.filter(follower=user).values_list(
+                    "following_id", flat=True
+                )
+            )
+        else:
+            ctx["following_ids"] = set()
+        return ctx
 
     @action(detail=False, methods=["get"])
     def search_by_hashtag(self, request):
@@ -686,6 +705,34 @@ class FollowViewSet(viewsets.ModelViewSet):
     queryset = Follow.objects.all()
     serializer_class = FollowSerializer
     permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return Follow.objects.filter(follower=self.request.user).select_related(
+            "follower", "following"
+        )
+
+    def get_serializer_context(self):
+        ctx = super().get_serializer_context()
+        user = getattr(self.request, "user", None)
+        if user is not None and user.is_authenticated:
+            ctx["following_ids"] = set(
+                Follow.objects.filter(follower=user).values_list(
+                    "following_id", flat=True
+                )
+            )
+        else:
+            ctx["following_ids"] = set()
+        return ctx
+
+    @action(detail=False, methods=["get"], url_path="ids")
+    def following_ids(self, request):
+        """Compact list of user IDs the current user follows (for feed UI hydrate)."""
+        ids = list(
+            Follow.objects.filter(follower=request.user).values_list(
+                "following_id", flat=True
+            )
+        )
+        return Response({"ids": ids})
 
     def create(self, request, *args, **kwargs):
         following_id = request.data.get("following_id")

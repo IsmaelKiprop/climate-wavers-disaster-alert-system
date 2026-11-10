@@ -10,6 +10,7 @@ export const endpoints = {
     "post": "/api/v1/post/",
     "comments": "/api/v1/comments/",
     "follow": "/api/v1/follows/",
+    "followIds": "/api/v1/follows/ids/",
     "profile": "/api/v1/users/activity/",
     "users": "/api/v1/users/",
     "popularUsers": "/api/v1/users/popular/",

@@ -26,6 +26,7 @@ const Accountcard = ({ user }) => {
   const [busy, setBusy] = useState(false);
 
   const follow = async (userId) => {
+    setFollowing(userId, true);
     try {
       await client.run(
         "post",
@@ -45,6 +46,7 @@ const Accountcard = ({ user }) => {
   };
 
   const unfollow = async (userId) => {
+    setFollowing(userId, false);
     try {
       await client.run("delete", `${endpoints?.follow}${userId}/`, {}, true);
       setFollowing(userId, false);
@@ -97,6 +99,7 @@ const Accountcard = ({ user }) => {
         <button
           type="button"
           disabled={busy}
+          aria-pressed={followed}
           onClick={() => {
             handleFollow(user?.id);
           }}
@@ -106,7 +109,7 @@ const Accountcard = ({ user }) => {
               : "bg-teal-500 text-white hover:bg-teal-600 shadow-sm hover:shadow-md"
           }`}
         >
-          {followed ? "Following" : "Follow"}
+          {busy ? "…" : followed ? "Following" : "Follow"}
         </button>
       )}
     </div>

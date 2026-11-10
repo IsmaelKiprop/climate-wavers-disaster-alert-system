@@ -151,12 +151,15 @@ const Profile = () => {
   };
 
   const follow = async (targetId) => {
+    setIsFollowLocal(true);
+    setFollowing(targetId, true);
     try {
       await client.run("post", endpoints?.follow, { following_id: Number(targetId) }, true);
       setIsFollowLocal(true);
       setFollowing(targetId, true);
     } catch (error) {
-      if (error.response?.data?.detail === "You are already following this user.") {
+      const detail = String(error?.response?.data?.detail || "").toLowerCase();
+      if (detail.includes("already following")) {
         setIsFollowLocal(true);
         setFollowing(targetId, true);
         return;
@@ -168,6 +171,8 @@ const Profile = () => {
   };
 
   const unfollow = async (targetId) => {
+    setIsFollowLocal(false);
+    setFollowing(targetId, false);
     try {
       await client.run("delete", `${endpoints?.follow}${targetId}/`, {}, true);
       setIsFollowLocal(false);

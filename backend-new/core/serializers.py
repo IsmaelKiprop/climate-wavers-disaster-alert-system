@@ -125,9 +125,25 @@ class UserSerializer(serializers.ModelSerializer):
 
 class PostAuthorSerializer(serializers.ModelSerializer):
     profile_picture = serializers.SerializerMethodField()
+    is_following = serializers.SerializerMethodField()
 
     def get_profile_picture(self, obj):
         return _force_https(obj.profile_picture)
+
+    def get_is_following(self, obj):
+        following_ids = self.context.get("following_ids")
+        if following_ids is not None:
+            return obj.id in following_ids
+
+        annotated = getattr(obj, "viewer_follows", None)
+        if annotated is not None:
+            return bool(annotated)
+
+        request = self.context.get("request")
+        user = getattr(request, "user", None) if request else None
+        if user is not None and getattr(user, "is_authenticated", False):
+            return obj.followers.filter(follower=user).exists()
+        return False
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
@@ -146,6 +162,7 @@ class PostAuthorSerializer(serializers.ModelSerializer):
             "email",
             "profile_picture",
             "profile_pic",
+            "is_following",
         )
 
 
@@ -203,6 +220,13 @@ class PostSerializer(serializers.ModelSerializer):
         if request and hasattr(request, "user") and request.user.is_authenticated:
             return request.user
         return None
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        # Prefer the post-level annotation when present (avoids N+1 on feed).
+        if data.get("user") is not None and "author_is_following" in instance.__dict__:
+            data["user"]["is_following"] = bool(instance.__dict__.get("author_is_following"))
+        return data
 
     class Meta:
         model = Post

@@ -6,18 +6,21 @@ function getContext() {
   if (typeof window === "undefined") return null;
   const AudioContextClass = window.AudioContext || window.webkitAudioContext;
   if (!AudioContextClass) return null;
+  // Only construct after a user gesture — Chrome blocks autoplay AudioContext.
+  if (!unlocked) return null;
   if (!audioCtx) audioCtx = new AudioContextClass();
   return audioCtx;
 }
 
 /** Browsers block sound until a user gesture — call once from a click/tap. */
 export function unlockNotificationSound() {
+  if (typeof window === "undefined") return;
+  unlocked = true;
   const ctx = getContext();
   if (!ctx) return;
   if (ctx.state === "suspended") {
     ctx.resume().catch(() => {});
   }
-  unlocked = true;
 }
 
 /**
@@ -25,6 +28,8 @@ export function unlockNotificationSound() {
  * Skips if called too often (rapid burst) or before unlock.
  */
 export function playNotificationSound() {
+  if (!unlocked) return;
+
   const now = Date.now();
   if (now - lastPlayedAt < 1200) return;
   lastPlayedAt = now;
@@ -33,7 +38,6 @@ export function playNotificationSound() {
   if (!ctx) return;
 
   const start = () => {
-    unlocked = true;
     const t0 = ctx.currentTime;
     const master = ctx.createGain();
     master.gain.setValueAtTime(0.0001, t0);
