@@ -77,7 +77,16 @@ async function sendDisasterAlertWhatsApp(payload) {
     const phone = row.phone || row
     let components = []
     if (template === "phone_verify_otp") {
-      components = [bodyParams([data.otp || ""])]
+      const otp = String(data.otp || "")
+      components = [
+        bodyParams([otp]),
+        {
+          type: "button",
+          sub_type: "url",
+          index: "0",
+          parameters: [{ type: "text", text: otp.slice(0, 15) }],
+        },
+      ]
     } else {
       components = [
         bodyParams([

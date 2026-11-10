@@ -38,11 +38,12 @@ python manage.py poll_live_official_alerts
 You can reuse the **same FlowOps Africa WhatsApp number** already on Meta (Cloud API). Climate Wavers alerts send as template messages from that Phone number ID; Grace / FlowOps chat can keep using the same number.
 
 1. Open the FlowOps Meta app → **WhatsApp → API setup** (or Production setup).
-2. Copy these into Render → `climate-wavers-notifications` (or local `notification_service/.env`):
+2. Copy these into Render → **both** `climate-wavers-notifications` and `climate-wavers-api`
+   (API sends phone OTP directly via Graph when Cloudflare blocks the notification service):
    - `META_WA_TOKEN` — permanent System User / access token with `whatsapp_business_messaging`
    - `META_WA_PHONE_NUMBER_ID` — **Phone number ID** (not the dial digits)
-   - `META_WA_BUSINESS_ACCOUNT_ID` — WhatsApp Business Account ID (WABA)
-   - `META_WA_APP_SECRET` — App settings → Basic → App secret
+   - `META_WA_BUSINESS_ACCOUNT_ID` — WhatsApp Business Account ID (WABA) — notifications only
+   - `META_WA_APP_SECRET` — App settings → Basic → App secret — notifications only
    - `META_WA_VERIFY_TOKEN` — any string you choose (must match webhook verify token in Meta)
 3. Approve templates (names used in code):
    - `disaster_alert_user` — body vars: type, place, confidence, magnitude, tip, link

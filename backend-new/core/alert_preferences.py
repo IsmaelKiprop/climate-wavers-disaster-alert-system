@@ -1,3 +1,4 @@
+import logging
 import random
 import string
 from datetime import timedelta
@@ -8,9 +9,12 @@ from rest_framework import permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from api.tasks import _post_notification
+from api.tasks import _post_notification, _send_resend
 
+from . import meta_whatsapp
 from .models import UserAlertPreference
+
+logger = logging.getLogger(__name__)
 
 
 def _pref_for(user):
@@ -97,27 +101,34 @@ class AlertPhoneVerifyRequestView(APIView):
         )
 
         sent_via = []
-        # Prefer Meta WhatsApp template; fall back to email OTP.
+        # Prefer direct Meta Graph API (avoids Cloudflare 429 on notification service).
         try:
-            _post_notification(
-                {
-                    "type": "disaster_alert_whatsapp",
-                    "data": {
-                        "template": "phone_verify_otp",
-                        "recipients": [{"phone": phone}],
-                        "otp": code,
-                        "city": "Climate Wavers",
-                        "disasterType": "verification",
-                    },
-                }
-            )
+            meta_whatsapp.send_phone_otp(phone, code)
             sent_via.append("whatsapp")
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Direct WhatsApp OTP failed: %s", exc)
+            try:
+                _post_notification(
+                    {
+                        "type": "disaster_alert_whatsapp",
+                        "data": {
+                            "template": "phone_verify_otp",
+                            "recipients": [{"phone": phone}],
+                            "otp": code,
+                            "city": "Climate Wavers",
+                            "disasterType": "verification",
+                        },
+                    }
+                )
+                sent_via.append("whatsapp")
+            except Exception as nested:
+                logger.warning("Notification-service WhatsApp OTP failed: %s", nested)
+
+        # Email OTP via Resend first (same Cloudflare issue on notification HTTP).
         try:
-            _post_notification(
+            _send_resend(
+                "custom_mail",
                 {
-                    "type": "custom_mail",
                     "email": request.user.email,
                     "data": {
                         "content": (
@@ -125,11 +136,27 @@ class AlertPhoneVerifyRequestView(APIView):
                             "It expires in 15 minutes."
                         )
                     },
-                }
+                },
             )
             sent_via.append("email")
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Resend OTP email failed: %s", exc)
+            try:
+                _post_notification(
+                    {
+                        "type": "custom_mail",
+                        "email": request.user.email,
+                        "data": {
+                            "content": (
+                                f"Your Climate Wavers phone verification code is {code}. "
+                                "It expires in 15 minutes."
+                            )
+                        },
+                    }
+                )
+                sent_via.append("email")
+            except Exception as nested:
+                logger.warning("Notification-service OTP email failed: %s", nested)
 
         if not sent_via:
             return Response(

@@ -73,6 +73,12 @@ services:
         sync: false
       - key: OPENAI_API_KEY
         sync: false
+      - key: META_WA_TOKEN
+        sync: false
+      - key: META_WA_PHONE_NUMBER_ID
+        sync: false
+      - key: META_WA_TEMPLATE_LANG
+        value: en
 
   - type: cron
     name: climate-wavers-alert-poller
