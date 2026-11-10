@@ -2,6 +2,7 @@ import { useTrending } from "../hooks/useTrending";
 import { useLiveDisasters } from "../hooks/useLiveDisasters";
 import { NavLink } from "react-router-dom";
 import { formatTimeAgo } from "../utils/apiData";
+import { hashtagPath } from "../utils/hashtag";
 
 const Trending = ({ trendingData: propTrendingData, isLoading: propIsLoading, error: propError }) => {
   const { data: hookTrendingData, isLoading: hookIsLoading, error: hookError, isFetching } = useTrending();
@@ -34,7 +35,11 @@ const Trending = ({ trendingData: propTrendingData, isLoading: propIsLoading, er
 
       <div className="space-y-1">
         {hashtags.slice(0, 5).map((item) => (
-          <NavLink key={item.hashtags} to="/app/community" className="block py-2 text-sm hover:text-primary">
+          <NavLink
+            key={item.hashtags}
+            to={hashtagPath(item.hashtags)}
+            className="block py-2 text-sm hover:text-primary"
+          >
             #{String(item.hashtags).replace(/^#/, "")}
             <span className="block text-xs text-muted">{item.count} posts</span>
           </NavLink>

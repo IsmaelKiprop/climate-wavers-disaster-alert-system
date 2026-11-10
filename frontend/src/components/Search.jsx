@@ -416,7 +416,10 @@ const UserResult = ({ user }) => (
 );
 
 const HashtagResult = ({ hashtag }) => (
-  <Link to={`/app/hashtag/${hashtag.name || hashtag.tag}`} className="block p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+  <Link
+    to={`/app/hashtag/${encodeURIComponent(String(hashtag.name || hashtag.tag || "").replace(/^#/, "").toLowerCase())}`}
+    className="block p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+  >
     <div className="flex items-center gap-3">
       <div className="w-10 h-10 bg-[#067d83]/10 rounded-full flex items-center justify-center">
         <span className="text-[#067d83] font-bold text-lg">#</span>

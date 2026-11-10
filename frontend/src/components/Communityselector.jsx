@@ -2,6 +2,7 @@ import { NavLink } from "react-router-dom";
 import { useLiveDisasters } from "../hooks/useLiveDisasters";
 import { useTrending } from "../hooks/useTrending";
 import { formatTimeAgo } from "../utils/apiData";
+import { hashtagPath } from "../utils/hashtag";
 
 const Communityselector = () => {
   const { data: events = [], isFetching } = useLiveDisasters();
@@ -31,7 +32,7 @@ const Communityselector = () => {
           <NavLink
             key={item.hashtags}
             className="px-3 py-2 text-sm border-b border-border hover:bg-background"
-            to="/app/community"
+            to={hashtagPath(item.hashtags)}
           >
             #{String(item.hashtags).replace(/^#/, "")}
             <span className="block text-xs text-muted">{item.count} posts</span>

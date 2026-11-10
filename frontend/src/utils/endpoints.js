@@ -20,6 +20,7 @@ export const endpoints = {
     "ai_analyze_content": "/api/v1/ai/analyze-content/",
     "ai_generate_hashtags": "/api/v1/ai/generate-hashtags/",
     "hashtag": "/api/v1/hashtags/",
+    "hashtagSearch": "/api/v1/post/search_by_hashtag/",
     "trending": "/api/v1/post/trending/",
     "search": "/api/v1/search/",
     "searchUsers": "/api/v1/search/users/",

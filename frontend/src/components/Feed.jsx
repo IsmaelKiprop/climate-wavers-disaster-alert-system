@@ -98,7 +98,7 @@ const Feed = ({ feeds, feedData, activeFeed, setActiveFeed, isLoading, error, tr
                   {hashtags.slice(0, 5).map((item) => (
                     <Link
                       key={item.hashtags}
-                      to="/app/community"
+                      to={`/app/hashtag/${encodeURIComponent(String(item.hashtags || "").replace(/^#/, "").toLowerCase())}`}
                       className="flex items-center justify-between p-3 border border-border hover:border-primary"
                     >
                       <span className="font-medium text-sm truncate">#{String(item.hashtags).replace(/^#/, "")}</span>
