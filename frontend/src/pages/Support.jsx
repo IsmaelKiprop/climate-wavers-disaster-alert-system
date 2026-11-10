@@ -32,12 +32,17 @@ const TOPICS = [
 const Support = () => {
   return (
     <PublicPage
-      title="Support"
+      title="Help"
       description="Help using the live map, accounts, and campaigns."
     >
-      <h1 className="text-3xl sm:text-4xl font-semibold">Support</h1>
+      <h1 className="text-3xl sm:text-4xl font-semibold">Help</h1>
       <p className="mt-3 text-muted">
         Guides for the current Climate Wavers site. For account issues email {SITE.emails.support}.
+        To support the product or see org plans, visit{" "}
+        <Link to="/pricing" className="text-primary">
+          pricing
+        </Link>
+        .
       </p>
       <div className="mt-8 space-y-4">
         {TOPICS.map((topic) => (

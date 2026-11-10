@@ -11,6 +11,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .models import ResponderDispatch, ResponderMembership, ResponderOrganization
+from .pricing import PLANS, normalize_plan, plan_meta
 from .rapid_brief import generate_rapid_brief
 
 User = get_user_model()
@@ -67,6 +68,11 @@ def _parse_org_apply_fields(data):
         "contact_email": (data.get("contact_email") or "").strip() or None,
         "contact_phone": (data.get("contact_phone") or "").strip() or None,
         "whatsapp_opt_in": bool(data.get("whatsapp_opt_in")),
+        "plan": normalize_plan(
+            data.get("plan") or data.get("requested_plan"),
+            (data.get("org_type") or "ngo"),
+        ),
+        "plan_status": "pending",
     }, None
 
 
@@ -93,6 +99,10 @@ def _create_pending_org(user, fields):
 
 
 class ResponderOrgSerializer(serializers.ModelSerializer):
+    has_rapidbrief_access = serializers.SerializerMethodField()
+    plan_label = serializers.SerializerMethodField()
+    plan_price_label = serializers.SerializerMethodField()
+
     class Meta:
         model = ResponderOrganization
         fields = (
@@ -112,6 +122,14 @@ class ResponderOrgSerializer(serializers.ModelSerializer):
             "whatsapp_opt_in",
             "verification_status",
             "verified_at",
+            "plan",
+            "plan_status",
+            "plan_started_at",
+            "plan_ends_at",
+            "max_seats",
+            "has_rapidbrief_access",
+            "plan_label",
+            "plan_price_label",
             "created_at",
             "updated_at",
         )
@@ -119,9 +137,25 @@ class ResponderOrgSerializer(serializers.ModelSerializer):
             "id",
             "verification_status",
             "verified_at",
+            "plan_status",
+            "plan_started_at",
+            "plan_ends_at",
+            "max_seats",
+            "has_rapidbrief_access",
+            "plan_label",
+            "plan_price_label",
             "created_at",
             "updated_at",
         )
+
+    def get_has_rapidbrief_access(self, obj):
+        return bool(getattr(obj, "has_rapidbrief_access", False))
+
+    def get_plan_label(self, obj):
+        return plan_meta(obj.plan).get("name")
+
+    def get_plan_price_label(self, obj):
+        return plan_meta(obj.plan).get("price_label")
 
 
 class ResponderMembershipSerializer(serializers.ModelSerializer):
@@ -324,15 +358,30 @@ class ResponderMeView(APIView):
 
     def get(self, request):
         memberships = list(_memberships_for(request.user))
+        approved = [
+            m for m in memberships if m.org.verification_status == "approved"
+        ]
+        rapidbrief = [m for m in approved if m.org.has_rapidbrief_access]
         return Response(
             {
                 "memberships": ResponderMembershipSerializer(memberships, many=True).data,
-                "has_approved": any(
-                    m.org.verification_status == "approved" for m in memberships
-                ),
+                "has_approved": bool(approved),
                 "has_pending": any(
                     m.org.verification_status == "pending" for m in memberships
                 ),
+                "has_rapidbrief": bool(rapidbrief),
+                "plans": {
+                    key: {
+                        "key": meta["key"],
+                        "name": meta["name"],
+                        "price_label": meta["price_label"],
+                        "price_kes_month": meta["price_kes_month"],
+                        "max_seats": meta["max_seats"],
+                        "trial_days": meta["trial_days"],
+                        "detail": meta["detail"],
+                    }
+                    for key, meta in PLANS.items()
+                },
             }
         )
 
@@ -424,7 +473,8 @@ class ResponderDispatchListView(APIView):
                 )
             return Response({"detail": "No approved responder organization"}, status=403)
 
-        qs = ResponderDispatch.objects.filter(org=membership.org).order_by("-created_at")
+        org = membership.org
+        qs = ResponderDispatch.objects.filter(org=org).order_by("-created_at")
         status_filter = (request.query_params.get("status") or "").strip()
         if status_filter and status_filter in DISPATCH_STATUSES:
             qs = qs.filter(status=status_filter)
@@ -432,8 +482,9 @@ class ResponderDispatchListView(APIView):
         qs = qs[:limit]
         return Response(
             {
-                "org": ResponderOrgSerializer(membership.org).data,
+                "org": ResponderOrgSerializer(org).data,
                 "role": membership.role,
+                "has_rapidbrief": bool(org.has_rapidbrief_access),
                 "dispatches": ResponderDispatchSerializer(qs, many=True).data,
             }
         )

@@ -3,6 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 import { toast } from "react-toastify";
 import { client } from "../api";
 import { endpoints } from "../utils/endpoints";
+import { PLAN_OPTIONS } from "../config/pricing";
 
 const ORG_TYPES = [
   { value: "red_cross", label: "Red Cross" },
@@ -48,6 +49,7 @@ const emptyApply = {
   contact_phone: "",
   website: "",
   whatsapp_opt_in: false,
+  plan: "ngo",
 };
 
 const ResponderDesk = () => {
@@ -63,10 +65,12 @@ const ResponderDesk = () => {
   const [applyForm, setApplyForm] = useState(emptyApply);
   const [submitting, setSubmitting] = useState(false);
   const [statusFilter, setStatusFilter] = useState("");
+  const [hasRapidbrief, setHasRapidbrief] = useState(false);
 
   const refreshMe = useCallback(async () => {
     const data = await client.run("get", endpoints.responderMe, {}, true, false, false, false);
     setMe(data);
+    setHasRapidbrief(Boolean(data?.has_rapidbrief));
     return data;
   }, []);
 
@@ -84,6 +88,7 @@ const ResponderDesk = () => {
     setDispatches(data?.dispatches || []);
     setOrg(data?.org || null);
     setRole(data?.role || "");
+    setHasRapidbrief(Boolean(data?.has_rapidbrief ?? data?.org?.has_rapidbrief_access));
     if (data?.dispatches?.length) {
       setSelected((prev) => {
         if (prev && data.dispatches.some((d) => d.id === prev.id)) {
@@ -262,6 +267,27 @@ const ResponderDesk = () => {
               ))}
             </select>
           </label>
+          <label className="block text-sm">
+            <span className="font-medium">RapidBrief plan</span>
+            <select
+              className="mt-1 h-11 w-full px-3 border border-border bg-background"
+              value={applyForm.plan}
+              onChange={(e) => setApplyForm((p) => ({ ...p, plan: e.target.value }))}
+            >
+              {PLAN_OPTIONS.map((p) => (
+                <option key={p.value} value={p.value}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
+            <span className="mt-1 block text-xs text-muted">
+              Approved orgs get a free 90-day pilot. See{" "}
+              <Link to="/pricing" className="text-primary">
+                pricing
+              </Link>
+              .
+            </span>
+          </label>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <label className="block text-sm">
               <span className="font-medium">City</span>
@@ -416,8 +442,15 @@ const ResponderDesk = () => {
           <p>
             <span className="text-muted">Status:</span> pending
           </p>
+          <p>
+            <span className="text-muted">Plan:</span>{" "}
+            {pendingOrg?.plan_label || pendingOrg?.plan || "pilot"} (90-day pilot starts on approval)
+          </p>
         </div>
-        <Link to="/app/alert-settings" className="inline-block mt-6 text-sm text-primary">
+        <Link to="/pricing" className="inline-block mt-4 text-sm text-primary">
+          View pricing
+        </Link>
+        <Link to="/app/alert-settings" className="inline-block mt-3 ml-4 text-sm text-primary">
           Review personal alert settings
         </Link>
       </div>
@@ -443,14 +476,40 @@ const ResponderDesk = () => {
   }
 
   const canWrite = role === "owner" || role === "dispatcher";
+  const planEnds = org?.plan_ends_at
+    ? new Date(org.plan_ends_at).toLocaleDateString()
+    : null;
 
   return (
     <div className="p-4 sm:p-6">
+      {!hasRapidbrief ? (
+        <div className="mb-4 border border-border bg-surface p-4">
+          <p className="font-medium text-foreground">RapidBrief plan inactive</p>
+          <p className="mt-1 text-sm text-muted">
+            Your org is approved, but the trial/paid window is not active. Live matched
+            dispatches pause until an admin activates your plan. Email hello@flowops.africa
+            or see{" "}
+            <Link to="/pricing" className="text-primary">
+              pricing
+            </Link>
+            .
+          </p>
+        </div>
+      ) : null}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold">RapidBrief Desk</h1>
           <p className="mt-1 text-sm text-muted">
             {org?.name || "Responder"} · live matched incidents with AI mobilization briefs
+          </p>
+          <p className="mt-1 text-xs text-muted">
+            Plan: {org?.plan_label || org?.plan || "—"} · {org?.plan_status || "—"}
+            {org?.plan_price_label ? ` · ${org.plan_price_label}` : ""}
+            {planEnds ? ` · ends ${planEnds}` : ""}
+            {" · "}
+            <Link to="/pricing" className="text-primary">
+              pricing
+            </Link>
           </p>
         </div>
         <select

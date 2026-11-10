@@ -225,7 +225,7 @@ const LandingPage = () => {
                 Alerts
               </button>
 
-              {/* Donate Button */}
+              {/* Support platform */}
               <button 
                 onClick={() => setShowDonationModal(true)}
                 className="hidden md:flex items-center px-3 py-1.5 bg-[#067d83] text-white rounded-md hover:bg-[#055a5f] transition-colors text-sm font-medium"
@@ -233,7 +233,7 @@ const LandingPage = () => {
                 <svg className="w-3 h-3 mr-1.5" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clipRule="evenodd" />
                 </svg>
-                Donate
+                Support
               </button>
 
               {/* Plant Tree Button */}
@@ -312,7 +312,7 @@ const LandingPage = () => {
                 Impact
               </Link>
               
-              {/* Donate Button for Mobile */}
+              {/* Support platform for Mobile */}
               <button 
                 onClick={() => {
                   setShowDonationModal(true);
@@ -323,7 +323,7 @@ const LandingPage = () => {
                 <svg className="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clipRule="evenodd" />
                 </svg>
-                Donate
+                Support
               </button>
 
               {/* Plant Tree Button for Mobile */}

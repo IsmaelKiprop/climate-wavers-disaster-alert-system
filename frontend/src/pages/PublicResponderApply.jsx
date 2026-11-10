@@ -1,10 +1,11 @@
-import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useMemo, useState } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import Cookies from "js-cookie";
 import { toast } from "react-toastify";
 import PublicPage from "../components/PublicPage";
 import { client } from "../api";
 import { endpoints } from "../utils/endpoints";
+import { PLAN_OPTIONS } from "../config/pricing";
 
 const ORG_TYPES = [
   { value: "red_cross", label: "Red Cross" },
@@ -45,11 +46,17 @@ const emptyForm = {
   password: "",
   website: "",
   whatsapp_opt_in: false,
+  plan: "ngo",
 };
 
 const PublicResponderApply = () => {
   const navigate = useNavigate();
-  const [form, setForm] = useState(emptyForm);
+  const [searchParams] = useSearchParams();
+  const initialPlan = useMemo(() => {
+    const raw = (searchParams.get("plan") || "ngo").toLowerCase();
+    return PLAN_OPTIONS.some((p) => p.value === raw) ? raw : "ngo";
+  }, [searchParams]);
+  const [form, setForm] = useState({ ...emptyForm, plan: initialPlan });
   const [submitting, setSubmitting] = useState(false);
 
   const update = (key, value) => setForm((prev) => ({ ...prev, [key]: value }));
@@ -130,14 +137,21 @@ const PublicResponderApply = () => {
       <h1 className="mt-2 text-3xl sm:text-4xl font-semibold">Apply as a responder organization</h1>
       <p className="mt-3 text-muted max-w-2xl">
         Built for Red Cross, county emergency, government, UN, medical, fire, and NGO teams.
-        This creates an <strong className="text-foreground font-medium">organization workspace</strong>{" "}
-        and submits your RapidBrief application for admin verification. No personal community
-        signup required first.
+        After admin approval you get a <strong className="text-foreground font-medium">90-day free RapidBrief pilot</strong>.
+        NGO plan is KES 5,000/mo after pilot — see{" "}
+        <Link to="/pricing" className="text-primary">
+          pricing
+        </Link>
+        .
       </p>
 
       <div className="mt-4 flex flex-wrap gap-3 text-sm">
         <Link to="/login?redirect=/app/responder/apply" className="text-primary">
           Already have an account? Sign in and apply
+        </Link>
+        <span className="text-muted">·</span>
+        <Link to="/pricing" className="text-primary">
+          View RapidBrief pricing
         </Link>
         <span className="text-muted">·</span>
         <Link to="/consulting" className="text-primary">
@@ -171,6 +185,23 @@ const PublicResponderApply = () => {
                 </option>
               ))}
             </select>
+          </label>
+          <label className="block text-sm">
+            <span className="font-medium">RapidBrief plan</span>
+            <select
+              className="mt-1 h-11 w-full px-3 border border-border bg-background"
+              value={form.plan}
+              onChange={(e) => update("plan", e.target.value)}
+            >
+              {PLAN_OPTIONS.map((p) => (
+                <option key={p.value} value={p.value}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
+            <span className="mt-1 block text-xs text-muted">
+              Every approved org starts with a free 90-day pilot. Paid plans activate after pilot.
+            </span>
           </label>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <label className="block text-sm">

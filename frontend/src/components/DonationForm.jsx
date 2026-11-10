@@ -87,7 +87,7 @@ const DonationForm = ({ onClose }) => {
 
     const amount = selectedAmount || parseFloat(customAmount) || 0;
     if (amount <= 0) {
-      toast.error('Please select or enter a donation amount');
+      toast.error('Please select or enter a support amount');
       return;
     }
 
@@ -159,7 +159,7 @@ const DonationForm = ({ onClose }) => {
     try {
       // Here you would typically send the payment data to your backend
       // For now, we'll just show a success message
-      toast.success('Thank you for your donation! Your contribution helps us protect communities from disasters.');
+      toast.success('Thank you for supporting Climate Wavers. You help keep WhatsApp + email alerts running.');
       
       // Reset form
       setSelectedAmount('');
@@ -186,7 +186,7 @@ const DonationForm = ({ onClose }) => {
         <div className="p-6">
           {/* Header */}
           <div className="flex items-center justify-between mb-6">
-            <h2 className="text-2xl font-bold text-gray-900">Donate</h2>
+            <h2 className="text-2xl font-bold text-gray-900">Support Climate Wavers</h2>
             <button
               onClick={onClose}
               className="text-gray-400 hover:text-gray-600 transition-colors"
@@ -313,7 +313,7 @@ const DonationForm = ({ onClose }) => {
           {convertedAmount > 0 && (
             <div className="bg-gray-50 p-4 rounded-lg mb-6">
               <div className="flex justify-between items-center">
-                <span className="text-gray-600">Donation Amount:</span>
+                <span className="text-gray-600">Support amount:</span>
                 <span className="font-semibold">${selectedAmount || customAmount} USD</span>
               </div>
               <div className="flex justify-between items-center text-sm text-gray-500">
@@ -323,13 +323,24 @@ const DonationForm = ({ onClose }) => {
             </div>
           )}
 
-          {/* Donate Button */}
+          <p className="mb-4 text-sm text-gray-600">
+            Fuel WhatsApp + email disaster alerts. Prefer planting?{" "}
+            <a href="/app/plant-tree" className="text-[#067d83] font-medium hover:underline">
+              Plant a tree
+            </a>
+            {" · "}
+            <a href="/pricing" className="text-[#067d83] font-medium hover:underline">
+              See pricing
+            </a>
+          </p>
+
+          {/* Support Button */}
           <button
             onClick={handlePayment}
             disabled={loading}
             className="w-full bg-[#067d83] text-white py-3 px-6 rounded-lg font-semibold hover:bg-[#055a5f] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {loading ? 'Processing...' : 'DONATE'}
+            {loading ? 'Processing...' : 'SUPPORT'}
           </button>
 
           {/* Security Note */}

@@ -113,24 +113,53 @@ class ResponderOrganizationAdmin(ModelAdmin):
         "city",
         "country",
         "verification_status",
+        "plan",
+        "plan_status",
+        "plan_ends_at",
         "contact_email",
         "whatsapp_opt_in",
         "created_at",
     )
-    list_filter = ("verification_status", "org_type", "country", "whatsapp_opt_in")
+    list_filter = (
+        "verification_status",
+        "plan",
+        "plan_status",
+        "org_type",
+        "country",
+        "whatsapp_opt_in",
+    )
     search_fields = ("name", "city", "contact_email", "contact_phone")
-    actions = ["approve_organizations", "reject_organizations"]
+    actions = [
+        "approve_organizations",
+        "reject_organizations",
+        "activate_paid_plans",
+    ]
 
-    @admin.action(description="Approve selected responder organizations")
+    @admin.action(description="Approve + start 90-day RapidBrief pilot")
     def approve_organizations(self, request, queryset):
-        queryset.update(
-            verification_status="approved",
-            verified_at=timezone.now(),
-        )
+        from .pricing import start_pilot
+
+        for org in queryset:
+            org.verification_status = "approved"
+            org.verified_at = timezone.now()
+            start_pilot(org)
+            org.save()
 
     @admin.action(description="Reject selected responder organizations")
     def reject_organizations(self, request, queryset):
-        queryset.update(verification_status="rejected", verified_at=None)
+        queryset.update(
+            verification_status="rejected",
+            verified_at=None,
+            plan_status="pending",
+        )
+
+    @admin.action(description="Mark plan active (paid / 30 days)")
+    def activate_paid_plans(self, request, queryset):
+        from .pricing import activate_paid_plan
+
+        for org in queryset.filter(verification_status="approved"):
+            activate_paid_plan(org)
+            org.save()
 
 
 @admin.register(ResponderMembership)

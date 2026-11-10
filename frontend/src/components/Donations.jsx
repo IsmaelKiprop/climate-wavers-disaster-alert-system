@@ -40,10 +40,10 @@ const Donations = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-8">
           <h1 className="text-4xl font-bold text-gray-900 mb-4">
-            Support Climate Relief
+            Support Climate Wavers
           </h1>
           <p className="text-xl text-gray-600">
-            Your donations help communities affected by climate disasters
+            Fuel WhatsApp + email alerts, or back a verified planting campaign
           </p>
         </div>
 
@@ -103,7 +103,7 @@ const Donations = () => {
                     onClick={() => setSelectedCampaign(campaign)}
                     className="w-full bg-[#2F4F4F] text-white py-2 px-4 rounded-md hover:bg-[#1F3F3F] transition-colors"
                   >
-                    Donate Now
+                    Support this campaign
                   </button>
                 </div>
               </div>

@@ -35,6 +35,7 @@ export const FOOTER_INFORMATION = [
 export const FOOTER_SERVICES = [
   { to: "/about", label: "About Us" },
   { to: "/contact", label: "Contact Us" },
+  { to: "/pricing", label: "Pricing" },
   { to: "/consulting", label: "Consulting" },
-  { to: "/support", label: "Support" },
+  { to: "/support", label: "Help" },
 ];

@@ -1430,6 +1430,26 @@ class ResponderOrganization(models.Model):
         max_length=20, choices=VERIFICATION_STATUSES, default="pending"
     )
     verified_at = models.DateTimeField(null=True, blank=True)
+    # RapidBrief monetization — pilot starts on admin approve.
+    PLAN_CHOICES = [
+        ("pilot", "RapidBrief Pilot"),
+        ("ngo", "RapidBrief NGO"),
+        ("org", "RapidBrief Org"),
+        ("partner", "FlowOps Partner"),
+    ]
+    PLAN_STATUS_CHOICES = [
+        ("pending", "Pending verification"),
+        ("trial", "Trial"),
+        ("active", "Active"),
+        ("expired", "Expired"),
+    ]
+    plan = models.CharField(max_length=20, choices=PLAN_CHOICES, default="pilot")
+    plan_status = models.CharField(
+        max_length=20, choices=PLAN_STATUS_CHOICES, default="pending"
+    )
+    plan_started_at = models.DateTimeField(null=True, blank=True)
+    plan_ends_at = models.DateTimeField(null=True, blank=True)
+    max_seats = models.PositiveIntegerField(default=5)
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -1446,10 +1466,17 @@ class ResponderOrganization(models.Model):
             models.Index(fields=["verification_status"]),
             models.Index(fields=["latitude", "longitude"]),
             models.Index(fields=["country", "verification_status"]),
+            models.Index(fields=["plan", "plan_status"]),
         ]
 
     def __str__(self):
         return f"{self.name} ({self.verification_status})"
+
+    @property
+    def has_rapidbrief_access(self):
+        from .pricing import has_rapidbrief_access
+
+        return has_rapidbrief_access(self)
 
 
 class ResponderMembership(models.Model):

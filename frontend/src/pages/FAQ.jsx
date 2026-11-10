@@ -26,7 +26,7 @@ const ITEMS = [
   },
   {
     q: "Do I need an account?",
-    a: "Not to browse live events. You need an account to post, plant trees, donate to a campaign, or use WaverX. Create one at /signup.",
+    a: "Not to browse live events. You need an account to post, plant trees, support a campaign, or use WaverX. Create one at /signup. Org pricing is at /pricing.",
   },
   {
     q: "How do tree campaigns work?",

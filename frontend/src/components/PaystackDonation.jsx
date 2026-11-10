@@ -99,7 +99,7 @@ const PaystackDonation = ({ campaign, onSuccess, onClose: onModalClose }) => {
       // Show success message
       await Swal.fire({
         title: 'Donation Successful!',
-        text: `Thank you for your donation of $${amount} to support this campaign.`,
+        text: `Thank you for supporting this campaign with $${amount}.`,
         icon: 'success',
         confirmButtonText: 'OK'
       });
@@ -145,7 +145,7 @@ const PaystackDonation = ({ campaign, onSuccess, onClose: onModalClose }) => {
     if (!amount || parseFloat(amount) <= 0) {
       Swal.fire({
         title: 'Invalid Amount',
-        text: 'Please enter a valid donation amount',
+        text: 'Please enter a valid support amount',
         icon: 'warning',
         confirmButtonText: 'OK'
       });
@@ -363,7 +363,7 @@ const PaystackDonation = ({ campaign, onSuccess, onClose: onModalClose }) => {
                 Processing...
               </div>
             ) : (
-              `Donate $${amount || '0'}${convertedAmount ? ` (≈ ${selectedCurrency.symbol}${convertedAmount.toFixed(0)})` : ''}`
+              `Support $${amount || '0'}${convertedAmount ? ` (≈ ${selectedCurrency.symbol}${convertedAmount.toFixed(0)})` : ''}`
             )}
           </button>
         </form>
@@ -383,7 +383,7 @@ const PaystackDonation = ({ campaign, onSuccess, onClose: onModalClose }) => {
       
       {/* Campaign Impact - Compact version */}
       <div className="bg-green-50 p-2 rounded-b-lg border-t border-green-100">
-        <h4 className="text-xs font-medium text-green-800 mb-1">Your donation helps:</h4>
+        <h4 className="text-xs font-medium text-green-800 mb-1">Your support helps:</h4>
         <div className="flex flex-wrap text-xs text-green-700">
           <div className="flex items-center mr-3 mb-1">
             <svg className="w-3 h-3 text-green-600 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">

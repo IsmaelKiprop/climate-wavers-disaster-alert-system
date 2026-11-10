@@ -42,12 +42,20 @@ const Consulting = () => {
           get matched disaster dispatches, AI mobilization briefs, and a live response desk.
           Applications are reviewed by Climate Wavers admins before unlock.
         </p>
-        <Link
-          to="/responders/apply"
-          className="inline-flex mt-4 min-h-11 items-center px-5 bg-primary text-primary-foreground text-sm font-medium"
-        >
-          Apply as Responder
-        </Link>
+        <div className="mt-4 flex flex-wrap gap-3">
+          <Link
+            to="/responders/apply"
+            className="inline-flex min-h-11 items-center px-5 bg-primary text-primary-foreground text-sm font-medium"
+          >
+            Apply as Responder
+          </Link>
+          <Link
+            to="/pricing"
+            className="inline-flex min-h-11 items-center px-5 border border-border text-sm font-medium"
+          >
+            View pricing
+          </Link>
+        </div>
         <p className="mt-3 text-xs text-muted">
           No personal account needed. Organizations create a workspace and apply in one step.{" "}
           <Link to="/login?redirect=/app/responder/apply" className="text-primary">

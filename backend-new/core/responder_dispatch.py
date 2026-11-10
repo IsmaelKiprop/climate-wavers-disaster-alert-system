@@ -60,6 +60,9 @@ def match_responder_orgs(lat, lng, city, country, disaster_type, limit=20):
     country_l = (country or "").strip().lower()
 
     for org in orgs:
+        # Only orgs with an active/trial RapidBrief plan get live dispatches.
+        if not getattr(org, "has_rapidbrief_access", False):
+            continue
         if not _type_matches(org, disaster_type):
             continue
         dist = None

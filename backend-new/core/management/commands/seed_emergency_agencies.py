@@ -91,6 +91,8 @@ class Command(BaseCommand):
 
         responder_msg = "No RapidBrief sample (need Red Cross with email)."
         if red_cross:
+            from core.pricing import start_pilot
+
             org, org_created = ResponderOrganization.objects.update_or_create(
                 name=red_cross.name,
                 defaults={
@@ -107,10 +109,14 @@ class Command(BaseCommand):
                     "whatsapp_opt_in": False,
                     "verification_status": "approved",
                     "verified_at": timezone.now(),
+                    "plan": "ngo",
                 },
             )
+            start_pilot(org, "ngo")
+            org.save()
             responder_msg = (
-                f"RapidBrief sample {'created' if org_created else 'updated'}: {org.name} (approved)."
+                f"RapidBrief sample {'created' if org_created else 'updated'}: {org.name} "
+                f"(approved, {org.plan_status})."
             )
 
         self.stdout.write(

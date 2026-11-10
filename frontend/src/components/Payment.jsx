@@ -28,7 +28,7 @@ const Payment = ({ campaignId, campaignTitle, targetAmount }) => {
       return;
     }
     if (parseInt(amount, 10) < 100) {
-      toast.error("Minimum donation amount is ₦100");
+      toast.error("Minimum support amount is ₦100");
       return;
     }
     if (!window.PaystackPop) {
@@ -47,7 +47,7 @@ const Payment = ({ campaignId, campaignTitle, targetAmount }) => {
         campaign_title: campaignTitle,
       },
       callback: () => {
-        toast.success("Payment successful. Thank you for your donation.");
+        toast.success("Payment successful. Thank you for supporting Climate Wavers.");
         setAmount("");
         setEmail("");
       },
@@ -59,7 +59,7 @@ const Payment = ({ campaignId, campaignTitle, targetAmount }) => {
   return (
     <div className="max-w-md mx-auto bg-surface border border-border p-6" style={{ borderRadius: 5 }}>
       <h2 className="text-xl font-semibold text-foreground mb-5 text-center">
-        Donate to {campaignTitle}
+        Support {campaignTitle}
       </h2>
 
       <div className="space-y-4">
@@ -110,7 +110,7 @@ const Payment = ({ campaignId, campaignTitle, targetAmount }) => {
           className="w-full h-11 bg-primary text-primary-foreground font-medium hover:bg-primary-dark disabled:opacity-60"
           style={{ borderRadius: 5 }}
         >
-          {ready ? "Donate now" : "Loading payment…"}
+          {ready ? "Support now" : "Loading payment…"}
         </button>
       </div>
 
