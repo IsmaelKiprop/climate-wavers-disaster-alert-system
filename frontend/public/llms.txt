@@ -1,0 +1,24 @@
+# Climate Wavers
+
+> Disaster alert verification and climate action platform from FlowOps Africa in Nairobi, Kenya.
+
+Climate Wavers publishes live USGS earthquake and NASA EONET events, hosts tree-planting campaigns, and builds toward verified alerts that do not amplify rumor as fact.
+
+## Primary pages
+
+- Home: https://alerts.flowops.africa/
+- About: https://alerts.flowops.africa/about
+- Impact: https://alerts.flowops.africa/impact
+- FAQ: https://alerts.flowops.africa/faq
+- Contact: https://alerts.flowops.africa/contact
+- Consulting: https://alerts.flowops.africa/consulting
+- Support: https://alerts.flowops.africa/support
+- Privacy: https://alerts.flowops.africa/privacy-policy
+- Terms: https://alerts.flowops.africa/terms-of-service
+
+## Organization
+
+- Product: Climate Wavers
+- Lab: FlowOps Africa (Nairobi, Kenya)
+- Contact: hello@flowops.africa
+- Research: https://www.flowops.africa/projects/disaster-alert-verification

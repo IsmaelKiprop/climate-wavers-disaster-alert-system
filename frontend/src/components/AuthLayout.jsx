@@ -1,4 +1,5 @@
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
+import { AuthUtilitySEO } from "./SEOComponents";
 
 const AuthLayout = ({
   title,
@@ -12,9 +13,12 @@ const AuthLayout = ({
   footerNote = "Live official feeds. Human review before high-impact send.",
   align = "center",
 }) => {
+  const location = useLocation();
   const mainAlign = align === "start" ? "items-start" : "items-start sm:items-center";
 
   return (
+    <>
+    <AuthUtilitySEO title={title || "Account"} path={location.pathname} />
     <div className="min-h-[100dvh] bg-background flex">
       <aside className="hidden lg:flex w-[42%] xl:w-[480px] shrink-0 bg-primary text-primary-foreground flex-col p-8 xl:p-10 min-h-[100dvh]">
         <div>
@@ -102,6 +106,7 @@ const AuthLayout = ({
         </div>
       </main>
     </div>
+    </>
   );
 };
 

@@ -1,15 +1,15 @@
 import { Helmet } from "react-helmet-async";
-import { env } from "../config/env";
+import { SITE } from "../config/site";
 
-const SITE_URL = env.siteUrl || "https://alerts.flowops.africa";
+const SITE_URL = SITE.url || "https://alerts.flowops.africa";
 const DEFAULT_IMAGE = `${SITE_URL}/og-image.jpg`;
 const DEFAULT_DESCRIPTION =
-  "Real-time disaster alerts, community response, and climate action. Track hazards, plant trees, and coordinate with communities across Africa.";
+  "Real-time USGS and NASA disaster alerts, community response, and climate action. Built in Nairobi to verify hazards instead of amplifying rumors.";
 
 const SEO = ({
-  title = "Climate Wavers — Disaster Alerts & Climate Action",
+  title = "Climate Wavers: Disaster Alerts & Climate Action",
   description = DEFAULT_DESCRIPTION,
-  keywords = "climate change, disaster alerts, environmental action, climate activism, disaster preparedness, Kenya, Africa, early warning",
+  keywords = "disaster alerts, climate action, USGS, NASA EONET, early warning Africa, Nairobi, Kenya, verified alerts",
   image = DEFAULT_IMAGE,
   url = SITE_URL,
   type = "website",
@@ -28,17 +28,29 @@ const SEO = ({
   const fullImage = image.startsWith("http")
     ? image
     : `${SITE_URL}${image.startsWith("/") ? image : `/${image}`}`;
+  const robots = [
+    noindex ? "noindex" : "index",
+    nofollow ? "nofollow" : "follow",
+    "max-image-preview:large",
+    "max-snippet:-1",
+    "max-video-preview:-1",
+  ].join(", ");
+
+  const schemaBlocks = Array.isArray(structuredData)
+    ? structuredData.filter(Boolean)
+    : structuredData
+      ? [structuredData]
+      : [];
 
   return (
     <Helmet>
+      <html lang="en" />
       <title>{fullTitle}</title>
       <meta name="description" content={description} />
-      <meta name="keywords" content={keywords} />
+      {keywords ? <meta name="keywords" content={keywords} /> : null}
       <meta name="author" content={author} />
-      <meta
-        name="robots"
-        content={`${noindex ? "noindex" : "index"}, ${nofollow ? "nofollow" : "follow"}`}
-      />
+      <meta name="robots" content={robots} />
+      <meta name="googlebot" content={robots} />
       <link rel="canonical" href={canonical || fullUrl} />
 
       <meta property="og:type" content={type} />
@@ -54,18 +66,18 @@ const SEO = ({
       <meta property="og:site_name" content="Climate Wavers" />
       <meta property="og:locale" content="en_US" />
 
-      {type === "article" && publishedTime && (
+      {type === "article" && publishedTime ? (
         <meta property="article:published_time" content={publishedTime} />
-      )}
-      {type === "article" && modifiedTime && (
+      ) : null}
+      {type === "article" && modifiedTime ? (
         <meta property="article:modified_time" content={modifiedTime} />
-      )}
-      {type === "article" && author && (
+      ) : null}
+      {type === "article" && author ? (
         <meta property="article:author" content={author} />
-      )}
-      {type === "article" && section && (
+      ) : null}
+      {type === "article" && section ? (
         <meta property="article:section" content={section} />
-      )}
+      ) : null}
       {type === "article" &&
         tags.length > 0 &&
         tags.map((tag) => <meta key={tag} property="article:tag" content={tag} />)}
@@ -80,13 +92,16 @@ const SEO = ({
 
       <meta name="theme-color" content="#067d83" />
       <meta name="msapplication-TileColor" content="#067d83" />
+      <meta name="mobile-web-app-capable" content="yes" />
       <meta name="apple-mobile-web-app-capable" content="yes" />
       <meta name="apple-mobile-web-app-status-bar-style" content="default" />
       <meta name="apple-mobile-web-app-title" content="Climate Wavers" />
 
-      {structuredData && (
-        <script type="application/ld+json">{JSON.stringify(structuredData)}</script>
-      )}
+      {schemaBlocks.map((block, index) => (
+        <script key={`ld-${index}`} type="application/ld+json">
+          {JSON.stringify(block)}
+        </script>
+      ))}
     </Helmet>
   );
 };

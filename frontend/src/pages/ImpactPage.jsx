@@ -25,7 +25,15 @@ const ImpactPage = () => {
     <PublicPage
       title="Impact"
       description="Live USGS and NASA events plus tree-planting records currently shown on Climate Wavers."
+      keywords="Climate Wavers impact, disaster monitoring Africa, tree planting impact, USGS NASA alerts"
       wide
+      structuredData={{
+        "@context": "https://schema.org",
+        "@type": "WebPage",
+        name: "Climate Wavers Impact",
+        description: "Live USGS and NASA events plus tree-planting records currently shown on Climate Wavers.",
+        url: `${SITE.url}/impact`,
+      }}
     >
       <p className="text-xs font-semibold uppercase tracking-wide text-muted">What we can stand behind</p>
       <h1 className="mt-2 text-3xl sm:text-4xl font-semibold">Impact</h1>

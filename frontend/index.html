@@ -44,35 +44,35 @@
     </script>
     
     <!-- Primary Meta Tags -->
-    <title>Climate Wavers — Disaster Alerts & Climate Action</title>
-    <meta name="title" content="Climate Wavers — Disaster Alerts & Climate Action" />
-    <meta name="description" content="Real-time disaster alerts, community response, and climate action. Track hazards, plant trees, and coordinate with communities across Africa." />
-    <meta name="keywords" content="climate change, disaster alerts, environmental action, climate activism, disaster preparedness, Kenya, Africa, early warning" />
+    <title>Climate Wavers: Disaster Alerts & Climate Action</title>
+    <meta name="title" content="Climate Wavers: Disaster Alerts & Climate Action" />
+    <meta name="description" content="Real-time USGS and NASA disaster alerts, community response, and climate action. Built in Nairobi to verify hazards instead of amplifying rumors." />
+    <meta name="keywords" content="disaster alerts, climate action, USGS earthquakes, NASA EONET, early warning Africa, Nairobi, Kenya, verified alerts, tree planting" />
     <meta name="author" content="Climate Wavers" />
-    <meta name="robots" content="index, follow" />
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
     <link rel="canonical" href="https://alerts.flowops.africa/" />
     
     <!-- Open Graph / Facebook / WhatsApp -->
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://alerts.flowops.africa/" />
-    <meta property="og:title" content="Climate Wavers — Disaster Alerts & Climate Action" />
-    <meta property="og:description" content="Real-time disaster alerts, community response, and climate action. Track hazards, plant trees, and coordinate with communities across Africa." />
+    <meta property="og:title" content="Climate Wavers: Disaster Alerts & Climate Action" />
+    <meta property="og:description" content="Real-time USGS and NASA disaster alerts, community response, and climate action. Built in Nairobi to verify hazards instead of amplifying rumors." />
     <meta property="og:image" content="https://alerts.flowops.africa/og-image.jpg" />
     <meta property="og:image:secure_url" content="https://alerts.flowops.africa/og-image.jpg" />
     <meta property="og:image:type" content="image/jpeg" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content="Climate Wavers — Disaster alerts, community response, climate action" />
+    <meta property="og:image:alt" content="Climate Wavers: Disaster alerts, community response, climate action" />
     <meta property="og:site_name" content="Climate Wavers" />
     <meta property="og:locale" content="en_US" />
     
     <!-- Twitter / X -->
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:url" content="https://alerts.flowops.africa/" />
-    <meta name="twitter:title" content="Climate Wavers — Disaster Alerts & Climate Action" />
-    <meta name="twitter:description" content="Real-time disaster alerts, community response, and climate action. Track hazards, plant trees, and coordinate with communities across Africa." />
+    <meta name="twitter:title" content="Climate Wavers: Disaster Alerts & Climate Action" />
+    <meta name="twitter:description" content="Real-time USGS and NASA disaster alerts, community response, and climate action. Built in Nairobi to verify hazards instead of amplifying rumors." />
     <meta name="twitter:image" content="https://alerts.flowops.africa/og-image.jpg" />
-    <meta name="twitter:image:alt" content="Climate Wavers — Disaster alerts, community response, climate action" />
+    <meta name="twitter:image:alt" content="Climate Wavers: Disaster alerts, community response, climate action" />
     <meta name="twitter:site" content="@ClimateWavers" />
     <meta name="twitter:creator" content="@ClimateWavers" />
     
@@ -85,7 +85,8 @@
     <meta name="apple-mobile-web-app-title" content="Climate Wavers" />
     
     <!-- Favicon and Icons -->
-    <link rel="icon" type="image/svg+xml" href="/Vector.png" />
+    <link rel="icon" type="image/png" href="/Vector.png" />
+    <link rel="apple-touch-icon" href="/logo.jpg" />
     <link rel="manifest" href="/site.webmanifest" />
     
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -96,24 +97,46 @@
     <script type="application/ld+json">
     {
       "@context": "https://schema.org",
-      "@type": "WebSite",
-      "name": "Climate Wavers",
-      "url": "https://alerts.flowops.africa",
-      "description": "Real-time disaster alerts, community response, and climate action across Africa.",
-      "publisher": {
-        "@type": "Organization",
-        "name": "Climate Wavers",
-        "url": "https://alerts.flowops.africa",
-        "logo": {
-          "@type": "ImageObject",
-          "url": "https://alerts.flowops.africa/Vector.png"
+      "@graph": [
+        {
+          "@type": "Organization",
+          "@id": "https://alerts.flowops.africa/#organization",
+          "name": "Climate Wavers",
+          "url": "https://alerts.flowops.africa",
+          "logo": {
+            "@type": "ImageObject",
+            "url": "https://alerts.flowops.africa/Vector.png"
+          },
+          "email": "hello@flowops.africa",
+          "address": {
+            "@type": "PostalAddress",
+            "addressLocality": "Nairobi",
+            "addressCountry": "KE"
+          },
+          "parentOrganization": {
+            "@type": "Organization",
+            "name": "FlowOps Africa",
+            "url": "https://www.flowops.africa/"
+          },
+          "sameAs": [
+            "https://facebook.com/climatewavers",
+            "https://youtube.com/@climatewavers",
+            "https://x.com/climatewavers",
+            "https://www.linkedin.com/company/climate-wavers-by-flowops-africa/"
+          ]
+        },
+        {
+          "@type": "WebSite",
+          "@id": "https://alerts.flowops.africa/#website",
+          "name": "Climate Wavers",
+          "url": "https://alerts.flowops.africa",
+          "description": "Real-time USGS and NASA disaster alerts, community response, and climate action across Africa.",
+          "publisher": {
+            "@id": "https://alerts.flowops.africa/#organization"
+          },
+          "inLanguage": "en"
         }
-      },
-      "potentialAction": {
-        "@type": "SearchAction",
-        "target": "https://alerts.flowops.africa/search?q={search_term_string}",
-        "query-input": "required name=search_term_string"
-      }
+      ]
     }
     </script>
   </head>

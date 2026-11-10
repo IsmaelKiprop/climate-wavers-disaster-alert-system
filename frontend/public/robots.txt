@@ -1,25 +1,40 @@
 User-agent: *
 Allow: /
 
-# Sitemap
-Sitemap: https://climatewavers.org/sitemap.xml
+# Canonical sitemap
+Sitemap: https://alerts.flowops.africa/sitemap.xml
 
-# Disallow admin and private areas
+# Private and app areas
 Disallow: /app/
 Disallow: /api/
 Disallow: /admin/
 Disallow: /onboarding/
 Disallow: /uploadphoto
 Disallow: /uploadcover
+Disallow: /payment-success
+Disallow: /forgotpassword
+Disallow: /resetpassword
+Disallow: /emailcode
+Disallow: /phonecode
+Disallow: /verifyphone
+Disallow: /verifymail
+Disallow: /verifypasswordreset
+Disallow: /login
+Disallow: /signup
 
-# Allow important pages
+# Public marketing and content
 Allow: /
 Allow: /about
 Allow: /impact
-Allow: /landing
-Allow: /disasters
-Allow: /campaigns
-Allow: /bot
-
-# Crawl delay (optional)
-Crawl-delay: 1
+Allow: /faq
+Allow: /contact
+Allow: /support
+Allow: /consulting
+Allow: /privacy-policy
+Allow: /terms-of-service
+Allow: /traffic-report
+Allow: /transparency-report
+Allow: /responders/apply
+Allow: /project
+Allow: /u/
+Allow: /disasters/

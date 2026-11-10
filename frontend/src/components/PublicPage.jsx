@@ -1,27 +1,46 @@
-import { Link } from "react-router-dom";
-import { Helmet } from "react-helmet-async";
+import { Link, useLocation } from "react-router-dom";
 import { SITE } from "../config/site";
 import { getAuthToken } from "../utils/factory";
+import SEO from "./SEO";
 import SiteFooter from "./SiteFooter";
 
-export default function PublicPage({ title, description, wide = false, children }) {
+export default function PublicPage({
+  title,
+  description,
+  wide = false,
+  children,
+  keywords,
+  structuredData,
+  noindex = false,
+  image,
+  type = "website",
+  canonical,
+  path,
+}) {
+  const location = useLocation();
   const signedIn = Boolean(getAuthToken());
   const homeTo = signedIn ? "/app" : "/";
   const homeLabel = signedIn ? "Dashboard" : "Home";
+  const pagePath = path || location.pathname;
 
   return (
     <>
-      <Helmet>
-        <title>
-          {title} | {SITE.name}
-        </title>
-        <meta name="description" content={description} />
-      </Helmet>
+      <SEO
+        title={title}
+        description={description}
+        keywords={keywords}
+        url={pagePath}
+        canonical={canonical}
+        structuredData={structuredData}
+        noindex={noindex}
+        image={image}
+        type={type}
+      />
       <main className="min-h-[100dvh] bg-background text-foreground flex flex-col overflow-x-hidden">
         <header className="bg-surface border-b border-border">
           <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between gap-3">
             <Link to={homeTo} className="flex items-center min-w-0">
-              <img alt="" src="/logo.jpg" className="h-8 w-auto mr-3" />
+              <img alt="Climate Wavers" src="/logo.jpg" className="h-8 w-auto mr-3" width="32" height="32" />
               <span className="font-semibold text-primary truncate">{SITE.name}</span>
             </Link>
             <Link

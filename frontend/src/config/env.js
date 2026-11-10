@@ -27,7 +27,7 @@ export const env = {
     import.meta.env.VITE_SITE_URL ||
       (typeof window !== "undefined" && window.location.hostname !== "localhost"
         ? window.location.origin
-        : "https://climatewavers.org")
+        : "https://alerts.flowops.africa")
   ),
 };
 

@@ -429,10 +429,15 @@ const LandingPage = () => {
         {heroReady ? (
           <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center pb-16">
             <div className="max-w-3xl mx-auto">
-              <h1 className="text-3xl sm:text-4xl md:text-5xl font-semibold text-white mb-4 leading-tight">
-                <span className="block">{HERO_SLIDES[currentSlide].title}</span>
-                <span className="block">{HERO_SLIDES[currentSlide].subtitle}</span>
-            </h1>
+              <p className="text-xs sm:text-sm font-semibold uppercase tracking-[0.18em] text-white/80 mb-3">
+                Climate Wavers
+              </p>
+              <h1 className="text-3xl sm:text-4xl md:text-5xl font-semibold text-white mb-3 leading-tight">
+                Disaster alerts verified from Nairobi
+              </h1>
+              <p className="text-lg sm:text-xl font-medium text-white mb-3 leading-snug" aria-live="polite">
+                <span className="block">{HERO_SLIDES[currentSlide].title} {HERO_SLIDES[currentSlide].subtitle}</span>
+              </p>
               <p className="text-base sm:text-lg text-white/90 mb-8 max-w-2xl mx-auto leading-relaxed">
                 {HERO_SLIDES[currentSlide].description}
               </p>

@@ -178,10 +178,51 @@ const DisasterPage = () => {
     );
   }
 
+  const detailText = (
+    disaster?.details ||
+    disaster?.description ||
+    `Live ${typeLabel} report on Climate Wavers.`
+  ).slice(0, 160);
+  const pageUrl = `${SITE.url}/disasters/${encodeURIComponent(decodedId)}`;
+
   return (
     <PublicPage
       title={title}
-      description={disaster?.details || disaster?.description || "Live disaster report from Climate Wavers."}
+      description={detailText}
+      keywords={`${typeLabel}, disaster alert, ${disaster?.country || disaster?.region || "Africa"}, Climate Wavers`}
+      path={`/disasters/${encodeURIComponent(decodedId)}`}
+      type="article"
+      structuredData={
+        disaster
+          ? {
+              "@context": "https://schema.org",
+              "@type": "NewsArticle",
+              headline: title,
+              description: detailText,
+              url: pageUrl,
+              datePublished: disaster.startDate || disaster.lastUpdated || undefined,
+              dateModified: disaster.lastUpdated || disaster.startDate || undefined,
+              author: {
+                "@type": "Organization",
+                name: SITE.name,
+                url: SITE.url,
+              },
+              publisher: {
+                "@type": "Organization",
+                name: SITE.name,
+                url: SITE.url,
+                logo: {
+                  "@type": "ImageObject",
+                  url: `${SITE.url}/Vector.png`,
+                },
+              },
+              about: {
+                "@type": "Thing",
+                name: typeLabel,
+              },
+            }
+          : undefined
+      }
     >
       {report}
     </PublicPage>

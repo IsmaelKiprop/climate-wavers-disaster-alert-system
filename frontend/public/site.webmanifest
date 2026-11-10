@@ -1,11 +1,11 @@
 {
   "name": "Climate Wavers",
-  "short_name": "ClimateWavers",
-  "description": "Disaster Alert & Climate Action Platform",
+  "short_name": "Climate Wavers",
+  "description": "Disaster alerts and climate action from FlowOps Africa in Nairobi.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
-  "theme_color": "#10B981",
+  "theme_color": "#067d83",
   "orientation": "portrait-primary",
   "icons": [
     {

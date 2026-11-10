@@ -7,7 +7,25 @@ const AboutPage = () => {
     <PublicPage
       title="About"
       description={`${SITE.name} is the live disaster platform from ${SITE.org.name} in ${SITE.org.city}. Official feeds now. Verified alerts as the endgame.`}
+      keywords="about Climate Wavers, FlowOps Africa, Nairobi disaster alerts, alert verification"
       wide
+      structuredData={{
+        "@context": "https://schema.org",
+        "@type": "AboutPage",
+        name: "About Climate Wavers",
+        description: `${SITE.name} is the live disaster platform from ${SITE.org.name} in ${SITE.org.city}.`,
+        url: `${SITE.url}/about`,
+        mainEntity: {
+          "@type": "Organization",
+          name: SITE.name,
+          url: SITE.url,
+          parentOrganization: {
+            "@type": "Organization",
+            name: SITE.org.name,
+            url: SITE.org.url,
+          },
+        },
+      }}
     >
       <p className="text-xs font-semibold uppercase tracking-wide text-muted">
         Origin · {SITE.org.city}

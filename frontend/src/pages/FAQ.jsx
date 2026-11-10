@@ -45,6 +45,19 @@ const FAQ = () => {
     <PublicPage
       title="FAQ"
       description="Answers about live USGS and NASA data, FlowOps research, accounts, and tree campaigns."
+      keywords="Climate Wavers FAQ, USGS NASA disaster alerts, FlowOps Africa, tree campaigns help"
+      structuredData={{
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        mainEntity: ITEMS.map((item) => ({
+          "@type": "Question",
+          name: item.q,
+          acceptedAnswer: {
+            "@type": "Answer",
+            text: item.a,
+          },
+        })),
+      }}
     >
       <h1 className="text-3xl sm:text-4xl font-semibold">Frequently asked questions</h1>
       <p className="mt-3 text-muted">About the live map, the Nairobi research, accounts, and campaigns.</p>
