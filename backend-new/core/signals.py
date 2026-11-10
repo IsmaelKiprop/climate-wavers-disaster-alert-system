@@ -1,13 +1,17 @@
+import logging
+
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from .models import Post, Comment, Reaction, Repost, PollInteraction, Notification, Follow, Bookmark
 from .serializers import PostSerializer, CommentSerializer
+from . import social_email
 from api.models import User
 from django.contrib.contenttypes.models import ContentType
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 
 channel_layer = get_channel_layer()
+logger = logging.getLogger(__name__)
 
 
 def send_to_websocket(notification_id, group_name, message, noticee_user, notification_type, content=None):
@@ -71,6 +75,12 @@ def notify_followers_on_post_creation(sender, instance, created, **kwargs):
                     instance.user,
                     notification.notification_type,
                     PostSerializer(instance,  context={'request': None}).data)
+                social_email.send_social_email(
+                    follower,
+                    subject=f"{instance.user.username} posted on Climate Wavers",
+                    message=notification.message,
+                    link=social_email.post_url(instance.id),
+                )
 
 
 @receiver(post_save, sender=Comment)
@@ -97,6 +107,12 @@ def notify_post_author_and_commenters(sender, instance, created, **kwargs):
                 notification.notification_type,
                 CommentSerializer(instance,  context={'request': None}).data
             )
+            social_email.send_social_email(
+                post_author,
+                subject=f"{instance.user.username} commented on your post",
+                message=notification.message,
+                link=social_email.post_url(instance.post_id),
+            )
 
         # Notify other commenters
 
@@ -116,6 +132,12 @@ def notify_post_author_and_commenters(sender, instance, created, **kwargs):
                 instance.user,
                 notification.notification_type,
                 CommentSerializer(instance,  context={'request': None}).data
+            )
+            social_email.send_social_email(
+                commenter,
+                subject=f"{instance.user.username} replied on a post you commented on",
+                message=notification.message,
+                link=social_email.post_url(instance.post_id),
             )
 
 
@@ -153,6 +175,16 @@ def notify_author_on_reaction(sender, instance, created, **kwargs):
                 notification.notification_type,
                 content
             )
+            social_email.send_social_email(
+                content_author,
+                subject=f"{instance.user.username} liked your {instance.content_type.model}",
+                message=notification.message,
+                link=(
+                    social_email.post_url(content_id)
+                    if instance.content_type == ContentType.objects.get_for_model(Post)
+                    else social_email.notifications_url()
+                ),
+            )
 
 
 @receiver(post_save, sender=Repost)
@@ -186,6 +218,12 @@ def notify_original_post_author(sender, instance, created, **kwargs):
                 instance.user,
                 notification.notification_type,
                 content
+            )
+            social_email.send_social_email(
+                original_post_author,
+                subject=f"{instance.user.username} reposted your {instance.content_type.model}",
+                message=notification.message,
+                link=social_email.post_url(content_id),
             )
 
 
@@ -236,13 +274,18 @@ def notify_user_on_new_follower(sender, instance, created, **kwargs):
                 }
             },
         )
+        social_email.send_social_email(
+            instance.following,
+            subject=f"{instance.follower.username} started following you",
+            message=notification.message,
+            link=social_email.profile_url(instance.follower_id),
+        )
     except Exception as exc:
-        import logging
-        logging.getLogger(__name__).warning("Follow notification failed: %s", exc)
+        logger.warning("Follow notification failed: %s", exc)
 
 
 @receiver(post_save, sender=Bookmark)
-def notify_original_post_author(sender, instance, created, **kwargs):
+def notify_author_on_bookmark(sender, instance, created, **kwargs):
     if created:
         if instance.content_type == ContentType.objects.get_for_model(Post):
             post = Post.objects.get(id=instance.object_id)
@@ -255,6 +298,8 @@ def notify_original_post_author(sender, instance, created, **kwargs):
             content_id = comment.id
             content = CommentSerializer(
                 comment,  context={'request': None}).data
+        else:
+            return
 
         # Skip notification if the user bookmarking is the original post author
         if original_post_author != instance.user:
@@ -272,4 +317,10 @@ def notify_original_post_author(sender, instance, created, **kwargs):
                 instance.user,
                 notification.notification_type,
                 content
+            )
+            social_email.send_social_email(
+                original_post_author,
+                subject=f"{instance.user.username} bookmarked your {instance.content_type.model}",
+                message=notification.message,
+                link=social_email.post_url(content_id),
             )

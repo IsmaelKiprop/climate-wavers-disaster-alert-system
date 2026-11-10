@@ -88,7 +88,8 @@ def _mail_copy(queue_name, payload):
         )
     if queue_name == "onboarding":
         return ("Welcome Aboard", "Welcome to Climate Wavers. Verify first. Send second.")
-    return ("Climate Wavers", data.get("content") or "A message from Climate Wavers.")
+    subject = (data.get("subject") or "").strip() or "Climate Wavers"
+    return (subject, data.get("content") or "A message from Climate Wavers.")
 
 
 def _is_cloudflare_block(status_code, body=""):
