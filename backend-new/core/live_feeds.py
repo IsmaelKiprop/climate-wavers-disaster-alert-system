@@ -28,7 +28,20 @@ def _fetch_usgs(timeout):
             coords = (feature.get("geometry") or {}).get("coordinates") or []
             mag = props.get("mag") or 0
             event_id = feature.get("id") or ""
-            detail = props.get("detail") or props.get("url") or ""
+            place = (props.get("place") or "").strip()
+            place_parts = [part.strip() for part in place.split(",") if part.strip()]
+            # Prefer human event page; USGS "detail" is raw GeoJSON.
+            human_url = (props.get("url") or "").strip()
+            if human_url.endswith(".geojson"):
+                human_url = ""
+            source_url = (
+                human_url
+                or (
+                    f"https://earthquake.usgs.gov/earthquakes/eventpage/{event_id}"
+                    if event_id
+                    else ""
+                )
+            )
             events.append(
                 {
                     "id": event_id,
@@ -42,9 +55,10 @@ def _fetch_usgs(timeout):
                         else "moderate"
                     ),
                     "status": "ongoing",
-                    "country": (props.get("place") or "").split(",")[-1].strip(),
-                    "region": props.get("place") or "",
-                    "city": (props.get("place") or "").split(",")[0].strip(),
+                    "country": place_parts[-1] if place_parts else "",
+                    # Keep place once; avoid city+region+country duplication in UI.
+                    "region": place,
+                    "city": "",
                     "latitude": coords[1] if len(coords) > 1 else None,
                     "longitude": coords[0] if coords else None,
                     "description": props.get("title"),
@@ -57,8 +71,7 @@ def _fetch_usgs(timeout):
                         else None
                     ),
                     "official_source": "USGS",
-                    "source_url": detail
-                    or f"https://earthquake.usgs.gov/earthquakes/eventpage/{event_id}",
+                    "source_url": source_url,
                     "is_official": True,
                 }
             )

@@ -189,6 +189,8 @@ export function mapDisaster(disaster) {
   const startDate =
     typeof startRaw === "number" ? new Date(startRaw).toISOString() : startRaw;
 
+  const rawSourceUrl =
+    disaster.sourceUrl || disaster.source_url || disaster.url || disaster.link || "";
   return {
     id: disaster.id,
     title: disaster.title || `${disaster.region || disaster.city || ""}, ${disaster.country || ""}`.trim(),
@@ -206,15 +208,53 @@ export function mapDisaster(disaster) {
     name: disaster.title || disaster.name || disaster.disasterType || "Disaster",
     type: disasterType,
     description: disaster.description || disaster.details || "",
-    location: [disaster.city, disaster.region, disaster.country].filter(Boolean).join(", "),
+    location: uniqueLocationLabel([disaster.city, disaster.region, disaster.country]),
     lastUpdated: disaster.updated_at || disaster.last_updated || disaster.start_date || disaster.startDate,
     source: disaster.source || disaster.official_source || (String(disaster.status).toLowerCase() === "unconfirmed" ? "Community report" : ""),
-    sourceUrl: disaster.sourceUrl || disaster.source_url || disaster.url || disaster.link || "",
+    sourceUrl: normalizeOfficialSourceUrl(rawSourceUrl, disaster.id, disaster.source || disaster.official_source),
     coordinates:
       Number.isFinite(lat) && Number.isFinite(lng)
         ? { lat, lng }
         : null,
   };
+}
+
+/** Deduplicate "city, full place, country" style USGS location strings. */
+export function uniqueLocationLabel(parts) {
+  const tokens = [];
+  for (const raw of parts || []) {
+    String(raw || "")
+      .split(",")
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .forEach((part) => tokens.push(part));
+  }
+  const out = [];
+  for (const part of tokens) {
+    const lower = part.toLowerCase();
+    if (out.some((existing) => existing.toLowerCase() === lower)) continue;
+    out.push(part);
+  }
+  return out.join(", ");
+}
+
+/** Prefer human USGS/NASA pages over raw GeoJSON detail feeds. */
+export function normalizeOfficialSourceUrl(url, eventId = "", source = "") {
+  const value = String(url || "").trim();
+  const id = String(eventId || "").trim();
+  const src = String(source || "").toLowerCase();
+
+  if (value.includes("earthquake.usgs.gov") && value.endsWith(".geojson")) {
+    const match = value.match(/\/detail\/([^/?#]+)\.geojson/i);
+    const usgsId = match?.[1] || id;
+    if (usgsId) return `https://earthquake.usgs.gov/earthquakes/eventpage/${usgsId}`;
+  }
+
+  if (!value && (src.includes("usgs") || /^us/i.test(id)) && id) {
+    return `https://earthquake.usgs.gov/earthquakes/eventpage/${id}`;
+  }
+
+  return value;
 }
 
 export function mapDisasterForMap(disaster) {
@@ -286,8 +326,15 @@ function mapUsgsFeature(feature) {
   const props = feature.properties || {};
   const coords = feature.geometry?.coordinates || [];
   const mag = Number(props.mag);
+  const eventId = feature.id || props.code;
+  const humanUrl =
+    props.url && !String(props.url).endsWith(".geojson")
+      ? props.url
+      : eventId
+        ? `https://earthquake.usgs.gov/earthquakes/eventpage/${eventId}`
+        : "";
   return mapDisaster({
-    id: feature.id || props.code,
+    id: eventId,
     title: props.title || `M${mag} earthquake`,
     name: props.title,
     disaster_type: "earthquake",
@@ -302,7 +349,7 @@ function mapUsgsFeature(feature) {
     start_date: props.time ? new Date(props.time).toISOString() : null,
     updated_at: props.updated ? new Date(props.updated).toISOString() : null,
     source: "USGS",
-    url: props.url || (feature.id ? `https://earthquake.usgs.gov/earthquakes/eventpage/${feature.id}` : ""),
+    url: humanUrl,
   });
 }
 

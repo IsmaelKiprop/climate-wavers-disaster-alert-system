@@ -6,7 +6,13 @@ import Topbar from "../components/Topbar";
 import DashboardSidebar from "../components/DashboardSidebar";
 import Menu from "../components/Menu";
 import Footer from "../components/FooterBar";
-import { disasterTypeFallback, fetchDisaster, getCachedDisaster } from "../utils/apiData";
+import {
+  disasterTypeFallback,
+  fetchDisaster,
+  getCachedDisaster,
+  normalizeOfficialSourceUrl,
+  uniqueLocationLabel,
+} from "../utils/apiData";
 import { getAuthToken } from "../utils/factory";
 import { SITE } from "../config/site";
 
@@ -75,6 +81,17 @@ const DisasterPage = () => {
       : disaster?.latitude != null && disaster?.longitude != null
         ? `${Number(disaster.latitude).toFixed(4)}, ${Number(disaster.longitude).toFixed(4)}`
         : "";
+  const locationLabel = uniqueLocationLabel([
+    disaster?.location,
+    disaster?.city,
+    disaster?.region,
+    disaster?.country,
+  ]);
+  const officialSourceUrl = normalizeOfficialSourceUrl(
+    disaster?.sourceUrl || disaster?.source_url || disaster?.url,
+    disaster?.id || decodedId,
+    disaster?.source
+  );
 
   const report = (
     <>
@@ -106,10 +123,10 @@ const DisasterPage = () => {
           <h1 className="mt-1 font-semibold text-xl sm:text-2xl">{title}</h1>
           <p className="mt-2 text-sm text-muted capitalize">{typeLabel}</p>
           <dl className="mt-4 grid gap-2 text-sm">
-            {disaster?.location ? (
+            {locationLabel ? (
               <div>
                 <dt className="font-medium text-foreground">Location</dt>
-                <dd className="text-muted">{disaster.location}</dd>
+                <dd className="text-muted">{locationLabel}</dd>
               </div>
             ) : null}
             {coords ? (
@@ -134,9 +151,9 @@ const DisasterPage = () => {
           <p className="mt-2 text-sm sm:text-base whitespace-pre-wrap">
             {disaster?.details || disaster?.description || "No description has been published for this report yet."}
           </p>
-          {disaster?.sourceUrl ? (
+          {officialSourceUrl ? (
             <a
-              href={disaster.sourceUrl}
+              href={officialSourceUrl}
               target="_blank"
               rel="noopener noreferrer"
               className="mt-4 inline-flex h-11 items-center px-4 bg-primary text-primary-foreground"
