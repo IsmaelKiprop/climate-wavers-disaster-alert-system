@@ -100,7 +100,7 @@ const AlertSettings = () => {
   const requestCode = async () => {
     setOtpBusy(true);
     try {
-      await client.run(
+      const data = await client.run(
         "post",
         endpoints.alertPhoneRequest,
         { phone: form.phone },
@@ -109,7 +109,12 @@ const AlertSettings = () => {
         false,
         false
       );
-      toast.success("Verification code sent (WhatsApp if configured, else email).");
+      const via = Array.isArray(data?.sent_via) ? data.sent_via.join(" + ") : "channel";
+      const to = data?.sent_to ? `+${data.sent_to}` : form.phone;
+      toast.success(
+        data?.message ||
+          `Code sent to ${to} via ${via}. Open WhatsApp chat with FlowOps Africa.`
+      );
     } catch (error) {
       toast.error("Could not send verification code.");
     } finally {
@@ -278,7 +283,9 @@ const AlertSettings = () => {
             placeholder="+2547…"
           />
           <p className="mt-1 text-xs text-muted">
-            {form.phone_verified ? "Phone verified." : "Phone not verified yet."}
+            {form.phone_verified
+              ? "Phone verified."
+              : "Phone not verified yet. Codes arrive on this number from FlowOps Africa WhatsApp (Meta), not to the business number."}
           </p>
         </div>
 

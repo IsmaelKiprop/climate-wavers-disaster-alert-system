@@ -36,11 +36,16 @@ def send_template(*, to, template_name, language_code="en", components=None):
     if not phone:
         raise RuntimeError("missing phone")
 
+    # Never allow sending "to" the business Phone number ID (common misconfig).
+    phone_id = str(getattr(settings, "META_WA_PHONE_NUMBER_ID", "") or "")
+    if phone_id and phone == phone_id:
+        raise RuntimeError("recipient cannot be META_WA_PHONE_NUMBER_ID")
+
     graph = getattr(settings, "META_WA_GRAPH_VERSION", "") or "v21.0"
-    phone_id = settings.META_WA_PHONE_NUMBER_ID
     url = f"https://graph.facebook.com/{graph}/{phone_id}/messages"
     body = {
         "messaging_product": "whatsapp",
+        "recipient_type": "individual",
         "to": phone,
         "type": "template",
         "template": {
@@ -50,6 +55,13 @@ def send_template(*, to, template_name, language_code="en", components=None):
     }
     if components:
         body["template"]["components"] = components
+
+    logger.info(
+        "Meta WhatsApp send template=%s to=%s from_phone_number_id=%s",
+        template_name,
+        phone,
+        phone_id,
+    )
 
     request = urllib.request.Request(
         url,
@@ -64,10 +76,10 @@ def send_template(*, to, template_name, language_code="en", components=None):
     try:
         with urllib.request.urlopen(request, timeout=30) as response:
             payload = json.loads(response.read().decode("utf-8", errors="replace") or "{}")
-            return {"ok": True, "data": payload}
+            return {"ok": True, "to": phone, "data": payload}
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")
-        logger.error("Meta WhatsApp HTTP %s: %s", exc.code, detail[:500])
+        logger.error("Meta WhatsApp HTTP %s to=%s: %s", exc.code, phone, detail[:500])
         raise RuntimeError(f"Meta WhatsApp {exc.code}: {detail[:400]}") from exc
 
 
@@ -75,6 +87,7 @@ def send_phone_otp(phone, otp, language_code=None):
     """Send authentication template phone_verify_otp (body + copy-code button)."""
     code = str(otp or "").strip()
     lang = language_code or getattr(settings, "META_WA_TEMPLATE_LANG", "") or "en"
+    # Copy-code auth templates need the OTP in body and button params.
     components = [
         {
             "type": "body",

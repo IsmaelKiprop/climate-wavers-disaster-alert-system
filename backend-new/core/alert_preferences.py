@@ -101,12 +101,14 @@ class AlertPhoneVerifyRequestView(APIView):
         )
 
         sent_via = []
+        sent_to = meta_whatsapp.normalize_phone(phone)
         # Prefer direct Meta Graph API (avoids Cloudflare 429 on notification service).
         try:
-            meta_whatsapp.send_phone_otp(phone, code)
+            result = meta_whatsapp.send_phone_otp(phone, code)
             sent_via.append("whatsapp")
+            sent_to = result.get("to") or sent_to
         except Exception as exc:
-            logger.warning("Direct WhatsApp OTP failed: %s", exc)
+            logger.warning("Direct WhatsApp OTP failed to=%s: %s", sent_to, exc)
             try:
                 _post_notification(
                     {
@@ -167,7 +169,13 @@ class AlertPhoneVerifyRequestView(APIView):
             {
                 "ok": True,
                 "sent_via": sent_via,
-                "message": "Verification code sent.",
+                "sent_to": sent_to,
+                "message": (
+                    f"Verification code sent to +{sent_to} "
+                    "(WhatsApp from FlowOps Africa business number)."
+                    if "whatsapp" in sent_via
+                    else "Verification code sent."
+                ),
                 # Dev convenience when DEBUG; never rely on this in production UI.
                 "debug_code": code if getattr(settings, "DEBUG", False) else None,
             }
