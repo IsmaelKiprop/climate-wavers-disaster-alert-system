@@ -95,8 +95,8 @@ app.post("/api/v1/whatsapp/webhook", (req, res) => {
   return res.sendStatus(200)
 })
 
+// Public health check — only returns whether Meta env vars are present (no secrets).
 app.get("/api/v1/whatsapp/status", (req, res) => {
-  if (!requireSecret(req, res)) return
   return res.json({ configured: whatsapp.configured() })
 })
 

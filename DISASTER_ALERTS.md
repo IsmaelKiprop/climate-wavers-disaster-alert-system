@@ -35,20 +35,26 @@ python manage.py poll_live_official_alerts
 
 ## Meta WhatsApp setup
 
-1. Create a Meta Business app with WhatsApp product.
-2. Set env on `climate-wavers-notifications`:
-   - `META_WA_TOKEN`
-   - `META_WA_PHONE_NUMBER_ID`
-   - `META_WA_BUSINESS_ACCOUNT_ID`
-   - `META_WA_APP_SECRET`
-   - `META_WA_VERIFY_TOKEN` (for webhook)
+You can reuse the **same FlowOps Africa WhatsApp number** already on Meta (Cloud API). Climate Wavers alerts send as template messages from that Phone number ID; Grace / FlowOps chat can keep using the same number.
+
+1. Open the FlowOps Meta app → **WhatsApp → API setup** (or Production setup).
+2. Copy these into Render → `climate-wavers-notifications` (or local `notification_service/.env`):
+   - `META_WA_TOKEN` — permanent System User / access token with `whatsapp_business_messaging`
+   - `META_WA_PHONE_NUMBER_ID` — **Phone number ID** (not the dial digits)
+   - `META_WA_BUSINESS_ACCOUNT_ID` — WhatsApp Business Account ID (WABA)
+   - `META_WA_APP_SECRET` — App settings → Basic → App secret
+   - `META_WA_VERIFY_TOKEN` — any string you choose (must match webhook verify token in Meta)
 3. Approve templates (names used in code):
    - `disaster_alert_user` — body vars: type, place, confidence, magnitude, tip, link
    - `disaster_alert_agency` — same shape for responders
    - `phone_verify_otp` — body var: code
-4. Webhook URL: `https://climate-wavers-notifications.onrender.com/api/v1/whatsapp/webhook`
+4. Optional webhook (delivery status / inbound log):  
+   `https://climate-wavers-notifications.onrender.com/api/v1/whatsapp/webhook`  
+   If FlowOps/Grace already owns the app webhook, leave theirs in place — **outbound alerts only need token + phone number ID**.
 
 Until Meta credentials and templates are live, email fanout still works; WhatsApp calls no-op with a log line.
+
+Check: `GET https://climate-wavers-notifications.onrender.com/api/v1/whatsapp/status` → `{ "configured": true }`.
 
 ## API surface
 
