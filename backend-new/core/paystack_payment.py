@@ -268,11 +268,18 @@ def record_tree_payment(reference, request_user=None, client_data=None):
         if raw_gift not in (None, ""):
             dedication = f"{dedication}\n\nGifted to user id: {raw_gift}".strip()
 
+    from .tree_pricing import split_tree_payment
+
+    platform_fee, admin_share, fee_rate = split_tree_payment(amount)
+
     create_kwargs = {
         "project": project,
         "donor": donor,
         "payer_email": payer_email,
         "amount": amount,
+        "platform_fee": platform_fee,
+        "admin_share": admin_share,
+        "fee_rate": fee_rate,
         "trees_purchased": trees_purchased,
         "payment_reference": reference,
         "payment_status": "completed",
@@ -286,23 +293,29 @@ def record_tree_payment(reference, request_user=None, client_data=None):
         with transaction.atomic():
             donation = TreeProjectDonation.objects.create(**create_kwargs)
             project.trees_planted += trees_purchased
-            project.funds_raised += amount
+            # Attribute only the Tree Admin share to project funds
+            project.funds_raised += admin_share
             project.save(update_fields=["trees_planted", "funds_raised"])
     except IntegrityError:
         donation = TreeProjectDonation.objects.select_related("project", "donor").get(
             payment_reference=reference
         )
     except (ProgrammingError, OperationalError) as exc:
-        # Migration lag: retry without gifted_to rather than failing a paid charge.
-        logger.exception("Donation create failed; retrying without gifted_to: %s", exc)
+        # Migration lag: retry without gifted_to / fee fields rather than failing a paid charge.
+        logger.exception("Donation create failed; retrying lean create: %s", exc)
         create_kwargs.pop("gifted_to", None)
+        for optional in ("platform_fee", "admin_share", "fee_rate"):
+            create_kwargs.pop(optional, None)
         with transaction.atomic():
             donation = TreeProjectDonation.objects.create(**create_kwargs)
             project.trees_planted += trees_purchased
-            project.funds_raised += amount
+            project.funds_raised += admin_share
             project.save(update_fields=["trees_planted", "funds_raised"])
 
     payload = _donation_payload(donation, payer_email)
+    payload["platform_fee"] = float(getattr(donation, "platform_fee", platform_fee) or platform_fee)
+    payload["admin_share"] = float(getattr(donation, "admin_share", admin_share) or admin_share)
+    payload["fee_rate"] = float(getattr(donation, "fee_rate", fee_rate) or fee_rate)
     return _attach_points(payload, donation)
 
 

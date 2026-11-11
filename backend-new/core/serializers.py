@@ -518,11 +518,12 @@ class TreeProjectDonationSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = TreeProjectDonation
-        fields = ['id', 'amount', 'trees_purchased', 'payment_reference', 'payment_status', 
+        fields = ['id', 'amount', 'platform_fee', 'admin_share', 'fee_rate',
+                 'trees_purchased', 'payment_reference', 'payment_status', 
                  'dedication_message', 'is_anonymous', 'created_at', 'donor_name',
                  'gifted_to', 'gifted_to_name',
                  'project_name', 'project_city', 'project_country', 'co2_absorption_per_tree']
-        read_only_fields = ['payment_reference', 'created_at']
+        read_only_fields = ['payment_reference', 'platform_fee', 'admin_share', 'fee_rate', 'created_at']
     
     def get_donor_name(self, obj):
         if obj.is_anonymous or not obj.donor_id:
@@ -551,7 +552,8 @@ class TreeProjectSerializer(serializers.ModelSerializer):
     class Meta:
         model = TreeProject
         fields = [
-            'id', 'name', 'description', 'short_description', 'organization', 'organization_name',
+            'id', 'name', 'description', 'short_description', 'organization', 'tree_admin_org',
+            'organization_name',
             'organization_description', 'organization_website', 'organization_logo', 'organization_logo_url',
             'country', 'region', 'city', 'latitude', 'longitude', 'address',
             'project_type', 'status', 'target_trees', 'trees_planted', 'tree_species', 'tree_price',
@@ -563,7 +565,7 @@ class TreeProjectSerializer(serializers.ModelSerializer):
             'progress_percentage', 'funding_percentage', 'total_co2_offset',
             'updates', 'donations', 'created_at', 'updated_at'
         ]
-        read_only_fields = ['trees_planted', 'funds_raised', 'is_verified', 'verification_date', 'created_at', 'updated_at']
+        read_only_fields = ['trees_planted', 'funds_raised', 'is_verified', 'verification_date', 'tree_admin_org', 'created_at', 'updated_at']
     
     def get_cover_image_url(self, obj):
         if not obj.cover_image:
@@ -629,7 +631,13 @@ class TreeProjectCreateSerializer(serializers.ModelSerializer):
     
     def create(self, validated_data):
         # Set the organization to the current user
-        validated_data['organization'] = self.context['request'].user
+        request = self.context['request']
+        validated_data['organization'] = request.user
+        tree_admin_org = self.context.get('tree_admin_org')
+        if tree_admin_org is not None:
+            validated_data['tree_admin_org'] = tree_admin_org
+            if not validated_data.get('organization_name'):
+                validated_data['organization_name'] = tree_admin_org.name
         return super().create(validated_data)
 
 

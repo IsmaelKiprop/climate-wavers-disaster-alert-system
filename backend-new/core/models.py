@@ -413,6 +413,14 @@ class TreeProject(models.Model):
         on_delete=models.CASCADE, 
         related_name='tree_projects'
     )
+    tree_admin_org = models.ForeignKey(
+        "TreeAdminOrganization",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="projects",
+        help_text="Verified Tree Admin org that owns this project",
+    )
     organization_name = models.CharField(max_length=200)
     organization_description = models.TextField(blank=True, null=True)
     organization_website = models.URLField(blank=True, null=True)
@@ -567,6 +575,24 @@ class TreeProjectDonation(models.Model):
     )
     payer_email = models.EmailField(blank=True, default="")
     amount = models.DecimalField(max_digits=10, decimal_places=2, help_text="Amount charged, in major units")
+    platform_fee = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        help_text="Climate Wavers platform fee share",
+    )
+    admin_share = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        help_text="Amount attributed to the Tree Admin project",
+    )
+    fee_rate = models.DecimalField(
+        max_digits=5,
+        decimal_places=4,
+        default=0.18,
+        help_text="Platform fee rate applied at payment time",
+    )
     trees_purchased = models.PositiveIntegerField()
     payment_reference = models.CharField(max_length=100, unique=True)
     payment_status = models.CharField(
@@ -1568,4 +1594,111 @@ class ResponderDispatch(models.Model):
 
     def __str__(self):
         return f"Dispatch {self.event_key} → {self.org_id} ({self.status})"
+
+
+class TreeAdminOrganization(models.Model):
+    """Local planter / nursery / CBO that runs Climate Wavers tree projects."""
+
+    ORG_TYPES = [
+        ("nursery", "Tree Nursery"),
+        ("cbo", "Community CBO"),
+        ("school", "School / Campus"),
+        ("church", "Faith Group"),
+        ("county", "County / Government"),
+        ("ngo", "NGO"),
+        ("other", "Other"),
+    ]
+    VERIFICATION_STATUSES = [
+        ("pending", "Pending"),
+        ("approved", "Approved"),
+        ("rejected", "Rejected"),
+    ]
+    PLAN_CHOICES = [
+        ("pilot", "Tree Admin Pilot"),
+        ("growth", "Tree Admin Growth"),
+        ("partner", "Tree Admin Partner"),
+    ]
+    PLAN_STATUS_CHOICES = [
+        ("pending", "Pending verification"),
+        ("trial", "Trial"),
+        ("active", "Active"),
+        ("expired", "Expired"),
+    ]
+
+    name = models.CharField(max_length=200)
+    org_type = models.CharField(max_length=20, choices=ORG_TYPES, default="cbo")
+    website = models.URLField(max_length=500, blank=True, null=True)
+    country = models.CharField(max_length=100, default="Kenya")
+    city = models.CharField(max_length=100, blank=True, null=True)
+    contact_email = models.EmailField(blank=True, null=True)
+    contact_phone = models.CharField(max_length=40, blank=True, null=True)
+    planting_sites_note = models.TextField(
+        blank=True,
+        null=True,
+        help_text="Where they can plant (school, farm, riverbank, etc.)",
+    )
+    verification_status = models.CharField(
+        max_length=20, choices=VERIFICATION_STATUSES, default="pending"
+    )
+    verified_at = models.DateTimeField(null=True, blank=True)
+    plan = models.CharField(max_length=20, choices=PLAN_CHOICES, default="pilot")
+    plan_status = models.CharField(
+        max_length=20, choices=PLAN_STATUS_CHOICES, default="pending"
+    )
+    plan_started_at = models.DateTimeField(null=True, blank=True)
+    plan_ends_at = models.DateTimeField(null=True, blank=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_tree_admin_orgs",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["name"]
+        indexes = [
+            models.Index(fields=["verification_status"]),
+            models.Index(fields=["country", "city"]),
+            models.Index(fields=["plan", "plan_status"]),
+        ]
+
+    def __str__(self):
+        return f"{self.name} ({self.verification_status})"
+
+    @property
+    def has_tree_admin_access(self):
+        from .tree_pricing import has_tree_admin_access
+
+        return has_tree_admin_access(self)
+
+
+class TreeAdminMembership(models.Model):
+    ROLE_CHOICES = [
+        ("owner", "Owner"),
+        ("manager", "Manager"),
+        ("viewer", "Viewer"),
+    ]
+
+    org = models.ForeignKey(
+        TreeAdminOrganization,
+        on_delete=models.CASCADE,
+        related_name="memberships",
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="tree_admin_memberships",
+    )
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES, default="owner")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("org", "user")
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.user_id} @ tree-admin {self.org_id} ({self.role})"
 

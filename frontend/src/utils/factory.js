@@ -214,11 +214,32 @@ const TREE_ADMIN_EMAILS = new Set([
   "flowopsafrica@gmail.com",
 ]);
 
-// Check if user is admin or staff
+const TREE_ADMIN_ACCESS_KEY = "treeAdminAccess";
+
+export const setTreeAdminAccess = (enabled) => {
+  try {
+    if (typeof sessionStorage === "undefined") return;
+    if (enabled) sessionStorage.setItem(TREE_ADMIN_ACCESS_KEY, "1");
+    else sessionStorage.removeItem(TREE_ADMIN_ACCESS_KEY);
+  } catch {
+    /* ignore */
+  }
+};
+
+export const hasTreeAdminAccessCache = () => {
+  try {
+    return typeof sessionStorage !== "undefined" && sessionStorage.getItem(TREE_ADMIN_ACCESS_KEY) === "1";
+  } catch {
+    return false;
+  }
+};
+
+// Check if user is admin or staff (includes approved Tree Admins after /tree-admin/me/)
 export const isAdmin = () => {
   const user = getUser();
   if (!user) return false;
   if (user.is_staff || user.is_superuser || user.is_admin) return true;
+  if (hasTreeAdminAccessCache()) return true;
   const email = String(user.email || "").trim().toLowerCase();
   return TREE_ADMIN_EMAILS.has(email);
 };

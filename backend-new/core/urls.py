@@ -30,6 +30,11 @@ from .responder import (
     ResponderDispatchStatusView,
     ResponderBriefView,
 )
+from .tree_admin import (
+    TreeAdminApplyView,
+    TreeAdminPublicApplyView,
+    TreeAdminMeView,
+)
 from .profile_share import public_profile
 
 
@@ -95,6 +100,13 @@ urlpatterns = [
         name="responder-dispatch-status",
     ),
     path("responder/brief/", ResponderBriefView.as_view(), name="responder-brief"),
+    path("tree-admin/apply/", TreeAdminApplyView.as_view(), name="tree-admin-apply"),
+    path(
+        "tree-admin/apply-public/",
+        TreeAdminPublicApplyView.as_view(),
+        name="tree-admin-apply-public",
+    ),
+    path("tree-admin/me/", TreeAdminMeView.as_view(), name="tree-admin-me"),
     path('notifications/', NotificationListView.as_view(),
          name='notification_list'),
     path('notifications/mark-read/', MarkNotificationsAsReadView.as_view(),

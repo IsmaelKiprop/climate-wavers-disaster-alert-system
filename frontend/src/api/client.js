@@ -47,16 +47,55 @@ class Client {
   }
 
   // Method to handle validation errors with SweetAlert
+  isAuthCredentialFailure(error) {
+    const url = String(error?.config?.url || "");
+    const detail = String(error?.response?.data?.detail || "").toLowerCase();
+    const isAuthEndpoint =
+      url.includes("/auth/login") ||
+      url.includes("/auth/register") ||
+      url.includes("/auth/verify-email") ||
+      url.includes("/auth/resend-verification") ||
+      url.includes("/auth/password-reset");
+    if (!isAuthEndpoint) return false;
+    return (
+      detail.includes("email is not verified") ||
+      detail.includes("invalid credentials") ||
+      detail.includes("no active account") ||
+      error?.response?.status === 401 ||
+      error?.response?.status === 400
+    );
+  }
+
   handleValidationErrors(error) {
     if (error.response && error.response.data) {
       const errorData = error.response.data;
       const status = error.response.status;
-      
+      const detail = String(errorData.detail || "");
+
+      // Login/register 401s are credential or verification failures, not expired sessions.
+      if (this.isAuthCredentialFailure(error)) {
+        if (detail.toLowerCase().includes("email is not verified")) {
+          Swal.fire({
+            icon: "info",
+            title: "Verify your email",
+            text: "Enter the 6-digit code we sent, or resend a new one to continue.",
+            confirmButtonText: "Verify email",
+            confirmButtonColor: "#067d83",
+          }).then((result) => {
+            if (result.isConfirmed) {
+              window.location.href = "/verifymail";
+            }
+          });
+          return true;
+        }
+        return false;
+      }
+
       // Expired / invalid JWT — never show as "Validation Error"
       if (
         status === 401 ||
         errorData.code === "token_not_valid" ||
-        String(errorData.detail || "").toLowerCase().includes("token not valid")
+        detail.toLowerCase().includes("token not valid")
       ) {
         return this.handleSessionExpired();
       }

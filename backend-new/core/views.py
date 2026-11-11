@@ -1091,6 +1091,78 @@ class TreeProjectViewSet(viewsets.ModelViewSet):
         if self.action == 'create':
             return TreeProjectCreateSerializer
         return TreeProjectSerializer
+
+    def _require_tree_admin_write(self, request):
+        from .tree_admin import user_has_tree_admin_access
+
+        if not user_has_tree_admin_access(request.user):
+            return Response(
+                {
+                    "detail": (
+                        "Tree Admin access required. Apply at /tree-admins/apply "
+                        "and wait for verification."
+                    )
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        return None
+
+    def create(self, request, *args, **kwargs):
+        from .tree_admin import active_tree_admin_org_for
+        from .tree_pricing import max_active_projects
+
+        denied = self._require_tree_admin_write(request)
+        if denied:
+            return denied
+
+        org = active_tree_admin_org_for(request.user)
+        if org is not None:
+            limit = max_active_projects(org)
+            if limit is not None:
+                active_count = TreeProject.objects.filter(
+                    tree_admin_org=org,
+                    status__in=["active", "pending_approval", "paused"],
+                ).count()
+                if active_count >= int(limit):
+                    return Response(
+                        {
+                            "detail": (
+                                f"Your {org.plan} plan allows up to {limit} active projects. "
+                                "Upgrade to Growth or Partner for more."
+                            )
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+        serializer = self.get_serializer(
+            data=request.data,
+            context={
+                "request": request,
+                "tree_admin_org": org,
+            },
+        )
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+
+    def update(self, request, *args, **kwargs):
+        denied = self._require_tree_admin_write(request)
+        if denied:
+            return denied
+        return super().update(request, *args, **kwargs)
+
+    def partial_update(self, request, *args, **kwargs):
+        denied = self._require_tree_admin_write(request)
+        if denied:
+            return denied
+        return super().partial_update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        denied = self._require_tree_admin_write(request)
+        if denied:
+            return denied
+        return super().destroy(request, *args, **kwargs)
     
     def get_queryset(self):
         queryset = TreeProject.objects.all()
@@ -1181,10 +1253,17 @@ class TreeProjectViewSet(viewsets.ModelViewSet):
         )
         
         if serializer.is_valid():
+            from .tree_pricing import split_tree_payment
+
             donation = serializer.save()
-            
-            # Update project's funds_raised
-            project.funds_raised += donation.amount
+            platform_fee, admin_share, fee_rate = split_tree_payment(donation.amount)
+            donation.platform_fee = platform_fee
+            donation.admin_share = admin_share
+            donation.fee_rate = fee_rate
+            donation.save(update_fields=["platform_fee", "admin_share", "fee_rate"])
+
+            # Attribute Tree Admin share only
+            project.funds_raised += admin_share
             project.trees_planted += donation.trees_purchased
             project.save()
             
@@ -1197,9 +1276,10 @@ class TreeProjectViewSet(viewsets.ModelViewSet):
         Verify a tree project (admin only)
         """
         project = self.get_object()
-        
-        # Check if user is admin or staff
-        if not request.user.is_staff:
+        from .tree_admin import user_has_tree_admin_access
+
+        # Staff or approved Tree Admin can verify
+        if not (request.user.is_staff or user_has_tree_admin_access(request.user)):
             return Response(
                 {"error": "Only administrators can verify projects"}, 
                 status=status.HTTP_403_FORBIDDEN

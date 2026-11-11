@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { FaTree, FaLeaf, FaSeedling, FaGlobe, FaHeart, FaMapMarkerAlt, FaUsers, FaCog, FaChartBar, FaEdit, FaTrash, FaPlus, FaEye } from 'react-icons/fa';
 import { endpoints } from '../../utils/endpoints';
+import { apiUrl } from '../../config/env';
 
 const TreeAdmin = () => {
   const [projects, setProjects] = useState([]);
@@ -15,10 +17,11 @@ const TreeAdmin = () => {
   const fetchProjects = async () => {
     try {
       setLoading(true);
-      const response = await fetch(endpoints.treeProjects);
+      const response = await fetch(apiUrl(endpoints.tree_projects));
       if (response.ok) {
         const data = await response.json();
-        setProjects(data.slice(0, 4)); // Show 4 projects for admin overview
+        const list = data.results || data;
+        setProjects(Array.isArray(list) ? list.slice(0, 4) : []);
       }
     } catch (error) {
       console.error('Error fetching projects:', error);
@@ -40,9 +43,23 @@ const TreeAdmin = () => {
               Tree Project Administration
             </h1>
             <p className="text-lg text-gray-600 max-w-2xl">
-              Manage and oversee tree planting projects. Monitor project progress, 
-              update project details, and ensure successful environmental impact.
+              Host planting sites, publish projects, and share proof. Apply for a free
+              90-day Tree Admin pilot — supporters fund trees with an 18% platform fee.
             </p>
+            <div className="mt-6 flex flex-wrap justify-center gap-3">
+              <Link
+                to="/tree-admins/apply"
+                className="inline-flex items-center px-6 py-3 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700"
+              >
+                Apply as Tree Admin
+              </Link>
+              <Link
+                to="/app/admin/tree-projects"
+                className="inline-flex items-center px-6 py-3 border border-green-600 text-green-700 rounded-lg font-medium hover:bg-green-50"
+              >
+                Open Tree Admin desk
+              </Link>
+            </div>
           </div>
         </div>
 
@@ -85,10 +102,13 @@ const TreeAdmin = () => {
             <h2 className="text-2xl font-bold text-gray-900">
               Project Management Dashboard
             </h2>
-            <button className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors flex items-center space-x-2">
+            <Link
+              to="/app/admin/tree-projects"
+              className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors flex items-center space-x-2"
+            >
               <FaPlus className="w-4 h-4" />
-              <span>Add New Project</span>
-            </button>
+              <span>Open real desk</span>
+            </Link>
           </div>
           
           {loading ? (

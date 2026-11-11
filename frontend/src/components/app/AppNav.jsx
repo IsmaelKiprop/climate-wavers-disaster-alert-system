@@ -19,11 +19,13 @@ import {
 } from "react-icons/io5";
 import { MdOutlineCampaign, MdCampaign } from "react-icons/md";
 import { RiAlarmWarningLine, RiAlarmWarningFill } from "react-icons/ri";
-import { getUser, logout, isAdmin } from "../../utils/factory";
+import { getUser, logout, isAdmin, setTreeAdminAccess } from "../../utils/factory";
 import { useEffect, useState } from "react";
 import Modal from "../Modal";
 import Createpost from "../Createpost";
 import { useNotifications } from "../../context/NotificationContext";
+import { client } from "../../api";
+import { endpoints } from "../../utils/endpoints";
 
 const AppNav = ({ onNavigate, compact = false }) => {
   const location = useLocation();
@@ -32,6 +34,7 @@ const AppNav = ({ onNavigate, compact = false }) => {
   const { hasNewNotification } = useNotifications() || {};
   const [user, setUser] = useState(getUser());
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [treeAdminOk, setTreeAdminOk] = useState(isAdmin());
 
   useEffect(() => {
     const sync = () => setUser(getUser());
@@ -43,6 +46,29 @@ const AppNav = ({ onNavigate, compact = false }) => {
     };
   }, []);
 
+  useEffect(() => {
+    if (!user?.id && !user?.email) {
+      setTreeAdminOk(false);
+      setTreeAdminAccess(false);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await client.run("get", endpoints.treeAdminMe, {}, true, false, false, false);
+        if (cancelled) return;
+        const ok = Boolean(data?.has_tree_admin_access);
+        setTreeAdminAccess(ok);
+        setTreeAdminOk(ok || isAdmin());
+      } catch {
+        if (!cancelled) setTreeAdminOk(isAdmin());
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, user?.email]);
+
   const close = () => onNavigate?.();
 
   const items = onboarding
@@ -52,7 +78,7 @@ const AppNav = ({ onNavigate, compact = false }) => {
         { to: "/onboarding/profile", label: "Profile", Icon: IoPersonOutline, ActiveIcon: IoPerson },
         { to: "/onboarding/bot", label: "WaverX", Icon: IoSparklesOutline, ActiveIcon: IoSparklesOutline },
         { to: "/onboarding/plant-tree", label: "Plant Trees", Icon: IoLeafOutline, ActiveIcon: IoLeafOutline },
-        { to: "/onboarding/tree-admin", label: "Tree Admin", Icon: IoSettingsOutline, ActiveIcon: IoSettingsOutline },
+        { to: "/tree-admins/apply", label: "Tree Admin", Icon: IoSettingsOutline, ActiveIcon: IoSettingsOutline },
         { to: "/onboarding/notifications", label: "Notifications", Icon: IoNotificationsOutline, ActiveIcon: IoNotifications },
         { to: "/onboarding/campaigns", label: "Campaigns", Icon: MdOutlineCampaign, ActiveIcon: MdCampaign },
         { to: "/onboarding/disasters", label: "Alerts", Icon: RiAlarmWarningLine, ActiveIcon: RiAlarmWarningFill },
@@ -68,7 +94,7 @@ const AppNav = ({ onNavigate, compact = false }) => {
         },
         { to: "/app/waverx", label: "WaverX", Icon: IoSparklesOutline, ActiveIcon: IoSparklesOutline },
         { to: "/app/plant-tree", label: "Plant Trees", Icon: IoLeafOutline, ActiveIcon: IoLeafOutline },
-        ...(isAdmin()
+        ...(treeAdminOk || isAdmin()
           ? [
               {
                 to: "/app/admin/tree-projects",
@@ -77,7 +103,14 @@ const AppNav = ({ onNavigate, compact = false }) => {
                 ActiveIcon: IoSettingsOutline,
               },
             ]
-          : []),
+          : [
+              {
+                to: "/tree-admins/apply",
+                label: "Become Tree Admin",
+                Icon: IoSettingsOutline,
+                ActiveIcon: IoSettingsOutline,
+              },
+            ]),
         { to: "/app/notifications", label: "Notifications", Icon: IoNotificationsOutline, ActiveIcon: IoNotifications },
         {
           to: "/app/alert-settings",

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
+import Cookies from "js-cookie";
 import { client } from "../../api";
 import { endpoints } from "../../utils/endpoints";
 import { completeAuthSession, safeRedirectPath } from "../../utils/factory";
@@ -34,6 +35,13 @@ const Signin = () => {
       await completeAuthSession(response || {});
       navigate(redirectTo, { replace: true });
     } catch (error) {
+      const detail = String(error?.response?.data?.detail || "");
+      if (detail.toLowerCase().includes("email is not verified")) {
+        const email = String(data?.email || "").trim().toLowerCase();
+        if (email) Cookies.set("email", email);
+        navigate("/verifymail");
+        return;
+      }
       console.log("Login failed:", error);
     } finally {
       setIsDisabled(false);

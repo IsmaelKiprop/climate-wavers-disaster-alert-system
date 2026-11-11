@@ -18,6 +18,8 @@ from .models import (
     ResponderOrganization,
     ResponderMembership,
     ResponderDispatch,
+    TreeAdminOrganization,
+    TreeAdminMembership,
 )
 from unfold.admin import ModelAdmin
 
@@ -164,6 +166,77 @@ class ResponderOrganizationAdmin(ModelAdmin):
 
 @admin.register(ResponderMembership)
 class ResponderMembershipAdmin(ModelAdmin):
+    list_display = ("org", "user", "role", "created_at")
+    list_filter = ("role",)
+    search_fields = ("org__name", "user__email", "user__username")
+
+
+@admin.register(TreeAdminOrganization)
+class TreeAdminOrganizationAdmin(ModelAdmin):
+    list_display = (
+        "name",
+        "org_type",
+        "city",
+        "country",
+        "verification_status",
+        "plan",
+        "plan_status",
+        "plan_ends_at",
+        "contact_email",
+        "created_at",
+    )
+    list_filter = (
+        "verification_status",
+        "plan",
+        "plan_status",
+        "org_type",
+        "country",
+    )
+    search_fields = ("name", "city", "contact_email", "contact_phone")
+    actions = [
+        "approve_tree_admins",
+        "reject_tree_admins",
+        "activate_paid_plans",
+    ]
+
+    @admin.action(description="Approve + start 90-day Tree Admin pilot + grant staff")
+    def approve_tree_admins(self, request, queryset):
+        from .tree_pricing import start_tree_pilot
+
+        for org in queryset:
+            org.verification_status = "approved"
+            org.verified_at = timezone.now()
+            start_tree_pilot(org)
+            org.save()
+            owners = org.memberships.filter(role="owner").select_related("user")
+            for membership in owners:
+                user = membership.user
+                if not user:
+                    continue
+                user.is_staff = True
+                user.is_verified = True
+                user.is_active = True
+                user.save(update_fields=["is_staff", "is_verified", "is_active"])
+
+    @admin.action(description="Reject selected Tree Admin organizations")
+    def reject_tree_admins(self, request, queryset):
+        queryset.update(
+            verification_status="rejected",
+            verified_at=None,
+            plan_status="pending",
+        )
+
+    @admin.action(description="Mark Tree Admin plan active (paid / 30 days)")
+    def activate_paid_plans(self, request, queryset):
+        from .tree_pricing import activate_paid_plan
+
+        for org in queryset.filter(verification_status="approved"):
+            activate_paid_plan(org)
+            org.save()
+
+
+@admin.register(TreeAdminMembership)
+class TreeAdminMembershipAdmin(ModelAdmin):
     list_display = ("org", "user", "role", "created_at")
     list_filter = ("role",)
     search_fields = ("org__name", "user__email", "user__username")

@@ -75,6 +75,7 @@ const TreeProjectAdmin = () => {
   });
 
   const [isAdmin, setIsAdmin] = useState(false);
+  const [treeAdminMe, setTreeAdminMe] = useState(null);
 
   // Debug admin status
   useEffect(() => {
@@ -125,15 +126,33 @@ const TreeProjectAdmin = () => {
         },
       });
 
+      let staff = false;
       if (response.ok) {
         const userData = await response.json();
         console.log('User data from API:', userData);
         console.log('is_staff:', userData.is_staff);
         console.log('is_superuser:', userData.is_superuser);
-        setIsAdmin(userData.is_staff || userData.is_superuser);
+        staff = Boolean(userData.is_staff || userData.is_superuser);
       } else {
         console.error('Failed to fetch user data:', response.status);
       }
+
+      try {
+        const meRes = await fetch(apiUrl(endpoints.treeAdminMe), {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (meRes.ok) {
+          const me = await meRes.json();
+          setTreeAdminMe(me);
+          const { setTreeAdminAccess } = await import('../utils/factory');
+          setTreeAdminAccess(Boolean(me.has_tree_admin_access));
+          setIsAdmin(staff || Boolean(me.has_tree_admin_access));
+          return;
+        }
+      } catch (meErr) {
+        console.error('Tree admin me failed:', meErr);
+      }
+      setIsAdmin(staff);
     } catch (error) {
       console.error('Error checking admin status:', error);
     }
@@ -618,6 +637,41 @@ Thank you for your understanding! 🌱
               Add Project
             </button>
           </div>
+          {treeAdminMe?.memberships?.[0]?.org ? (
+            <div className="mt-4 border border-border bg-white p-4 text-sm">
+              <p className="font-medium text-gray-900">
+                {treeAdminMe.memberships[0].org.name} ·{" "}
+                {treeAdminMe.memberships[0].org.plan_label || treeAdminMe.memberships[0].org.plan}
+              </p>
+              <p className="mt-1 text-gray-600">
+                Status: {treeAdminMe.memberships[0].org.verification_status}
+                {treeAdminMe.memberships[0].org.plan_status
+                  ? ` · ${treeAdminMe.memberships[0].org.plan_status}`
+                  : ""}
+                {treeAdminMe.memberships[0].org.plan_ends_at
+                  ? ` · ends ${new Date(treeAdminMe.memberships[0].org.plan_ends_at).toLocaleDateString()}`
+                  : ""}
+              </p>
+              <p className="mt-1 text-gray-500">
+                Platform fee on tree purchases: 18%. Project funds receive 82%.
+              </p>
+              {!treeAdminMe.has_tree_admin_access && treeAdminMe.has_pending ? (
+                <p className="mt-2 text-amber-700">
+                  Your application is pending verification. You can browse but publishing unlocks after approval.
+                </p>
+              ) : null}
+            </div>
+          ) : !isAdmin ? (
+            <div className="mt-4 border border-border bg-white p-4 text-sm">
+              <p className="text-gray-700">
+                No Tree Admin org yet.{" "}
+                <a href="/tree-admins/apply" className="text-green-700 font-medium underline">
+                  Apply to become a Tree Admin
+                </a>
+                .
+              </p>
+            </div>
+          ) : null}
         </div>
 
         {/* Stats Cards */}

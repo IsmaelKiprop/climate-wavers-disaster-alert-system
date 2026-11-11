@@ -29,6 +29,7 @@ const TransparencyReport = lazy(() => import("./pages/TransparencyReport"));
 const Consulting = lazy(() => import("./pages/Consulting"));
 const PricingPage = lazy(() => import("./pages/PricingPage"));
 const PublicResponderApply = lazy(() => import("./pages/PublicResponderApply"));
+const PublicTreeAdminApply = lazy(() => import("./pages/PublicTreeAdminApply"));
 const DisasterPage = lazy(() => import("./pages/DisasterPage"));
 const Donations = lazy(() => import("./components/Donations"));
 const PlantTree = lazy(() => import("./components/PlantTree"));
@@ -145,6 +146,7 @@ function App() {
               <Route path="/consulting" element={<Consulting />} />
               <Route path="/pricing" element={<PricingPage />} />
               <Route path="/responders/apply" element={<PublicResponderApply />} />
+              <Route path="/tree-admins/apply" element={<PublicTreeAdminApply />} />
               <Route path="/project" element={<PublicProjectView />} />
               <Route path="/u/:userId" element={<SharedProfilePage />} />
               <Route path="/gift/:userId" element={<PlantTree />} />
