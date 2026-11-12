@@ -1,10 +1,17 @@
 import { useQuery } from "@tanstack/react-query";
 import { client } from "../api";
 import { endpoints } from "../utils/endpoints";
-import { getUser, normalizeUser, setUser } from "../utils/factory";
+import {
+  cacheProfileMedia,
+  getUser,
+  mergeUserMedia,
+  normalizeUser,
+  setUser,
+  withCachedMedia,
+} from "../utils/factory";
 
 const seedUser = (userId) => {
-  const me = normalizeUser(getUser());
+  const me = withCachedMedia(normalizeUser(getUser()));
   if (!me || !userId) return undefined;
   if (String(me.id) === String(userId)) return me;
   return undefined;
@@ -19,9 +26,10 @@ export const useProfile = ({ user_id, username } = {}) => {
     queryFn: async () => {
       if (!user_id) return null;
       const remote = await client.run("get", `${endpoints.users}${user_id}/`, {}, true);
-      const user = normalizeUser(remote) || remote;
+      const user = mergeUserMedia(seed || {}, normalizeUser(remote) || remote || {});
+      cacheProfileMedia(user);
       if (seed && user?.id && String(user.id) === String(seed.id)) {
-        setUser({ ...seed, ...user });
+        setUser(user);
       }
       return user;
     },
@@ -38,7 +46,18 @@ export const useProfile = ({ user_id, username } = {}) => {
       const body = user_id
         ? { user_id: Number(user_id) || user_id }
         : { username };
-      return client.run("post", endpoints.profile, body, true);
+      const payload = await client.run("post", endpoints.profile, body, true);
+      if (payload?.user) {
+        payload.user = mergeUserMedia(
+          seed || {},
+          normalizeUser(payload.user) || payload.user
+        );
+        cacheProfileMedia(payload.user);
+        if (seed?.id && String(payload.user.id) === String(seed.id)) {
+          setUser(payload.user);
+        }
+      }
+      return payload;
     },
     enabled: Boolean(user_id || username),
     staleTime: 15000,
@@ -46,7 +65,10 @@ export const useProfile = ({ user_id, username } = {}) => {
     retry: 1,
   });
 
-  const user = activity.data?.user || details.data || seed || null;
+  const rawUser = activity.data?.user || details.data || seed || null;
+  const user = rawUser
+    ? mergeUserMedia(seed || {}, normalizeUser(rawUser) || rawUser)
+    : null;
 
   return {
     error: details.error || activity.error,

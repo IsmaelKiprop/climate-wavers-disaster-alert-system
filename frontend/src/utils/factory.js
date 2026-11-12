@@ -27,6 +27,80 @@ export const normalizeUser = (user) => {
   return { ...source, id };
 };
 
+const PROFILE_MEDIA_KEY = "cw_profile_media_v1";
+
+const pickMedia = (user = {}) => ({
+  profile_picture:
+    user.profile_picture || user.profile_pic || user.picture || "",
+  cover: user.cover || user.cover_image || "",
+});
+
+/** Persist avatar/cover outside the cookie (cookies truncate large payloads). */
+export const cacheProfileMedia = (user) => {
+  const normalized = normalizeUser(user);
+  if (!normalized?.id || typeof window === "undefined") return;
+  const media = pickMedia(normalized);
+  if (!media.profile_picture && !media.cover) return;
+  try {
+    const all = JSON.parse(localStorage.getItem(PROFILE_MEDIA_KEY) || "{}");
+    const prev = all[String(normalized.id)] || {};
+    all[String(normalized.id)] = {
+      profile_picture: media.profile_picture || prev.profile_picture || "",
+      cover: media.cover || prev.cover || "",
+      ts: Date.now(),
+    };
+    localStorage.setItem(PROFILE_MEDIA_KEY, JSON.stringify(all));
+  } catch {
+    // ignore quota / private mode
+  }
+};
+
+export const readCachedProfileMedia = (userId) => {
+  if (!userId || typeof window === "undefined") return null;
+  try {
+    const all = JSON.parse(localStorage.getItem(PROFILE_MEDIA_KEY) || "{}");
+    return all[String(userId)] || null;
+  } catch {
+    return null;
+  }
+};
+
+/** Prefer non-empty media from next, then prev, then localStorage cache. */
+export const mergeUserMedia = (prev = {}, next = {}) => {
+  const cached = readCachedProfileMedia(next?.id || prev?.id);
+  const picture =
+    next.profile_picture ||
+    next.profile_pic ||
+    next.picture ||
+    prev.profile_picture ||
+    prev.profile_pic ||
+    prev.picture ||
+    cached?.profile_picture ||
+    "";
+  const cover =
+    next.cover ||
+    next.cover_image ||
+    prev.cover ||
+    prev.cover_image ||
+    cached?.cover ||
+    "";
+  return {
+    ...prev,
+    ...next,
+    profile_picture: picture,
+    profile_pic: picture,
+    picture: picture || next.picture || prev.picture,
+    cover,
+    cover_image: cover,
+  };
+};
+
+export const withCachedMedia = (user) => {
+  const normalized = normalizeUser(user);
+  if (!normalized?.id) return normalized;
+  return mergeUserMedia(normalized, normalized);
+};
+
 export const setUser = (user) => {
   const normalized = normalizeUser(user);
   if (!normalized) return user;
@@ -35,8 +109,21 @@ export const setUser = (user) => {
     refresh_token: _refresh,
     password: _password,
     ...safeUser
-  } = normalized;
-  Cookies.set("user", JSON.stringify(safeUser), { path: "/" });
+  } = mergeUserMedia(getUser() || {}, normalized);
+  cacheProfileMedia(safeUser);
+  try {
+    Cookies.set("user", JSON.stringify(safeUser), { path: "/" });
+  } catch {
+    // Cookie may overflow; media is already in localStorage.
+    const slim = { ...safeUser };
+    delete slim.cover;
+    delete slim.cover_image;
+    try {
+      Cookies.set("user", JSON.stringify(slim), { path: "/" });
+    } catch {
+      /* ignore */
+    }
+  }
   if (typeof window !== "undefined") {
     window.dispatchEvent(new CustomEvent("userUpdated"));
   }
@@ -67,7 +154,7 @@ export const completeAuthSession = async (authPayload = {}) => {
   try {
     const remote = await client.run("get", endpoints.user, {}, true);
     if (remote) {
-      return setUser({ ...seed, ...remote });
+      return setUser(mergeUserMedia(seed, remote));
     }
   } catch (error) {
     console.error("Failed to hydrate signed-in profile:", error);
@@ -81,7 +168,7 @@ export const getUser = () => {
 
   if (raw) {
     try {
-      const userData = normalizeUser(JSON.parse(raw));
+      const userData = withCachedMedia(normalizeUser(JSON.parse(raw)));
       return userData || false;
     } catch (error) {
       console.error("Failed to parse user data from cookies:", error);

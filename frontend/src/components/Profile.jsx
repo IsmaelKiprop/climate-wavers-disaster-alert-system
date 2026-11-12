@@ -11,7 +11,14 @@ import { useProfile } from "../hooks/useProfile";
 import { useTrending } from "../hooks/useTrending";
 import { endpoints } from "../utils/endpoints";
 import { client } from "../api";
-import { getUser, normalizeUser, setUser } from "../utils/factory";
+import {
+  getUser,
+  mergeUserMedia,
+  normalizeUser,
+  secureMediaUrl,
+  setUser,
+  withCachedMedia,
+} from "../utils/factory";
 import { useFollow } from "../context/FollowContext";
 import ProfileShareModal from "./ProfileShareModal";
 import BuyMeATreeQrModal from "./BuyMeATreeQrModal";
@@ -23,7 +30,7 @@ import {
 import ClimateVerifiedBadge from "./ClimateVerifiedBadge";
 
 const seedOwnProfile = (userId) => {
-  const me = normalizeUser(getUser()) || {};
+  const me = withCachedMedia(normalizeUser(getUser())) || {};
   if (!userId || String(me.id) !== String(userId)) return {};
   if (me.full_name && !me.first_name) {
     const parts = String(me.full_name).trim().split(/\s+/);
@@ -69,21 +76,14 @@ const Profile = () => {
   ];
 
   useEffect(() => {
-    setProfile(seedOwnProfile(userId));
+    const seed = seedOwnProfile(userId);
+    if (seed?.id) {
+      setProfile((prev) => mergeUserMedia(seed, prev?.id ? prev : seed));
+    }
     const syncCookie = () => {
-      const seed = seedOwnProfile(userId);
-      if (!seed?.id) return;
-      setProfile((prev) => ({
-        ...seed,
-        ...prev,
-        first_name: prev.first_name || seed.first_name,
-        last_name: prev.last_name || seed.last_name,
-        username: prev.username || seed.username,
-        profile_picture: prev.profile_picture || seed.profile_picture,
-        profile_pic: prev.profile_pic || seed.profile_pic,
-        cover: prev.cover || seed.cover,
-        bio: prev.bio || seed.bio,
-      }));
+      const nextSeed = seedOwnProfile(userId);
+      if (!nextSeed?.id) return;
+      setProfile((prev) => mergeUserMedia(nextSeed, prev || {}));
     };
     window.addEventListener("userUpdated", syncCookie);
     return () => window.removeEventListener("userUpdated", syncCookie);
@@ -92,7 +92,7 @@ const Profile = () => {
   useEffect(() => {
     const nextUser = normalizeUser(user?.user || loadedUser);
     if (nextUser?.id) {
-      setProfile((prev) => ({ ...prev, ...nextUser }));
+      setProfile((prev) => mergeUserMedia(prev || {}, nextUser));
       const following = Boolean(nextUser.is_following);
       setIsFollowLocal(following);
       setFollowing(nextUser.id, following);
@@ -114,14 +114,10 @@ const Profile = () => {
   }, [isFetched, error, user, loadedUser, setFollowing]);
 
   const isOwnProfile = String(me.id || "") === String(profile?.id || userId || "");
-  const avatarSrcRaw = profile?.profile_picture || profile?.profile_pic || profile?.picture || "";
-  const avatarSrc =
-    avatarSrcRaw.startsWith("http://") &&
-    !avatarSrcRaw.includes("localhost") &&
-    !avatarSrcRaw.includes("127.0.0.1")
-      ? `https://${avatarSrcRaw.slice(7)}`
-      : avatarSrcRaw;
-  const coverSrc = profile?.cover || profile?.cover_image || "";
+  const avatarSrc = secureMediaUrl(
+    profile?.profile_picture || profile?.profile_pic || profile?.picture || ""
+  );
+  const coverSrc = secureMediaUrl(profile?.cover || profile?.cover_image || "");
   const displayName =
     [profile?.first_name, profile?.last_name].filter(Boolean).join(" ") ||
     profile?.full_name ||
@@ -133,7 +129,10 @@ const Profile = () => {
   const whatsappDigits = String(whatsappPhone).replace(/\D/g, "");
   const whatsappHref = whatsappDigits ? `https://wa.me/${whatsappDigits}` : "";
 
-  const coverPreviewSrc = coverSrc || "/environment.jpg";
+  // Avoid flashing default plastic cover / teal avatar before cached or API media arrives.
+  const mediaSettled = Boolean(isFetched || avatarSrc || coverSrc || !isOwnProfile);
+  const coverPreviewSrc = coverSrc || (mediaSettled ? "/environment.jpg" : "");
+  const showAvatarSkeleton = !avatarSrc && !mediaSettled;
 
   const handleProfilePictureClick = (event) => {
     event.stopPropagation();
@@ -147,28 +146,28 @@ const Profile = () => {
   const handleCoverPhotoClick = (e) => {
     e.preventDefault();
     e.stopPropagation();
+    if (!coverPreviewSrc) {
+      if (isOwnProfile) navigate("/uploadcover");
+      return;
+    }
     setLightbox({
       src: coverPreviewSrc,
       alt: `${displayName || "Profile"} cover`,
     });
   };
 
-  const handleProfileUpdate = (updatedUser) => {
-    const nextProfile = {
-      ...profile,
-      ...updatedUser,
-      profile_picture:
-        updatedUser?.profile_picture ||
-        updatedUser?.profile_pic ||
-        profile?.profile_picture,
-    };
-    setProfile(nextProfile);
-
-    const currentUser = getUser() || {};
-    setUser({
-      ...currentUser,
-      ...nextProfile,
+  useEffect(() => {
+    [avatarSrc, coverSrc].filter(Boolean).forEach((src) => {
+      const img = new Image();
+      img.decoding = "async";
+      img.src = src;
     });
+  }, [avatarSrc, coverSrc]);
+
+  const handleProfileUpdate = (updatedUser) => {
+    const nextProfile = mergeUserMedia(profile || {}, updatedUser || {});
+    setProfile(nextProfile);
+    setUser(nextProfile);
   };
 
   const follow = async (targetId) => {
@@ -220,9 +219,11 @@ const Profile = () => {
         {/* Cover Image Section */}
         <div className="relative h-64 md:h-80 lg:h-96 overflow-hidden">
           <div
-            className="w-full h-full bg-cover bg-center bg-background cursor-zoom-in"
+            className={`w-full h-full bg-cover bg-center bg-surface-muted cursor-zoom-in ${
+              !coverPreviewSrc ? "animate-pulse" : ""
+            }`}
             style={{
-              backgroundImage: `url(${coverPreviewSrc})`,
+              backgroundImage: coverPreviewSrc ? `url(${coverPreviewSrc})` : "none",
             }}
             onClick={handleCoverPhotoClick}
             role="button"
@@ -260,14 +261,22 @@ const Profile = () => {
               {avatarSrc ? (
                     <img
                       src={avatarSrc}
-                      className="w-24 h-24 md:w-32 md:h-32 lg:w-36 lg:h-36 object-cover border-4 border-white shadow-2xl cursor-zoom-in"
+                      className="w-24 h-24 md:w-32 md:h-32 lg:w-36 lg:h-36 object-cover border-4 border-white shadow-2xl cursor-zoom-in bg-surface"
                       alt={`${displayName || "Profile"} photo`}
                       style={{ borderRadius: "50%" }}
                       fetchPriority="high"
+                      decoding="async"
                       onClick={handleProfilePictureClick}
                       onError={(e) => {
+                        e.target.onerror = null;
                         e.target.src = "/avatar.png";
                       }}
+                    />
+                  ) : showAvatarSkeleton ? (
+                    <div
+                      className="w-24 h-24 md:w-32 md:h-32 lg:w-36 lg:h-36 border-4 border-white shadow-2xl bg-surface-muted animate-pulse"
+                      style={{ borderRadius: "50%" }}
+                      aria-hidden
                     />
                   ) : (
                     <div
