@@ -6,13 +6,11 @@ import { PiBookmark, PiBookmarkFill } from "react-icons/pi";
 import { BsBarChart } from "react-icons/bs";
 import { formatDistanceToNow } from "date-fns";
 import PropTypes from "prop-types";
-import { toast } from "react-toastify";
-import { client } from "../api";
-import { endpoints } from "../utils/endpoints";
 import { avatarUrl } from "../utils/factory";
 import LinkifiedText from "./LinkifiedText";
 import { postFontStyle } from "../utils/postFonts";
 import PostOwnerMenu from "./PostOwnerMenu";
+import PostEditPanel from "./PostEditPanel";
 
 const ProfileContent = ({ content, type, onLike, onUnlike, onRepost, onUnrepost, onSave, onUnsave }) => {
   const navigate = useNavigate();
@@ -22,8 +20,6 @@ const ProfileContent = ({ content, type, onLike, onUnlike, onRepost, onUnrepost,
   const [localContent, setLocalContent] = useState(content);
   const [hidden, setHidden] = useState(false);
   const [editing, setEditing] = useState(false);
-  const [editText, setEditText] = useState("");
-  const [savingEdit, setSavingEdit] = useState(false);
 
   useEffect(() => {
     // Set initial states based on content
@@ -68,36 +64,21 @@ const ProfileContent = ({ content, type, onLike, onUnlike, onRepost, onUnrepost,
   };
 
   const startEdit = () => {
-    setEditText(localContent?.content || "");
     setEditing(true);
   };
 
-  const saveEdit = async () => {
-    const next = String(editText || "").trim();
-    if (!next) {
-      toast.error("Post cannot be empty.");
-      return;
-    }
-    setSavingEdit(true);
-    try {
-      const url =
-        type === "comments"
-          ? `${endpoints.comments}${localContent.id}/`
-          : `${endpoints.post}${localContent.id}/`;
-      const updated = await client.run("patch", url, { content: next }, true);
-      setLocalContent((prev) => ({
-        ...prev,
-        content: updated?.content ?? next,
-        hashtags: updated?.hashtags ?? prev?.hashtags,
-      }));
-      toast.success("Post updated");
-      setEditing(false);
-    } catch (err) {
-      const detail = err?.response?.data?.detail;
-      toast.error(typeof detail === "string" ? detail : "Could not save changes.");
-    } finally {
-      setSavingEdit(false);
-    }
+  const handleEditSaved = (updated) => {
+    setLocalContent((prev) => ({
+      ...prev,
+      content: updated?.content ?? prev?.content,
+      hashtags: updated?.hashtags ?? prev?.hashtags,
+      font_family: updated?.font_family ?? prev?.font_family,
+      image: updated?.image ?? "",
+      video: updated?.video ?? "",
+      audio: updated?.audio ?? "",
+      location: updated?.location ?? "",
+    }));
+    setEditing(false);
   };
 
   const renderContent = () => {
@@ -138,36 +119,12 @@ const ProfileContent = ({ content, type, onLike, onUnlike, onRepost, onUnrepost,
               
               <div className="mb-6">
                 {editing ? (
-                  <div className="space-y-3">
-                    <textarea
-                      value={editText}
-                      onChange={(e) => setEditText(e.target.value)}
-                      rows={4}
-                      className="w-full px-3 py-2 border border-border bg-background text-foreground text-base leading-relaxed focus:outline-none focus:ring-2 focus:ring-primary/25"
-                      style={postFontStyle(content.font_family)}
-                      disabled={savingEdit}
-                    />
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        disabled={savingEdit}
-                        onClick={saveEdit}
-                        className="min-h-10 px-4 bg-primary text-primary-foreground text-sm font-medium disabled:opacity-60"
-                        style={{ borderRadius: 5 }}
-                      >
-                        {savingEdit ? "Saving…" : "Save"}
-                      </button>
-                      <button
-                        type="button"
-                        disabled={savingEdit}
-                        onClick={() => setEditing(false)}
-                        className="min-h-10 px-4 border border-border bg-background text-foreground text-sm font-medium"
-                        style={{ borderRadius: 5 }}
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
+                  <PostEditPanel
+                    item={content}
+                    itemType={type === "comments" ? "comments" : "post"}
+                    onCancel={() => setEditing(false)}
+                    onSaved={handleEditSaved}
+                  />
                 ) : (
                 <p
                   className="text-foreground text-base leading-relaxed"
@@ -178,7 +135,7 @@ const ProfileContent = ({ content, type, onLike, onUnlike, onRepost, onUnrepost,
                 )}
                 
                 {/* Handle both images and videos */}
-                {content.image && (
+                {!editing && content.image && (
                   <div className="mt-4">
                     {content.image.includes('.mp4') || content.image.includes('.mov') || content.image.includes('.avi') || content.image.includes('.webm') ? (
                       <video
@@ -199,7 +156,7 @@ const ProfileContent = ({ content, type, onLike, onUnlike, onRepost, onUnrepost,
                   </div>
                 )}
                 
-                {content.video && (
+                {!editing && content.video && (
                   <div className="mt-4">
                     <video
                       src={content.video}
@@ -212,7 +169,7 @@ const ProfileContent = ({ content, type, onLike, onUnlike, onRepost, onUnrepost,
                   </div>
                 )}
                 
-                {content.audio && (
+                {!editing && content.audio && (
                   <div className="mt-4">
                     <audio
                       src={content.audio}
@@ -224,7 +181,7 @@ const ProfileContent = ({ content, type, onLike, onUnlike, onRepost, onUnrepost,
                   </div>
                 )}
                 
-                {content.location && (
+                {!editing && content.location && (
                   <div className="mt-4 p-3 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-100">
                     <div className="flex items-center space-x-2">
                       <div className="flex items-center justify-center w-8 h-8 bg-blue-100 rounded-full">

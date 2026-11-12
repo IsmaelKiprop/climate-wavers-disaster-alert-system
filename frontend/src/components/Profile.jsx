@@ -13,7 +13,7 @@ import { endpoints } from "../utils/endpoints";
 import { client } from "../api";
 import {
   getUser,
-  mergeUserMedia,
+  mergeProfileFields,
   normalizeUser,
   secureMediaUrl,
   setUser,
@@ -59,6 +59,7 @@ const Profile = () => {
   const {
     error,
     isFetched,
+    remoteFetched,
     data: user,
     user: loadedUser,
   } = useProfile({
@@ -80,12 +81,14 @@ const Profile = () => {
   useEffect(() => {
     const seed = seedOwnProfile(userId);
     if (seed?.id) {
-      setProfile((prev) => mergeUserMedia(seed, prev?.id ? prev : seed));
+      setProfile((prev) => mergeProfileFields(seed, prev?.id ? prev : seed));
+    } else {
+      setProfile((prev) => (String(prev?.id) === String(userId) ? prev : { id: userId }));
     }
     const syncCookie = () => {
       const nextSeed = seedOwnProfile(userId);
       if (!nextSeed?.id) return;
-      setProfile((prev) => mergeUserMedia(nextSeed, prev || {}));
+      setProfile((prev) => mergeProfileFields(nextSeed, prev || {}));
     };
     window.addEventListener("userUpdated", syncCookie);
     return () => window.removeEventListener("userUpdated", syncCookie);
@@ -94,7 +97,7 @@ const Profile = () => {
   useEffect(() => {
     const nextUser = normalizeUser(user?.user || loadedUser);
     if (nextUser?.id) {
-      setProfile((prev) => mergeUserMedia(prev || {}, nextUser));
+      setProfile((prev) => mergeProfileFields(prev || {}, nextUser));
       const following = Boolean(nextUser.is_following);
       setIsFollowLocal(following);
       setFollowing(nextUser.id, following);
@@ -109,21 +112,26 @@ const Profile = () => {
         polls: user.polls || [],
       });
     }
-    if (error && !nextUser?.id) {
+    if (error && !nextUser?.id && remoteFetched) {
       toast.dismiss();
       toast.error("We could not load this profile.");
     }
-  }, [isFetched, error, user, loadedUser, setFollowing]);
+  }, [isFetched, remoteFetched, error, user, loadedUser, setFollowing]);
 
   const isOwnProfile = String(me.id || "") === String(profile?.id || userId || "");
+  // Prefer loaded profile, fall back to signed-in cookie for own page (avoids blank "Profile"/?).
+  const viewUser = isOwnProfile
+    ? mergeProfileFields(withCachedMedia(me) || {}, profile || {})
+    : profile;
   const avatarSrc = secureMediaUrl(
-    profile?.profile_picture || profile?.profile_pic || profile?.picture || ""
+    viewUser?.profile_picture || viewUser?.profile_pic || viewUser?.picture || ""
   );
-  const coverSrc = secureMediaUrl(profile?.cover || profile?.cover_image || "");
+  const coverSrc = secureMediaUrl(viewUser?.cover || viewUser?.cover_image || "");
   const displayName =
-    [profile?.first_name, profile?.last_name].filter(Boolean).join(" ") ||
-    profile?.full_name ||
-    profile?.username ||
+    [viewUser?.first_name, viewUser?.last_name].filter(Boolean).join(" ") ||
+    viewUser?.display_name ||
+    viewUser?.full_name ||
+    viewUser?.username ||
     "";
 
   const whatsappVerified = Boolean(profile?.whatsapp_verified);
@@ -131,10 +139,10 @@ const Profile = () => {
   const whatsappDigits = String(whatsappPhone).replace(/\D/g, "");
   const whatsappHref = whatsappDigits ? `https://wa.me/${whatsappDigits}` : "";
 
-  // Avoid flashing default plastic cover / teal avatar before cached or API media arrives.
-  const mediaSettled = Boolean(isFetched || avatarSrc || coverSrc || !isOwnProfile);
-  const coverPreviewSrc = coverSrc || (mediaSettled ? "/environment.jpg" : "");
-  const showAvatarSkeleton = !avatarSrc && !mediaSettled;
+  // Wait for a real name/photo before settling — avoids "?" and default plastic cover flash.
+  const profileReady = Boolean(displayName || avatarSrc || remoteFetched);
+  const coverPreviewSrc = coverSrc || (profileReady ? "/environment.jpg" : "");
+  const showAvatarSkeleton = !avatarSrc && !profileReady;
 
   const handleProfilePictureClick = (event) => {
     event.stopPropagation();
@@ -167,7 +175,7 @@ const Profile = () => {
   }, [avatarSrc, coverSrc]);
 
   const handleProfileUpdate = (updatedUser) => {
-    const nextProfile = mergeUserMedia(profile || {}, updatedUser || {});
+    const nextProfile = mergeProfileFields(profile || {}, updatedUser || {});
     setProfile(nextProfile);
     setUser(nextProfile);
   };
@@ -268,7 +276,7 @@ const Profile = () => {
                     />
                   ) : (
                     <UserAvatar
-                      user={profile}
+                      user={viewUser}
                       showFirstName={!avatarSrc}
                       className="w-24 h-24 md:w-32 md:h-32 lg:w-36 lg:h-36 border-4 border-white shadow-2xl cursor-zoom-in"
                       textClassName="text-base md:text-xl lg:text-2xl font-bold"
@@ -307,23 +315,25 @@ const Profile = () => {
             <div className="flex flex-col gap-5 max-w-3xl">
               <div>
                 <h1 className="text-2xl md:text-3xl font-semibold text-foreground tracking-tight inline-flex items-center gap-2 flex-wrap">
-                  <span>{displayName || "Profile"}</span>
-                  {profile?.is_verified ? (
+                  <span>
+                    {displayName || (profileReady ? "Profile" : "Loading…")}
+                  </span>
+                  {viewUser?.is_verified ? (
                     <ClimateVerifiedBadge size="lg" showLabel />
                   ) : null}
                 </h1>
-                {profile?.username ? (
-                  <p className="mt-1 text-sm text-muted">@{profile.username}</p>
+                {viewUser?.username ? (
+                  <p className="mt-1 text-sm text-muted">@{viewUser.username}</p>
                 ) : null}
-                {String(profile?.username || "").toLowerCase() === "waverx" ||
-                String(profile?.first_name || "").toLowerCase() === "waverx" ? (
+                {String(viewUser?.username || "").toLowerCase() === "waverx" ||
+                String(viewUser?.first_name || "").toLowerCase() === "waverx" ? (
                   <p className="mt-2 text-sm text-primary font-medium">
                     Official Climate Wavers assistant · verified alerts & climate tips
                   </p>
                 ) : null}
-                {profile?.bio ? (
+                {viewUser?.bio ? (
                   <p className="mt-3 text-sm md:text-base text-foreground leading-relaxed max-w-2xl">
-                    {profile.bio}
+                    {viewUser.bio}
                   </p>
                 ) : null}
               </div>
@@ -549,7 +559,7 @@ const Profile = () => {
         </div>
       </div>
       <div className="px-4 md:px-6 lg:px-8 pb-6 max-w-4xl mx-auto w-full">
-        <ProfileImpactPanel profile={profile} feed={feed} />
+        <ProfileImpactPanel profile={viewUser} feed={feed} />
       </div>
 
       <Feed 

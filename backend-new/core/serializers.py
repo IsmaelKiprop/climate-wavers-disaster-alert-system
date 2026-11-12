@@ -10,6 +10,7 @@ from .models import (
     Follow,
     Bookmark,
     Notification,
+    ChatMessage,
     TreeProject,
     TreeProjectUpdate,
     TreeProjectDonation,
@@ -362,6 +363,19 @@ class PostSerializer(serializers.ModelSerializer):
         
         return super().create(validated_data)
 
+    def update(self, instance, validated_data):
+        # Allow clearing media by sending blank values from the editor.
+        for media_key in ("image", "video", "audio"):
+            if media_key in validated_data:
+                value = validated_data.get(media_key)
+                if value is None or value == "":
+                    validated_data[media_key] = None
+                elif hasattr(value, "read"):
+                    validated_data.pop(media_key, None)
+        if "location" in validated_data and validated_data.get("location") == "":
+            validated_data["location"] = None
+        return super().update(instance, validated_data)
+
 
 class CommentSerializer(serializers.ModelSerializer):
     total_comments = serializers.IntegerField(read_only=True)
@@ -556,6 +570,29 @@ class NotificationSerializer(serializers.ModelSerializer):
                 payload = CommentSerializer(Comment.objects.get(id=obj.object_id), context={'request': request}).data
             elif obj.content_type and obj.content_type.model == 'follow':
                 payload = FollowSerializer(Follow.objects.get(id=obj.object_id), context={'request': request}).data
+            elif obj.content_type and obj.content_type.model == 'chatmessage':
+                msg = ChatMessage.objects.select_related("sender").get(id=obj.object_id)
+                sender = msg.sender
+                preview = (msg.body or "").strip()
+                if len(preview) > 120:
+                    preview = f"{preview[:117]}..."
+                profile = getattr(sender, "profile_picture", None) if sender else None
+                try:
+                    profile_url = profile.url if profile and hasattr(profile, "url") else profile
+                except Exception:
+                    profile_url = None
+                payload = {
+                    "conversation_id": msg.conversation_id,
+                    "message_id": msg.id,
+                    "content": preview,
+                    "actor": {
+                        "id": sender.id if sender else None,
+                        "username": getattr(sender, "username", "") if sender else "",
+                        "first_name": getattr(sender, "first_name", "") if sender else "",
+                        "last_name": getattr(sender, "last_name", "") if sender else "",
+                        "profile_picture": profile_url,
+                    },
+                }
         except Exception:
             payload = None
         obj._content_cache = payload

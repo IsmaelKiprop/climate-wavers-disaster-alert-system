@@ -79,6 +79,77 @@ def _normalize_mentions(raw):
     return out
 
 
+def notify_chat_mentions(msg, sender=None):
+    """Create in-app (+ websocket) notifications for @mentioned users."""
+    try:
+        mentions = msg.mentions or []
+        if not mentions:
+            return
+
+        sender = sender or msg.sender
+        if not sender:
+            return
+
+        mention_ids = []
+        for item in mentions:
+            try:
+                uid = int(item.get("id") if isinstance(item, dict) else item)
+            except (TypeError, ValueError, AttributeError):
+                continue
+            if uid == sender.id:
+                continue
+            if uid not in mention_ids:
+                mention_ids.append(uid)
+        if not mention_ids:
+            return
+
+        from django.contrib.contenttypes.models import ContentType
+
+        from .models import Notification
+        from .signals import send_to_websocket
+
+        recipients = list(User.objects.filter(id__in=mention_ids))
+        if not recipients:
+            return
+
+        display = (
+            f"{sender.first_name or ''} {sender.last_name or ''}".strip()
+            or sender.username
+        )
+        preview = (msg.body or "").strip()
+        if len(preview) > 120:
+            preview = f"{preview[:117]}..."
+
+        content_payload = {
+            "conversation_id": msg.conversation_id,
+            "message_id": msg.id,
+            "content": preview,
+            "actor": user_public_dict(sender),
+        }
+        ct = ContentType.objects.get_for_model(ChatMessage)
+        notice_text = f"{display} mentioned you in chat"
+
+        for recipient in recipients:
+            notification = Notification.objects.create(
+                user=recipient,
+                notification_type="mention",
+                object_id=msg.id,
+                content_type=ct,
+                message=notice_text,
+            )
+            send_to_websocket(
+                notification.id,
+                recipient.username,
+                notice_text,
+                sender,
+                "mention",
+                content=content_payload,
+            )
+    except Exception:
+        # Never break chat send if notification delivery fails.
+        return
+
+
 def message_dict(msg, current_user_id=None):
     deleted = bool(msg.is_deleted)
     return {
@@ -637,6 +708,8 @@ class ChatMessageListCreateView(APIView):
         ConversationMember.objects.filter(
             conversation=conv, user=request.user
         ).update(last_read_at=timezone.now(), last_read_message_id=msg.id)
+
+        notify_chat_mentions(msg, sender=request.user)
 
         payload = message_dict(msg, request.user.id)
         broadcast_chat_event(conv.id, "message", payload)

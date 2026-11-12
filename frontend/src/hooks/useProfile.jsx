@@ -4,7 +4,7 @@ import { endpoints } from "../utils/endpoints";
 import {
   cacheProfileMedia,
   getUser,
-  mergeUserMedia,
+  mergeProfileFields,
   normalizeUser,
   setUser,
   withCachedMedia,
@@ -26,10 +26,11 @@ export const useProfile = ({ user_id, username } = {}) => {
     queryFn: async () => {
       if (!user_id) return null;
       const remote = await client.run("get", `${endpoints.users}${user_id}/`, {}, true);
-      const user = mergeUserMedia(seed || {}, normalizeUser(remote) || remote || {});
+      const user = mergeProfileFields(seed || {}, normalizeUser(remote) || remote || {});
       cacheProfileMedia(user);
-      if (seed && user?.id && String(user.id) === String(seed.id)) {
-        setUser(user);
+      if (user?.id && String(user.id) === String(user_id)) {
+        const me = getUser();
+        if (me && String(me.id) === String(user.id)) setUser(user);
       }
       return user;
     },
@@ -48,12 +49,13 @@ export const useProfile = ({ user_id, username } = {}) => {
         : { username };
       const payload = await client.run("post", endpoints.profile, body, true);
       if (payload?.user) {
-        payload.user = mergeUserMedia(
-          seed || {},
+        payload.user = mergeProfileFields(
+          seed || details.data || {},
           normalizeUser(payload.user) || payload.user
         );
         cacheProfileMedia(payload.user);
-        if (seed?.id && String(payload.user.id) === String(seed.id)) {
+        const me = getUser();
+        if (me && payload.user?.id && String(me.id) === String(payload.user.id)) {
           setUser(payload.user);
         }
       }
@@ -67,16 +69,19 @@ export const useProfile = ({ user_id, username } = {}) => {
 
   const rawUser = activity.data?.user || details.data || seed || null;
   const user = rawUser
-    ? mergeUserMedia(seed || {}, normalizeUser(rawUser) || rawUser)
+    ? mergeProfileFields(seed || {}, normalizeUser(rawUser) || rawUser)
     : null;
+
+  const remoteFetched = details.isFetched || activity.isFetched;
 
   return {
     error: details.error || activity.error,
-    isFetched: details.isFetched || activity.isFetched || Boolean(user),
+    isFetched: remoteFetched || Boolean(user),
+    remoteFetched,
     isLoading: (details.isLoading || activity.isLoading) && !user,
     isPending: details.isPending || activity.isPending,
     data: activity.data
-      ? activity.data
+      ? { ...activity.data, user: mergeProfileFields(user || {}, activity.data.user || {}) }
       : user
         ? { user, posts: [], comments: [], repost: [], bookmarks: [], reactions: [], polls: [] }
         : undefined,

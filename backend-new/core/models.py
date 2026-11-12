@@ -17,6 +17,7 @@ class Notification(models.Model):
         ("poll", "Poll"),
         ("follow", "Follow"),
         ("disaster", "Disaster"),
+        ("mention", "Mention"),
     ]
 
     user = models.ForeignKey(

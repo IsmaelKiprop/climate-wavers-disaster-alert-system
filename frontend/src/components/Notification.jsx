@@ -6,6 +6,11 @@ import { formatTimeAgo } from "../utils/apiData";
 import { secureMediaUrl } from "../utils/factory";
 
 const noticeUrl = (notice) => {
+  if (notice?.notification_type === "mention") {
+    const conversationId =
+      notice?.content?.conversation_id || notice?.content?.conversationId;
+    return conversationId ? `/app/chat?c=${conversationId}` : "/app/chat";
+  }
   if (notice?.content?.post) {
     return `/app/${notice.content.post}/${notice.content.id}/comments`;
   }
@@ -53,7 +58,7 @@ const Notification = () => {
         <div className="border border-border bg-surface p-6">
           <p className="font-medium">No notifications yet</p>
           <p className="mt-2 text-sm text-muted">
-            Follows, comments, and disaster alerts will show up here as they happen.
+            Follows, mentions, comments, and disaster alerts will show up here as they happen.
           </p>
           <button
             type="button"

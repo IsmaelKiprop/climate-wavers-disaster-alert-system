@@ -65,6 +65,18 @@ export const readCachedProfileMedia = (userId) => {
   }
 };
 
+const nonEmpty = (value) => {
+  if (value == null) return false;
+  if (typeof value === "string") return value.trim() !== "";
+  return true;
+};
+
+const pickText = (next, prev, key) => {
+  if (nonEmpty(next?.[key])) return next[key];
+  if (nonEmpty(prev?.[key])) return prev[key];
+  return next?.[key] ?? prev?.[key] ?? "";
+};
+
 /** Prefer non-empty media from next, then prev, then localStorage cache. */
 export const mergeUserMedia = (prev = {}, next = {}) => {
   const cached = readCachedProfileMedia(next?.id || prev?.id);
@@ -95,10 +107,44 @@ export const mergeUserMedia = (prev = {}, next = {}) => {
   };
 };
 
+/**
+ * Merge profile payloads without letting blank API fields wipe name / bio / media.
+ */
+export const mergeProfileFields = (prev = {}, next = {}) => {
+  const media = mergeUserMedia(prev, next);
+  const textKeys = [
+    "first_name",
+    "last_name",
+    "full_name",
+    "username",
+    "email",
+    "bio",
+    "country",
+    "state",
+    "location",
+    "profession",
+    "phone",
+    "website",
+    "display_name",
+    "whatsapp_phone",
+  ];
+  const out = { ...media };
+  for (const key of textKeys) {
+    out[key] = pickText(next, prev, key);
+  }
+  out.id = next?.id ?? next?.pk ?? prev?.id ?? prev?.pk ?? out.id;
+  if (out.full_name && !out.first_name) {
+    const parts = String(out.full_name).trim().split(/\s+/);
+    out.first_name = parts[0] || "";
+    out.last_name = out.last_name || parts.slice(1).join(" ");
+  }
+  return out;
+};
+
 export const withCachedMedia = (user) => {
   const normalized = normalizeUser(user);
   if (!normalized?.id) return normalized;
-  return mergeUserMedia(normalized, normalized);
+  return mergeProfileFields(normalized, normalized);
 };
 
 export const setUser = (user) => {
@@ -109,7 +155,7 @@ export const setUser = (user) => {
     refresh_token: _refresh,
     password: _password,
     ...safeUser
-  } = mergeUserMedia(getUser() || {}, normalized);
+  } = mergeProfileFields(getUser() || {}, normalized);
   cacheProfileMedia(safeUser);
   try {
     Cookies.set("user", JSON.stringify(safeUser), { path: "/" });
@@ -154,7 +200,7 @@ export const completeAuthSession = async (authPayload = {}) => {
   try {
     const remote = await client.run("get", endpoints.user, {}, true);
     if (remote) {
-      return setUser(mergeUserMedia(seed, remote));
+      return setUser(mergeProfileFields(seed, remote));
     }
   } catch (error) {
     console.error("Failed to hydrate signed-in profile:", error);

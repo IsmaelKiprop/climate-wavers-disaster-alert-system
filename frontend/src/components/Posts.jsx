@@ -2,16 +2,14 @@ import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { formatDistanceToNow } from "date-fns";
 import Accountcard from "./Accountcard";
-import { client } from "../api";
-import { endpoints } from "../utils/endpoints";
 import { secureMediaUrl } from "../utils/factory";
-import { toast } from "react-toastify";
 import { AiOutlineHeart, AiFillHeart, AiOutlineRetweet } from "react-icons/ai";
 import { IoChatboxEllipsesOutline } from "react-icons/io5";
 import { PiBookmark, PiBookmarkFill } from "react-icons/pi";
 import Modal from "./Modal";
 import Createpost from "./Createpost";
 import PostOwnerMenu from "./PostOwnerMenu";
+import PostEditPanel from "./PostEditPanel";
 import PropTypes from "prop-types";
 import ImageLightbox from "./ImageLightbox";
 import LinkifiedText from "./LinkifiedText";
@@ -37,8 +35,6 @@ const Posts = ({
   const [localPosts, setLocalPosts] = useState([]);
   const [mediaPreview, setMediaPreview] = useState(null);
   const [editingId, setEditingId] = useState(null);
-  const [editText, setEditText] = useState("");
-  const [savingEdit, setSavingEdit] = useState(false);
 
   useEffect(() => {
     if (!Array.isArray(posts)) {
@@ -138,44 +134,23 @@ const Posts = ({
 
   const startEdit = (post) => {
     setEditingId(post.id);
-    setEditText(post.content || "");
   };
 
   const cancelEdit = () => {
     setEditingId(null);
-    setEditText("");
-    setSavingEdit(false);
   };
 
-  const saveEdit = async (post) => {
-    const next = String(editText || "").trim();
-    if (!next) {
-      toast.error("Post cannot be empty.");
-      return;
-    }
-    if (next === String(post.content || "").trim()) {
-      cancelEdit();
-      return;
-    }
-    setSavingEdit(true);
-    try {
-      const isComment = type === "comments";
-      const url = isComment
-        ? `${endpoints.comments}${post.id}/`
-        : `${endpoints.post}${post.id}/`;
-      const updated = await client.run("patch", url, { content: next }, true);
-      handleOptimisticUpdate(post.id, {
-        content: updated?.content ?? next,
-        hashtags: updated?.hashtags,
-        font_family: updated?.font_family ?? post.font_family,
-      });
-      toast.success(isComment ? "Comment updated" : "Post updated");
-      cancelEdit();
-    } catch (error) {
-      const detail = error?.response?.data?.detail;
-      toast.error(typeof detail === "string" ? detail : "Could not save changes.");
-      setSavingEdit(false);
-    }
+  const handleEditSaved = (postId, updated) => {
+    handleOptimisticUpdate(postId, {
+      content: updated?.content,
+      hashtags: updated?.hashtags,
+      font_family: updated?.font_family,
+      image: updated?.image ?? "",
+      video: updated?.video ?? "",
+      audio: updated?.audio ?? "",
+      location: updated?.location ?? "",
+    });
+    cancelEdit();
   };
 
   const handleDeleted = (post) => {
@@ -318,36 +293,12 @@ const Posts = ({
             <div className="w-full text-left">
               <div className="px-6 pb-4">
               {editingId === post.id ? (
-                <div className="space-y-3" onClick={(e) => e.stopPropagation()}>
-                  <textarea
-                    value={editText}
-                    onChange={(e) => setEditText(e.target.value)}
-                    rows={4}
-                    className="w-full px-3 py-2 border border-border bg-background text-foreground text-base leading-relaxed focus:outline-none focus:ring-2 focus:ring-primary/25"
-                    style={postFontStyle(post?.font_family)}
-                    disabled={savingEdit}
-                  />
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      disabled={savingEdit}
-                      onClick={() => saveEdit(post)}
-                      className="min-h-10 px-4 bg-primary text-primary-foreground text-sm font-medium disabled:opacity-60"
-                      style={{ borderRadius: 5 }}
-                    >
-                      {savingEdit ? "Saving…" : "Save"}
-                    </button>
-                    <button
-                      type="button"
-                      disabled={savingEdit}
-                      onClick={cancelEdit}
-                      className="min-h-10 px-4 border border-border bg-background text-foreground text-sm font-medium disabled:opacity-60"
-                      style={{ borderRadius: 5 }}
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </div>
+                <PostEditPanel
+                  item={post}
+                  itemType={type === "comments" ? "comments" : "post"}
+                  onCancel={cancelEdit}
+                  onSaved={(updated) => handleEditSaved(post.id, updated)}
+                />
               ) : (
               <button type="button" onClick={() => commentPage(post)} className="w-full text-left">
               <p
@@ -362,7 +313,7 @@ const Posts = ({
               </p>
               </button>
               )}
-              {(post?.image || post?.video) && (
+              {editingId !== post.id && (post?.image || post?.video) && (
                   <div
                     className={`mt-4 grid gap-2 ${
                       post?.image && post?.video ? "grid-cols-2" : "grid-cols-1"
@@ -447,7 +398,7 @@ const Posts = ({
                     )}
                   </div>
                 )}
-                {post?.audio && (
+                {editingId !== post.id && post?.audio && (
                   <div className="mt-4">
                     <div className="bg-gray-50 rounded-xl p-4 border border-gray-200 group-hover:shadow-lg transition-shadow duration-300">
                       <div className="flex items-center space-x-3">

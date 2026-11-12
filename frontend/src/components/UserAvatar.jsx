@@ -38,6 +38,17 @@ export default function UserAvatar({
     );
   }
 
+  // Never show a lonely "?" — wait for first name or use a neutral pulse.
+  if (!firstName && initial === "?") {
+    return (
+      <div
+        className={`bg-surface-muted animate-pulse ${className}`}
+        style={{ borderRadius: "50%", ...style }}
+        aria-hidden
+      />
+    );
+  }
+
   return (
     <div
       className={`bg-primary text-primary-foreground flex items-center justify-center font-semibold select-none ${className}`}

@@ -368,7 +368,12 @@ class ChatConsumer(AsyncWebsocketConsumer):
         media_type="",
         mentions=None,
     ):
-        from .chat import _normalize_mentions, message_dict, user_can_access
+        from .chat import (
+            _normalize_mentions,
+            message_dict,
+            notify_chat_mentions,
+            user_can_access,
+        )
         from .models import ChatMessage, Conversation, ConversationMember
 
         try:
@@ -410,6 +415,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
         ConversationMember.objects.filter(
             conversation=conv, user=self.user
         ).update(last_read_at=timezone.now(), last_read_message_id=msg.id)
+        notify_chat_mentions(msg, sender=self.user)
         return message_dict(msg, self.user_id)
 
     @database_sync_to_async
