@@ -6,6 +6,7 @@ import {
   IoAttachOutline,
   IoChatbubblesOutline,
   IoCheckmarkDone,
+  IoChevronForward,
   IoClose,
   IoHappyOutline,
   IoPeopleOutline,
@@ -425,27 +426,39 @@ const CommunityChat = () => {
     ) {
       return;
     }
+    // Open instantly (WhatsApp-style), then fill members.
     setGroupInfoOpen(true);
     setGroupInfoLoading(true);
-    const res = await loadRoomMembers(activeConversation.id);
-    // Prefer live conversation avatar/description if members payload is sparse.
-    if (res && !res.group) {
-      res.group = {
+    setGroupInfoData({
+      conversation_type: activeConversation.conversation_type,
+      group: {
         name: activeConversation.name,
         description: activeConversation.description || "",
         cover_image: activeConversation.avatar || "",
-        member_count: activeConversation.member_count || (res.members || []).length,
-      };
-    } else if (res?.group) {
-      res.group = {
-        ...res.group,
-        cover_image:
-          res.group.cover_image || activeConversation.avatar || "",
-        description:
-          res.group.description || activeConversation.description || "",
-      };
+        member_count: activeConversation.member_count || roomMembers.length || 0,
+      },
+      members: roomMembers,
+    });
+    const res = await loadRoomMembers(activeConversation.id);
+    if (res) {
+      setGroupInfoData({
+        ...res,
+        conversation_type: res.conversation_type || activeConversation.conversation_type,
+        group: {
+          ...(res.group || {}),
+          name: res.group?.name || activeConversation.name,
+          cover_image:
+            res.group?.cover_image || activeConversation.avatar || "",
+          description:
+            res.group?.description || activeConversation.description || "",
+          member_count:
+            res.group?.member_count ||
+            (res.members || []).length ||
+            activeConversation.member_count ||
+            0,
+        },
+      });
     }
-    setGroupInfoData(res);
     setGroupInfoLoading(false);
   };
 
@@ -1131,7 +1144,7 @@ const CommunityChat = () => {
               </button>
               <button
                 type="button"
-                className="min-w-0 flex-1 text-left"
+                className="min-w-0 flex-1 text-left hover:opacity-90"
                 onClick={() => {
                   if (
                     ["group", "community"].includes(
@@ -1142,7 +1155,14 @@ const CommunityChat = () => {
                   }
                 }}
               >
-                <p className="text-sm font-semibold truncate">{activeConversation.name}</p>
+                <p className="text-sm font-semibold truncate flex items-center gap-1">
+                  <span className="truncate">{activeConversation.name}</span>
+                  {["group", "community"].includes(
+                    activeConversation.conversation_type
+                  ) ? (
+                    <IoChevronForward size={14} className="shrink-0 text-muted" />
+                  ) : null}
+                </p>
                 <p className="text-xs text-muted truncate">{headerSubtitle}</p>
               </button>
             </header>
