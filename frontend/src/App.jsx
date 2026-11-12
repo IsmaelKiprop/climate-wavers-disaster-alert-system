@@ -102,6 +102,21 @@ const OnboardingPlantTree = lazy(() =>
 const OnboardingTreeAdmin = lazy(() =>
   import("./components/Onboarding").then((m) => ({ default: m.TreeAdmin }))
 );
+const OnboardingNetwork = lazy(() =>
+  import("./components/Onboarding").then((m) => ({ default: m.Network }))
+);
+const OnboardingGroups = lazy(() =>
+  import("./components/Onboarding").then((m) => ({ default: m.Groups }))
+);
+const OnboardingChat = lazy(() =>
+  import("./components/Onboarding").then((m) => ({ default: m.Chat }))
+);
+const OnboardingAlertSettings = lazy(() =>
+  import("./components/Onboarding").then((m) => ({ default: m.AlertSettings }))
+);
+const OnboardingResponder = lazy(() =>
+  import("./components/Onboarding").then((m) => ({ default: m.Responder }))
+);
 
 function RouteFallback() {
   return (
@@ -193,16 +208,21 @@ function App() {
               </Route>
               <Route path="/onboarding" element={<OnboardingLayout />}>
                 <Route index element={<Welcome />} />
+                <Route path="/onboarding/home" element={<Home />} />
+                <Route path="/onboarding/network" element={<OnboardingNetwork />} />
+                <Route path="/onboarding/groups" element={<OnboardingGroups />} />
+                <Route path="/onboarding/community" element={<OnboardingCommunity />} />
+                <Route path="/onboarding/chat" element={<OnboardingChat />} />
+                <Route path="/onboarding/profile" element={<OnboardingProfile />} />
+                <Route path="/onboarding/plant-tree" element={<OnboardingPlantTree />} />
+                <Route path="/onboarding/alert-settings" element={<OnboardingAlertSettings />} />
+                <Route path="/onboarding/disasters" element={<OnboardingDisasters />} />
+                <Route path="/onboarding/responder" element={<OnboardingResponder />} />
+                <Route path="/onboarding/waverx" element={<OnboardingWaverX />} />
                 <Route path="/onboarding/bot" element={<OnboardingChatbot />} />
                 <Route path="/onboarding/campaigns" element={<OnboardingCampaign />} />
-                <Route path="/onboarding/home" element={<Home />} />
-                <Route path="/onboarding/community" element={<OnboardingCommunity />} />
                 <Route path="/onboarding/notifications" element={<OnboardingNotification />} />
-                <Route path="/onboarding/disasters" element={<OnboardingDisasters />} />
-                <Route path="/onboarding/profile" element={<OnboardingProfile />} />
                 <Route path="/onboarding/donate" element={<OnboardingDonate />} />
-                <Route path="/onboarding/waverx" element={<OnboardingWaverX />} />
-                <Route path="/onboarding/plant-tree" element={<OnboardingPlantTree />} />
                 <Route path="/onboarding/tree-admin" element={<OnboardingTreeAdmin />} />
                 <Route path="/onboarding/grableg" element={<GrabLeg />} />
                 <Route path="/onboarding/botleg" element={<BotLeg />} />

@@ -78,13 +78,17 @@ const AppNav = ({ onNavigate, compact = false }) => {
   const items = onboarding
     ? [
         { to: "/onboarding/home", label: "Home", Icon: IoHomeOutline, ActiveIcon: IoHome, end: true },
-        { to: "/onboarding/community", label: "Community", Icon: IoPeopleOutline, ActiveIcon: IoPeople },
+        { to: "/onboarding/network", label: "Network", Icon: IoPeopleOutline, ActiveIcon: IoPeople },
+        { to: "/onboarding/groups", label: "Groups", Icon: IoPeopleCircleOutline, ActiveIcon: IoPeopleCircle },
+        { to: "/onboarding/community", label: "Community", Icon: RiAlarmWarningLine, ActiveIcon: RiAlarmWarningFill },
+        { to: "/onboarding/chat", label: "Chats", Icon: IoChatbubblesOutline, ActiveIcon: IoChatbubbles },
         { to: "/onboarding/profile", label: "Profile", Icon: IoPersonOutline, ActiveIcon: IoPerson },
-        { to: "/onboarding/bot", label: "WaverX", Icon: IoSparklesOutline, ActiveIcon: IoSparklesOutline },
+        { to: "/onboarding/waverx", label: "WaverX", Icon: IoSparklesOutline, ActiveIcon: IoSparklesOutline },
         { to: "/onboarding/plant-tree", label: "Plant Trees", Icon: IoLeafOutline, ActiveIcon: IoLeafOutline },
         { to: "/tree-admins/apply", label: "Tree Admin", Icon: IoSettingsOutline, ActiveIcon: IoSettingsOutline },
         { to: "/onboarding/notifications", label: "Notifications", Icon: IoNotificationsOutline, ActiveIcon: IoNotifications },
-        { to: "/onboarding/campaigns", label: "Campaigns", Icon: MdOutlineCampaign, ActiveIcon: MdCampaign },
+        { to: "/onboarding/alert-settings", label: "Alert settings", Icon: IoPhonePortraitOutline, ActiveIcon: IoPhonePortraitOutline },
+        { to: "/onboarding/responder", label: "Responder Desk", Icon: IoShieldOutline, ActiveIcon: IoShieldCheckmark },
         { to: "/onboarding/disasters", label: "Alerts", Icon: RiAlarmWarningLine, ActiveIcon: RiAlarmWarningFill },
       ]
     : [

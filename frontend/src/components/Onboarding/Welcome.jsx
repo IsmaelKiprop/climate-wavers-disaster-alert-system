@@ -25,10 +25,10 @@ const Welcome = () => {
               Hello. Welcome to Climate Wavers.
             </p>
             <p className="bg-primary text-primary-foreground px-4 py-3 text-sm leading-relaxed">
-              I am WaverX, the assistant for live alerts and community reports.
+              I am WaverX. I&apos;ll walk you through home, groups, chats, tree gifts, alerts, and more.
             </p>
             <p className="bg-primary text-primary-foreground px-4 py-3 text-sm leading-relaxed">
-              Let me show you around.
+              This quick tour matches the same navigation you&apos;ll use in the app.
             </p>
           </div>
           <Link
