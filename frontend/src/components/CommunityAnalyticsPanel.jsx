@@ -13,8 +13,6 @@ import {
   Filler,
 } from "chart.js";
 import { Bar, Doughnut, Line } from "react-chartjs-2";
-import html2canvas from "html2canvas";
-import jsPDF from "jspdf";
 import { IoDownloadOutline, IoRefreshOutline, IoSparklesOutline } from "react-icons/io5";
 import { client } from "../api";
 import { endpoints } from "../utils/endpoints";
@@ -22,6 +20,7 @@ import {
   analyticsPromptFromReport,
   buildCommunityAnalytics,
 } from "../utils/communityAnalytics";
+import { exportElementToPdf, sanitizeAiBrief } from "../utils/exportPdf";
 import { useTheme } from "../context/ThemeContext";
 
 ChartJS.register(
@@ -147,8 +146,9 @@ const CommunityAnalyticsPanel = ({ events = [], hashtags = [], className = "" })
         res?.generated_content ||
         res?.text ||
         (typeof res === "string" ? res : "");
-      if (text && String(text).trim().length > 40) {
-        setAiBrief(String(text).trim());
+      const cleaned = sanitizeAiBrief(text, baseReport?.narrative || "");
+      if (cleaned && cleaned.length > 40) {
+        setAiBrief(cleaned);
         return;
       }
     } catch {
@@ -257,31 +257,12 @@ const CommunityAnalyticsPanel = ({ events = [], hashtags = [], className = "" })
     if (!reportRef.current || downloading) return;
     setDownloading(true);
     try {
-      const canvas = await html2canvas(reportRef.current, {
-        scale: 2,
-        useCORS: true,
-        backgroundColor: isDark ? "#171d1d" : "#ffffff",
-        logging: false,
-      });
-      const img = canvas.toDataURL("image/png");
-      const pdf = new jsPDF("p", "mm", "a4");
-      const pageWidth = 210;
-      const pageHeight = 297;
-      const margin = 10;
-      const imgWidth = pageWidth - margin * 2;
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-      let heightLeft = imgHeight;
-      let position = margin;
-      pdf.addImage(img, "PNG", margin, position, imgWidth, imgHeight);
-      heightLeft -= pageHeight - margin * 2;
-      while (heightLeft > 0) {
-        position = heightLeft - imgHeight + margin;
-        pdf.addPage();
-        pdf.addImage(img, "PNG", margin, position, imgWidth, imgHeight);
-        heightLeft -= pageHeight - margin * 2;
-      }
       const stamp = new Date().toISOString().slice(0, 10);
-      pdf.save(`ClimateWavers_Community_Pulse_${stamp}.pdf`);
+      await exportElementToPdf(reportRef.current, {
+        fileName: `ClimateWavers_Community_Pulse_${stamp}.pdf`,
+        backgroundColor: isDark ? "#171d1d" : "#ffffff",
+        captureWidth: 920,
+      });
     } catch (err) {
       console.error(err);
       setError("PDF download failed. Try again.");
@@ -335,8 +316,13 @@ const CommunityAnalyticsPanel = ({ events = [], hashtags = [], className = "" })
 
       {error ? <p className="px-4 pt-3 text-sm text-destructive">{error}</p> : null}
 
-      <div ref={reportRef} className="p-4 space-y-5 bg-surface text-foreground">
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3">
+      <div ref={reportRef} className="p-4 sm:p-5 space-y-5 bg-surface text-foreground">
+        <div style={{ breakInside: "avoid" }}>
+          <p className="text-xs uppercase tracking-wide text-muted">Climate Wavers</p>
+          <h3 className="text-base font-semibold text-foreground mt-0.5">Community Pulse Report</h3>
+        </div>
+
+        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
           {[
             { label: "Live events", value: summary.events_live ?? 0 },
             { label: "High / critical", value: summary.high_or_critical ?? 0 },
@@ -348,7 +334,7 @@ const CommunityAnalyticsPanel = ({ events = [], hashtags = [], className = "" })
             <div
               key={stat.label}
               className="border border-border bg-surface-muted p-3 min-w-0"
-              style={{ borderRadius: 5 }}
+              style={{ borderRadius: 5, breakInside: "avoid" }}
             >
               <p className="text-[11px] sm:text-xs text-muted">{stat.label}</p>
               <p className="text-base sm:text-xl font-semibold text-foreground mt-1 truncate tabular-nums">
@@ -360,7 +346,7 @@ const CommunityAnalyticsPanel = ({ events = [], hashtags = [], className = "" })
 
         <div
           className="border border-border bg-surface-muted p-4"
-          style={{ borderRadius: 5 }}
+          style={{ borderRadius: 5, breakInside: "avoid" }}
         >
           <div className="flex items-center gap-2 mb-2">
             <IoSparklesOutline size={18} className="text-primary shrink-0" />
@@ -373,14 +359,14 @@ const CommunityAnalyticsPanel = ({ events = [], hashtags = [], className = "" })
             {aiBrief || report?.narrative || "No briefing yet."}
           </p>
           {report?.disclaimer ? (
-            <p className="text-xs text-muted mt-3">{report.disclaimer}</p>
+            <p className="text-xs text-foreground/70 mt-3">{report.disclaimer}</p>
           ) : null}
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <div className="border border-border p-3" style={{ borderRadius: 5 }}>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="border border-border p-3" style={{ borderRadius: 5, breakInside: "avoid" }}>
             <h3 className="text-sm font-medium mb-2">7-day activity</h3>
-            <div className="h-48">
+            <div className="h-52">
               {(charts.activity_7d?.labels || []).length ? (
                 <Line data={activityData} options={baseOptions} />
               ) : (
@@ -388,9 +374,9 @@ const CommunityAnalyticsPanel = ({ events = [], hashtags = [], className = "" })
               )}
             </div>
           </div>
-          <div className="border border-border p-3" style={{ borderRadius: 5 }}>
+          <div className="border border-border p-3" style={{ borderRadius: 5, breakInside: "avoid" }}>
             <h3 className="text-sm font-medium mb-2">By hazard type</h3>
-            <div className="h-48">
+            <div className="h-52">
               {(charts.by_type?.labels || []).length ? (
                 <Doughnut data={typeData} options={doughnutOptions} />
               ) : (
@@ -398,9 +384,9 @@ const CommunityAnalyticsPanel = ({ events = [], hashtags = [], className = "" })
               )}
             </div>
           </div>
-          <div className="border border-border p-3" style={{ borderRadius: 5 }}>
+          <div className="border border-border p-3" style={{ borderRadius: 5, breakInside: "avoid" }}>
             <h3 className="text-sm font-medium mb-2">Severity mix</h3>
-            <div className="h-48">
+            <div className="h-52">
               {(charts.by_severity?.labels || []).length ? (
                 <Bar data={severityData} options={baseOptions} />
               ) : (
@@ -408,9 +394,9 @@ const CommunityAnalyticsPanel = ({ events = [], hashtags = [], className = "" })
               )}
             </div>
           </div>
-          <div className="border border-border p-3" style={{ borderRadius: 5 }}>
+          <div className="border border-border p-3" style={{ borderRadius: 5, breakInside: "avoid" }}>
             <h3 className="text-sm font-medium mb-2">Geographic hotspots</h3>
-            <div className="h-48">
+            <div className="h-52">
               {(charts.hotspots?.labels || []).length ? (
                 <Bar
                   data={hotspotData}
@@ -429,12 +415,9 @@ const CommunityAnalyticsPanel = ({ events = [], hashtags = [], className = "" })
               )}
             </div>
           </div>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <div className="border border-border p-3" style={{ borderRadius: 5 }}>
+          <div className="border border-border p-3" style={{ borderRadius: 5, breakInside: "avoid" }}>
             <h3 className="text-sm font-medium mb-2">Feed sources</h3>
-            <div className="h-44">
+            <div className="h-52">
               {(charts.by_source?.labels || []).length ? (
                 <Doughnut data={sourceData} options={doughnutOptions} />
               ) : (
@@ -442,20 +425,20 @@ const CommunityAnalyticsPanel = ({ events = [], hashtags = [], className = "" })
               )}
             </div>
           </div>
-          <div className="border border-border p-3 overflow-x-auto" style={{ borderRadius: 5 }}>
+          <div className="border border-border p-3" style={{ borderRadius: 5, breakInside: "avoid" }}>
             <h3 className="text-sm font-medium mb-2">Type breakdown</h3>
             {(report?.type_table || []).length ? (
-              <table className="w-full text-sm">
+              <table className="w-full text-sm table-fixed">
                 <thead>
                   <tr className="text-left text-muted border-b border-border">
-                    <th className="py-2 pr-2 font-medium">Type</th>
-                    <th className="py-2 pr-2 font-medium">Count</th>
-                    <th className="py-2 font-medium">Share</th>
+                    <th className="py-2 pr-2 font-medium w-[50%]">Type</th>
+                    <th className="py-2 pr-2 font-medium w-[25%]">Count</th>
+                    <th className="py-2 font-medium w-[25%]">Share</th>
                   </tr>
                 </thead>
                 <tbody>
                   {report.type_table.map((row) => (
-                    <tr key={row.type} className="border-b border-border/60">
+                    <tr key={row.type} className="border-b border-border">
                       <td className="py-2 pr-2 capitalize">{row.type}</td>
                       <td className="py-2 pr-2 tabular-nums">{row.count}</td>
                       <td className="py-2 tabular-nums">{row.share_pct}%</td>
@@ -469,7 +452,7 @@ const CommunityAnalyticsPanel = ({ events = [], hashtags = [], className = "" })
           </div>
         </div>
 
-        <p className="text-[11px] text-muted">
+        <p className="text-[11px] text-foreground/70 pt-1">
           Generated {report?.generated_at ? new Date(report.generated_at).toLocaleString() : "—"} ·
           Climate Wavers Community Pulse
         </p>

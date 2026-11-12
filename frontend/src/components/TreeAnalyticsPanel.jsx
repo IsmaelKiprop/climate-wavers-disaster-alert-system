@@ -13,13 +13,12 @@ import {
   Filler,
 } from "chart.js";
 import { Bar, Doughnut, Line } from "react-chartjs-2";
-import html2canvas from "html2canvas";
-import jsPDF from "jspdf";
 import { IoDownloadOutline, IoRefreshOutline, IoSparklesOutline } from "react-icons/io5";
 import { client } from "../api";
 import { endpoints } from "../utils/endpoints";
 import { fetchTreeStats } from "../utils/apiData";
 import { buildTreeAnalytics, treeAnalyticsPrompt } from "../utils/treeAnalytics";
+import { exportElementToPdf, sanitizeAiBrief } from "../utils/exportPdf";
 import { useTheme } from "../context/ThemeContext";
 
 ChartJS.register(
@@ -149,8 +148,9 @@ const TreeAnalyticsPanel = ({
         res?.generated_content ||
         res?.text ||
         (typeof res === "string" ? res : "");
-      if (text && String(text).trim().length > 40) {
-        setAiBrief(String(text).trim());
+      const cleaned = sanitizeAiBrief(text, baseReport?.narrative || "");
+      if (cleaned && cleaned.length > 40) {
+        setAiBrief(cleaned);
         return;
       }
     } catch {
@@ -270,31 +270,12 @@ const TreeAnalyticsPanel = ({
     if (!reportRef.current || downloading) return;
     setDownloading(true);
     try {
-      const canvas = await html2canvas(reportRef.current, {
-        scale: 2,
-        useCORS: true,
-        backgroundColor: isDark ? "#171d1d" : "#ffffff",
-        logging: false,
-      });
-      const img = canvas.toDataURL("image/png");
-      const pdf = new jsPDF("p", "mm", "a4");
-      const pageWidth = 210;
-      const pageHeight = 297;
-      const margin = 10;
-      const imgWidth = pageWidth - margin * 2;
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-      let heightLeft = imgHeight;
-      let position = margin;
-      pdf.addImage(img, "PNG", margin, position, imgWidth, imgHeight);
-      heightLeft -= pageHeight - margin * 2;
-      while (heightLeft > 0) {
-        position = heightLeft - imgHeight + margin;
-        pdf.addPage();
-        pdf.addImage(img, "PNG", margin, position, imgWidth, imgHeight);
-        heightLeft -= pageHeight - margin * 2;
-      }
       const stamp = new Date().toISOString().slice(0, 10);
-      pdf.save(`ClimateWavers_Tree_Impact_${stamp}.pdf`);
+      await exportElementToPdf(reportRef.current, {
+        fileName: `ClimateWavers_Tree_Impact_${stamp}.pdf`,
+        backgroundColor: isDark ? "#171d1d" : "#ffffff",
+        captureWidth: 920,
+      });
     } catch (err) {
       console.error(err);
       setError("PDF download failed. Try again.");
@@ -388,8 +369,8 @@ const TreeAnalyticsPanel = ({
           ) : null}
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <div className="border border-border p-3" style={{ borderRadius: 5 }}>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="border border-border p-3" style={{ borderRadius: 5, breakInside: "avoid" }}>
             <h3 className="text-sm font-medium mb-2">Trees by country</h3>
             <div className="h-48">
               {(charts.by_country?.labels || []).length ? (
@@ -438,8 +419,8 @@ const TreeAnalyticsPanel = ({
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <div className="border border-border p-3" style={{ borderRadius: 5 }}>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="border border-border p-3" style={{ borderRadius: 5, breakInside: "avoid" }}>
             <h3 className="text-sm font-medium mb-2">Trees by organization</h3>
             <div className="h-44">
               {(charts.by_org?.labels || []).length ? (
