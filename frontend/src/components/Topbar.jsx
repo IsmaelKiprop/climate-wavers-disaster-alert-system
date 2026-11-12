@@ -3,9 +3,10 @@ import { NavLink, Link, useLocation } from "react-router-dom";
 import Mobilemenu from "./Mobilemenu";
 import Search from "./Search";
 import BrandLogo from "./BrandLogo";
-import { avatarUrl, getUser, logout } from "../utils/factory";
+import { getUser, logout } from "../utils/factory";
 import Modal from "../components/Modal";
 import Report from "./Report";
+import UserAvatar from "./UserAvatar";
 import { IoNotifications, IoNotificationsOutline, IoSearch, IoLogOutOutline, IoPersonOutline, IoMenu, IoChevronBack, IoChevronForward, IoSunnyOutline, IoMoonOutline } from "react-icons/io5";
 import { useNotifications } from "../context/NotificationContext";
 import { useSidebar } from "../context/SidebarContext";
@@ -134,15 +135,11 @@ const Topbar = () => {
             className="h-9 w-9 overflow-hidden"
             aria-label="Account menu"
           >
-            <img
-              key={avatarUrl(user)}
-              src={avatarUrl(user)}
-              className="w-full h-full object-cover"
+            <UserAvatar
+              user={user}
+              className="w-full h-full"
+              textClassName="text-sm"
               alt=""
-              style={{ borderRadius: "50%" }}
-              onError={(event) => {
-                event.target.src = "/avatar.png";
-              }}
             />
           </button>
 

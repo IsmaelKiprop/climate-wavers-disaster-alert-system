@@ -28,6 +28,7 @@ import {
   giftTreesPath,
 } from "../utils/profileCompleteness";
 import ClimateVerifiedBadge from "./ClimateVerifiedBadge";
+import UserAvatar from "./UserAvatar";
 
 const seedOwnProfile = (userId) => {
   const me = withCachedMedia(normalizeUser(getUser())) || {};
@@ -258,45 +259,21 @@ const Profile = () => {
           {/* Profile Picture */}
           <div className="absolute -bottom-2 md:-bottom-4 left-4 md:left-8">
             <div className="relative group">
-              {avatarSrc ? (
-                    <img
-                      src={avatarSrc}
-                      className="w-24 h-24 md:w-32 md:h-32 lg:w-36 lg:h-36 object-cover border-4 border-white shadow-2xl cursor-zoom-in bg-surface"
-                      alt={`${displayName || "Profile"} photo`}
-                      style={{ borderRadius: "50%" }}
-                      fetchPriority="high"
-                      decoding="async"
-                      onClick={handleProfilePictureClick}
-                      onError={(e) => {
-                        e.target.onerror = null;
-                        e.target.src = "/avatar.png";
-                      }}
-                    />
-                  ) : showAvatarSkeleton ? (
+              {showAvatarSkeleton ? (
                     <div
                       className="w-24 h-24 md:w-32 md:h-32 lg:w-36 lg:h-36 border-4 border-white shadow-2xl bg-surface-muted animate-pulse"
                       style={{ borderRadius: "50%" }}
                       aria-hidden
                     />
                   ) : (
-                    <div
-                      className="w-24 h-24 md:w-32 md:h-32 lg:w-36 lg:h-36 border-4 border-white shadow-2xl cursor-pointer bg-primary text-primary-foreground flex items-center justify-center"
-                      style={{ borderRadius: "50%" }}
+                    <UserAvatar
+                      user={profile}
+                      showFirstName={!avatarSrc}
+                      className="w-24 h-24 md:w-32 md:h-32 lg:w-36 lg:h-36 border-4 border-white shadow-2xl cursor-zoom-in"
+                      textClassName="text-base md:text-xl lg:text-2xl font-bold"
+                      alt={`${displayName || "Profile"} photo`}
                       onClick={handleProfilePictureClick}
-                      role="button"
-                      tabIndex={0}
-                      aria-label={isOwnProfile ? "Upload profile photo" : "Profile photo"}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault();
-                          handleProfilePictureClick(e);
-                        }
-                      }}
-                    >
-                      <span className="text-2xl md:text-3xl lg:text-4xl font-bold">
-                        {displayName.charAt(0)?.toUpperCase() || ""}
-                      </span>
-                    </div>
+                    />
                   )}
               {isOwnProfile ? (
                 <button

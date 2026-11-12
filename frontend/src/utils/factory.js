@@ -203,6 +203,39 @@ export const avatarUrl = (user) =>
     "/avatar.png"
   );
 
+/** True when the user has a real uploaded photo (not empty / default). */
+export const hasCustomAvatar = (user) => {
+  const raw = user?.profile_picture || user?.profile_pic || user?.picture || "";
+  if (!raw) return false;
+  const value = String(raw).toLowerCase();
+  if (value.includes("avatar.png") || value.includes("og-image") || value.includes("girl-avatar") || value.includes("boy-avatar")) {
+    return false;
+  }
+  return Boolean(secureMediaUrl(raw));
+};
+
+/** Prefer first name for initials — never gender M/F. */
+export const avatarInitial = (user) => {
+  const first = String(user?.first_name || "").trim();
+  if (first) return first.charAt(0).toUpperCase();
+  const full = String(user?.full_name || "").trim();
+  if (full) return full.charAt(0).toUpperCase();
+  const username = String(user?.username || "").trim().replace(/^@/, "");
+  if (username) return username.charAt(0).toUpperCase();
+  const email = String(user?.email || "").trim();
+  if (email) return email.charAt(0).toUpperCase();
+  return "?";
+};
+
+export const avatarFirstName = (user) => {
+  const first = String(user?.first_name || "").trim();
+  if (first) return first;
+  const full = String(user?.full_name || "").trim();
+  if (full) return full.split(/\s+/)[0] || full;
+  const username = String(user?.username || "").trim().replace(/^@/, "");
+  return username || "";
+};
+
 export const getAuthToken = () => {
   const token = Cookies.get("accessToken");
   return token;

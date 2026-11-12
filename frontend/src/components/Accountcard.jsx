@@ -4,10 +4,11 @@ import { endpoints } from "../utils/endpoints";
 import { client } from "../api";
 import { Link } from "react-router-dom";
 import { IoLeafOutline } from "react-icons/io5";
-import { avatarUrl, getUser } from "../utils/factory";
+import { getUser } from "../utils/factory";
 import { useFollow } from "../context/FollowContext";
 import { giftTreesPath } from "../utils/profileCompleteness";
 import ClimateVerifiedBadge from "./ClimateVerifiedBadge";
+import UserAvatar from "./UserAvatar";
 
 const alreadyFollowing = (error) => {
   const data = error?.response?.data;
@@ -87,13 +88,11 @@ const Accountcard = ({ user }) => {
       >
         <div className="flex items-center gap-2.5 min-w-0">
           <div className="relative shrink-0">
-            <img
-              src={avatarUrl(user)}
-              className="h-10 w-10 rounded-full object-cover ring-2 ring-border group-hover:ring-primary/40 transition-all duration-200"
+            <UserAvatar
+              user={user}
+              className="h-10 w-10 ring-2 ring-border group-hover:ring-primary/40 transition-all duration-200"
+              textClassName="text-sm"
               alt={displayName || "Profile"}
-              onError={(e) => {
-                e.target.src = "/avatar.png";
-              }}
             />
             {user?.is_online ? (
               <div
