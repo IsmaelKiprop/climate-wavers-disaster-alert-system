@@ -23,17 +23,26 @@ const Network = () => {
     }
     setLoading(true);
     try {
-      const [activity, popularRes] = await Promise.all([
-        client.run("post", endpoints.profile, { user_id: Number(me.id) }, true, false, false, false),
-        client.run("get", endpoints.popularUsers, {}, true, false, false, false),
+      const [network, popularRes] = await Promise.all([
+        client.run("get", endpoints.followNetwork, {}, true, false, false, false),
+        client.run(
+          "get",
+          `${endpoints.popularUsers}?limit=12`,
+          {},
+          true,
+          false,
+          false,
+          false
+        ),
       ]);
-      setFollowers(activity?.followers || []);
-      setFollowingList(activity?.followings || activity?.following || []);
+      setFollowers(network?.followers || []);
+      setFollowingList(network?.following || []);
       const people = Array.isArray(popularRes)
         ? popularRes
         : popularRes?.results || popularRes?.users || [];
       setPopular(people);
-      await refreshFollowing?.();
+      // Hydrate follow buttons in the background — do not block the list render.
+      refreshFollowing?.();
     } catch {
       toast.error("Could not load your network.");
     } finally {

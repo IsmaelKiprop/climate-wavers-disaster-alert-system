@@ -16,6 +16,8 @@ import {
   readDevicePosition,
   reverseGeocode,
 } from "../utils/formatLocation";
+import PostFontPicker from "./PostFontPicker";
+import { DEFAULT_POST_FONT, postFontStyle } from "../utils/postFonts";
 
 export default function Createpost({ type, postId, parentId, closeModal }) {
   const { register, handleSubmit, reset, watch, setValue } = useForm();
@@ -32,6 +34,7 @@ export default function Createpost({ type, postId, parentId, closeModal }) {
   const [locationError, setLocationError] = useState(null);
   const [aiGeneratedContent, setAiGeneratedContent] = useState("");
   const [isGeneratingContent, setIsGeneratingContent] = useState(false);
+  const [fontFamily, setFontFamily] = useState(DEFAULT_POST_FONT);
   const fileInputRef = useRef(null);
   const videoInputRef = useRef(null);
   const aiPromptRef = useRef(null);
@@ -379,6 +382,7 @@ export default function Createpost({ type, postId, parentId, closeModal }) {
       // Add text content
       formData.append('content', data.content || '');
       formData.append('visibility', data.visibility || 'Everyone');
+      formData.append('font_family', fontFamily || DEFAULT_POST_FONT);
       formData.append(
         "location",
         locationFieldValue(selectedLocation, data.location || "")
@@ -443,6 +447,7 @@ export default function Createpost({ type, postId, parentId, closeModal }) {
       setImagePreview(null);
       setVideoPreview(null);
       setSelectedLocation(null);
+      setFontFamily(DEFAULT_POST_FONT);
       setIsDisabled(false);
       closeModal();
       
@@ -483,7 +488,8 @@ export default function Createpost({ type, postId, parentId, closeModal }) {
       <div className="relative">
       <textarea
           placeholder="What's on your mind?"
-          className="w-full min-h-[120px] p-4 text-lg text-gray-900 placeholder-gray-500 border border-gray-200 rounded-xl resize-none focus:border-[#2F4F4F] focus:outline-none focus:ring-2 focus:ring-[#2F4F4F]/20 transition-all duration-200"
+          className="w-full min-h-[120px] p-4 text-lg text-foreground placeholder:text-muted border border-border bg-surface resize-none focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all duration-200"
+          style={postFontStyle(fontFamily)}
         {...register("content", { required: true })}
           onChange={(e) => {
             const content = e.target.value;
@@ -501,6 +507,8 @@ export default function Createpost({ type, postId, parentId, closeModal }) {
           </div>
         )}
       </div>
+
+      <PostFontPicker value={fontFamily} onChange={setFontFamily} />
 
       {/* AI Suggestions */}
       {aiSuggestions.length > 0 && (

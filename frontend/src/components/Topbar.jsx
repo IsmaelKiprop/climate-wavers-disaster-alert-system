@@ -2,12 +2,14 @@ import { useState, useRef, useEffect } from "react";
 import { NavLink, Link, useLocation } from "react-router-dom";
 import Mobilemenu from "./Mobilemenu";
 import Search from "./Search";
+import BrandLogo from "./BrandLogo";
 import { avatarUrl, getUser, logout } from "../utils/factory";
 import Modal from "../components/Modal";
 import Report from "./Report";
-import { IoNotifications, IoNotificationsOutline, IoSearch, IoLogOutOutline, IoPersonOutline, IoMenu, IoChevronBack, IoChevronForward } from "react-icons/io5";
+import { IoNotifications, IoNotificationsOutline, IoSearch, IoLogOutOutline, IoPersonOutline, IoMenu, IoChevronBack, IoChevronForward, IoSunnyOutline, IoMoonOutline } from "react-icons/io5";
 import { useNotifications } from "../context/NotificationContext";
 import { useSidebar } from "../context/SidebarContext";
+import { useTheme } from "../context/ThemeContext";
 
 const Topbar = () => {
   const location = useLocation();
@@ -18,6 +20,7 @@ const Topbar = () => {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const { hasNewNotification, markAsRead } = useNotifications();
   const { collapsed, toggle } = useSidebar();
+  const { isDark, preference, setPreference, toggle: toggleTheme } = useTheme();
   const userMenuRef = useRef(null);
   const [user, setUser] = useState(getUser());
   const homeTo = onboarding ? "/onboarding/home" : "/app";
@@ -63,8 +66,8 @@ const Topbar = () => {
           </button>
         ) : null}
         {isOpen ? <Mobilemenu setIsOpen={setIsOpen} /> : null}
-        <Link to={homeTo} className="hidden md:flex items-center gap-2">
-          <img alt="Climate Wavers" src="/logo.jpg" className="h-8 w-auto" />
+        <Link to={homeTo} className="hidden md:flex items-center gap-2 text-foreground">
+          <BrandLogo imgClassName="h-8 w-auto" />
           <span className="hidden lg:inline text-sm font-semibold">Climate Wavers</span>
         </Link>
       </div>
@@ -81,6 +84,16 @@ const Topbar = () => {
       </div>
 
       <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+        <button
+          type="button"
+          onClick={toggleTheme}
+          className="p-2 text-foreground hover:bg-background"
+          aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
+          title={isDark ? "Light mode" : "Dark mode"}
+        >
+          {isDark ? <IoSunnyOutline size={20} /> : <IoMoonOutline size={20} />}
+        </button>
+
         <button
           type="button"
           className="hidden md:inline-flex items-center px-3 py-2 bg-primary text-primary-foreground text-sm font-medium hover:bg-primary-dark"
@@ -149,6 +162,29 @@ const Topbar = () => {
                 <IoPersonOutline className="w-4 h-4 mr-3" />
                 Profile
               </NavLink>
+              <div className="px-4 py-2.5 border-y border-border">
+                <p className="text-xs text-muted mb-2">Appearance</p>
+                <div className="flex gap-1">
+                  {[
+                    { id: "light", label: "Light" },
+                    { id: "dark", label: "Dark" },
+                    { id: "system", label: "System" },
+                  ].map((option) => (
+                    <button
+                      key={option.id}
+                      type="button"
+                      onClick={() => setPreference(option.id)}
+                      className={`flex-1 min-h-8 px-2 text-xs font-medium border ${
+                        preference === option.id
+                          ? "border-primary bg-primary text-primary-foreground"
+                          : "border-border bg-surface text-foreground hover:border-primary"
+                      }`}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
               <button
                 type="button"
                 onClick={() => {

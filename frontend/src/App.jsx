@@ -7,6 +7,7 @@ import LandingPage from "./pages/LandingPage";
 import ScrollToTop from "./components/ScrollToTop";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { lazyWithRetry as lazy } from "./utils/lazyWithRetry";
+import { useTheme } from "./context/ThemeContext";
 
 const Signin = lazy(() => import("./pages/Auth/Signin"));
 const Signup = lazy(() => import("./pages/Auth/Signup"));
@@ -132,11 +133,21 @@ function RouteFallback() {
   );
 }
 
+function ThemedToasts() {
+  const { isDark } = useTheme();
+  return (
+    <ToastContainer
+      theme={isDark ? "dark" : "light"}
+      toastClassName="border border-border"
+    />
+  );
+}
+
 function App() {
   return (
     <HelmetProvider>
-      <div>
-        <ToastContainer />
+      <div className="bg-background text-foreground min-h-[100dvh]">
+        <ThemedToasts />
         <BrowserRouter
           future={{
             v7_startTransition: true,

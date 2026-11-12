@@ -4,6 +4,7 @@ import Menu from "../components/Menu";
 import DashboardSidebar from "../components/DashboardSidebar";
 import Footer from "../components/FooterBar";
 import Pagination from "../components/Pagination";
+import DisasterForecastPanel from "../components/DisasterForecastPanel";
 import { useMemo, useState } from "react";
 import { DisastersPageSEO } from "../components/SEOComponents";
 import { usePagination } from "../hooks/usePagination";
@@ -60,6 +61,11 @@ const DisasterPage = () => {
                   Disaster alerts
                 </h1>
               </div>
+
+              <DisasterForecastPanel
+                events={allDisasters}
+                className="mb-6"
+              />
 
               <form
                 className="flex gap-2"

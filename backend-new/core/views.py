@@ -49,6 +49,7 @@ from .serializers import (
     NotificationSerializer,
     UserSerializer,
     OnlineUserSerializer,
+    PostAuthorSerializer,
     PostSerializer,
     PollSerializer,
     PollVoteSerializer,
@@ -818,6 +819,43 @@ class FollowViewSet(viewsets.ModelViewSet):
         )
         return Response({"ids": ids})
 
+    @action(detail=False, methods=["get"], url_path="network")
+    def network(self, request):
+        """
+        Lightweight followers + following lists for the Network page.
+        Avoids /users/activity/ which serializes posts, comments, reactions, etc.
+        """
+        following_ids = set(
+            Follow.objects.filter(follower=request.user).values_list(
+                "following_id", flat=True
+            )
+        )
+        ctx = {"request": request, "following_ids": following_ids}
+
+        following_users = [
+            f.following
+            for f in Follow.objects.filter(follower=request.user)
+            .select_related("following")
+            .order_by("-created_at")
+        ]
+        follower_users = [
+            f.follower
+            for f in Follow.objects.filter(following=request.user)
+            .select_related("follower")
+            .order_by("-created_at")
+        ]
+
+        return Response(
+            {
+                "following": PostAuthorSerializer(
+                    following_users, many=True, context=ctx
+                ).data,
+                "followers": PostAuthorSerializer(
+                    follower_users, many=True, context=ctx
+                ).data,
+            }
+        )
+
     def create(self, request, *args, **kwargs):
         following_id = request.data.get("following_id")
         already = False
@@ -1419,6 +1457,27 @@ class DisasterViewSet(viewsets.ReadOnlyModelViewSet):
         from .live_feeds import fetch_live_official_events
 
         return Response(fetch_live_official_events())
+
+    @action(detail=False, methods=["get", "post"], permission_classes=[AllowAny])
+    def forecast(self, request):
+        """
+        Historical + live-event outlook with chart series and AI narrative.
+        POST body may include { "events": [...live disasters...], "days": 90 }.
+        """
+        from .disaster_forecast import build_forecast
+
+        days = request.data.get("days") if request.method == "POST" else request.query_params.get("days")
+        try:
+            days = int(days or 90)
+        except (TypeError, ValueError):
+            days = 90
+        live_events = []
+        if request.method == "POST":
+            payload = request.data.get("events") or request.data.get("disasters") or []
+            if isinstance(payload, list):
+                live_events = payload
+        report = build_forecast(live_events=live_events, days=days)
+        return Response(report)
 
 
 class TreeProjectUpdateViewSet(viewsets.ModelViewSet):

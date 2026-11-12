@@ -11,6 +11,7 @@ export const endpoints = {
     "comments": "/api/v1/comments/",
     "follow": "/api/v1/follows/",
     "followIds": "/api/v1/follows/ids/",
+    "followNetwork": "/api/v1/follows/network/",
     "profile": "/api/v1/users/activity/",
     "users": "/api/v1/users/",
     "popularUsers": "/api/v1/users/popular/",

@@ -64,6 +64,12 @@ class Post(models.Model):
         choices=[("Everyone", "Everyone"), ("Friends", "Friends")],
         default="Everyone",
     )
+    font_family = models.CharField(
+        max_length=64,
+        blank=True,
+        default="montserrat",
+        help_text="Frontend post font id (e.g. montserrat, lora, playfair).",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

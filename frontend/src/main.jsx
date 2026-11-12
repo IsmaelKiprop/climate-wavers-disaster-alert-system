@@ -9,22 +9,26 @@ import { NotificationProvider } from "./context/NotificationContext";
 import { ChatProvider } from "./context/ChatContext";
 import { FollowProvider } from "./context/FollowContext";
 import { SidebarProvider } from "./context/SidebarContext";
+import { ThemeProvider } from "./context/ThemeContext";
+import "./styles/font.css";
 
 const queryClient = new QueryClient();
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
-      <NotificationProvider>
-        <ChatProvider>
-          <FollowProvider>
-            <SidebarProvider>
-              <App />
-            </SidebarProvider>
-          </FollowProvider>
-        </ChatProvider>
-        {/* <ReactQueryDevtools initialIsOpen={false} /> */}
-      </NotificationProvider>
+      <ThemeProvider>
+        <NotificationProvider>
+          <ChatProvider>
+            <FollowProvider>
+              <SidebarProvider>
+                <App />
+              </SidebarProvider>
+            </FollowProvider>
+          </ChatProvider>
+          {/* <ReactQueryDevtools initialIsOpen={false} /> */}
+        </NotificationProvider>
+      </ThemeProvider>
     </QueryClientProvider>
   </React.StrictMode>
 );

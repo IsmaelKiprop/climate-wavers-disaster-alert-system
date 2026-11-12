@@ -9,6 +9,22 @@
         if (path === "/" || path === "/index.html" || path === "/landing") {
           document.documentElement.setAttribute("data-route", "home");
         }
+        try {
+          var stored = localStorage.getItem("cw_theme");
+          var prefersDark =
+            window.matchMedia &&
+            window.matchMedia("(prefers-color-scheme: dark)").matches;
+          var theme =
+            stored === "dark" || stored === "light"
+              ? stored
+              : prefersDark
+                ? "dark"
+                : "light";
+          document.documentElement.setAttribute("data-theme", theme);
+          document.documentElement.style.colorScheme = theme;
+        } catch (e) {
+          document.documentElement.setAttribute("data-theme", "light");
+        }
       })();
     </script>
     <style>
@@ -91,7 +107,7 @@
     
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600&family=Lora:wght@400;600&family=Merriweather:wght@400;700&family=Montserrat+Alternates:wght@700&family=Montserrat:wght@400;600&family=Nunito:wght@400;700&family=Playfair+Display:wght@400;700&family=Poppins:wght@400;600&family=Roboto+Slab:wght@400;700&family=Space+Grotesk:wght@400;600&display=swap" rel="stylesheet" />
     
     <!-- Structured Data -->
     <script type="application/ld+json">
