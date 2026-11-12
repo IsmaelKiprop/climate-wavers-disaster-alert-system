@@ -85,7 +85,12 @@ const Accountcard = ({ user }) => {
                 e.target.src = "/avatar.png";
               }}
             />
-            <div className="absolute -bottom-0.5 -right-0.5 h-3 w-3 bg-green-400 border-2 border-white rounded-full"></div>
+            {user?.is_online ? (
+              <div
+                className="absolute -bottom-0.5 -right-0.5 h-3 w-3 bg-primary border-2 border-white rounded-full"
+                title="Online"
+              />
+            ) : null}
           </div>
           <div className="min-w-0 flex-1">
             <h3 className="text-sm font-semibold text-gray-900 truncate group-hover:text-teal-600 transition-colors duration-200">

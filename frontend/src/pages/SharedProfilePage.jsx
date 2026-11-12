@@ -4,6 +4,7 @@ import { FaTree } from "react-icons/fa";
 import { FiMapPin } from "react-icons/fi";
 import SEO from "../components/SEO";
 import BuyMeATreeQrModal from "../components/BuyMeATreeQrModal";
+import ImageLightbox from "../components/ImageLightbox";
 import { client } from "../api";
 import { endpoints } from "../utils/endpoints";
 import { getAuthToken, getUser, secureMediaUrl } from "../utils/factory";
@@ -17,6 +18,7 @@ const SharedProfilePage = () => {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [showGiftQr, setShowGiftQr] = useState(false);
+  const [lightbox, setLightbox] = useState(null);
   const me = getUser();
   const isOwnPublicProfile = String(me?.id || "") === String(userId || "");
 
@@ -124,15 +126,30 @@ const SharedProfilePage = () => {
         ) : (
           <article className="border border-border bg-surface overflow-hidden">
             <div
-              className="h-44 md:h-56 bg-cover bg-center"
+              className="h-44 md:h-56 bg-cover bg-center cursor-zoom-in"
               style={{ backgroundImage: `url(${cover})` }}
+              onClick={() =>
+                setLightbox({ src: cover, alt: `${displayName} cover` })
+              }
+              role="button"
+              tabIndex={0}
+              aria-label="View cover photo"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  setLightbox({ src: cover, alt: `${displayName} cover` });
+                }
+              }}
             />
             <div className="px-5 md:px-8 pb-8 -mt-10">
               <img
                 src={photo}
-                alt=""
-                className="h-24 w-24 md:h-28 md:w-28 object-cover border-4 border-surface bg-surface"
+                alt={`${displayName} photo`}
+                className="h-24 w-24 md:h-28 md:w-28 object-cover border-4 border-surface bg-surface cursor-zoom-in"
                 style={{ borderRadius: "50%" }}
+                onClick={() =>
+                  setLightbox({ src: photo, alt: `${displayName} photo` })
+                }
                 onError={(e) => {
                   e.target.src = "/avatar.png";
                 }}
@@ -242,6 +259,14 @@ const SharedProfilePage = () => {
 
       {showGiftQr && profile ? (
         <BuyMeATreeQrModal user={profile} onClose={() => setShowGiftQr(false)} />
+      ) : null}
+
+      {lightbox?.src ? (
+        <ImageLightbox
+          src={lightbox.src}
+          alt={lightbox.alt}
+          onClose={() => setLightbox(null)}
+        />
       ) : null}
     </div>
   );

@@ -13,10 +13,18 @@ const Community = () => {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3">
-        <h1 className="text-lg font-semibold">Community</h1>
-        <p className="text-xs text-muted">
-          {isFetching ? "Updating live feed" : "Live USGS and NASA events"}
-        </p>
+        <div>
+          <h1 className="text-lg font-semibold">Community</h1>
+          <p className="text-xs text-muted">
+            {isFetching ? "Updating live feed" : "Live USGS and NASA events"}
+          </p>
+        </div>
+        <Link
+          to="/app/chat"
+          className="inline-flex min-h-10 items-center px-3 text-sm font-medium bg-primary text-primary-foreground hover:bg-primary-dark"
+        >
+          Open chats
+        </Link>
       </div>
 
       <div className="flex gap-1 overflow-x-auto border-b border-border" role="tablist" aria-label="Community feeds">

@@ -59,6 +59,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     is_active = models.BooleanField(default=True)
     date_joined = models.DateTimeField(auto_now_add=True)
     last_login = models.DateTimeField(auto_now=True)
+    last_seen = models.DateTimeField(blank=True, null=True, db_index=True)
     bio = models.TextField(max_length=520, blank=True, null=True)
     auth_provider = models.CharField(
         max_length=50, default=AUTH_PROVIDERS.get("email"))

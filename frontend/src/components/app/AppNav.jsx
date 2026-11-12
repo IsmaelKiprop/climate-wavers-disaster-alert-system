@@ -16,6 +16,8 @@ import {
   IoPhonePortraitOutline,
   IoShieldOutline,
   IoShieldCheckmark,
+  IoChatbubblesOutline,
+  IoChatbubbles,
 } from "react-icons/io5";
 import { MdOutlineCampaign, MdCampaign } from "react-icons/md";
 import { RiAlarmWarningLine, RiAlarmWarningFill } from "react-icons/ri";
@@ -86,6 +88,12 @@ const AppNav = ({ onNavigate, compact = false }) => {
     : [
         { to: "/app", label: "Home", Icon: IoHomeOutline, ActiveIcon: IoHome, end: true },
         { to: "/app/community", label: "Community", Icon: IoPeopleOutline, ActiveIcon: IoPeople },
+        {
+          to: "/app/chat",
+          label: "Chats",
+          Icon: IoChatbubblesOutline,
+          ActiveIcon: IoChatbubbles,
+        },
         {
           to: user?.id ? `/app/${user.id}/profile` : "/login",
           label: "Profile",

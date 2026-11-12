@@ -1533,6 +1533,99 @@ class ResponderMembership(models.Model):
         return f"{self.user_id} @ {self.org_id} ({self.role})"
 
 
+class ResponderSeatInvite(models.Model):
+    """Pending seat invite counted against max_seats until accepted or revoked."""
+
+    ROLE_CHOICES = ResponderMembership.ROLE_CHOICES
+    STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("accepted", "Accepted"),
+        ("revoked", "Revoked"),
+        ("expired", "Expired"),
+    ]
+
+    org = models.ForeignKey(
+        ResponderOrganization,
+        on_delete=models.CASCADE,
+        related_name="seat_invites",
+    )
+    email = models.EmailField()
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES, default="dispatcher")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
+    invited_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="sent_responder_invites",
+    )
+    accepted_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="accepted_responder_invites",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    accepted_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["email", "status"]),
+            models.Index(fields=["org", "status"]),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["org", "email"],
+                condition=models.Q(status="pending"),
+                name="uniq_pending_responder_seat_invite",
+            )
+        ]
+
+    def __str__(self):
+        return f"Invite {self.email} → {self.org_id} ({self.status})"
+
+
+class ResponderPlanPayment(models.Model):
+    """Idempotent Paystack records for RapidBrief NGO / Org renewals."""
+
+    STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("completed", "Completed"),
+        ("failed", "Failed"),
+    ]
+
+    org = models.ForeignKey(
+        ResponderOrganization,
+        on_delete=models.CASCADE,
+        related_name="plan_payments",
+    )
+    plan = models.CharField(max_length=20)
+    months = models.PositiveIntegerField(default=1)
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    currency = models.CharField(max_length=8, default="KES")
+    payment_reference = models.CharField(max_length=100, unique=True)
+    payment_status = models.CharField(
+        max_length=20, choices=STATUS_CHOICES, default="pending"
+    )
+    payer_email = models.EmailField(blank=True, default="")
+    paid_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="responder_plan_payments",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"RapidBrief {self.plan} {self.payment_reference} ({self.payment_status})"
+
+
 class ResponderDispatch(models.Model):
     STATUS_CHOICES = [
         ("new", "New"),
@@ -1702,3 +1795,118 @@ class TreeAdminMembership(models.Model):
     def __str__(self):
         return f"{self.user_id} @ tree-admin {self.org_id} ({self.role})"
 
+
+
+class Conversation(models.Model):
+    """Community, DM, or responder-org chat room."""
+
+    TYPE_CHOICES = [
+        ("community", "Community"),
+        ("dm", "Direct"),
+        ("responder", "Responder"),
+    ]
+
+    conversation_type = models.CharField(max_length=20, choices=TYPE_CHOICES)
+    name = models.CharField(max_length=200, blank=True, default="")
+    # Stable key for singleton rooms: community:global, responder:{org_id}, dm:{min}:{max}
+    room_key = models.CharField(max_length=120, unique=True, db_index=True)
+    responder_org = models.ForeignKey(
+        "ResponderOrganization",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="chat_rooms",
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_conversations",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-updated_at"]
+        indexes = [
+            models.Index(fields=["conversation_type", "updated_at"]),
+        ]
+
+    def __str__(self):
+        return f"{self.conversation_type}:{self.room_key}"
+
+
+class ConversationMember(models.Model):
+    conversation = models.ForeignKey(
+        Conversation,
+        on_delete=models.CASCADE,
+        related_name="memberships",
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="chat_memberships",
+    )
+    joined_at = models.DateTimeField(auto_now_add=True)
+    last_read_at = models.DateTimeField(null=True, blank=True)
+    last_read_message_id = models.PositiveIntegerField(null=True, blank=True)
+    muted = models.BooleanField(default=False)
+
+    class Meta:
+        unique_together = ("conversation", "user")
+        indexes = [
+            models.Index(fields=["user", "joined_at"]),
+        ]
+
+    def __str__(self):
+        return f"user {self.user_id} in conv {self.conversation_id}"
+
+
+class ChatMessage(models.Model):
+    conversation = models.ForeignKey(
+        Conversation,
+        on_delete=models.CASCADE,
+        related_name="messages",
+    )
+    sender = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="chat_messages",
+    )
+    body = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    edited_at = models.DateTimeField(null=True, blank=True)
+    is_deleted = models.BooleanField(default=False)
+    client_id = models.CharField(max_length=64, blank=True, default="", db_index=True)
+
+    class Meta:
+        ordering = ["created_at"]
+        indexes = [
+            models.Index(fields=["conversation", "created_at"]),
+            models.Index(fields=["sender", "created_at"]),
+        ]
+
+    def __str__(self):
+        return f"msg {self.id} in {self.conversation_id}"
+
+
+class UserChatPresence(models.Model):
+    """Persisted last-seen; online state is primarily from Channels."""
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="chat_presence",
+    )
+    is_online = models.BooleanField(default=False)
+    last_seen = models.DateTimeField(auto_now=True)
+    connection_count = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["is_online", "last_seen"]),
+        ]
+
+    def __str__(self):
+        return f"presence {self.user_id} online={self.is_online}"

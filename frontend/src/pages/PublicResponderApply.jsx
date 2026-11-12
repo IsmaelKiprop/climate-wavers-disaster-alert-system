@@ -5,7 +5,14 @@ import { toast } from "react-toastify";
 import PublicPage from "../components/PublicPage";
 import { client } from "../api";
 import { endpoints } from "../utils/endpoints";
-import { PLAN_OPTIONS } from "../config/pricing";
+import { PLAN_OPTIONS, RAPIDBRIEF_PLANS } from "../config/pricing";
+
+const PLAN_LIMITS = Object.fromEntries(
+  RAPIDBRIEF_PLANS.filter((p) => p.maxSeats != null).map((p) => [
+    p.key,
+    { maxSeats: p.maxSeats, maxCoverageKm: p.maxCoverageKm },
+  ])
+);
 
 const ORG_TYPES = [
   { value: "red_cross", label: "Red Cross" },
@@ -58,6 +65,10 @@ const PublicResponderApply = () => {
   }, [searchParams]);
   const [form, setForm] = useState({ ...emptyForm, plan: initialPlan });
   const [submitting, setSubmitting] = useState(false);
+  const planLimits = PLAN_LIMITS[form.plan] || PLAN_LIMITS.ngo || {
+    maxSeats: 8,
+    maxCoverageKm: 500,
+  };
 
   const update = (key, value) => setForm((prev) => ({ ...prev, [key]: value }));
 
@@ -200,7 +211,9 @@ const PublicResponderApply = () => {
               ))}
             </select>
             <span className="mt-1 block text-xs text-muted">
-              Every approved org starts with a free 90-day pilot. Paid plans activate after pilot.
+              Every approved org starts with a free 90-day pilot (
+              {planLimits.maxSeats} seats · up to {planLimits.maxCoverageKm} km). Renew NGO/Org
+              in-app with Paystack after the pilot.
             </span>
           </label>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -250,11 +263,13 @@ const PublicResponderApply = () => {
             </button>
           </div>
           <label className="block text-sm">
-            <span className="font-medium">Coverage radius (km)</span>
+            <span className="font-medium">
+              Coverage radius (km, max {planLimits.maxCoverageKm})
+            </span>
             <input
               type="number"
               min="10"
-              max="2000"
+              max={planLimits.maxCoverageKm}
               className="mt-1 h-11 w-full px-3 border border-border bg-background"
               value={form.coverage_radius_km}
               onChange={(e) => update("coverage_radius_km", e.target.value)}

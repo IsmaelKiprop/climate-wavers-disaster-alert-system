@@ -88,7 +88,7 @@ const ProfileContent = ({ content, type, onLike, onUnlike, onRepost, onUnrepost,
                       <video
                         src={content.image}
                         controls
-                        className="rounded-xl max-w-full h-auto shadow-md"
+                        className="rounded-xl w-full max-h-[min(70vh,520px)] object-contain bg-gray-100 shadow-md"
                         preload="metadata"
                       >
                         Your browser does not support the video tag.
@@ -97,7 +97,7 @@ const ProfileContent = ({ content, type, onLike, onUnlike, onRepost, onUnrepost,
                       <img
                         src={content.image}
                         alt="Post image"
-                        className="rounded-xl max-w-full h-auto shadow-md"
+                        className="rounded-xl w-full max-h-[min(70vh,520px)] object-contain bg-gray-100 shadow-md"
                       />
                     )}
                   </div>
@@ -108,7 +108,7 @@ const ProfileContent = ({ content, type, onLike, onUnlike, onRepost, onUnrepost,
                     <video
                       src={content.video}
                       controls
-                      className="rounded-xl max-w-full h-auto shadow-md"
+                      className="rounded-xl w-full max-h-[min(70vh,520px)] object-contain bg-gray-100 shadow-md"
                       preload="metadata"
                     >
                       Your browser does not support the video tag.
@@ -270,7 +270,7 @@ const ProfileContent = ({ content, type, onLike, onUnlike, onRepost, onUnrepost,
                         <video
                           src={content.image}
                           controls
-                          className="rounded-lg max-w-full h-auto shadow-sm"
+                          className="rounded-lg w-full max-h-[min(70vh,520px)] object-contain bg-gray-100 shadow-sm"
                           preload="metadata"
                         >
                           Your browser does not support the video tag.
@@ -279,7 +279,7 @@ const ProfileContent = ({ content, type, onLike, onUnlike, onRepost, onUnrepost,
                         <img
                           src={content.image}
                           alt="Comment image"
-                          className="rounded-lg max-w-full h-auto shadow-sm"
+                          className="rounded-lg w-full max-h-[min(70vh,520px)] object-contain bg-gray-100 shadow-sm"
                         />
                       )}
                     </div>
@@ -290,7 +290,7 @@ const ProfileContent = ({ content, type, onLike, onUnlike, onRepost, onUnrepost,
                       <video
                         src={content.video}
                         controls
-                        className="rounded-lg max-w-full h-auto shadow-sm"
+                        className="rounded-lg w-full max-h-[min(70vh,520px)] object-contain bg-gray-100 shadow-sm"
                         preload="metadata"
                       >
                         Your browser does not support the video tag.
@@ -398,7 +398,7 @@ const ProfileContent = ({ content, type, onLike, onUnlike, onRepost, onUnrepost,
                             <video
                               src={content.post.image}
                               controls
-                              className="rounded-lg max-w-full h-auto shadow-sm"
+                              className="rounded-lg w-full max-h-[min(70vh,520px)] object-contain bg-gray-100 shadow-sm"
                               preload="metadata"
                             >
                               Your browser does not support the video tag.
@@ -407,7 +407,7 @@ const ProfileContent = ({ content, type, onLike, onUnlike, onRepost, onUnrepost,
                             <img
                               src={content.post.image}
                               alt="Reposted post image"
-                              className="rounded-lg max-w-full h-auto shadow-sm"
+                              className="rounded-lg w-full max-h-[min(70vh,520px)] object-contain bg-gray-100 shadow-sm"
                             />
                           )}
                         </div>
@@ -470,7 +470,7 @@ const ProfileContent = ({ content, type, onLike, onUnlike, onRepost, onUnrepost,
                         <video
                           src={content.post.image}
                           controls
-                          className="rounded-lg max-w-full h-auto shadow-md"
+                          className="rounded-lg w-full max-h-[min(70vh,520px)] object-contain bg-gray-100 shadow-md"
                           preload="metadata"
                         >
                           Your browser does not support the video tag.
@@ -479,7 +479,7 @@ const ProfileContent = ({ content, type, onLike, onUnlike, onRepost, onUnrepost,
                         <img
                           src={content.post.image}
                           alt="Bookmarked post image"
-                          className="rounded-lg max-w-full h-auto shadow-md"
+                          className="rounded-lg w-full max-h-[min(70vh,520px)] object-contain bg-gray-100 shadow-md"
                         />
                       )}
                       
@@ -540,7 +540,7 @@ const ProfileContent = ({ content, type, onLike, onUnlike, onRepost, onUnrepost,
                         <video
                           src={content.post.image}
                           controls
-                          className="rounded-lg max-w-full h-auto shadow-md"
+                          className="rounded-lg w-full max-h-[min(70vh,520px)] object-contain bg-gray-100 shadow-md"
                           preload="metadata"
                         >
                           Your browser does not support the video tag.
@@ -549,7 +549,7 @@ const ProfileContent = ({ content, type, onLike, onUnlike, onRepost, onUnrepost,
                         <img
                           src={content.post.image}
                           alt="Liked post image"
-                          className="rounded-lg max-w-full h-auto shadow-md"
+                          className="rounded-lg w-full max-h-[min(70vh,520px)] object-contain bg-gray-100 shadow-md"
                         />
                       )}
                     </div>

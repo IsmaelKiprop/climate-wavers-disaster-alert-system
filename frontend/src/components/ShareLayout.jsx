@@ -3,8 +3,10 @@ import Topbar from "./Topbar";
 import Leftsidebar from "./Leftsidebar";
 import Rightsidebar from "./Rightsidebar";
 import DashboardSidebar from "./DashboardSidebar";
+import OnlinePeopleMobile from "./OnlinePeopleMobile";
 import { Outlet, useLocation } from "react-router-dom";
 import Footer from "./FooterBar";
+import { usePresenceHeartbeat } from "../hooks/usePresenceHeartbeat";
 import {
   avatarUrl,
   completeAuthSession,
@@ -14,8 +16,11 @@ import {
 
 const SharedLayout = ({ showRight = true }) => {
   const location = useLocation();
-  const isChat = location.pathname.startsWith("/app/waverx");
+  const isChat =
+    location.pathname.startsWith("/app/waverx") ||
+    location.pathname.startsWith("/app/chat");
   const showAside = showRight && !isChat;
+  usePresenceHeartbeat(Boolean(getAuthToken()));
 
   useEffect(() => {
     const token = getAuthToken();
@@ -43,11 +48,13 @@ const SharedLayout = ({ showRight = true }) => {
         </main>
 
         {showAside ? (
-          <aside className="hidden xl:block w-[260px] bg-sidebar border-l border-border h-full overflow-y-auto shrink-0">
+          <aside className="hidden xl:block w-[280px] bg-sidebar border-l border-border h-full overflow-y-auto shrink-0">
             <Rightsidebar />
           </aside>
         ) : null}
       </div>
+
+      {showAside ? <OnlinePeopleMobile /> : null}
 
       <div className="md:hidden shrink-0">
         <Footer />

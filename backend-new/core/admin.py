@@ -1,5 +1,7 @@
 from django.contrib import admin
 from django.utils import timezone
+from django.db.models import Case, IntegerField, Value, When
+
 from .models import (
     Post,
     Poll,
@@ -17,10 +19,17 @@ from .models import (
     OfficialAlertEvent,
     ResponderOrganization,
     ResponderMembership,
+    ResponderSeatInvite,
+    ResponderPlanPayment,
     ResponderDispatch,
     TreeAdminOrganization,
     TreeAdminMembership,
+    Conversation,
+    ConversationMember,
+    ChatMessage,
+    UserChatPresence,
 )
+from .pricing import verification_priority
 from unfold.admin import ModelAdmin
 
 class PostAdmin(ModelAdmin):
@@ -115,8 +124,11 @@ class ResponderOrganizationAdmin(ModelAdmin):
         "city",
         "country",
         "verification_status",
+        "queue_priority",
         "plan",
         "plan_status",
+        "max_seats",
+        "coverage_radius_km",
         "plan_ends_at",
         "contact_email",
         "whatsapp_opt_in",
@@ -131,11 +143,45 @@ class ResponderOrganizationAdmin(ModelAdmin):
         "whatsapp_opt_in",
     )
     search_fields = ("name", "city", "contact_email", "contact_phone")
+    ordering = ("-created_at",)
     actions = [
         "approve_organizations",
         "reject_organizations",
         "activate_paid_plans",
     ]
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        # NGO / Org / Partner pending apps rise above Pilot in the queue.
+        return qs.annotate(
+            _verify_priority=Case(
+                When(plan="partner", then=Value(40)),
+                When(plan="org", then=Value(30)),
+                When(plan="ngo", then=Value(20)),
+                When(plan="pilot", then=Value(10)),
+                default=Value(0),
+                output_field=IntegerField(),
+            )
+        ).order_by(
+            Case(
+                When(verification_status="pending", then=Value(0)),
+                default=Value(1),
+                output_field=IntegerField(),
+            ),
+            "-_verify_priority",
+            "created_at",
+        )
+
+    @admin.display(description="Queue priority", ordering="_verify_priority")
+    def queue_priority(self, obj):
+        score = verification_priority(obj.plan)
+        if obj.plan == "ngo":
+            return f"{score} · NGO priority"
+        if obj.plan == "org":
+            return f"{score} · Org / county"
+        if obj.plan == "partner":
+            return f"{score} · Partner"
+        return f"{score} · Pilot"
 
     @admin.action(description="Approve + start 90-day RapidBrief pilot")
     def approve_organizations(self, request, queryset):
@@ -169,6 +215,29 @@ class ResponderMembershipAdmin(ModelAdmin):
     list_display = ("org", "user", "role", "created_at")
     list_filter = ("role",)
     search_fields = ("org__name", "user__email", "user__username")
+
+
+@admin.register(ResponderSeatInvite)
+class ResponderSeatInviteAdmin(ModelAdmin):
+    list_display = ("org", "email", "role", "status", "created_at", "accepted_at")
+    list_filter = ("status", "role")
+    search_fields = ("email", "org__name")
+
+
+@admin.register(ResponderPlanPayment)
+class ResponderPlanPaymentAdmin(ModelAdmin):
+    list_display = (
+        "org",
+        "plan",
+        "months",
+        "amount",
+        "currency",
+        "payment_status",
+        "payment_reference",
+        "created_at",
+    )
+    list_filter = ("plan", "payment_status", "currency")
+    search_fields = ("payment_reference", "org__name", "payer_email")
 
 
 @admin.register(TreeAdminOrganization)
@@ -255,5 +324,31 @@ class ResponderDispatchAdmin(ModelAdmin):
     )
     list_filter = ("status", "is_official", "disaster_type")
     search_fields = ("event_key", "place", "org__name")
+
+
+@admin.register(Conversation)
+class ConversationAdmin(ModelAdmin):
+    list_display = ("id", "conversation_type", "name", "room_key", "updated_at")
+    list_filter = ("conversation_type",)
+    search_fields = ("name", "room_key")
+
+
+@admin.register(ConversationMember)
+class ConversationMemberAdmin(ModelAdmin):
+    list_display = ("conversation", "user", "joined_at", "last_read_at", "muted")
+    search_fields = ("user__email", "user__username", "conversation__room_key")
+
+
+@admin.register(ChatMessage)
+class ChatMessageAdmin(ModelAdmin):
+    list_display = ("id", "conversation", "sender", "created_at", "is_deleted")
+    list_filter = ("is_deleted",)
+    search_fields = ("body", "sender__email", "sender__username")
+
+
+@admin.register(UserChatPresence)
+class UserChatPresenceAdmin(ModelAdmin):
+    list_display = ("user", "is_online", "last_seen", "connection_count")
+    list_filter = ("is_online",)
 
 

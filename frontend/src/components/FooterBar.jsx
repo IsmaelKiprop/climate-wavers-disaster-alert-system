@@ -6,6 +6,8 @@ import {
   IoPeople,
   IoLeafOutline,
   IoSparklesOutline,
+  IoChatbubblesOutline,
+  IoChatbubbles,
 } from "react-icons/io5";
 import { RiAlarmWarningLine, RiAlarmWarningFill } from "react-icons/ri";
 
@@ -25,7 +27,7 @@ const Footer = () => {
     : [
         { to: "/app", label: "Home", Icon: IoHomeOutline, ActiveIcon: IoHome, end: true },
         { to: "/app/community", label: "Community", Icon: IoPeopleOutline, ActiveIcon: IoPeople },
-        { to: "/app/plant-tree", label: "Trees", Icon: IoLeafOutline, ActiveIcon: IoLeafOutline },
+        { to: "/app/chat", label: "Chats", Icon: IoChatbubblesOutline, ActiveIcon: IoChatbubbles },
         { to: "/app/waverx", label: "WaverX", Icon: IoSparklesOutline, ActiveIcon: IoSparklesOutline },
         { to: "/disasters", label: "Alerts", Icon: RiAlarmWarningLine, ActiveIcon: RiAlarmWarningFill },
       ];

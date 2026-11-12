@@ -1,6 +1,7 @@
 """Responder org onboarding + RapidBrief dispatch desk APIs."""
 
 import re
+import secrets
 
 from django.contrib.auth import get_user_model
 from django.db import transaction
@@ -10,8 +11,24 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import ResponderDispatch, ResponderMembership, ResponderOrganization
-from .pricing import PLANS, normalize_plan, plan_meta
+from .models import (
+    ResponderDispatch,
+    ResponderMembership,
+    ResponderOrganization,
+    ResponderSeatInvite,
+)
+from .pricing import (
+    PLANS,
+    can_add_seat,
+    clamp_coverage_km,
+    is_billable_plan,
+    max_coverage_km,
+    normalize_plan,
+    plan_meta,
+    seat_count,
+    seats_remaining,
+    verification_priority,
+)
 from .rapid_brief import generate_rapid_brief
 
 User = get_user_model()
@@ -20,6 +37,7 @@ ORG_TYPES = [c[0] for c in ResponderOrganization.ORG_TYPES]
 DISPATCH_STATUSES = [c[0] for c in ResponderDispatch.STATUS_CHOICES]
 ACTIVE_ROLES = ("owner", "dispatcher", "viewer")
 WRITE_ROLES = ("owner", "dispatcher")
+INVITE_ROLES = ("owner", "dispatcher", "viewer")
 
 
 def _parse_disaster_types(raw):
@@ -48,11 +66,16 @@ def _parse_org_apply_fields(data):
             {"detail": "latitude and longitude are required"}, status=400
         )
 
+    plan = normalize_plan(
+        data.get("plan") or data.get("requested_plan"),
+        org_type,
+    )
+    meta = plan_meta(plan)
     try:
-        radius = int(data.get("coverage_radius_km") or 150)
+        radius = int(data.get("coverage_radius_km") or meta.get("default_coverage_km") or 150)
     except (TypeError, ValueError):
-        radius = 150
-    radius = max(10, min(radius, 2000))
+        radius = int(meta.get("default_coverage_km") or 150)
+    radius = clamp_coverage_km(plan, radius)
 
     return {
         "name": name[:200],
@@ -68,11 +91,9 @@ def _parse_org_apply_fields(data):
         "contact_email": (data.get("contact_email") or "").strip() or None,
         "contact_phone": (data.get("contact_phone") or "").strip() or None,
         "whatsapp_opt_in": bool(data.get("whatsapp_opt_in")),
-        "plan": normalize_plan(
-            data.get("plan") or data.get("requested_plan"),
-            (data.get("org_type") or "ngo"),
-        ),
+        "plan": plan,
         "plan_status": "pending",
+        "max_seats": int(meta.get("max_seats") or 5),
     }, None
 
 
@@ -102,6 +123,12 @@ class ResponderOrgSerializer(serializers.ModelSerializer):
     has_rapidbrief_access = serializers.SerializerMethodField()
     plan_label = serializers.SerializerMethodField()
     plan_price_label = serializers.SerializerMethodField()
+    price_kes_month = serializers.SerializerMethodField()
+    max_coverage_km = serializers.SerializerMethodField()
+    seats_used = serializers.SerializerMethodField()
+    seats_remaining = serializers.SerializerMethodField()
+    billable = serializers.SerializerMethodField()
+    verification_priority = serializers.SerializerMethodField()
 
     class Meta:
         model = ResponderOrganization
@@ -127,6 +154,12 @@ class ResponderOrgSerializer(serializers.ModelSerializer):
             "plan_started_at",
             "plan_ends_at",
             "max_seats",
+            "seats_used",
+            "seats_remaining",
+            "max_coverage_km",
+            "price_kes_month",
+            "billable",
+            "verification_priority",
             "has_rapidbrief_access",
             "plan_label",
             "plan_price_label",
@@ -141,6 +174,12 @@ class ResponderOrgSerializer(serializers.ModelSerializer):
             "plan_started_at",
             "plan_ends_at",
             "max_seats",
+            "seats_used",
+            "seats_remaining",
+            "max_coverage_km",
+            "price_kes_month",
+            "billable",
+            "verification_priority",
             "has_rapidbrief_access",
             "plan_label",
             "plan_price_label",
@@ -157,6 +196,24 @@ class ResponderOrgSerializer(serializers.ModelSerializer):
     def get_plan_price_label(self, obj):
         return plan_meta(obj.plan).get("price_label")
 
+    def get_price_kes_month(self, obj):
+        return plan_meta(obj.plan).get("price_kes_month")
+
+    def get_max_coverage_km(self, obj):
+        return max_coverage_km(obj.plan)
+
+    def get_seats_used(self, obj):
+        return seat_count(obj)
+
+    def get_seats_remaining(self, obj):
+        return seats_remaining(obj)
+
+    def get_billable(self, obj):
+        return is_billable_plan(obj.plan)
+
+    def get_verification_priority(self, obj):
+        return verification_priority(obj.plan)
+
 
 class ResponderMembershipSerializer(serializers.ModelSerializer):
     org = ResponderOrgSerializer(read_only=True)
@@ -164,6 +221,33 @@ class ResponderMembershipSerializer(serializers.ModelSerializer):
     class Meta:
         model = ResponderMembership
         fields = ("id", "role", "created_at", "org")
+
+
+class ResponderTeamMemberSerializer(serializers.ModelSerializer):
+    email = serializers.EmailField(source="user.email", read_only=True)
+    username = serializers.CharField(source="user.username", read_only=True)
+    first_name = serializers.CharField(source="user.first_name", read_only=True)
+    last_name = serializers.CharField(source="user.last_name", read_only=True)
+    user_id = serializers.IntegerField(source="user.id", read_only=True)
+
+    class Meta:
+        model = ResponderMembership
+        fields = (
+            "id",
+            "role",
+            "created_at",
+            "email",
+            "username",
+            "first_name",
+            "last_name",
+            "user_id",
+        )
+
+
+class ResponderSeatInviteSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ResponderSeatInvite
+        fields = ("id", "email", "role", "status", "created_at", "accepted_at")
 
 
 class ResponderDispatchSerializer(serializers.ModelSerializer):
@@ -353,10 +437,44 @@ class ResponderPublicApplyView(APIView):
         )
 
 
+def _accept_pending_invites_for(user):
+    """Attach any pending seat invites matching the user's email."""
+    email = (getattr(user, "email", "") or "").strip().lower()
+    if not email:
+        return []
+    accepted = []
+    invites = (
+        ResponderSeatInvite.objects.select_related("org")
+        .filter(email__iexact=email, status="pending")
+        .order_by("created_at")
+    )
+    for invite in invites:
+        org = invite.org
+        if ResponderMembership.objects.filter(org=org, user=user).exists():
+            invite.status = "accepted"
+            invite.accepted_by = user
+            invite.accepted_at = timezone.now()
+            invite.save(
+                update_fields=["status", "accepted_by", "accepted_at"]
+            )
+            continue
+        # Pending invite already reserved a seat; convert without re-checking capacity.
+        membership = ResponderMembership.objects.create(
+            org=org, user=user, role=invite.role or "dispatcher"
+        )
+        invite.status = "accepted"
+        invite.accepted_by = user
+        invite.accepted_at = timezone.now()
+        invite.save(update_fields=["status", "accepted_by", "accepted_at"])
+        accepted.append(membership)
+    return accepted
+
+
 class ResponderMeView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        _accept_pending_invites_for(request.user)
         memberships = list(_memberships_for(request.user))
         approved = [
             m for m in memberships if m.org.verification_status == "approved"
@@ -377,8 +495,11 @@ class ResponderMeView(APIView):
                         "price_label": meta["price_label"],
                         "price_kes_month": meta["price_kes_month"],
                         "max_seats": meta["max_seats"],
+                        "max_coverage_km": meta["max_coverage_km"],
+                        "billable": bool(meta.get("billable")),
                         "trial_days": meta["trial_days"],
                         "detail": meta["detail"],
+                        "verification_priority": verification_priority(key),
                     }
                     for key, meta in PLANS.items()
                 },
@@ -430,10 +551,9 @@ class ResponderOrgView(APIView):
             org.whatsapp_opt_in = bool(data.get("whatsapp_opt_in"))
 
         if "coverage_radius_km" in data:
-            try:
-                org.coverage_radius_km = max(10, min(int(data.get("coverage_radius_km")), 2000))
-            except (TypeError, ValueError):
-                pass
+            org.coverage_radius_km = clamp_coverage_km(
+                org.plan, data.get("coverage_radius_km")
+            )
 
         if "latitude" in data and "longitude" in data:
             try:
@@ -455,6 +575,8 @@ class ResponderOrgView(APIView):
         if "name" in data and str(data.get("name") or "").strip():
             org.name = str(data.get("name")).strip()[:200]
 
+        # Keep coverage within the current plan ceiling even if only other fields changed.
+        org.coverage_radius_km = clamp_coverage_km(org.plan, org.coverage_radius_km)
         org.save()
         return Response(ResponderOrgSerializer(org).data)
 
@@ -577,3 +699,306 @@ class ResponderBriefView(APIView):
         dispatch.ai_brief = brief
         dispatch.save(update_fields=["ai_brief", "updated_at"])
         return Response({"ai_brief": brief, "dispatch": ResponderDispatchSerializer(dispatch).data})
+
+
+def _owner_membership(user):
+    membership = _primary_membership(user, require_approved=True)
+    if not membership:
+        return None, Response({"detail": "No approved responder organization"}, status=403)
+    if membership.role != "owner":
+        return None, Response({"detail": "Only owners can manage seats and billing"}, status=403)
+    return membership, None
+
+
+def _team_payload(org):
+    members = (
+        ResponderMembership.objects.select_related("user")
+        .filter(org=org)
+        .order_by("created_at")
+    )
+    invites = ResponderSeatInvite.objects.filter(org=org, status="pending").order_by(
+        "-created_at"
+    )
+    return {
+        "org": ResponderOrgSerializer(org).data,
+        "max_seats": org.max_seats,
+        "seats_used": seat_count(org),
+        "seats_remaining": seats_remaining(org),
+        "members": ResponderTeamMemberSerializer(members, many=True).data,
+        "invites": ResponderSeatInviteSerializer(invites, many=True).data,
+    }
+
+
+class ResponderTeamView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        membership = _primary_membership(request.user, require_approved=True)
+        if not membership:
+            return Response({"detail": "No approved responder organization"}, status=403)
+        return Response(_team_payload(membership.org))
+
+    def post(self, request):
+        """Invite a teammate by email. Occupies a seat until revoked or accepted."""
+        membership, error = _owner_membership(request.user)
+        if error:
+            return error
+
+        org = membership.org
+        if not can_add_seat(org):
+            return Response(
+                {
+                    "detail": (
+                        f"Seat limit reached ({org.max_seats}). "
+                        "Upgrade your RapidBrief plan for more seats."
+                    ),
+                    "max_seats": org.max_seats,
+                    "seats_used": seat_count(org),
+                },
+                status=400,
+            )
+
+        email = (request.data.get("email") or "").strip().lower()
+        if not email or "@" not in email:
+            return Response({"detail": "A valid teammate email is required"}, status=400)
+
+        role = (request.data.get("role") or "dispatcher").strip().lower()
+        if role not in INVITE_ROLES:
+            return Response({"detail": "invalid role"}, status=400)
+        if role == "owner" and membership.role != "owner":
+            return Response({"detail": "Only owners can grant owner role"}, status=403)
+
+        if ResponderMembership.objects.filter(org=org, user__email__iexact=email).exists():
+            return Response({"detail": "That user is already on this team"}, status=400)
+        if ResponderSeatInvite.objects.filter(
+            org=org, email__iexact=email, status="pending"
+        ).exists():
+            return Response({"detail": "An invite is already pending for that email"}, status=400)
+
+        existing_user = User.objects.filter(email__iexact=email).first()
+        with transaction.atomic():
+            if existing_user:
+                ResponderMembership.objects.create(
+                    org=org, user=existing_user, role=role
+                )
+                ResponderSeatInvite.objects.create(
+                    org=org,
+                    email=email,
+                    role=role,
+                    invited_by=request.user,
+                    status="accepted",
+                    accepted_by=existing_user,
+                    accepted_at=timezone.now(),
+                )
+                try:
+                    from django.core.mail import send_mail
+                    from django.conf import settings as dj_settings
+
+                    send_mail(
+                        subject=f"Added to {org.name} RapidBrief desk",
+                        message=(
+                            f"You were added to {org.name} as {role} on Climate Wavers RapidBrief.\n"
+                            f"Open the app → RapidBrief Desk to view dispatches."
+                        ),
+                        from_email=getattr(dj_settings, "DEFAULT_FROM_EMAIL", None),
+                        recipient_list=[email],
+                        fail_silently=True,
+                    )
+                except Exception:
+                    pass
+            else:
+                ResponderSeatInvite.objects.create(
+                    org=org,
+                    email=email,
+                    role=role,
+                    invited_by=request.user,
+                    status="pending",
+                )
+                try:
+                    from django.core.mail import send_mail
+                    from django.conf import settings as dj_settings
+
+                    send_mail(
+                        subject=f"Join {org.name} on Climate Wavers RapidBrief",
+                        message=(
+                            f"You were invited to {org.name} as {role}.\n"
+                            f"Create or sign in to a Climate Wavers account with {email} "
+                            f"to join the RapidBrief desk."
+                        ),
+                        from_email=getattr(dj_settings, "DEFAULT_FROM_EMAIL", None),
+                        recipient_list=[email],
+                        fail_silently=True,
+                    )
+                except Exception:
+                    pass
+
+        return Response(_team_payload(org), status=201)
+
+
+class ResponderTeamMemberDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, membership_id):
+        owner, error = _owner_membership(request.user)
+        if error:
+            return error
+        org = owner.org
+        try:
+            member = ResponderMembership.objects.select_related("user").get(
+                id=membership_id, org=org
+            )
+        except ResponderMembership.DoesNotExist:
+            return Response({"detail": "Member not found"}, status=404)
+
+        role = (request.data.get("role") or "").strip().lower()
+        if role not in INVITE_ROLES:
+            return Response({"detail": "invalid role"}, status=400)
+        if member.role == "owner" and role != "owner":
+            owners = org.memberships.filter(role="owner").count()
+            if owners <= 1:
+                return Response(
+                    {"detail": "Keep at least one owner on the organization"},
+                    status=400,
+                )
+        member.role = role
+        member.save(update_fields=["role"])
+        return Response(_team_payload(org))
+
+    def delete(self, request, membership_id):
+        owner, error = _owner_membership(request.user)
+        if error:
+            return error
+        org = owner.org
+        try:
+            member = ResponderMembership.objects.get(id=membership_id, org=org)
+        except ResponderMembership.DoesNotExist:
+            return Response({"detail": "Member not found"}, status=404)
+
+        if member.user_id == request.user.id:
+            return Response(
+                {"detail": "Owners cannot remove themselves. Transfer ownership first."},
+                status=400,
+            )
+        if member.role == "owner" and org.memberships.filter(role="owner").count() <= 1:
+            return Response(
+                {"detail": "Keep at least one owner on the organization"},
+                status=400,
+            )
+        member.delete()
+        return Response(_team_payload(org))
+
+
+class ResponderSeatInviteDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request, invite_id):
+        owner, error = _owner_membership(request.user)
+        if error:
+            return error
+        org = owner.org
+        try:
+            invite = ResponderSeatInvite.objects.get(id=invite_id, org=org)
+        except ResponderSeatInvite.DoesNotExist:
+            return Response({"detail": "Invite not found"}, status=404)
+        if invite.status == "pending":
+            invite.status = "revoked"
+            invite.save(update_fields=["status"])
+        return Response(_team_payload(org))
+
+
+class ResponderBillingCheckoutView(APIView):
+    """Return Paystack checkout details for NGO / Org monthly billing."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        membership, error = _owner_membership(request.user)
+        if error:
+            return error
+
+        org = membership.org
+        plan = normalize_plan(
+            request.data.get("plan") or org.plan,
+            org.org_type,
+        )
+        if not is_billable_plan(plan):
+            return Response(
+                {
+                    "detail": (
+                        "Pilot is free. Choose NGO or Org to pay with Paystack, "
+                        "or contact FlowOps for Partner."
+                    )
+                },
+                status=400,
+            )
+
+        try:
+            months = max(1, min(int(request.data.get("months") or 1), 12))
+        except (TypeError, ValueError):
+            months = 1
+
+        meta = plan_meta(plan)
+        amount_kes = int(meta["price_kes_month"]) * months
+        email = (
+            (request.data.get("email") or "").strip()
+            or (org.contact_email or "").strip()
+            or (request.user.email or "").strip()
+        )
+        if not email:
+            return Response({"detail": "Billing email is required"}, status=400)
+
+        reference = f"rb-{org.id}-{plan}-{secrets.token_hex(8)}"
+        return Response(
+            {
+                "reference": reference,
+                "email": email,
+                "amount_kes": amount_kes,
+                "amount_cents": amount_kes * 100,
+                "currency": "KES",
+                "plan": plan,
+                "plan_label": meta["name"],
+                "months": months,
+                "max_seats": meta["max_seats"],
+                "max_coverage_km": meta["max_coverage_km"],
+                "metadata": {
+                    "product": "rapidbrief",
+                    "org_id": str(org.id),
+                    "plan": plan,
+                    "months": str(months),
+                },
+            }
+        )
+
+
+class ResponderBillingVerifyView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        membership, error = _owner_membership(request.user)
+        if error:
+            return error
+
+        reference = (request.data.get("reference") or "").strip()
+        if not reference:
+            return Response({"detail": "payment reference is required"}, status=400)
+
+        from .paystack_payment import PaymentRecordError, record_rapidbrief_payment
+
+        try:
+            payload = record_rapidbrief_payment(
+                reference,
+                request_user=request.user,
+                client_data={
+                    "product": "rapidbrief",
+                    "org_id": membership.org_id,
+                    "plan": request.data.get("plan") or membership.org.plan,
+                    "months": request.data.get("months") or 1,
+                    "email": request.user.email,
+                },
+            )
+        except PaymentRecordError as exc:
+            return Response({"detail": str(exc)}, status=exc.status)
+
+        org = ResponderOrganization.objects.get(id=membership.org_id)
+        payload["org"] = ResponderOrgSerializer(org).data
+        return Response(payload)

@@ -18,7 +18,7 @@ import re
 import os
 import uuid
 import requests
-from datetime import datetime
+from datetime import datetime, timedelta
 from .models import (
     Notification,
     Post,
@@ -38,6 +38,9 @@ from .models import (
 from .paystack_payment import (
     PaymentRecordError,
     claim_tree_donations,
+    payment_product_type,
+    record_paystack_charge,
+    record_rapidbrief_payment,
     record_tree_payment,
     user_from_request,
     webhook_signature_ok,
@@ -45,6 +48,7 @@ from .paystack_payment import (
 from .serializers import (
     NotificationSerializer,
     UserSerializer,
+    OnlineUserSerializer,
     PostSerializer,
     PollSerializer,
     PollVoteSerializer,
@@ -414,6 +418,62 @@ class UserViewSet(viewsets.ModelViewSet):
         users = list(qs[:limit])
         serializer = self.get_serializer(users, many=True)
         return Response(serializer.data)
+
+    @action(detail=False, methods=["post"], permission_classes=[IsAuthenticated])
+    def heartbeat(self, request):
+        """Mark the authenticated user as online (updates last_seen)."""
+        now = timezone.now()
+        User.objects.filter(pk=request.user.pk).update(last_seen=now)
+        return Response({"ok": True, "last_seen": now.isoformat()})
+
+    @action(detail=False, methods=["get"], permission_classes=[IsAuthenticated])
+    def online(self, request):
+        """
+        People currently active in the system (last_seen within the window).
+        Facebook/Twitter-style contacts rail source.
+        """
+        try:
+            window = int(request.query_params.get("window", 120) or 120)
+        except (TypeError, ValueError):
+            window = 120
+        window = max(30, min(window, 600))
+
+        try:
+            limit = int(request.query_params.get("limit", 100) or 100)
+        except (TypeError, ValueError):
+            limit = 100
+        limit = max(1, min(limit, 200))
+
+        cutoff = timezone.now() - timedelta(seconds=window)
+        qs = (
+            User.objects.filter(
+                is_active=True,
+                is_staff=False,
+                is_superuser=False,
+                last_seen__gte=cutoff,
+            )
+            .exclude(pk=request.user.pk)
+            .order_by("-last_seen", "first_name", "username")
+        )
+
+        following_ids = set(
+            Follow.objects.filter(follower=request.user).values_list(
+                "following_id", flat=True
+            )
+        )
+        users = list(qs[:limit])
+        serializer = OnlineUserSerializer(
+            users,
+            many=True,
+            context={"request": request, "following_ids": following_ids},
+        )
+        return Response(
+            {
+                "count": len(users),
+                "window_seconds": window,
+                "results": serializer.data,
+            }
+        )
 
     def update(self, request, *args, **kwargs):
         """
@@ -1434,7 +1494,7 @@ def verify_paystack_payment(request):
         return JsonResponse({"success": False, "message": "Invalid JSON."}, status=400)
 
     try:
-        payload = record_tree_payment(
+        payload = record_paystack_charge(
             data.get("reference"),
             request_user=user_from_request(request),
             client_data=data,
@@ -1479,8 +1539,12 @@ def paystack_webhook(request):
         return JsonResponse({"status": "ignored"})
 
     reference = data.get("reference")
+    product = payment_product_type(data)
     try:
-        record_tree_payment(reference)
+        if product in {"rapidbrief", "responder_plan", "rapidbrief_plan"}:
+            record_rapidbrief_payment(reference, client_data={"product": "rapidbrief"})
+        else:
+            record_tree_payment(reference)
     except PaymentRecordError as exc:
         if exc.status >= 500:
             return JsonResponse({"status": "error", "message": str(exc)}, status=500)

@@ -161,7 +161,7 @@ const PricingPage = () => {
       </div>
 
       <p className="mt-8 text-sm text-muted">
-        After admin approval, RapidBrief and Tree Admin start as free pilots. Paid plans activate in admin when ready. Email{" "}
+        After admin approval, RapidBrief and Tree Admin start as free pilots. NGO and Org renewals are paid in-app with Paystack from the RapidBrief desk. Email{" "}
         <a className="text-primary" href={`mailto:${SITE.emails.hello}`}>
           {SITE.emails.hello}
         </a>

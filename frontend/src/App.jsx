@@ -52,6 +52,7 @@ const AuthUploadCover = lazy(() => import("./pages/AuthenticatedPages/UploadCove
 const AuthUploadPhoto = lazy(() => import("./pages/AuthenticatedPages/UploadPhoto"));
 const AuthAlertSettings = lazy(() => import("./pages/AuthenticatedPages/AlertSettings"));
 const AuthResponder = lazy(() => import("./pages/AuthenticatedPages/Responder"));
+const AuthChat = lazy(() => import("./pages/AuthenticatedPages/Chat"));
 const AuthHashtag = lazy(() => import("./pages/AuthenticatedPages/Hashtag"));
 
 const OnboardingLayout = lazy(() =>
@@ -153,6 +154,7 @@ function App() {
               <Route path="/app" element={<AuthSharedLayout />}>
                 <Route index element={<AuthMainfeed />} />
                 <Route path="/app/community" element={<AuthCommunity />} />
+                <Route path="/app/chat" element={<AuthChat />} />
                 <Route path="/app/hashtag/:tag" element={<AuthHashtag />} />
                 <Route path="/app/notifications" element={<AuthNotification />} />
                 <Route path="/app/waverx" element={<AuthWaverX />} />

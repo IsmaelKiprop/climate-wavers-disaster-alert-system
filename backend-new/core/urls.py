@@ -29,6 +29,11 @@ from .responder import (
     ResponderDispatchDetailView,
     ResponderDispatchStatusView,
     ResponderBriefView,
+    ResponderTeamView,
+    ResponderTeamMemberDetailView,
+    ResponderSeatInviteDetailView,
+    ResponderBillingCheckoutView,
+    ResponderBillingVerifyView,
 )
 from .tree_admin import (
     TreeAdminApplyView,
@@ -36,6 +41,14 @@ from .tree_admin import (
     TreeAdminMeView,
 )
 from .profile_share import public_profile
+from .chat import (
+    ChatBootstrapView,
+    ChatDirectMessageView,
+    ChatMessageListCreateView,
+    ChatMarkReadView,
+    ChatPresenceView,
+    ChatDirectoryView,
+)
 
 
 # Initialize the default router
@@ -100,6 +113,27 @@ urlpatterns = [
         name="responder-dispatch-status",
     ),
     path("responder/brief/", ResponderBriefView.as_view(), name="responder-brief"),
+    path("responder/team/", ResponderTeamView.as_view(), name="responder-team"),
+    path(
+        "responder/team/members/<int:membership_id>/",
+        ResponderTeamMemberDetailView.as_view(),
+        name="responder-team-member",
+    ),
+    path(
+        "responder/team/invites/<int:invite_id>/",
+        ResponderSeatInviteDetailView.as_view(),
+        name="responder-team-invite",
+    ),
+    path(
+        "responder/billing/checkout/",
+        ResponderBillingCheckoutView.as_view(),
+        name="responder-billing-checkout",
+    ),
+    path(
+        "responder/billing/verify/",
+        ResponderBillingVerifyView.as_view(),
+        name="responder-billing-verify",
+    ),
     path("tree-admin/apply/", TreeAdminApplyView.as_view(), name="tree-admin-apply"),
     path(
         "tree-admin/apply-public/",
@@ -152,4 +186,20 @@ urlpatterns = [
     path('points/balance/', wavers_points_balance, name='wavers-points-balance'),
     path('points/ledger/', wavers_points_ledger, name='wavers-points-ledger'),
     path('points/redeem/', wavers_points_redeem, name='wavers-points-redeem'),
+
+    # Community + responder chat
+    path('chat/conversations/', ChatBootstrapView.as_view(), name='chat-conversations'),
+    path('chat/dm/', ChatDirectMessageView.as_view(), name='chat-dm'),
+    path('chat/directory/', ChatDirectoryView.as_view(), name='chat-directory'),
+    path('chat/presence/', ChatPresenceView.as_view(), name='chat-presence'),
+    path(
+        'chat/conversations/<int:conversation_id>/messages/',
+        ChatMessageListCreateView.as_view(),
+        name='chat-messages',
+    ),
+    path(
+        'chat/conversations/<int:conversation_id>/read/',
+        ChatMarkReadView.as_view(),
+        name='chat-mark-read',
+    ),
 ]

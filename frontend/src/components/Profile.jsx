@@ -15,6 +15,7 @@ import { getUser, normalizeUser, setUser } from "../utils/factory";
 import { useFollow } from "../context/FollowContext";
 import ProfileShareModal from "./ProfileShareModal";
 import BuyMeATreeQrModal from "./BuyMeATreeQrModal";
+import ImageLightbox from "./ImageLightbox";
 import {
   getProfileCompleteness,
   giftTreesPath,
@@ -40,6 +41,7 @@ const Profile = () => {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const [showGiftQrModal, setShowGiftQrModal] = useState(false);
+  const [lightbox, setLightbox] = useState(null);
   const { isFollowing, setFollowing } = useFollow();
   const isFollow = isFollowing(profile?.id || userId, isFollowLocal);
   const completeness = getProfileCompleteness(profile);
@@ -122,14 +124,24 @@ const Profile = () => {
     profile?.username ||
     "";
 
+  const coverPreviewSrc = coverSrc || "/environment.jpg";
+
   const handleProfilePictureClick = (event) => {
     event.stopPropagation();
+    if (avatarSrc) {
+      setLightbox({ src: avatarSrc, alt: `${displayName || "Profile"} photo` });
+      return;
+    }
     if (isOwnProfile) navigate("/uploadphoto");
   };
 
   const handleCoverPhotoClick = (e) => {
     e.preventDefault();
-    if (isOwnProfile) navigate("/uploadcover");
+    e.stopPropagation();
+    setLightbox({
+      src: coverPreviewSrc,
+      alt: `${displayName || "Profile"} cover`,
+    });
   };
 
   const handleProfileUpdate = (updatedUser) => {
@@ -199,15 +211,39 @@ const Profile = () => {
         {/* Cover Image Section */}
         <div className="relative h-64 md:h-80 lg:h-96 overflow-hidden">
           <div
-            className="w-full h-full bg-cover bg-center bg-background cursor-pointer"
-          style={{
-            backgroundImage: `url(${coverSrc || "/environment.jpg"})`,
-          }}
-            onClick={(e) => handleCoverPhotoClick(e)}
+            className="w-full h-full bg-cover bg-center bg-background cursor-zoom-in"
+            style={{
+              backgroundImage: `url(${coverPreviewSrc})`,
+            }}
+            onClick={handleCoverPhotoClick}
+            role="button"
+            tabIndex={0}
+            aria-label="View cover photo"
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                handleCoverPhotoClick(e);
+              }
+            }}
           >
             <div className="absolute inset-0 bg-black bg-opacity-20"></div>
             <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent"></div>
           </div>
+
+          {isOwnProfile ? (
+            <button
+              type="button"
+              className="absolute top-3 right-3 z-10 h-10 px-3 bg-black/55 text-white text-sm inline-flex items-center gap-2 hover:bg-black/70"
+              onClick={(e) => {
+                e.stopPropagation();
+                navigate("/uploadcover");
+              }}
+              aria-label="Change cover photo"
+            >
+              <IoCamera size={18} />
+              <span className="hidden sm:inline">Edit cover</span>
+            </button>
+          ) : null}
           
           {/* Profile Picture */}
           <div className="absolute -bottom-2 md:-bottom-4 left-4 md:left-8">
@@ -215,8 +251,8 @@ const Profile = () => {
               {avatarSrc ? (
                     <img
                       src={avatarSrc}
-                      className="w-24 h-24 md:w-32 md:h-32 lg:w-36 lg:h-36 object-cover border-4 border-white shadow-2xl cursor-pointer"
-                      alt=""
+                      className="w-24 h-24 md:w-32 md:h-32 lg:w-36 lg:h-36 object-cover border-4 border-white shadow-2xl cursor-zoom-in"
+                      alt={`${displayName || "Profile"} photo`}
                       style={{ borderRadius: "50%" }}
                       fetchPriority="high"
                       onClick={handleProfilePictureClick}
@@ -229,15 +265,34 @@ const Profile = () => {
                       className="w-24 h-24 md:w-32 md:h-32 lg:w-36 lg:h-36 border-4 border-white shadow-2xl cursor-pointer bg-primary text-primary-foreground flex items-center justify-center"
                       style={{ borderRadius: "50%" }}
                       onClick={handleProfilePictureClick}
+                      role="button"
+                      tabIndex={0}
+                      aria-label={isOwnProfile ? "Upload profile photo" : "Profile photo"}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          handleProfilePictureClick(e);
+                        }
+                      }}
                     >
                       <span className="text-2xl md:text-3xl lg:text-4xl font-bold">
                         {displayName.charAt(0)?.toUpperCase() || ""}
                       </span>
                     </div>
                   )}
-              <div className="absolute inset-0 rounded-full bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-all duration-300 flex items-center justify-center">
-                <IoCamera className="text-white opacity-0 group-hover:opacity-100 transition-opacity duration-300" size={24} />
-              </div>
+              {isOwnProfile ? (
+                <button
+                  type="button"
+                  className="absolute top-1 right-1 z-10 h-8 w-8 rounded-full bg-black/70 text-white inline-flex items-center justify-center hover:bg-black/85 opacity-90 group-hover:opacity-100"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    navigate("/uploadphoto");
+                  }}
+                  aria-label="Change profile photo"
+                >
+                  <IoCamera size={16} />
+                </button>
+              ) : null}
               {/* Tree Badge */}
               <TreeBadge 
                 hasPlantedTrees={true}
@@ -468,6 +523,14 @@ const Profile = () => {
         <BuyMeATreeQrModal
           user={profile}
           onClose={() => setShowGiftQrModal(false)}
+        />
+      ) : null}
+
+      {lightbox?.src ? (
+        <ImageLightbox
+          src={lightbox.src}
+          alt={lightbox.alt}
+          onClose={() => setLightbox(null)}
         />
       ) : null}
     </div>

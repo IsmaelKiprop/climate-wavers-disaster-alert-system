@@ -22,7 +22,13 @@ export const DisaxPostCard = ({ post }) => {
       <div>
         <p className="text-left text-sm px-3 my-3 ">{post.body}</p>
         {post.image && (
-          <img className="w-[100%] px-3 " src={post.image} alt="" />
+          <div className="px-3 overflow-hidden flex items-center justify-center max-h-[min(70vh,520px)] bg-gray-100">
+            <img
+              className="w-full max-h-[min(70vh,520px)] object-contain"
+              src={post.image}
+              alt=""
+            />
+          </div>
         )}
       </div>
       <div className="flex flex-row justify-between px-3 mt-2 ">

@@ -166,6 +166,51 @@ class PostAuthorSerializer(serializers.ModelSerializer):
         )
 
 
+class OnlineUserSerializer(serializers.ModelSerializer):
+    profile_picture = serializers.SerializerMethodField()
+    is_online = serializers.SerializerMethodField()
+    is_following = serializers.SerializerMethodField()
+
+    def get_profile_picture(self, obj):
+        return _force_https(obj.profile_picture)
+
+    def get_is_online(self, obj):
+        return True
+
+    def get_is_following(self, obj):
+        following_ids = self.context.get("following_ids")
+        if following_ids is not None:
+            return obj.id in following_ids
+        request = self.context.get("request")
+        user = getattr(request, "user", None) if request else None
+        if user is not None and getattr(user, "is_authenticated", False):
+            return obj.followers.filter(follower=user).exists()
+        return False
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        for key in ("profile_pic", "picture", "default_avatar"):
+            if data.get(key):
+                data[key] = _force_https(data[key])
+        return data
+
+    class Meta:
+        model = User
+        fields = (
+            "id",
+            "username",
+            "first_name",
+            "last_name",
+            "profile_picture",
+            "profile_pic",
+            "last_seen",
+            "is_online",
+            "is_following",
+            "country",
+            "location",
+        )
+
+
 class PostSerializer(serializers.ModelSerializer):
     total_comments = serializers.IntegerField(read_only=True, default=0)
     total_reactions = serializers.IntegerField(read_only=True, default=0)

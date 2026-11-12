@@ -3,8 +3,12 @@ import Leftsidebar from "./Leftsidebar";
 import DashboardSidebar from "../DashboardSidebar";
 import { Outlet } from "react-router-dom";
 import Footer from "../FooterBar";
+import { usePresenceHeartbeat } from "../../hooks/usePresenceHeartbeat";
+import { getAuthToken } from "../../utils/factory";
 
 const OnboardingLayout = () => {
+  usePresenceHeartbeat(Boolean(getAuthToken()));
+
   return (
     <div className="bg-background text-foreground min-h-[100dvh] flex flex-col">
       <header className="sticky top-0 z-50 bg-navbar border-b border-border">

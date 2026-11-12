@@ -460,25 +460,34 @@ const Posts = ({
                   )
                 )}
               </p>
-              {post?.image && (
-                  <div className="mt-4">
-                <img
-                      className="w-full rounded-xl shadow-md group-hover:shadow-lg transition-shadow duration-300"
-                  src={secureMediaUrl(post.image)}
-                  alt="Post content"
-                />
-                  </div>
-                )}
-                {post?.video && (
-                  <div className="mt-4">
-                    <video
-                      className="w-full rounded-xl shadow-md group-hover:shadow-lg transition-shadow duration-300"
-                      controls
-                      preload="metadata"
-                    >
-                      <source src={post.video} type="video/mp4" />
-                      Your browser does not support the video tag.
-                    </video>
+              {(post?.image || post?.video) && (
+                  <div
+                    className={`mt-4 grid gap-2 ${
+                      post?.image && post?.video ? "grid-cols-2" : "grid-cols-1"
+                    }`}
+                  >
+                    {post?.image && (
+                      <div className="overflow-hidden rounded-xl bg-gray-100 flex items-center justify-center max-h-[min(70vh,520px)] shadow-md group-hover:shadow-lg transition-shadow duration-300">
+                        <img
+                          className="w-full max-h-[min(70vh,520px)] object-contain"
+                          src={secureMediaUrl(post.image)}
+                          alt="Post content"
+                        />
+                      </div>
+                    )}
+                    {post?.video && (
+                      <div className="overflow-hidden rounded-xl bg-gray-100 flex items-center justify-center max-h-[min(70vh,520px)] shadow-md group-hover:shadow-lg transition-shadow duration-300">
+                        <video
+                          className="w-full max-h-[min(70vh,520px)] object-contain"
+                          controls
+                          preload="metadata"
+                          playsInline
+                        >
+                          <source src={secureMediaUrl(post.video)} type="video/mp4" />
+                          Your browser does not support the video tag.
+                        </video>
+                      </div>
+                    )}
                   </div>
                 )}
                 {post?.audio && (

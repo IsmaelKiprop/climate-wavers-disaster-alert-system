@@ -64,14 +64,23 @@ export function wsHttpUrl(path = "") {
   return `${base}${normalized}`;
 }
 
-export function notificationsSocketUrl(token = "") {
-  const path = `/ws/notifications/?token=${encodeURIComponent(token || "")}`;
+function buildSocketUrl(pathWithQuery) {
   const explicit = trimSlash(import.meta.env.VITE_WSS_BACKEND || "");
   const httpBase = explicit || env.backendUrl;
   if (httpBase) {
-    return `${httpBase.replace(/^http/i, "ws")}${path}`;
+    return `${httpBase.replace(/^http/i, "ws")}${pathWithQuery}`;
   }
-  if (typeof window === "undefined") return `ws://localhost:8000${path}`;
+  if (typeof window === "undefined") return `ws://localhost:8000${pathWithQuery}`;
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  return `${protocol}//${window.location.host}${path}`;
+  return `${protocol}//${window.location.host}${pathWithQuery}`;
+}
+
+export function notificationsSocketUrl(token = "") {
+  const path = `/ws/notifications/?token=${encodeURIComponent(token || "")}`;
+  return buildSocketUrl(path);
+}
+
+export function chatSocketUrl(token = "") {
+  const path = `/ws/chat/?token=${encodeURIComponent(token || "")}`;
+  return buildSocketUrl(path);
 }

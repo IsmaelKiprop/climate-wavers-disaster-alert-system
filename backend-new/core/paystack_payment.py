@@ -14,7 +14,7 @@ from django.db.models import Sum
 from django.db.utils import OperationalError, ProgrammingError
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
-from .models import TreeProject, TreeProjectDonation
+from .models import ResponderOrganization, ResponderPlanPayment, TreeProject, TreeProjectDonation
 
 logger = logging.getLogger(__name__)
 
@@ -345,3 +345,163 @@ def webhook_signature_ok(body, signature):
         return hmac.compare_digest(signature, expected)
     except (TypeError, ValueError):
         return False
+
+
+def payment_product_type(payment_data):
+    metadata = payment_data.get("metadata") if isinstance(payment_data, dict) else {}
+    if not isinstance(metadata, dict):
+        metadata = {}
+    product = (
+        _metadata_value(metadata, "product")
+        or _metadata_value(metadata, "payment_type")
+        or ""
+    )
+    return str(product).strip().lower()
+
+
+def record_rapidbrief_payment(reference, request_user=None, client_data=None):
+    """Activate / renew a RapidBrief paid plan after a successful Paystack charge."""
+    from .pricing import activate_paid_plan, is_billable_plan, normalize_plan, plan_meta
+
+    reference = str(reference or "").strip()
+    if not reference:
+        raise PaymentRecordError("Missing payment reference.")
+
+    client_data = client_data or {}
+    existing = ResponderPlanPayment.objects.filter(payment_reference=reference).select_related(
+        "org"
+    ).first()
+    if existing and existing.payment_status == "completed":
+        return {
+            "success": True,
+            "message": "RapidBrief plan already activated.",
+            "payment_reference": existing.payment_reference,
+            "org_id": existing.org_id,
+            "plan": existing.plan,
+            "plan_status": existing.org.plan_status,
+            "plan_ends_at": existing.org.plan_ends_at,
+        }
+
+    payment = _verify_with_paystack(reference)
+    metadata = payment.get("metadata") or {}
+    if not isinstance(metadata, dict):
+        metadata = {}
+
+    product = (
+        _metadata_value(metadata, "product")
+        or client_data.get("product")
+        or ""
+    )
+    if str(product).strip().lower() not in {"rapidbrief", "responder_plan", "rapidbrief_plan"}:
+        # Allow reference-only verify when client passes org_id + plan.
+        if not (client_data.get("org_id") or _metadata_value(metadata, "org_id")):
+            raise PaymentRecordError("This payment is not a RapidBrief plan charge.", 400)
+
+    org_id = _metadata_value(metadata, "org_id") or client_data.get("org_id")
+    try:
+        org = ResponderOrganization.objects.get(id=int(org_id))
+    except (TypeError, ValueError, ResponderOrganization.DoesNotExist):
+        raise PaymentRecordError("Responder organization not found.", 404)
+
+    if org.verification_status != "approved":
+        raise PaymentRecordError("Organization must be verified before paying.", 400)
+
+    plan = normalize_plan(
+        _metadata_value(metadata, "plan") or client_data.get("plan") or org.plan,
+        org.org_type,
+    )
+    if not is_billable_plan(plan):
+        raise PaymentRecordError("Selected plan is not billable via Paystack.", 400)
+
+    months = _as_int(
+        _metadata_value(metadata, "months") or client_data.get("months"),
+        1,
+    )
+    months = max(1, min(months, 12))
+    meta = plan_meta(plan)
+    expected_kes = Decimal(str(meta["price_kes_month"])) * months
+
+    amount = _as_decimal(payment.get("amount", 0))
+    if amount is None:
+        raise PaymentRecordError("Paystack did not return a valid amount.", 400)
+    amount = (amount / Decimal("100")).quantize(Decimal("0.01"))
+    # Allow small gateway rounding; reject large underpay.
+    if amount + Decimal("1.00") < expected_kes:
+        raise PaymentRecordError(
+            f"Paid amount KES {amount} is below plan price KES {expected_kes}.",
+            400,
+        )
+
+    customer = payment.get("customer") or {}
+    payer_email = (customer.get("email") or client_data.get("email") or "").strip()
+    payer = _resolve_donor(request_user, payer_email)
+
+    with transaction.atomic():
+        activate_paid_plan(org, plan=plan, months=months)
+        org.save()
+        if existing:
+            existing.plan = plan
+            existing.months = months
+            existing.amount = amount
+            existing.payment_status = "completed"
+            existing.payer_email = payer_email or existing.payer_email
+            if payer is not None:
+                existing.paid_by = payer
+            existing.save()
+            record = existing
+        else:
+            try:
+                record = ResponderPlanPayment.objects.create(
+                    org=org,
+                    plan=plan,
+                    months=months,
+                    amount=amount,
+                    currency="KES",
+                    payment_reference=reference,
+                    payment_status="completed",
+                    payer_email=payer_email,
+                    paid_by=payer,
+                )
+            except IntegrityError:
+                record = ResponderPlanPayment.objects.select_related("org").get(
+                    payment_reference=reference
+                )
+
+    return {
+        "success": True,
+        "message": "RapidBrief plan activated.",
+        "payment_reference": record.payment_reference,
+        "org_id": org.id,
+        "plan": org.plan,
+        "plan_label": meta.get("name"),
+        "plan_status": org.plan_status,
+        "plan_ends_at": org.plan_ends_at,
+        "max_seats": org.max_seats,
+        "max_coverage_km": meta.get("max_coverage_km"),
+    }
+
+
+def record_paystack_charge(reference, request_user=None, client_data=None):
+    """
+    Route a verified Paystack reference to tree donation or RapidBrief billing.
+    Used by the browser verify endpoint and the webhook.
+    """
+    client_data = client_data or {}
+    product = str(client_data.get("product") or "").strip().lower()
+    if product in {"rapidbrief", "responder_plan", "rapidbrief_plan"}:
+        return record_rapidbrief_payment(reference, request_user, client_data)
+
+    # Peek metadata without failing tree flow when secret/network errors.
+    try:
+        payment = _verify_with_paystack(str(reference or "").strip())
+        if payment_product_type(payment) in {
+            "rapidbrief",
+            "responder_plan",
+            "rapidbrief_plan",
+        }:
+            return record_rapidbrief_payment(reference, request_user, client_data)
+    except PaymentRecordError:
+        # Fall through to tree recording — tree verify will re-check Paystack.
+        pass
+
+    return record_tree_payment(reference, request_user, client_data)
