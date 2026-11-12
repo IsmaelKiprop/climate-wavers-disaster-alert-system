@@ -8,6 +8,11 @@ function trimTrailingPunctuation(value) {
   return String(value || "").replace(/[),.!?;:]+$/g, "");
 }
 
+export function profilePath(userId) {
+  if (!userId) return "";
+  return `/app/${userId}/profile`;
+}
+
 export function normalizeExternalHref(raw) {
   const cleaned = trimTrailingPunctuation(raw);
   if (!cleaned) return "";
@@ -22,17 +27,18 @@ export function normalizeExternalHref(raw) {
 
 /**
  * Split text into typed segments for rendering.
- * @returns {{ type: 'text'|'url'|'hashtag'|'mention', value: string, href?: string }[]}
+ * @returns {{ type: 'text'|'url'|'hashtag'|'mention', value: string, href?: string, userId?: number|string }[]}
  */
 export function tokenizeRichText(text, { mentions = [] } = {}) {
   const source = String(text || "");
   if (!source) return [];
 
-  const mentionHandles = new Set(
-    (mentions || [])
-      .map((m) => String(m?.username || "").toLowerCase())
-      .filter(Boolean)
-  );
+  const mentionByHandle = new Map();
+  (mentions || []).forEach((m) => {
+    const handle = String(m?.username || "").toLowerCase();
+    if (!handle || mentionByHandle.has(handle)) return;
+    mentionByHandle.set(handle, m);
+  });
 
   const parts = [];
   let lastIndex = 0;
@@ -51,9 +57,13 @@ export function tokenizeRichText(text, { mentions = [] } = {}) {
       });
     } else if (raw.startsWith("@")) {
       const handle = raw.slice(1).toLowerCase();
+      const person = mentionByHandle.get(handle);
+      // Treat any @handle as a mention; link when we know the user id.
       parts.push({
-        type: mentionHandles.size === 0 || mentionHandles.has(handle) ? "mention" : "text",
+        type: "mention",
         value: raw,
+        userId: person?.id || null,
+        href: person?.id ? profilePath(person.id) : "",
       });
     } else {
       const href = normalizeExternalHref(raw);

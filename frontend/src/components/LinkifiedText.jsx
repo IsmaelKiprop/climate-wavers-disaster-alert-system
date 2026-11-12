@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { tokenizeRichText } from "../utils/linkify";
+import { profilePath, tokenizeRichText } from "../utils/linkify";
 
 /**
  * Renders plain text with clickable http(s)/www links, #hashtags, and @mentions.
@@ -50,6 +50,19 @@ const LinkifiedText = ({
           );
         }
         if (part.type === "mention") {
+          const to = part.href || (part.userId ? profilePath(part.userId) : "");
+          if (to) {
+            return (
+              <Link
+                key={key}
+                to={to}
+                className={mentionClassName}
+                onClick={(e) => e.stopPropagation()}
+              >
+                {part.value}
+              </Link>
+            );
+          }
           return (
             <span key={key} className={mentionClassName}>
               {part.value}

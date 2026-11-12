@@ -1,5 +1,9 @@
+import { Link } from "react-router-dom";
 import { IoClose, IoPeopleOutline, IoShieldCheckmarkOutline } from "react-icons/io5";
 import { avatarUrl, secureMediaUrl } from "../utils/factory";
+import { profilePath } from "../utils/linkify";
+import ImageLightbox from "./ImageLightbox";
+import { useState } from "react";
 
 function displayName(person) {
   if (!person) return "Member";
@@ -13,7 +17,56 @@ function roleLabel(role) {
   return "Member";
 }
 
+const MemberRow = ({ person, onClose, badge }) => {
+  const to = person?.id ? profilePath(person.id) : "";
+  const inner = (
+    <>
+      <span className="relative shrink-0">
+        <img
+          src={avatarUrl(person)}
+          alt=""
+          className="h-10 w-10 rounded-full object-cover bg-background"
+        />
+        {person.is_online ? (
+          <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full bg-success border-2 border-surface" />
+        ) : null}
+      </span>
+      <span className="min-w-0 flex-1 text-left">
+        <span className="block text-sm font-medium truncate">{displayName(person)}</span>
+        <span className="block text-xs text-muted truncate">
+          {badge || (
+            <>
+              @{person.username || "member"}
+              {person.role && person.role !== "member"
+                ? ` · ${roleLabel(person.role)}`
+                : ""}
+              {person.is_online ? " · online" : ""}
+            </>
+          )}
+        </span>
+      </span>
+    </>
+  );
+
+  if (!to) {
+    return <li className="flex items-center gap-3">{inner}</li>;
+  }
+
+  return (
+    <li>
+      <Link
+        to={to}
+        onClick={onClose}
+        className="flex items-center gap-3 rounded-sm hover:bg-background px-1 py-1 -mx-1"
+      >
+        {inner}
+      </Link>
+    </li>
+  );
+};
+
 const ChatGroupInfo = ({ open, onClose, loading, data, conversationName }) => {
+  const [logoPreview, setLogoPreview] = useState(null);
   if (!open) return null;
 
   const group = data?.group;
@@ -43,13 +96,20 @@ const ChatGroupInfo = ({ open, onClose, loading, data, conversationName }) => {
 
         <div className="flex-1 overflow-y-auto">
           <div className="flex flex-col items-center gap-3 px-4 py-6 border-b border-border">
-            <span className="h-24 w-24 rounded-full overflow-hidden bg-background border border-border flex items-center justify-center">
+            <button
+              type="button"
+              className="h-24 w-24 rounded-full overflow-hidden bg-background border border-border flex items-center justify-center"
+              onClick={() => {
+                if (logo) setLogoPreview({ src: logo, type: "image" });
+              }}
+              aria-label={logo ? "View logo" : "Group logo"}
+            >
               {logo ? (
                 <img src={logo} alt="" className="h-full w-full object-cover" />
               ) : (
                 <IoPeopleOutline size={40} className="text-muted" />
               )}
-            </span>
+            </button>
             <div className="text-center">
               <p className="text-lg font-semibold">{group?.name || conversationName || "Group"}</p>
               <p className="mt-1 text-sm text-muted">
@@ -74,23 +134,20 @@ const ChatGroupInfo = ({ open, onClose, loading, data, conversationName }) => {
                   <p className="text-xs font-medium uppercase tracking-wide text-muted mb-3">
                     Admins ({admins.length})
                   </p>
-                  <ul className="space-y-3">
+                  <ul className="space-y-2">
                     {admins.map((person) => (
-                      <li key={person.id} className="flex items-center gap-3">
-                        <img
-                          src={avatarUrl(person)}
-                          alt=""
-                          className="h-10 w-10 rounded-full object-cover bg-background"
-                        />
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm font-medium truncate">{displayName(person)}</p>
-                          <p className="text-xs text-muted flex items-center gap-1">
+                      <MemberRow
+                        key={person.id}
+                        person={person}
+                        onClose={onClose}
+                        badge={
+                          <span className="inline-flex items-center gap-1">
                             <IoShieldCheckmarkOutline size={12} />
                             {roleLabel(person.role)}
                             {person.is_online ? " · online" : ""}
-                          </p>
-                        </div>
-                      </li>
+                          </span>
+                        }
+                      />
                     ))}
                   </ul>
                 </section>
@@ -100,29 +157,9 @@ const ChatGroupInfo = ({ open, onClose, loading, data, conversationName }) => {
                 <p className="text-xs font-medium uppercase tracking-wide text-muted mb-3">
                   Members ({others.length || members.length})
                 </p>
-                <ul className="space-y-3">
+                <ul className="space-y-2">
                   {(others.length ? others : members).map((person) => (
-                    <li key={person.id} className="flex items-center gap-3">
-                      <span className="relative shrink-0">
-                        <img
-                          src={avatarUrl(person)}
-                          alt=""
-                          className="h-10 w-10 rounded-full object-cover bg-background"
-                        />
-                        {person.is_online ? (
-                          <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full bg-success border-2 border-surface" />
-                        ) : null}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium truncate">{displayName(person)}</p>
-                        <p className="text-xs text-muted truncate">
-                          @{person.username || "member"}
-                          {person.role && person.role !== "member"
-                            ? ` · ${roleLabel(person.role)}`
-                            : ""}
-                        </p>
-                      </div>
-                    </li>
+                    <MemberRow key={person.id} person={person} onClose={onClose} />
                   ))}
                 </ul>
               </section>
@@ -130,6 +167,15 @@ const ChatGroupInfo = ({ open, onClose, loading, data, conversationName }) => {
           )}
         </div>
       </aside>
+
+      {logoPreview?.src ? (
+        <ImageLightbox
+          src={logoPreview.src}
+          type={logoPreview.type || "image"}
+          alt="Group logo"
+          onClose={() => setLogoPreview(null)}
+        />
+      ) : null}
     </div>
   );
 };

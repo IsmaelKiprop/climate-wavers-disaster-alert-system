@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import EmojiPicker from "emoji-picker-react";
 import {
   IoArrowBack,
@@ -27,6 +27,8 @@ import {
 } from "../utils/notificationSound";
 import ChatGroupInfo from "./ChatGroupInfo";
 import LinkifiedText from "./LinkifiedText";
+import ImageLightbox from "./ImageLightbox";
+import { profilePath } from "../utils/linkify";
 
 function displayName(person) {
   if (!person) return "Member";
@@ -104,6 +106,21 @@ function previewLabel(msg) {
   return "Say hello";
 }
 
+function mergeMentions(mentions = [], roomMembers = []) {
+  const byHandle = new Map();
+  [...(mentions || []), ...(roomMembers || [])].forEach((person) => {
+    const handle = String(person?.username || "").toLowerCase();
+    if (!handle || byHandle.has(handle)) return;
+    byHandle.set(handle, {
+      id: person.id,
+      username: person.username || "",
+      first_name: person.first_name || "",
+      last_name: person.last_name || "",
+    });
+  });
+  return Array.from(byHandle.values());
+}
+
 function renderMessageBody(body, mentions = [], mine = false) {
   const text = body || "";
   if (!text) return null;
@@ -166,6 +183,7 @@ const CommunityChat = () => {
   const [groupInfoOpen, setGroupInfoOpen] = useState(false);
   const [groupInfoLoading, setGroupInfoLoading] = useState(false);
   const [groupInfoData, setGroupInfoData] = useState(null);
+  const [mediaPreview, setMediaPreview] = useState(null);
 
   const bottomRef = useRef(null);
   const draftRef = useRef(null);
@@ -1157,28 +1175,65 @@ const CommunityChat = () => {
                           }`}
                         >
                           {!mine && activeConversation.conversation_type !== "dm" ? (
-                            <p
-                              className={`text-[11px] font-medium mb-0.5 ${
-                                mine ? "text-primary-foreground/80" : "text-primary"
-                              }`}
-                            >
-                              {displayName(msg.sender)}
-                            </p>
+                            msg.sender?.id ? (
+                              <Link
+                                to={profilePath(msg.sender.id)}
+                                className={`text-[11px] font-medium mb-0.5 block hover:underline ${
+                                  mine ? "text-primary-foreground/80" : "text-primary"
+                                }`}
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                {displayName(msg.sender)}
+                              </Link>
+                            ) : (
+                              <p
+                                className={`text-[11px] font-medium mb-0.5 ${
+                                  mine ? "text-primary-foreground/80" : "text-primary"
+                                }`}
+                              >
+                                {displayName(msg.sender)}
+                              </p>
+                            )
                           ) : null}
                           {msg.media_url ? (
                             <div className="mb-1.5 overflow-hidden">
                               {msg.media_type === "image" ? (
-                                <img
-                                  src={secureMediaUrl(msg.media_url)}
-                                  alt=""
-                                  className="max-h-64 w-full object-cover"
-                                />
+                                <button
+                                  type="button"
+                                  className="block w-full text-left"
+                                  onClick={() =>
+                                    setMediaPreview({
+                                      src: secureMediaUrl(msg.media_url),
+                                      type: "image",
+                                      alt: "Chat image",
+                                    })
+                                  }
+                                >
+                                  <img
+                                    src={secureMediaUrl(msg.media_url)}
+                                    alt=""
+                                    className="max-h-64 w-full object-cover cursor-zoom-in"
+                                  />
+                                </button>
                               ) : msg.media_type === "video" ? (
-                                <video
-                                  src={secureMediaUrl(msg.media_url)}
-                                  controls
-                                  className="max-h-64 w-full bg-background"
-                                />
+                                <button
+                                  type="button"
+                                  className="block w-full text-left"
+                                  onClick={() =>
+                                    setMediaPreview({
+                                      src: secureMediaUrl(msg.media_url),
+                                      type: "video",
+                                      alt: "Chat video",
+                                    })
+                                  }
+                                >
+                                  <video
+                                    src={secureMediaUrl(msg.media_url)}
+                                    className="max-h-64 w-full bg-background pointer-events-none"
+                                    muted
+                                    playsInline
+                                  />
+                                </button>
                               ) : msg.media_type === "audio" ? (
                                 <audio src={secureMediaUrl(msg.media_url)} controls className="w-full" />
                               ) : (
@@ -1195,7 +1250,11 @@ const CommunityChat = () => {
                           ) : null}
                           {msg.body ? (
                             <p className="text-sm">
-                              {renderMessageBody(msg.body, msg.mentions, mine)}
+                              {renderMessageBody(
+                                msg.body,
+                                mergeMentions(msg.mentions, roomMembers),
+                                mine
+                              )}
                             </p>
                           ) : null}
                           <p
@@ -1358,6 +1417,15 @@ const CommunityChat = () => {
         data={groupInfoData}
         conversationName={activeConversation?.name}
       />
+
+      {mediaPreview?.src ? (
+        <ImageLightbox
+          src={mediaPreview.src}
+          type={mediaPreview.type || "image"}
+          alt={mediaPreview.alt || ""}
+          onClose={() => setMediaPreview(null)}
+        />
+      ) : null}
     </div>
   );
 };
