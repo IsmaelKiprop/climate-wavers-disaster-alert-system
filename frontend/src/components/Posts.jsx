@@ -1,16 +1,17 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { formatDistanceToNow } from "date-fns";
 import Accountcard from "./Accountcard";
 import { client } from "../api";
 import { endpoints } from "../utils/endpoints";
-import { getAuthToken, getUser, secureMediaUrl } from "../utils/factory";
+import { secureMediaUrl } from "../utils/factory";
 import { toast } from "react-toastify";
 import { AiOutlineHeart, AiFillHeart, AiOutlineRetweet } from "react-icons/ai";
-import { IoChatboxEllipsesOutline, IoEllipsisHorizontal, IoTrashOutline, IoEyeOutline } from "react-icons/io5";
+import { IoChatboxEllipsesOutline } from "react-icons/io5";
 import { PiBookmark, PiBookmarkFill } from "react-icons/pi";
 import Modal from "./Modal";
 import Createpost from "./Createpost";
+import PostOwnerMenu from "./PostOwnerMenu";
 import PropTypes from "prop-types";
 import ImageLightbox from "./ImageLightbox";
 import LinkifiedText from "./LinkifiedText";
@@ -33,10 +34,11 @@ const Posts = ({
   const navigate = useNavigate();
   const [isCommentModalOpen, setIsCommentModalOpen] = useState(false);
   const [commentId, setCommentId] = useState("");
-  const [openMenuId, setOpenMenuId] = useState(null);
-  const menuRef = useRef(null);
   const [localPosts, setLocalPosts] = useState([]);
   const [mediaPreview, setMediaPreview] = useState(null);
+  const [editingId, setEditingId] = useState(null);
+  const [editText, setEditText] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
 
   useEffect(() => {
     if (!Array.isArray(posts)) {
@@ -46,22 +48,6 @@ const Posts = ({
     setLocalPosts(posts.filter((post) => post && post.id));
   }, [posts]);
 
-  // Posts data is managed by the database, no localStorage needed
-
-  // Close menu when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (menuRef.current && !menuRef.current.contains(event.target)) {
-        setOpenMenuId(null);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, []);
-  
   const handleOptimisticUpdate = (postId, changes) => {
     setLocalPosts((prevPosts) =>
       prevPosts.map((post) =>
@@ -150,83 +136,59 @@ const Posts = ({
     }
   };
 
-  const deletePost = async (post) => {
-    try {
-      // Determine if this is a post or comment based on the type prop
-      const isComment = type === "comments";
-      const deleteUrl = isComment ? `${endpoints.comments}${post.id}/` : `${endpoints.post}${post.id}/`;
-      const token = getAuthToken();
-      
-      if (!token) {
-        toast.error('Authentication required to delete posts');
-        return;
-      }
-      
-      const response = await fetch(deleteUrl, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-      
-      if (response.ok) {
-        // Remove post from local state immediately for better UX
-        setLocalPosts(prevPosts => {
-          const filtered = prevPosts.filter(p => p.id !== post.id);
-          return filtered;
-        });
-        
-        const itemType = isComment ? 'Comment' : 'Post';
-        toast.success(`🗑️ ${itemType} deleted successfully!`, {
-          position: "top-center",
-          autoClose: 3000,
-          hideProgressBar: false,
-          closeOnClick: true,
-          pauseOnHover: true,
-          draggable: true,
-          style: {
-            background: '#10B981',
-            color: 'white',
-            fontWeight: 'bold'
-          }
-        });
+  const startEdit = (post) => {
+    setEditingId(post.id);
+    setEditText(post.content || "");
+  };
 
-        // If we're on a post detail page, redirect to home after deletion
-        const currentPath = window.location.pathname;
-        if (currentPath.includes('/post/') || 
-            currentPath.includes(`/${post.id}/`) || 
-            currentPath.includes(`/post/${post.id}`)) {
-          setTimeout(() => {
-            navigate('/app');
-          }, 1000); // Small delay to show the success message
-        }
-      } else {
-        const errorData = await response.text();
-        throw new Error(`HTTP ${response.status}: ${errorData}`);
-      }
-    } catch (error) {
-      console.error('Delete post error:', error);
-      
-      const itemType = type === "comments" ? 'comment' : 'post';
-      toast.error(`❌ Failed to delete ${itemType}: ${error.message}`, {
-        position: "top-center",
-        autoClose: 5000,
-        hideProgressBar: false,
-        closeOnClick: true,
-        pauseOnHover: true,
-        draggable: true,
-        style: {
-          background: '#EF4444',
-          color: 'white',
-          fontWeight: 'bold'
-        }
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditText("");
+    setSavingEdit(false);
+  };
+
+  const saveEdit = async (post) => {
+    const next = String(editText || "").trim();
+    if (!next) {
+      toast.error("Post cannot be empty.");
+      return;
+    }
+    if (next === String(post.content || "").trim()) {
+      cancelEdit();
+      return;
+    }
+    setSavingEdit(true);
+    try {
+      const isComment = type === "comments";
+      const url = isComment
+        ? `${endpoints.comments}${post.id}/`
+        : `${endpoints.post}${post.id}/`;
+      const updated = await client.run("patch", url, { content: next }, true);
+      handleOptimisticUpdate(post.id, {
+        content: updated?.content ?? next,
+        hashtags: updated?.hashtags,
+        font_family: updated?.font_family ?? post.font_family,
       });
+      toast.success(isComment ? "Comment updated" : "Post updated");
+      cancelEdit();
+    } catch (error) {
+      const detail = error?.response?.data?.detail;
+      toast.error(typeof detail === "string" ? detail : "Could not save changes.");
+      setSavingEdit(false);
     }
   };
 
-  const toggleMenu = (postId) => {
-    setOpenMenuId(openMenuId === postId ? null : postId);
+  const handleDeleted = (post) => {
+    setLocalPosts((prev) => prev.filter((p) => p.id !== post.id));
+    if (editingId === post.id) cancelEdit();
+    const currentPath = window.location.pathname;
+    if (
+      currentPath.includes("/post/") ||
+      currentPath.includes(`/${post.id}/`) ||
+      currentPath.includes(`/post/${post.id}`)
+    ) {
+      setTimeout(() => navigate("/app"), 600);
+    }
   };
 
   if (isLoading && localPosts.length === 0) {
@@ -310,113 +272,18 @@ const Posts = ({
                 />
               </Modal>
             )}
-            <div className="p-6 pb-4 flex items-center justify-between">
-            <Accountcard user={post?.user} />
-              <div className="relative" ref={menuRef}>
-                <button
-                  onClick={() => toggleMenu(post.id)}
-                  className="p-2 sm:p-3 rounded-full hover:bg-gray-100 transition-all duration-200 group"
-                  aria-label="Post options"
-                >
-                  <IoEllipsisHorizontal className="w-4 h-4 sm:w-5 sm:h-5 text-gray-500 group-hover:text-gray-700 transition-colors" />
-                </button>
-                
-                {openMenuId === post.id && (
-                  <div className="absolute right-0 top-10 sm:top-12 bg-white rounded-xl shadow-xl border border-gray-200 py-2 z-50 min-w-[180px] sm:min-w-[200px] max-w-[250px]">
-                    <button
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        console.log('=== VIEW DETAILS BUTTON CLICKED ===');
-                        console.log('Post:', post);
-                        viewPostDetails(post);
-                        setOpenMenuId(null);
-                      }}
-                      className="w-full px-4 py-3 text-left hover:bg-gray-50 active:bg-gray-100 flex items-center space-x-3 text-gray-700 transition-colors duration-150 group"
-                    >
-                      <IoEyeOutline className="w-4 h-4 sm:w-5 sm:h-5 text-blue-500 group-hover:text-blue-600" />
-                      <span className="text-sm sm:text-base font-medium">View Details</span>
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        console.log('=== VIEW COMMENTS BUTTON CLICKED ===');
-                        console.log('Post:', post);
-                        commentPage(post);
-                        setOpenMenuId(null);
-                      }}
-                      className="w-full px-4 py-3 text-left hover:bg-gray-50 active:bg-gray-100 flex items-center space-x-3 text-gray-700 transition-colors duration-150 group"
-                    >
-                      <IoChatboxEllipsesOutline className="w-4 h-4 sm:w-5 sm:h-5 text-green-500 group-hover:text-green-600" />
-                      <span className="text-sm sm:text-base font-medium">View Comments</span>
-                    </button>
-                    {(() => {
-                      try {
-                        // Use proper getUser() function instead of localStorage
-                        const currentUser = getUser();
-                        
-                        // Check if user is logged in
-                        const isLoggedIn = !!currentUser?.id;
-                        
-                        // Get user ID from proper source
-                        const userId = currentUser?.id;
-                        
-                        // Check if we can match by email or other fields
-                        const userEmail = currentUser?.email;
-                        const postUserEmail = post?.user?.email;
-                        
-                        // Check if this is the user's own post
-                        // Since we have different user systems, we'll use email matching for now
-                        const isOwnPost = userEmail === postUserEmail;
-                        
-                        // Handle different scenarios
-                        if (!isLoggedIn) {
-                            return false; // Don't show delete if not logged in
-                        }
-                        
-                        if (isOwnPost) {
-                            return true; // Show delete for own posts
-                        }
-                        
-                        return false; // Don't show delete for other users' posts
-                      } catch (error) {
-                        console.error('Error parsing user from localStorage:', error);
-                        return false; // Don't show delete if there's an error
-                      }
-                    })() && (
-                      <>
-                        <div className="border-t border-gray-100 my-1"></div>
-                        <button
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            
-                            const itemType = type === "comments" ? 'comment' : 'post';
-                            const itemTypeCapitalized = type === "comments" ? 'Comment' : 'Post';
-                            const confirmed = window.confirm(
-                              `🗑️ Delete ${itemTypeCapitalized}\n\n` +
-                              `Are you sure you want to delete this ${itemType}?\n` +
-                              'This action cannot be undone.\n\n' +
-                              `Click OK to delete or Cancel to keep the ${itemType}.`
-                            );
-                            if (confirmed) {
-                              deletePost(post);
-                              setOpenMenuId(null);
-                            }
-                          }}
-                          className="w-full px-4 py-3 text-left hover:bg-red-50 active:bg-red-100 flex items-center space-x-3 text-red-600 transition-colors duration-150 group"
-                        >
-                          <IoTrashOutline className="w-4 h-4 sm:w-5 sm:h-5 text-red-500 group-hover:text-red-600" />
-                          <span className="text-sm sm:text-base font-medium">
-                            Delete {type === "comments" ? "Comment" : "Post"}
-                          </span>
-                        </button>
-                      </>
-                    )}
-                  </div>
-                )}
+            <div className="p-6 pb-4 flex items-start justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <Accountcard user={post?.user} />
               </div>
+              <PostOwnerMenu
+                item={post}
+                itemType={type === "comments" ? "comments" : "post"}
+                onViewDetails={viewPostDetails}
+                onViewComments={commentPage}
+                onEdit={startEdit}
+                onDeleted={handleDeleted}
+              />
             </div>
             
             {/* Date/Time and Location Display */}
@@ -448,8 +315,41 @@ const Posts = ({
               </div>
             </div>
             
-            <button onClick={() => commentPage(post)} className="w-full text-left group-hover:bg-gray-50/50 transition-colors duration-200">
+            <div className="w-full text-left">
               <div className="px-6 pb-4">
+              {editingId === post.id ? (
+                <div className="space-y-3" onClick={(e) => e.stopPropagation()}>
+                  <textarea
+                    value={editText}
+                    onChange={(e) => setEditText(e.target.value)}
+                    rows={4}
+                    className="w-full px-3 py-2 border border-border bg-background text-foreground text-base leading-relaxed focus:outline-none focus:ring-2 focus:ring-primary/25"
+                    style={postFontStyle(post?.font_family)}
+                    disabled={savingEdit}
+                  />
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      disabled={savingEdit}
+                      onClick={() => saveEdit(post)}
+                      className="min-h-10 px-4 bg-primary text-primary-foreground text-sm font-medium disabled:opacity-60"
+                      style={{ borderRadius: 5 }}
+                    >
+                      {savingEdit ? "Saving…" : "Save"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={savingEdit}
+                      onClick={cancelEdit}
+                      className="min-h-10 px-4 border border-border bg-background text-foreground text-sm font-medium disabled:opacity-60"
+                      style={{ borderRadius: 5 }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+              <button type="button" onClick={() => commentPage(post)} className="w-full text-left">
               <p
                 className="text-foreground text-lg leading-relaxed font-medium transition-colors duration-200"
                 style={postFontStyle(post?.font_family)}
@@ -460,6 +360,8 @@ const Posts = ({
                   hashtagClassName="text-primary font-semibold hover:text-primary-dark transition-colors duration-200"
                 />
               </p>
+              </button>
+              )}
               {(post?.image || post?.video) && (
                   <div
                     className={`mt-4 grid gap-2 ${
@@ -581,8 +483,8 @@ const Posts = ({
                 )}
                 
               </div>
-            </button>
-            <div className="flex items-center justify-between px-6 py-4 border-t border-gray-100 bg-gray-50/30">
+            </div>
+            <div className="flex items-center justify-between px-6 py-4 border-t border-border bg-surface-muted/40">
               <Link onClick={() => setIsCommentModalOpen(true)}>
                 <button
                   className="flex items-center space-x-2 px-4 py-2.5 rounded-xl hover:bg-blue-50 transition-all duration-200 group/btn"

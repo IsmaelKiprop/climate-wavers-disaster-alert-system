@@ -1,27 +1,39 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { AiOutlineHeart, AiFillHeart, AiOutlineRetweet } from "react-icons/ai";
-import { IoChatboxEllipsesOutline, IoEllipsisHorizontal, IoTrashOutline, IoEyeOutline } from "react-icons/io5";
+import { IoChatboxEllipsesOutline } from "react-icons/io5";
 import { PiBookmark, PiBookmarkFill } from "react-icons/pi";
 import { BsBarChart } from "react-icons/bs";
 import { formatDistanceToNow } from "date-fns";
 import PropTypes from "prop-types";
+import { toast } from "react-toastify";
+import { client } from "../api";
+import { endpoints } from "../utils/endpoints";
 import { avatarUrl } from "../utils/factory";
 import LinkifiedText from "./LinkifiedText";
 import { postFontStyle } from "../utils/postFonts";
+import PostOwnerMenu from "./PostOwnerMenu";
 
 const ProfileContent = ({ content, type, onLike, onUnlike, onRepost, onUnrepost, onSave, onUnsave }) => {
   const navigate = useNavigate();
   const [isLiked, setIsLiked] = useState(false);
   const [isReposted, setIsReposted] = useState(false);
   const [isBookmarked, setIsBookmarked] = useState(false);
+  const [localContent, setLocalContent] = useState(content);
+  const [hidden, setHidden] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editText, setEditText] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
 
   useEffect(() => {
     // Set initial states based on content
     if (content) {
+      setLocalContent(content);
       setIsLiked(content.is_reacted || false);
       setIsReposted(content.is_reposted || false);
       setIsBookmarked(content.is_bookmarked || false);
+      setHidden(false);
+      setEditing(false);
     }
   }, [content]);
 
@@ -55,38 +67,115 @@ const ProfileContent = ({ content, type, onLike, onUnlike, onRepost, onUnrepost,
     }
   };
 
+  const startEdit = () => {
+    setEditText(localContent?.content || "");
+    setEditing(true);
+  };
+
+  const saveEdit = async () => {
+    const next = String(editText || "").trim();
+    if (!next) {
+      toast.error("Post cannot be empty.");
+      return;
+    }
+    setSavingEdit(true);
+    try {
+      const url =
+        type === "comments"
+          ? `${endpoints.comments}${localContent.id}/`
+          : `${endpoints.post}${localContent.id}/`;
+      const updated = await client.run("patch", url, { content: next }, true);
+      setLocalContent((prev) => ({
+        ...prev,
+        content: updated?.content ?? next,
+        hashtags: updated?.hashtags ?? prev?.hashtags,
+      }));
+      toast.success("Post updated");
+      setEditing(false);
+    } catch (err) {
+      const detail = err?.response?.data?.detail;
+      toast.error(typeof detail === "string" ? detail : "Could not save changes.");
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
   const renderContent = () => {
-    if (!content) return null;
+    if (!localContent || hidden) return null;
+    const content = localContent;
 
     switch (type) {
       case "post":
         return (
-          <div className="bg-white rounded-2xl shadow-lg border border-gray-100 hover:shadow-xl transition-all duration-300 hover:border-gray-200 group">
+          <div className="bg-surface rounded-2xl shadow-lg border border-border hover:shadow-xl transition-all duration-300 hover:border-primary/30 group">
             <div className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center space-x-3">
+              <div className="flex items-start justify-between gap-3 mb-4">
+                <div className="flex items-center space-x-3 min-w-0">
                   <img
                     src={avatarUrl(content.user)}
                     alt={content.user?.username}
-                    className="w-12 h-12 rounded-full object-cover ring-2 ring-gray-100"
+                    className="w-12 h-12 rounded-full object-cover ring-2 ring-border"
                   />
-                  <div>
-                    <h3 className="font-semibold text-gray-900 text-lg">{content.user?.first_name} {content.user?.last_name}</h3>
-                    <p className="text-sm text-gray-500">@{content.user?.username}</p>
+                  <div className="min-w-0">
+                    <h3 className="font-semibold text-foreground text-lg truncate">{content.user?.first_name} {content.user?.last_name}</h3>
+                    <p className="text-sm text-muted truncate">@{content.user?.username}</p>
                   </div>
                 </div>
-                <span className="text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
-                  {formatDistanceToNow(new Date(content.created_at), { addSuffix: true })}
-                </span>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-sm text-muted bg-surface-muted px-3 py-1" style={{ borderRadius: 5 }}>
+                    {formatDistanceToNow(new Date(content.created_at), { addSuffix: true })}
+                  </span>
+                  <PostOwnerMenu
+                    item={content}
+                    itemType="post"
+                    onViewDetails={(item) => navigate(`/app/post/${item.id}`, { state: { post: item } })}
+                    onViewComments={(item) => navigate(`/app/${item.id}/comments`, { state: { post: item } })}
+                    onEdit={startEdit}
+                    onDeleted={() => setHidden(true)}
+                  />
+                </div>
               </div>
               
               <div className="mb-6">
+                {editing ? (
+                  <div className="space-y-3">
+                    <textarea
+                      value={editText}
+                      onChange={(e) => setEditText(e.target.value)}
+                      rows={4}
+                      className="w-full px-3 py-2 border border-border bg-background text-foreground text-base leading-relaxed focus:outline-none focus:ring-2 focus:ring-primary/25"
+                      style={postFontStyle(content.font_family)}
+                      disabled={savingEdit}
+                    />
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        disabled={savingEdit}
+                        onClick={saveEdit}
+                        className="min-h-10 px-4 bg-primary text-primary-foreground text-sm font-medium disabled:opacity-60"
+                        style={{ borderRadius: 5 }}
+                      >
+                        {savingEdit ? "Saving…" : "Save"}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={savingEdit}
+                        onClick={() => setEditing(false)}
+                        className="min-h-10 px-4 border border-border bg-background text-foreground text-sm font-medium"
+                        style={{ borderRadius: 5 }}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
                 <p
                   className="text-foreground text-base leading-relaxed"
                   style={postFontStyle(content.font_family)}
                 >
                   <LinkifiedText text={content.content || ""} />
                 </p>
+                )}
                 
                 {/* Handle both images and videos */}
                 {content.image && (

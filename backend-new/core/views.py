@@ -127,6 +127,35 @@ class PostViewSet(viewsets.ModelViewSet):
         post.hashtags = post.extract_hashtags(post.content)
         post.save()
 
+    def update(self, request, *args, **kwargs):
+        """Only the post owner can edit."""
+        post = self.get_object()
+        if not request.user.is_authenticated:
+            return Response(
+                {"detail": "Authentication required to edit posts."},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+        if post.user != request.user:
+            return Response(
+                {"detail": "You can only edit your own posts."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        return super().update(request, *args, **kwargs)
+
+    def partial_update(self, request, *args, **kwargs):
+        post = self.get_object()
+        if not request.user.is_authenticated:
+            return Response(
+                {"detail": "Authentication required to edit posts."},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+        if post.user != request.user:
+            return Response(
+                {"detail": "You can only edit your own posts."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        return super().partial_update(request, *args, **kwargs)
+
     def perform_update(self, serializer):
         """
         Override perform_update to update the post and extract hashtags from the content.
