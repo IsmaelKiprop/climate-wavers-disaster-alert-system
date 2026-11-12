@@ -32,16 +32,16 @@ const Feed = ({ feeds, feedData, activeFeed, setActiveFeed, isLoading, error, tr
 
   return (
     <div className="w-full">
-      <div className="text-lg md:text-xl border-gray-200 rounded-md h-[50px] border-2 font-bold">
-        <div className="text-black font-bold text-xl flex flex-row px-2 sm:px-4 py-2 justify-between gap-x-2 sm:gap-x-4 h-[100%] text-sm sm:text-base overflow-x-auto">
+      <div className="text-lg md:text-xl border-border rounded-md h-[50px] border-2 font-bold bg-surface">
+        <div className="text-foreground font-bold flex flex-row px-2 sm:px-4 py-2 justify-between gap-x-2 sm:gap-x-4 h-[100%] text-sm sm:text-base overflow-x-auto">
           {feeds?.map((pageFeed) => (
             <div
               key={pageFeed}
-              className={`cursor-pointer capitalize ${
+              className={`cursor-pointer capitalize whitespace-nowrap ${
                 feed === pageFeed
-                  ? "border-b-4 text-capitalize border-[#2F4F4F]"
-                  : null
-              } `}
+                  ? "border-b-4 border-primary text-foreground"
+                  : "text-muted hover:text-foreground"
+              }`}
               onClick={() => {
                 setFeed(pageFeed);
                 if (setActiveFeed) {

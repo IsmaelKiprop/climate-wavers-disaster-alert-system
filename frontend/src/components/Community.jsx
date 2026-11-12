@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
+import CommunityAnalyticsPanel from "./CommunityAnalyticsPanel";
 import { useFeedData } from "../hooks/useFeedData";
+import { useTrending } from "../hooks/useTrending";
 import { disasterTypeFallback, formatTimeAgo } from "../utils/apiData";
 
 const FEEDS = ["Trending", "Climate Action", "Alerts", "Disasters"];
@@ -8,7 +10,9 @@ const FEEDS = ["Trending", "Climate Action", "Alerts", "Disasters"];
 const Community = () => {
   const [activeFeed, setActiveFeed] = useState("Trending");
   const { data, isLoading, isFetching, error, refetch } = useFeedData(activeFeed);
+  const trending = useTrending();
   const events = Array.isArray(data) ? data : [];
+  const hashtags = Array.isArray(trending.data) ? trending.data : [];
 
   return (
     <div className="space-y-4">
@@ -26,6 +30,8 @@ const Community = () => {
           Open chats
         </Link>
       </div>
+
+      <CommunityAnalyticsPanel events={events} hashtags={hashtags} />
 
       <div className="flex gap-1 overflow-x-auto border-b border-border" role="tablist" aria-label="Community feeds">
         {FEEDS.map((feed) => {
