@@ -13,7 +13,7 @@ WAVERX_BIO = (
     "truth from Nairobi to the world."
 )
 
-# Stable public HTTPS defaults (work in API responses; not localhost).
+# Fallback when FRONTEND_URL is unset.
 DEFAULT_AVATAR = (
     "https://ui-avatars.com/api/?name=WaverX&background=0D9488&color=fff"
     "&size=256&bold=true&format=png"
@@ -24,16 +24,11 @@ DEFAULT_COVER = (
 )
 
 
-def _public_asset(url: str, fallback: str) -> str:
-    value = (url or "").strip()
-    if not value:
-        return fallback
-    lowered = value.lower()
-    if "localhost" in lowered or "127.0.0.1" in lowered:
-        return fallback
-    if value.startswith("http://"):
-        value = f"https://{value[7:]}"
-    return value
+def _asset_url(frontend: str, path: str, fallback: str) -> str:
+    path = "/" + str(path).lstrip("/")
+    if frontend:
+        return f"{frontend.rstrip('/')}{path}"
+    return fallback
 
 
 class Command(BaseCommand):
@@ -46,20 +41,9 @@ class Command(BaseCommand):
         frontend = (getattr(settings, "FRONTEND_URL", "") or "").rstrip("/")
         configured_avatar = (getattr(settings, "WAVERX_AVATAR_URL", "") or "").strip()
         configured_cover = (getattr(settings, "WAVERX_COVER_URL", "") or "").strip()
-        # Prefer explicit env; else production frontend assets; else stable CDN.
-        if configured_avatar:
-            avatar = _public_asset(configured_avatar, DEFAULT_AVATAR)
-        elif frontend and "localhost" not in frontend and "127.0.0.1" not in frontend:
-            avatar = _public_asset(f"{frontend}/waverx-avatar.svg", DEFAULT_AVATAR)
-        else:
-            avatar = DEFAULT_AVATAR
-
-        if configured_cover:
-            cover = _public_asset(configured_cover, DEFAULT_COVER)
-        elif frontend and "localhost" not in frontend and "127.0.0.1" not in frontend:
-            cover = _public_asset(f"{frontend}/waverx-cover.svg", DEFAULT_COVER)
-        else:
-            cover = DEFAULT_COVER
+        # Prefer bot art in frontend/public (waverbot1.png), then logo, then CDN.
+        avatar = configured_avatar or _asset_url(frontend, "waverbot1.png", DEFAULT_AVATAR)
+        cover = configured_cover or _asset_url(frontend, "environment.jpg", DEFAULT_COVER)
 
         defaults = {
             "username": username,

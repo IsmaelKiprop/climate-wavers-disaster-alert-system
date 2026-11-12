@@ -114,9 +114,12 @@ const Profile = () => {
 
   const isOwnProfile = String(me.id || "") === String(profile?.id || userId || "");
   const avatarSrcRaw = profile?.profile_picture || profile?.profile_pic || profile?.picture || "";
-  const avatarSrc = avatarSrcRaw.startsWith("http://")
-    ? `https://${avatarSrcRaw.slice(7)}`
-    : avatarSrcRaw;
+  const avatarSrc =
+    avatarSrcRaw.startsWith("http://") &&
+    !avatarSrcRaw.includes("localhost") &&
+    !avatarSrcRaw.includes("127.0.0.1")
+      ? `https://${avatarSrcRaw.slice(7)}`
+      : avatarSrcRaw;
   const coverSrc = profile?.cover || profile?.cover_image || "";
   const displayName =
     [profile?.first_name, profile?.last_name].filter(Boolean).join(" ") ||
