@@ -42,16 +42,14 @@ export default function WaverxLeftBar({
               <Mobilemenu setIsOpen={() => setIsMenuOpen(false)} />
             ) : null}
           </div>
-          <div className="flex flex-2 gap-3.5">
+          <div className="flex flex-2 items-center gap-3.5">
             <img
               src="/waverbot.png"
               alt="WaverX"
-              className="h-[40px] object-cover"
+              className="h-10 w-10 object-contain"
+              style={{ borderRadius: "50%" }}
             />
-            <h1
-              size="headingxl"
-              className="!font-semibold md:text-[26px] text-[#2F4F4F] sm:text-[24px]"
-            >
+            <h1 className="!font-semibold md:text-[26px] text-[#2F4F4F] sm:text-[24px]">
               WaverX
             </h1>
           </div>

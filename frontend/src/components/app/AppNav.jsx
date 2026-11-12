@@ -7,7 +7,6 @@ import {
   IoPeople,
   IoPersonOutline,
   IoPerson,
-  IoSparklesOutline,
   IoLeafOutline,
   IoSettingsOutline,
   IoNotificationsOutline,
@@ -31,6 +30,7 @@ import Createpost from "../Createpost";
 import { useNotifications } from "../../context/NotificationContext";
 import { client } from "../../api";
 import { endpoints } from "../../utils/endpoints";
+import WaverXIcon from "../WaverXIcon";
 
 const AppNav = ({ onNavigate, compact = false }) => {
   const location = useLocation();
@@ -84,7 +84,7 @@ const AppNav = ({ onNavigate, compact = false }) => {
         { to: "/onboarding/community", label: "Community", Icon: RiAlarmWarningLine, ActiveIcon: RiAlarmWarningFill },
         { to: "/onboarding/chat", label: "Chats", Icon: IoChatbubblesOutline, ActiveIcon: IoChatbubbles },
         { to: "/onboarding/profile", label: "Profile", Icon: IoPersonOutline, ActiveIcon: IoPerson },
-        { to: "/onboarding/waverx", label: "WaverX", Icon: IoSparklesOutline, ActiveIcon: IoSparklesOutline },
+        { to: "/onboarding/waverx", label: "WaverX", Icon: WaverXIcon, ActiveIcon: WaverXIcon },
         { to: "/onboarding/plant-tree", label: "Plant Trees", Icon: IoLeafOutline, ActiveIcon: IoLeafOutline },
         { to: "/tree-admins/apply", label: "Tree Admin", Icon: IoSettingsOutline, ActiveIcon: IoSettingsOutline },
         { to: "/onboarding/notifications", label: "Notifications", Icon: IoNotificationsOutline, ActiveIcon: IoNotifications },
@@ -109,7 +109,7 @@ const AppNav = ({ onNavigate, compact = false }) => {
           Icon: IoPersonOutline,
           ActiveIcon: IoPerson,
         },
-        { to: "/app/waverx", label: "WaverX", Icon: IoSparklesOutline, ActiveIcon: IoSparklesOutline },
+        { to: "/app/waverx", label: "WaverX", Icon: WaverXIcon, ActiveIcon: WaverXIcon },
         { to: "/app/plant-tree", label: "Plant Trees", Icon: IoLeafOutline, ActiveIcon: IoLeafOutline },
         ...(treeAdminOk || isAdmin()
           ? [

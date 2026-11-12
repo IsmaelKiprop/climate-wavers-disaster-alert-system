@@ -3,6 +3,7 @@ import axios from "axios";
 import { getUser } from "../../utils/factory";
 import { chatbotApiUrl } from "../../config/env";
 import { WaverXBotPageSEO } from "../../components/SEOComponents";
+import WaverXIcon from "../../components/WaverXIcon";
 
 const chatbot = chatbotApiUrl("/api/v1");
 
@@ -126,9 +127,12 @@ const WaverXChatPage = () => {
       <WaverXBotPageSEO />
       <div className="flex flex-col h-[calc(100dvh-8rem)] md:h-[calc(100dvh-5.5rem)] min-h-[420px]">
         <div className="flex items-center justify-between gap-3 pb-3 border-b border-border">
-          <div>
-            <h1 className="text-lg font-semibold">WaverX</h1>
-            <p className="text-sm text-muted">Ask about live alerts, verification, and climate action.</p>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2.5">
+              <WaverXIcon size={32} alt="WaverX" />
+              <h1 className="text-lg font-semibold">WaverX</h1>
+            </div>
+            <p className="text-sm text-muted mt-0.5">Ask about live alerts, verification, and climate action.</p>
           </div>
           <button
             type="button"

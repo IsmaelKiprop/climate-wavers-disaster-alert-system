@@ -5,12 +5,12 @@ import {
   IoPeopleOutline,
   IoPeople,
   IoLeafOutline,
-  IoSparklesOutline,
   IoChatbubblesOutline,
   IoChatbubbles,
 } from "react-icons/io5";
 import { RiAlarmWarningLine, RiAlarmWarningFill } from "react-icons/ri";
 import { prefetchHandlers } from "../utils/routePrefetch";
+import WaverXIcon from "./WaverXIcon";
 
 const itemClass =
   "flex flex-col items-center justify-center gap-0.5 min-w-0 flex-1 h-full pt-1.5 pb-1 text-[10px] leading-tight font-medium";
@@ -29,7 +29,7 @@ const Footer = () => {
         { to: "/app", label: "Home", Icon: IoHomeOutline, ActiveIcon: IoHome, end: true },
         { to: "/app/groups", label: "Groups", Icon: IoPeopleOutline, ActiveIcon: IoPeople },
         { to: "/app/chat", label: "Chats", Icon: IoChatbubblesOutline, ActiveIcon: IoChatbubbles },
-        { to: "/app/waverx", label: "WaverX", Icon: IoSparklesOutline, ActiveIcon: IoSparklesOutline },
+        { to: "/app/waverx", label: "WaverX", Icon: WaverXIcon, ActiveIcon: WaverXIcon },
         { to: "/disasters", label: "Alerts", Icon: RiAlarmWarningLine, ActiveIcon: RiAlarmWarningFill },
       ];
 
