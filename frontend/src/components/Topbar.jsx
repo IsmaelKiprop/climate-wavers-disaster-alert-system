@@ -1,9 +1,9 @@
 import { useState, useRef, useEffect } from "react";
-import { NavLink, Link, useLocation } from "react-router-dom";
+import { NavLink, Link, useLocation, useNavigate } from "react-router-dom";
 import Mobilemenu from "./Mobilemenu";
 import Search from "./Search";
 import BrandLogo from "./BrandLogo";
-import { getUser, logout } from "../utils/factory";
+import { getUser, logout, normalizeUser } from "../utils/factory";
 import Modal from "../components/Modal";
 import Report from "./Report";
 import UserAvatar from "./UserAvatar";
@@ -14,6 +14,7 @@ import { useTheme } from "../context/ThemeContext";
 
 const Topbar = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const onboarding = location.pathname.startsWith("/onboarding");
   const [isOpen, setIsOpen] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -23,10 +24,14 @@ const Topbar = () => {
   const { collapsed, toggle } = useSidebar();
   const { isDark, preference, setPreference, toggle: toggleTheme } = useTheme();
   const userMenuRef = useRef(null);
-  const [user, setUser] = useState(getUser());
+  const [user, setUser] = useState(() => normalizeUser(getUser()) || null);
   const homeTo = onboarding ? "/onboarding/home" : "/app";
   const notificationsTo = onboarding ? "/onboarding/notifications" : "/app/notifications";
-  const profileTo = user?.id ? `/app/${user.id}/profile` : "/login";
+  const profileTo = user?.id
+    ? onboarding
+      ? "/onboarding/profile"
+      : `/app/${user.id}/profile`
+    : "/login";
   const showSidebarToggle =
     location.pathname.startsWith("/app") ||
     location.pathname.startsWith("/onboarding") ||
@@ -34,20 +39,46 @@ const Topbar = () => {
     location.pathname.startsWith("/disasters");
 
   useEffect(() => {
-    const handleUserUpdate = () => setUser(getUser());
+    const handleUserUpdate = () => setUser(normalizeUser(getUser()) || null);
     window.addEventListener("userUpdated", handleUserUpdate);
     return () => window.removeEventListener("userUpdated", handleUserUpdate);
   }, []);
 
   useEffect(() => {
+    if (!isUserMenuOpen) return undefined;
     const handleClickOutside = (event) => {
       if (userMenuRef.current && !userMenuRef.current.contains(event.target)) {
         setIsUserMenuOpen(false);
       }
     };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+    // Defer so the avatar click that opened the menu doesn't immediately close it.
+    const timer = window.setTimeout(() => {
+      document.addEventListener("click", handleClickOutside);
+    }, 0);
+    return () => {
+      window.clearTimeout(timer);
+      document.removeEventListener("click", handleClickOutside);
+    };
+  }, [isUserMenuOpen]);
+
+  const goToProfile = (event) => {
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+    setIsUserMenuOpen(false);
+    const latest = normalizeUser(getUser()) || user;
+    const nextPath = latest?.id
+      ? onboarding
+        ? "/onboarding/profile"
+        : `/app/${latest.id}/profile`
+      : "/login";
+    if (location.pathname === nextPath) {
+      document
+        .querySelector(".app-shell-main")
+        ?.scrollTo?.({ top: 0, behavior: "smooth" });
+      return;
+    }
+    navigate(nextPath);
+  };
 
   return (
     <div className="relative z-50 bg-navbar flex items-center justify-between h-16 px-3 sm:px-5 w-full gap-2 isolate">
@@ -144,21 +175,21 @@ const Topbar = () => {
           </button>
 
           {isUserMenuOpen ? (
-            <div className="absolute right-0 top-12 bg-surface border border-border py-2 z-50 min-w-[220px] shadow-md">
+            <div className="absolute right-0 top-12 bg-surface border border-border py-2 z-[200] min-w-[220px] shadow-md">
               <div className="px-4 py-3 border-b border-border">
                 <p className="text-sm font-medium">
                   {user?.first_name} {user?.last_name}
                 </p>
                 <p className="text-xs text-muted truncate">{user?.email}</p>
               </div>
-              <NavLink
-                to={profileTo}
+              <a
+                href={profileTo}
                 className="flex items-center px-4 py-2.5 text-sm hover:bg-background"
-                onClick={() => setIsUserMenuOpen(false)}
+                onClick={goToProfile}
               >
                 <IoPersonOutline className="w-4 h-4 mr-3" />
                 Profile
-              </NavLink>
+              </a>
               <div className="px-4 py-2.5 border-y border-border">
                 <p className="text-xs text-muted mb-2">Appearance</p>
                 <div className="flex gap-1">

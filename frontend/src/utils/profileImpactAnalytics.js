@@ -143,16 +143,33 @@ export function buildProfileImpactAnalytics({
   const canopy = clamp(treesTotal * 12, 0, 100);
   const voice = clamp(posts.length * 14, 0, 100);
   const echo = clamp(comments.length * 10 + likes.length * 4 + reposts.length * 6, 0, 100);
-  const vigilance = clamp(100 - highNearby * 12, 12, 100);
+  // No free floor — a quiet feed should not look like mid resilience.
+  const vigilance = clamp(100 - highNearby * 12, 0, 100);
   const continuity = clamp(
     bookmarks.length * 8 + (profile?.is_verified ? 20 : 0) + (places.length ? 15 : 0),
     0,
     100
   );
 
-  const resilience = Math.round(
-    canopy * 0.28 + voice * 0.18 + echo * 0.14 + vigilance * 0.25 + continuity * 0.15
-  );
+  const hasAction = treesTotal > 0 || posts.length > 0 || comments.length > 0 || likes.length > 0;
+  // New / empty profiles: only a small starter from verification + place, not alert calm.
+  const resilience = hasAction
+    ? Math.round(
+        canopy * 0.28 +
+          voice * 0.18 +
+          echo * 0.14 +
+          vigilance * 0.25 +
+          continuity * 0.15
+      )
+    : clamp(
+        Math.round(
+          (profile?.is_verified ? 4 : 0) +
+            (places.length ? 3 : 0) +
+            bookmarks.length * 2
+        ),
+        0,
+        12
+      );
 
   const name =
     [profile.first_name, profile.last_name].filter(Boolean).join(" ") ||
@@ -190,7 +207,16 @@ export function buildProfileImpactAnalytics({
     },
     radar: {
       labels: ["Canopy", "Voice", "Echo", "Vigilance", "Continuity"],
-      values: [canopy, voice, echo, vigilance, continuity],
+      // Match the index: don't paint a full "vigilance" wedge on empty profiles.
+      values: hasAction
+        ? [canopy, voice, echo, vigilance, continuity]
+        : [
+            0,
+            0,
+            0,
+            clamp(vigilance * 0.08, 0, 12),
+            clamp(continuity * 0.2, 0, 12),
+          ],
     },
     balance: {
       labels: ["Hazard pressure", "Canopy response"],
