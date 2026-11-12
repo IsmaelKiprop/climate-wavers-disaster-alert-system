@@ -1,5 +1,14 @@
+import os
+import uuid
+from datetime import datetime
+
+from django import forms
+from django.conf import settings
 from django.contrib import admin
+from django.core.files.base import ContentFile
+from django.core.files.storage import default_storage
 from django.utils import timezone
+from django.utils.html import format_html
 from django.db.models import Case, IntegerField, Value, When
 
 from .models import (
@@ -326,15 +335,41 @@ class ResponderDispatchAdmin(ModelAdmin):
     search_fields = ("event_key", "place", "org__name")
 
 
+class ConversationAdminForm(forms.ModelForm):
+    avatar_upload = forms.ImageField(
+        required=False,
+        help_text="Upload a logo image (JPG/PNG/WebP). Saved to media storage and linked as Avatar URL.",
+    )
+    clear_avatar = forms.BooleanField(
+        required=False,
+        label="Remove current avatar",
+    )
+
+    class Meta:
+        model = Conversation
+        fields = "__all__"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["avatar"].required = False
+        self.fields["avatar"].help_text = (
+            "Auto-filled after upload, or paste an image URL manually."
+        )
+
+
 @admin.register(Conversation)
 class ConversationAdmin(ModelAdmin):
-    list_display = ("id", "conversation_type", "name", "room_key", "updated_at")
+    form = ConversationAdminForm
+    list_display = ("id", "conversation_type", "name", "room_key", "avatar_thumb", "updated_at")
     list_filter = ("conversation_type",)
     search_fields = ("name", "room_key", "description")
     fields = (
         "conversation_type",
         "name",
         "description",
+        "avatar_preview",
+        "avatar_upload",
+        "clear_avatar",
         "avatar",
         "room_key",
         "responder_org",
@@ -343,7 +378,48 @@ class ConversationAdmin(ModelAdmin):
         "created_at",
         "updated_at",
     )
-    readonly_fields = ("created_at", "updated_at")
+    readonly_fields = ("avatar_preview", "created_at", "updated_at")
+
+    @admin.display(description="Avatar")
+    def avatar_thumb(self, obj):
+        if not obj.avatar:
+            return "—"
+        return format_html(
+            '<img src="{}" alt="" style="height:36px;width:36px;border-radius:999px;object-fit:cover;" />',
+            obj.avatar,
+        )
+
+    @admin.display(description="Current avatar")
+    def avatar_preview(self, obj):
+        if not obj or not obj.avatar:
+            return "No avatar yet — upload below."
+        return format_html(
+            '<img src="{}" alt="" style="height:96px;width:96px;border-radius:999px;object-fit:cover;border:1px solid #ddd;" />',
+            obj.avatar,
+        )
+
+    def save_model(self, request, obj, form, change):
+        clear_avatar = bool(form.cleaned_data.get("clear_avatar"))
+        upload = form.cleaned_data.get("avatar_upload")
+
+        if clear_avatar and not upload:
+            obj.avatar = None
+
+        if upload:
+            ext = os.path.splitext(getattr(upload, "name", "") or "")[1] or ".jpg"
+            path = (
+                f"chat/avatars/{datetime.now().strftime('%Y/%m/%d')}/"
+                f"{uuid.uuid4().hex}{ext.lower()}"
+            )
+            saved = default_storage.save(path, ContentFile(upload.read()))
+            url = default_storage.url(saved) if hasattr(default_storage, "url") else f"/media/{saved}"
+            if url.startswith("/") and getattr(settings, "BACKEND_HOST", ""):
+                url = f"{settings.BACKEND_HOST.rstrip('/')}{url}"
+            if url.startswith("http://"):
+                url = f"https://{url[7:]}"
+            obj.avatar = url[:500]
+
+        super().save_model(request, obj, form, change)
 
 
 @admin.register(ConversationMember)
