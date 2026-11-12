@@ -29,6 +29,7 @@ import {
 } from "../utils/profileCompleteness";
 import ClimateVerifiedBadge from "./ClimateVerifiedBadge";
 import UserAvatar from "./UserAvatar";
+import ProfileImpactPanel from "./ProfileImpactPanel";
 
 const seedOwnProfile = (userId) => {
   const me = withCachedMedia(normalizeUser(getUser())) || {};
@@ -547,6 +548,10 @@ const Profile = () => {
           </div>
         </div>
       </div>
+      <div className="px-4 md:px-6 lg:px-8 pb-6 max-w-4xl mx-auto w-full">
+        <ProfileImpactPanel profile={profile} feed={feed} />
+      </div>
+
       <Feed 
         feeds={profileFeeds} 
         feedData={feed} 
