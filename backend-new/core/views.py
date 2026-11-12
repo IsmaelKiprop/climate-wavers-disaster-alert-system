@@ -533,10 +533,11 @@ class UserViewSet(viewsets.ModelViewSet):
                 )
 
             try:
+                qs = User.objects.select_related("alert_preference")
                 if user_id:
-                    user = User.objects.get(id=user_id)
+                    user = qs.get(id=user_id)
                 else:
-                    user = User.objects.get(username__iexact=username)
+                    user = qs.get(username__iexact=username)
                     user_id = user.id
             except User.DoesNotExist:
                 return Response(

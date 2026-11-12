@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { BsBriefcase } from "react-icons/bs";
 import { FiMapPin } from "react-icons/fi";
-import { IoCreateOutline, IoCamera, IoCallOutline, IoGlobeOutline, IoLeaf, IoShareOutline, IoQrCodeOutline, IoChatbubbleEllipsesOutline } from "react-icons/io5";
+import { IoCreateOutline, IoCamera, IoCallOutline, IoGlobeOutline, IoLeaf, IoShareOutline, IoQrCodeOutline, IoChatbubbleEllipsesOutline, IoLogoWhatsapp } from "react-icons/io5";
 import TreeBadge from "./TreeBadge";
 import { toast } from "react-toastify";
 import Feed from "./Feed";
@@ -126,6 +126,11 @@ const Profile = () => {
     profile?.full_name ||
     profile?.username ||
     "";
+
+  const whatsappVerified = Boolean(profile?.whatsapp_verified);
+  const whatsappPhone = profile?.whatsapp_phone || (whatsappVerified ? profile?.phone : "") || "";
+  const whatsappDigits = String(whatsappPhone).replace(/\D/g, "");
+  const whatsappHref = whatsappDigits ? `https://wa.me/${whatsappDigits}` : "";
 
   const coverPreviewSrc = coverSrc || "/environment.jpg";
 
@@ -398,6 +403,18 @@ const Profile = () => {
                       ? "Chat with WaverX"
                       : "Message"}
                   </button>
+                  {whatsappHref ? (
+                    <a
+                      href={whatsappHref}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="h-11 px-4 border border-[#25D366]/40 bg-[#25D366]/10 text-[#128C7E] text-sm font-medium inline-flex items-center justify-center gap-2"
+                      aria-label={`WhatsApp ${displayName || "user"}`}
+                    >
+                      <IoLogoWhatsapp size={18} />
+                      WhatsApp
+                    </a>
+                  ) : null}
                   <button
                     type="button"
                     onClick={() =>
@@ -460,6 +477,7 @@ const Profile = () => {
                 profile?.location ||
                 profile?.profession ||
                 profile?.phone ||
+                whatsappHref ||
                 profile?.website) && (
                 <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3 border-t border-border pt-5 text-sm">
                   {(profile?.location || profile?.state || profile?.country) && (
@@ -493,6 +511,29 @@ const Profile = () => {
                         <dt className="text-muted">Phone</dt>
                         <dd className="text-foreground font-medium truncate">
                           {profile.phone}
+                        </dd>
+                      </div>
+                    </div>
+                  ) : null}
+                  {whatsappHref ? (
+                    <div className="flex gap-3 min-w-0">
+                      <IoLogoWhatsapp className="mt-0.5 shrink-0 text-[#25D366]" size={16} />
+                      <div className="min-w-0">
+                        <dt className="text-muted inline-flex items-center gap-1.5">
+                          WhatsApp
+                          <span className="text-[10px] font-semibold uppercase tracking-wide text-[#128C7E] border border-[#25D366]/50 px-1.5 py-0.5">
+                            Verified
+                          </span>
+                        </dt>
+                        <dd>
+                          <a
+                            href={whatsappHref}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-[#128C7E] font-medium hover:underline truncate inline-block max-w-full"
+                          >
+                            {whatsappPhone || "Message on WhatsApp"}
+                          </a>
                         </dd>
                       </div>
                     </div>

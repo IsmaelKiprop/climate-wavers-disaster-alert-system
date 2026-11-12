@@ -87,6 +87,8 @@ def _force_https(url):
 class UserSerializer(serializers.ModelSerializer):
     is_following = serializers.SerializerMethodField()
     profile_picture = serializers.SerializerMethodField()
+    whatsapp_verified = serializers.SerializerMethodField()
+    whatsapp_phone = serializers.SerializerMethodField()
     cover_image = serializers.URLField(source='cover', required=False, allow_blank=True, allow_null=True)
     
     # Allow cover and profile_pic fields to be updated
@@ -101,6 +103,25 @@ class UserSerializer(serializers.ModelSerializer):
 
     def get_profile_picture(self, obj):
         return _force_https(obj.profile_picture)
+
+    def _verified_whatsapp_pref(self, obj):
+        pref = getattr(obj, "alert_preference", None)
+        if pref is None:
+            try:
+                pref = obj.alert_preference
+            except Exception:
+                return None
+        if pref and pref.phone_verified and pref.phone:
+            return pref
+        return None
+
+    def get_whatsapp_verified(self, obj):
+        return self._verified_whatsapp_pref(obj) is not None
+
+    def get_whatsapp_phone(self, obj):
+        """Public only when Meta WhatsApp OTP verification succeeded."""
+        pref = self._verified_whatsapp_pref(obj)
+        return pref.phone if pref else None
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
