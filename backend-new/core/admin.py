@@ -1,15 +1,11 @@
-import os
-import uuid
-from datetime import datetime
-
 from django import forms
-from django.conf import settings
 from django.contrib import admin
-from django.core.files.base import ContentFile
-from django.core.files.storage import default_storage
+from django.contrib import messages
 from django.utils import timezone
 from django.utils.html import format_html
 from django.db.models import Case, IntegerField, Value, When
+
+from .media_upload import upload_public_image
 
 from .models import (
     Post,
@@ -338,7 +334,10 @@ class ResponderDispatchAdmin(ModelAdmin):
 class ConversationAdminForm(forms.ModelForm):
     avatar_upload = forms.ImageField(
         required=False,
-        help_text="Upload a logo image (JPG/PNG/WebP). Saved to media storage and linked as Avatar URL.",
+        help_text=(
+            "Upload a logo (JPG/PNG/WebP). Uploads go to Cloudinary (public), "
+            "same as group logos — then the Avatar URL is filled automatically."
+        ),
     )
     clear_avatar = forms.BooleanField(
         required=False,
@@ -353,7 +352,8 @@ class ConversationAdminForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.fields["avatar"].required = False
         self.fields["avatar"].help_text = (
-            "Auto-filled after upload, or paste an image URL manually."
+            "Prefer Avatar upload above. Paste a public https image URL only if needed. "
+            "Private S3 links will show as a broken image in chat."
         )
 
 
@@ -392,9 +392,14 @@ class ConversationAdmin(ModelAdmin):
     @admin.display(description="Current avatar")
     def avatar_preview(self, obj):
         if not obj or not obj.avatar:
-            return "No avatar yet — upload below."
+            return "No avatar yet — use Avatar upload below."
         return format_html(
-            '<img src="{}" alt="" style="height:96px;width:96px;border-radius:999px;object-fit:cover;border:1px solid #ddd;" />',
+            '<div>'
+            '<img src="{0}" alt="" style="height:96px;width:96px;border-radius:999px;object-fit:cover;border:1px solid #ddd;background:#111;" '
+            'onerror="this.style.display=\'none\'; this.nextElementSibling.style.display=\'block\';" />'
+            '<p style="display:none;color:#f87171;margin-top:8px;">Preview failed — this URL is not publicly readable. Re-upload with Avatar upload.</p>'
+            '<p style="margin-top:8px;font-size:12px;opacity:.75;word-break:break-all;">{0}</p>'
+            "</div>",
             obj.avatar,
         )
 
@@ -406,25 +411,19 @@ class ConversationAdmin(ModelAdmin):
             obj.avatar = None
 
         if upload:
-            ext = os.path.splitext(getattr(upload, "name", "") or "")[1] or ".jpg"
-            path = (
-                f"chat/avatars/{datetime.now().strftime('%Y/%m/%d')}/"
-                f"{uuid.uuid4().hex}{ext.lower()}"
-            )
-            saved = default_storage.save(path, ContentFile(upload.read()))
-            url = default_storage.url(saved) if hasattr(default_storage, "url") else f"/media/{saved}"
-            # Always store an absolute https URL so the frontend can load it.
-            if url.startswith("/"):
-                absolute = request.build_absolute_uri(url)
-                host = (
-                    getattr(settings, "BACKEND_HOST", "")
-                    or getattr(settings, "BASE_URL", "")
-                    or ""
-                ).rstrip("/")
-                url = f"{host}{url}" if host else absolute
-            if url.startswith("http://"):
-                url = f"https://{url[7:]}"
-            obj.avatar = url[:500]
+            try:
+                obj.avatar = upload_public_image(upload, folder="chat/avatars")
+                self.message_user(
+                    request,
+                    "Avatar uploaded to a public URL and saved.",
+                    level=messages.SUCCESS,
+                )
+            except Exception as exc:
+                self.message_user(
+                    request,
+                    f"Avatar upload failed: {exc}",
+                    level=messages.ERROR,
+                )
 
         super().save_model(request, obj, form, change)
 

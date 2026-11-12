@@ -252,6 +252,10 @@ META_WA_BUSINESS_ACCOUNT_ID = env("META_WA_BUSINESS_ACCOUNT_ID", default="")
 META_WA_TEMPLATE_LANG = env("META_WA_TEMPLATE_LANG", default="en")
 META_WA_GRAPH_VERSION = env("META_WA_GRAPH_VERSION", default="v21.0")
 
+# Cloudinary unsigned uploads (community/group logos from admin — same preset as frontend)
+CLOUDINARY_CLOUD_NAME = env("CLOUDINARY_CLOUD_NAME", default="lahri")
+CLOUDINARY_UPLOAD_PRESET = env("CLOUDINARY_UPLOAD_PRESET", default="thyh7ivb")
+
 
 # Static files (CSS, JavaScript, Images)
 STATIC_URL = "/static/"

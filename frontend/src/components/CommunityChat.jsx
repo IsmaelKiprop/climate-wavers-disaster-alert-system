@@ -8,7 +8,9 @@ import {
   IoCheckmarkDone,
   IoChevronForward,
   IoClose,
+  IoGiftOutline,
   IoHappyOutline,
+  IoLeafOutline,
   IoPeopleOutline,
   IoSearchOutline,
   IoSend,
@@ -27,9 +29,11 @@ import {
   unlockNotificationSound,
 } from "../utils/notificationSound";
 import ChatGroupInfo from "./ChatGroupInfo";
+import ChatTreeGiftSheet from "./ChatTreeGiftSheet";
 import LinkifiedText from "./LinkifiedText";
 import ImageLightbox from "./ImageLightbox";
 import { profilePath } from "../utils/linkify";
+import { giftTreesPath } from "../utils/profileCompleteness";
 
 function displayName(person) {
   if (!person) return "Member";
@@ -185,6 +189,8 @@ const CommunityChat = () => {
   const [groupInfoLoading, setGroupInfoLoading] = useState(false);
   const [groupInfoData, setGroupInfoData] = useState(null);
   const [mediaPreview, setMediaPreview] = useState(null);
+  const [giftSheetOpen, setGiftSheetOpen] = useState(false);
+  const [giftNudgeOpen, setGiftNudgeOpen] = useState(false);
 
   const bottomRef = useRef(null);
   const draftRef = useRef(null);
@@ -388,8 +394,29 @@ const CommunityChat = () => {
     });
     setGroupInfoOpen(false);
     setGroupInfoData(null);
+    setGiftSheetOpen(false);
     setDraft("");
   }, [activeId]);
+
+  useEffect(() => {
+    if (!activeConversation) {
+      setGiftNudgeOpen(false);
+      return undefined;
+    }
+    const key = `cw_gift_nudge_${activeConversation.id}`;
+    let dismissed = false;
+    try {
+      dismissed = sessionStorage.getItem(key) === "1";
+    } catch {
+      dismissed = false;
+    }
+    if (dismissed) {
+      setGiftNudgeOpen(false);
+      return undefined;
+    }
+    const timer = window.setTimeout(() => setGiftNudgeOpen(true), 4500);
+    return () => window.clearTimeout(timer);
+  }, [activeConversation?.id]);
 
   const loadRoomMembers = useCallback(async (conversationId) => {
     if (!conversationId) {
@@ -645,6 +672,83 @@ const CommunityChat = () => {
       })
       .slice(0, 8);
   }, [mentionOpen, mentionQuery, roomMembers, me?.id]);
+
+  const giftSuggestions = useMemo(() => {
+    const seen = new Set();
+    const out = [];
+    const push = (person) => {
+      if (!person?.id || Number(person.id) === Number(me?.id)) return;
+      const key = String(person.id);
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push(person);
+    };
+    if (activeConversation?.conversation_type === "dm" && activeConversation.peer) {
+      push(activeConversation.peer);
+    }
+    (activeConversation?.online_members || []).forEach(push);
+    (roomMembers || []).forEach(push);
+    return out.slice(0, 8);
+  }, [activeConversation, roomMembers, me?.id]);
+
+  const giftNudgePerson = giftSuggestions[0] || null;
+
+  const dismissGiftNudge = () => {
+    if (activeConversation?.id) {
+      try {
+        sessionStorage.setItem(`cw_gift_nudge_${activeConversation.id}`, "1");
+      } catch {
+        // ignore
+      }
+    }
+    setGiftNudgeOpen(false);
+  };
+
+  const sendGiftInviteMessage = async (_person, body) => {
+    if (!body || !activeId) return;
+    const clientId = clientMessageId();
+    const optimistic = {
+      id: `tmp_${clientId}`,
+      conversation_id: activeId,
+      body,
+      media_url: "",
+      media_type: "",
+      mentions: [],
+      client_id: clientId,
+      created_at: new Date().toISOString(),
+      sender: {
+        id: me?.id,
+        first_name: me?.first_name,
+        last_name: me?.last_name,
+        username: me?.username,
+        profile_picture: me?.profile_picture || me?.profile_pic,
+      },
+      is_mine: true,
+      pending: true,
+    };
+    setMessages((prev) => [...prev, optimistic]);
+    const viaSocket = sendMessage?.(activeId, body, clientId, {
+      media_url: "",
+      media_type: "",
+      mentions: [],
+    });
+    if (!viaSocket) {
+      try {
+        const saved = await client.run(
+          "post",
+          endpoints.chatMessages(activeId),
+          { body, client_id: clientId },
+          true
+        );
+        setMessages((prev) =>
+          prev.map((m) => (m.client_id === clientId ? { ...saved, pending: false } : m))
+        );
+      } catch {
+        setMessages((prev) => prev.filter((m) => m.client_id !== clientId));
+      }
+    }
+    dismissGiftNudge();
+  };
 
   const onDraftChange = (value) => {
     setDraft(value);
@@ -1165,6 +1269,15 @@ const CommunityChat = () => {
                 </p>
                 <p className="text-xs text-muted truncate">{headerSubtitle}</p>
               </button>
+              <button
+                type="button"
+                onClick={() => setGiftSheetOpen(true)}
+                className="min-h-10 min-w-10 flex items-center justify-center text-primary hover:bg-primary/10"
+                aria-label="Gift a tree"
+                title="Gift a tree"
+              >
+                <IoGiftOutline size={20} />
+              </button>
             </header>
 
             <div className="flex-1 overflow-y-auto px-3 sm:px-4 py-4 space-y-4">
@@ -1327,6 +1440,49 @@ const CommunityChat = () => {
               <div ref={bottomRef} />
             </div>
 
+            {giftNudgeOpen && giftNudgePerson ? (
+              <div className="shrink-0 mx-3 mb-2 border border-primary/30 bg-primary/5 px-3 py-3 flex items-start gap-3 animate-[fadeIn_280ms_ease-out]">
+                <span className="mt-0.5 h-9 w-9 rounded-full bg-primary text-primary-foreground flex items-center justify-center shrink-0">
+                  <IoLeafOutline size={18} />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold">
+                    Gift {displayName(giftNudgePerson)} a tree?
+                  </p>
+                  <p className="mt-0.5 text-xs text-muted">
+                    A living thank-you from this chat — plant impact together.
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setGiftSheetOpen(true)}
+                      className="min-h-9 px-3 text-xs font-medium bg-primary text-primary-foreground"
+                    >
+                      See gift ideas
+                    </button>
+                    <Link
+                      to={giftTreesPath(
+                        giftNudgePerson.id,
+                        displayName(giftNudgePerson)
+                      )}
+                      onClick={dismissGiftNudge}
+                      className="min-h-9 px-3 text-xs font-medium border border-border bg-surface inline-flex items-center"
+                    >
+                      Gift now
+                    </Link>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={dismissGiftNudge}
+                  className="min-h-8 min-w-8 flex items-center justify-center text-muted"
+                  aria-label="Dismiss gift suggestion"
+                >
+                  <IoClose size={16} />
+                </button>
+              </div>
+            ) : null}
+
             <form
               onSubmit={submitMessage}
               className="shrink-0 border-t border-border bg-surface p-3 space-y-2"
@@ -1418,6 +1574,18 @@ const CommunityChat = () => {
                 >
                   <IoHappyOutline size={22} />
                 </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    unlockNotificationSound();
+                    setGiftSheetOpen(true);
+                  }}
+                  className="min-h-11 min-w-10 flex items-center justify-center text-primary hover:text-primary-dark"
+                  aria-label="Gift a tree"
+                  title="Gift a tree"
+                >
+                  <IoGiftOutline size={22} />
+                </button>
                 <label className="sr-only" htmlFor="chat-draft">
                   Message
                 </label>
@@ -1470,6 +1638,21 @@ const CommunityChat = () => {
           onClose={() => setMediaPreview(null)}
         />
       ) : null}
+
+      <ChatTreeGiftSheet
+        open={giftSheetOpen}
+        onClose={() => setGiftSheetOpen(false)}
+        suggestions={giftSuggestions}
+        conversationType={activeConversation?.conversation_type}
+        onSendInvite={sendGiftInviteMessage}
+      />
+
+      <style>{`
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(6px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
     </div>
   );
 };
