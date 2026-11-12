@@ -76,14 +76,14 @@ const Accountcard = ({ user }) => {
   const subtitle = user?.profession || (user?.username ? `@${user.username}` : "");
 
   return (
-    <div className="flex items-center justify-between gap-2 px-2 py-1.5">
+    <div className="flex items-start justify-between gap-2 px-2 py-1.5 min-w-0 w-full overflow-hidden">
       <Link
         to={profileId ? `/app/${profileId}/profile` : "#"}
-        className="flex-1 min-w-0 group"
+        className="flex-1 min-w-0 overflow-hidden group"
         aria-label={displayName ? `Open ${displayName} profile` : "Open profile"}
       >
         <div className="flex items-center gap-2.5 min-w-0">
-          <div className="relative flex-shrink-0">
+          <div className="relative shrink-0">
             <img
               src={avatarUrl(user)}
               className="h-10 w-10 rounded-full object-cover ring-2 ring-gray-100 group-hover:ring-teal-200 transition-all duration-200"
@@ -99,9 +99,9 @@ const Accountcard = ({ user }) => {
               />
             ) : null}
           </div>
-          <div className="min-w-0 flex-1">
-            <h3 className="text-sm font-semibold text-foreground truncate group-hover:text-primary transition-colors duration-200 inline-flex items-center gap-1 max-w-full">
-              <span className="truncate">{displayName}</span>
+          <div className="min-w-0 flex-1 overflow-hidden">
+            <h3 className="flex items-center gap-1 min-w-0 max-w-full text-sm font-semibold text-foreground group-hover:text-primary transition-colors duration-200">
+              <span className="truncate min-w-0">{displayName}</span>
               {verified ? (
                 <span
                   className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-primary"
@@ -111,12 +111,16 @@ const Accountcard = ({ user }) => {
                 </span>
               ) : null}
             </h3>
-            <p className="text-xs text-muted truncate">{subtitle}</p>
+            {subtitle ? (
+              <p className="text-xs text-muted truncate block min-w-0" title={subtitle}>
+                {subtitle}
+              </p>
+            ) : null}
           </div>
         </div>
       </Link>
       {profileId && me?.id !== profileId && (
-        <div className="flex items-center gap-1.5 flex-shrink-0">
+        <div className="flex items-center gap-1.5 shrink-0">
           <Link
             to={
               String(user?.username || "").toLowerCase() === "waverx"
