@@ -3,8 +3,10 @@ import PropTypes from "prop-types";
 import { endpoints } from "../utils/endpoints";
 import { client } from "../api";
 import { Link } from "react-router-dom";
+import { IoLeafOutline } from "react-icons/io5";
 import { avatarUrl, getUser } from "../utils/factory";
 import { useFollow } from "../context/FollowContext";
+import { giftTreesPath } from "../utils/profileCompleteness";
 
 const alreadyFollowing = (error) => {
   const data = error?.response?.data;
@@ -120,7 +122,17 @@ const Accountcard = ({ user }) => {
         </div>
       </Link>
       {profileId && me?.id !== profileId && (
-        <div className="flex items-center gap-1.5 shrink-0">
+        <div className="flex flex-wrap items-center justify-end gap-1.5 shrink-0 max-w-[55%] sm:max-w-none">
+          <Link
+            to={giftTreesPath(profileId, displayName || user?.username || "")}
+            className="px-2.5 py-1.5 text-xs font-medium bg-primary text-primary-foreground hover:bg-primary-dark inline-flex items-center gap-1"
+            style={{ borderRadius: 5 }}
+            aria-label={`Buy ${displayName || "them"} a tree`}
+            title="Buy me a tree"
+          >
+            <IoLeafOutline size={14} aria-hidden="true" />
+            Buy me a tree
+          </Link>
           <Link
             to={
               String(user?.username || "").toLowerCase() === "waverx"
@@ -143,7 +155,7 @@ const Accountcard = ({ user }) => {
             className={`px-2.5 py-1.5 text-xs font-medium transition-all duration-200 disabled:opacity-60 ${
               followed
                 ? "bg-surface-muted text-foreground hover:bg-background border border-border"
-                : "bg-primary text-primary-foreground hover:bg-primary-dark"
+                : "border border-border bg-surface text-foreground hover:border-primary"
             }`}
             style={{ borderRadius: 5 }}
           >
