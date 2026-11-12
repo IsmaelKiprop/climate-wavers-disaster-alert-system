@@ -79,17 +79,17 @@ const Accountcard = ({ user }) => {
   const subtitle = user?.profession || (user?.username ? `@${user.username}` : "");
 
   return (
-    <div className="flex items-start justify-between gap-2 px-2 py-1.5 min-w-0 w-full overflow-hidden">
+    <div className="flex flex-col gap-2 px-2 py-2 min-w-0 w-full border-b border-border last:border-b-0">
       <Link
         to={profileId ? `/app/${profileId}/profile` : "#"}
-        className="flex-1 min-w-0 overflow-hidden group"
+        className="min-w-0 overflow-hidden group"
         aria-label={displayName ? `Open ${displayName} profile` : "Open profile"}
       >
         <div className="flex items-center gap-2.5 min-w-0">
           <div className="relative shrink-0">
             <img
               src={avatarUrl(user)}
-              className="h-10 w-10 rounded-full object-cover ring-2 ring-gray-100 group-hover:ring-teal-200 transition-all duration-200"
+              className="h-10 w-10 rounded-full object-cover ring-2 ring-border group-hover:ring-primary/40 transition-all duration-200"
               alt={displayName || "Profile"}
               onError={(e) => {
                 e.target.src = "/avatar.png";
@@ -116,11 +116,11 @@ const Accountcard = ({ user }) => {
         </div>
       </Link>
       {profileId && me?.id !== profileId && (
-        <div className="flex flex-wrap items-center justify-end gap-1.5 shrink-0 max-w-[55%] sm:max-w-none">
+        <div className="flex flex-wrap items-center gap-1.5 pl-[3.25rem]">
           <Link
             to={giftTreesPath(profileId, displayName || user?.username || "")}
             className="px-2.5 py-1.5 text-xs font-medium bg-primary text-primary-foreground hover:bg-primary-dark inline-flex items-center gap-1"
-            style={{ borderRadius: 5 }}
+            style={{ borderRadius: 5, color: "var(--cw-primary-foreground)" }}
             aria-label={`Buy ${displayName || "them"} a tree`}
             title="Buy me a tree"
           >
@@ -133,7 +133,7 @@ const Accountcard = ({ user }) => {
                 ? "/app/waverx"
                 : `/app/chat?dm=${profileId}`
             }
-            className="px-2.5 py-1.5 text-xs font-medium border border-border text-foreground hover:border-primary"
+            className="px-2.5 py-1.5 text-xs font-medium border border-border bg-background text-foreground hover:border-primary"
             style={{ borderRadius: 5 }}
             aria-label={`Message ${displayName}`}
           >
@@ -149,7 +149,7 @@ const Accountcard = ({ user }) => {
             className={`px-2.5 py-1.5 text-xs font-medium transition-all duration-200 disabled:opacity-60 ${
               followed
                 ? "bg-surface-muted text-foreground hover:bg-background border border-border"
-                : "border border-border bg-surface text-foreground hover:border-primary"
+                : "border border-border bg-background text-foreground hover:border-primary"
             }`}
             style={{ borderRadius: 5 }}
           >
