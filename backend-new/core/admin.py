@@ -413,8 +413,15 @@ class ConversationAdmin(ModelAdmin):
             )
             saved = default_storage.save(path, ContentFile(upload.read()))
             url = default_storage.url(saved) if hasattr(default_storage, "url") else f"/media/{saved}"
-            if url.startswith("/") and getattr(settings, "BACKEND_HOST", ""):
-                url = f"{settings.BACKEND_HOST.rstrip('/')}{url}"
+            # Always store an absolute https URL so the frontend can load it.
+            if url.startswith("/"):
+                absolute = request.build_absolute_uri(url)
+                host = (
+                    getattr(settings, "BACKEND_HOST", "")
+                    or getattr(settings, "BASE_URL", "")
+                    or ""
+                ).rstrip("/")
+                url = f"{host}{url}" if host else absolute
             if url.startswith("http://"):
                 url = f"https://{url[7:]}"
             obj.avatar = url[:500]

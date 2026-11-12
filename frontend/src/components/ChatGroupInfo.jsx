@@ -71,7 +71,7 @@ const ChatGroupInfo = ({ open, onClose, loading, data, conversationName }) => {
 
   const group = data?.group;
   const members = data?.members || [];
-  const logo = secureMediaUrl(group?.cover_image || "", "");
+  const logo = secureMediaUrl(group?.cover_image || data?.group?.avatar || "", "");
   const admins = members.filter((m) => m.role === "owner" || m.role === "admin");
   const others = members.filter((m) => m.role !== "owner" && m.role !== "admin");
   const isCommunity = data?.conversation_type === "community";

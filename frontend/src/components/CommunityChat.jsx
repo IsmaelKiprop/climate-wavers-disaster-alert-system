@@ -1006,12 +1006,20 @@ const CommunityChat = () => {
                           src={avatarSrc}
                           alt=""
                           className="h-11 w-11 rounded-full object-cover bg-background"
+                          onError={(e) => {
+                            e.currentTarget.style.display = "none";
+                            const fallback = e.currentTarget.nextElementSibling;
+                            if (fallback) fallback.classList.remove("hidden");
+                          }}
                         />
-                      ) : (
-                        <span className="h-11 w-11 rounded-full bg-primary/10 text-primary flex items-center justify-center">
-                          <Icon size={20} />
-                        </span>
-                      )}
+                      ) : null}
+                      <span
+                        className={`h-11 w-11 rounded-full bg-primary/10 text-primary flex items-center justify-center ${
+                          avatarSrc ? "hidden" : ""
+                        }`}
+                      >
+                        <Icon size={20} />
+                      </span>
                       {(peerOnline ||
                         (conv.conversation_type !== "dm" && (conv.online_count || 0) > 0)) && (
                         <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full bg-success border-2 border-surface" />
@@ -1098,15 +1106,23 @@ const CommunityChat = () => {
                     src={roomAvatarSrc(activeConversation)}
                     alt=""
                     className="h-10 w-10 rounded-full object-cover bg-background"
+                    onError={(e) => {
+                      e.currentTarget.style.display = "none";
+                      const fallback = e.currentTarget.nextElementSibling;
+                      if (fallback) fallback.classList.remove("hidden");
+                    }}
                   />
-                ) : (
-                  <span className="h-10 w-10 rounded-full bg-primary/10 text-primary flex items-center justify-center">
-                    {(() => {
-                      const Icon = roomIcon(activeConversation.conversation_type);
-                      return <Icon size={18} />;
-                    })()}
-                  </span>
-                )}
+                ) : null}
+                <span
+                  className={`h-10 w-10 rounded-full bg-primary/10 text-primary flex items-center justify-center ${
+                    roomAvatarSrc(activeConversation) ? "hidden" : ""
+                  }`}
+                >
+                  {(() => {
+                    const Icon = roomIcon(activeConversation.conversation_type);
+                    return <Icon size={18} />;
+                  })()}
+                </span>
                 {(activeConversation.conversation_type === "dm"
                   ? isOnline?.(activeConversation.peer?.id) || activeConversation.peer?.is_online
                   : (activeConversation.online_count || 0) > 0) && (
@@ -1168,19 +1184,19 @@ const CommunityChat = () => {
                         className={`flex ${mine ? "justify-end" : "justify-start"}`}
                       >
                         <div
-                          className={`max-w-[85%] sm:max-w-[70%] px-3 py-2 border ${
+                          className={`max-w-[85%] sm:max-w-[70%] overflow-hidden border ${
                             mine
                               ? "bg-primary text-primary-foreground border-primary"
                               : "bg-surface text-foreground border-border"
-                          }`}
+                          } ${msg.media_url && !msg.body ? "p-0" : "px-3 py-2"}`}
                         >
                           {!mine && activeConversation.conversation_type !== "dm" ? (
                             msg.sender?.id ? (
                               <Link
                                 to={profilePath(msg.sender.id)}
-                                className={`text-[11px] font-medium mb-0.5 block hover:underline ${
+                                className={`text-[11px] font-medium mb-0.5 block hover:underline px-3 pt-2 ${
                                   mine ? "text-primary-foreground/80" : "text-primary"
-                                }`}
+                                } ${msg.media_url && !msg.body ? "" : "px-0 pt-0"}`}
                                 onClick={(e) => e.stopPropagation()}
                               >
                                 {displayName(msg.sender)}
@@ -1196,11 +1212,15 @@ const CommunityChat = () => {
                             )
                           ) : null}
                           {msg.media_url ? (
-                            <div className="mb-1.5 overflow-hidden">
+                            <div
+                              className={`overflow-hidden ${
+                                msg.body ? "-mx-3 mb-1.5" : ""
+                              }`}
+                            >
                               {msg.media_type === "image" ? (
                                 <button
                                   type="button"
-                                  className="block w-full text-left"
+                                  className="block w-full"
                                   onClick={() =>
                                     setMediaPreview({
                                       src: secureMediaUrl(msg.media_url),
@@ -1212,13 +1232,13 @@ const CommunityChat = () => {
                                   <img
                                     src={secureMediaUrl(msg.media_url)}
                                     alt=""
-                                    className="max-h-64 w-full object-cover cursor-zoom-in"
+                                    className="w-full max-h-[min(70vh,420px)] object-contain bg-black/5 cursor-zoom-in"
                                   />
                                 </button>
                               ) : msg.media_type === "video" ? (
                                 <button
                                   type="button"
-                                  className="block w-full text-left"
+                                  className="block w-full"
                                   onClick={() =>
                                     setMediaPreview({
                                       src: secureMediaUrl(msg.media_url),
@@ -1229,19 +1249,23 @@ const CommunityChat = () => {
                                 >
                                   <video
                                     src={secureMediaUrl(msg.media_url)}
-                                    className="max-h-64 w-full bg-background pointer-events-none"
+                                    className="w-full max-h-[min(70vh,420px)] bg-background pointer-events-none"
                                     muted
                                     playsInline
                                   />
                                 </button>
                               ) : msg.media_type === "audio" ? (
-                                <audio src={secureMediaUrl(msg.media_url)} controls className="w-full" />
+                                <audio
+                                  src={secureMediaUrl(msg.media_url)}
+                                  controls
+                                  className="w-full px-3 py-2"
+                                />
                               ) : (
                                 <a
                                   href={secureMediaUrl(msg.media_url)}
                                   target="_blank"
                                   rel="noreferrer"
-                                  className="text-sm underline"
+                                  className="text-sm underline px-3 py-2 inline-block"
                                 >
                                   Open attachment
                                 </a>
@@ -1249,7 +1273,7 @@ const CommunityChat = () => {
                             </div>
                           ) : null}
                           {msg.body ? (
-                            <p className="text-sm">
+                            <p className={`text-sm ${msg.media_url ? "px-3" : ""}`}>
                               {renderMessageBody(
                                 msg.body,
                                 mergeMentions(msg.mentions, roomMembers),
@@ -1259,8 +1283,8 @@ const CommunityChat = () => {
                           ) : null}
                           <p
                             className={`mt-1 flex items-center justify-end gap-1 text-[10px] ${
-                              mine ? "text-primary-foreground/80" : "text-muted"
-                            }`}
+                              msg.media_url && !msg.body ? "px-3 pb-2" : ""
+                            } ${mine ? "text-primary-foreground/80" : "text-muted"}`}
                           >
                             <span>{formatClock(msg.created_at)}</span>
                             {mine ? (

@@ -4,6 +4,7 @@ from datetime import datetime
 
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.db.models import Count, Q
@@ -328,6 +329,18 @@ def conversation_dict(conv, current_user, *, last_message=None, unread=0, member
     if conv.conversation_type == "group" and getattr(conv, "social_group", None):
         avatar = conv.social_group.cover_image or avatar
         description = conv.social_group.description or description
+    if avatar:
+        avatar = str(avatar).strip()
+        if avatar.startswith("http://"):
+            avatar = f"https://{avatar[7:]}"
+        elif avatar.startswith("/"):
+            host = (
+                getattr(settings, "BACKEND_HOST", None)
+                or getattr(settings, "BASE_URL", "")
+                or ""
+            ).rstrip("/")
+            if host:
+                avatar = f"{host}{avatar}"
 
     return {
         "id": conv.id,

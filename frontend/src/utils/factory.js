@@ -5,6 +5,7 @@ import { client } from "../api";
 import { endpoints } from "./endpoints";
 import axios from 'axios';
 import { ipinfoKey, ipinfoUrl } from "../config/ipinfo.config";
+import { mediaUrl } from "../config/env";
 
 // Global flag to track if locale has been added
 if (!window.timeAgoLocaleAdded) {
@@ -105,9 +106,8 @@ export const getUser = () => {
 
 export const secureMediaUrl = (url, fallback = "") => {
   if (!url) return fallback;
-  const value = String(url).trim();
-  if (value.startsWith("http://")) return `https://${value.slice(7)}`;
-  return value;
+  const resolved = mediaUrl(url);
+  return resolved || fallback;
 };
 
 export const avatarUrl = (user) =>
