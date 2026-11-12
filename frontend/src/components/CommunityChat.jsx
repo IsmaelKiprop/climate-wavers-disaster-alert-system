@@ -401,10 +401,32 @@ const CommunityChat = () => {
   }, [activeId, loadRoomMembers]);
 
   const openGroupInfo = async () => {
-    if (!activeConversation || activeConversation.conversation_type !== "group") return;
+    if (
+      !activeConversation ||
+      !["group", "community"].includes(activeConversation.conversation_type)
+    ) {
+      return;
+    }
     setGroupInfoOpen(true);
     setGroupInfoLoading(true);
     const res = await loadRoomMembers(activeConversation.id);
+    // Prefer live conversation avatar/description if members payload is sparse.
+    if (res && !res.group) {
+      res.group = {
+        name: activeConversation.name,
+        description: activeConversation.description || "",
+        cover_image: activeConversation.avatar || "",
+        member_count: activeConversation.member_count || (res.members || []).length,
+      };
+    } else if (res?.group) {
+      res.group = {
+        ...res.group,
+        cover_image:
+          res.group.cover_image || activeConversation.avatar || "",
+        description:
+          res.group.description || activeConversation.description || "",
+      };
+    }
     setGroupInfoData(res);
     setGroupInfoLoading(false);
   };
@@ -561,11 +583,17 @@ const CommunityChat = () => {
       const n = activeConversation.online_count || 0;
       return n > 0 ? `${n} responder${n === 1 ? "" : "s"} online` : "Responder team chat";
     }
-    if (activeConversation.conversation_type === "group") {
+    if (
+      activeConversation.conversation_type === "group" ||
+      activeConversation.conversation_type === "community"
+    ) {
       const desc = (activeConversation.description || "").trim();
       if (desc) return desc;
       const n = activeConversation.online_count || 0;
       const members = activeConversation.member_count || 0;
+      if (activeConversation.conversation_type === "community") {
+        return n > 0 ? `${n} online in community` : "Community chat";
+      }
       return n > 0
         ? `${n} online · ${members} member${members === 1 ? "" : "s"}`
         : `Group chat · ${members} member${members === 1 ? "" : "s"}`;
@@ -1031,11 +1059,19 @@ const CommunityChat = () => {
                 type="button"
                 className="relative shrink-0"
                 onClick={() => {
-                  if (activeConversation.conversation_type === "group") openGroupInfo();
+                  if (
+                    ["group", "community"].includes(
+                      activeConversation.conversation_type
+                    )
+                  ) {
+                    openGroupInfo();
+                  }
                 }}
                 aria-label={
-                  activeConversation.conversation_type === "group"
-                    ? "Open group info"
+                  ["group", "community"].includes(
+                    activeConversation.conversation_type
+                  )
+                    ? "Open chat info"
                     : undefined
                 }
               >
@@ -1063,7 +1099,13 @@ const CommunityChat = () => {
                 type="button"
                 className="min-w-0 flex-1 text-left"
                 onClick={() => {
-                  if (activeConversation.conversation_type === "group") openGroupInfo();
+                  if (
+                    ["group", "community"].includes(
+                      activeConversation.conversation_type
+                    )
+                  ) {
+                    openGroupInfo();
+                  }
                 }}
               >
                 <p className="text-sm font-semibold truncate">{activeConversation.name}</p>

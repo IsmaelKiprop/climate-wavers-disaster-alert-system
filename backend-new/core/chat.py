@@ -25,6 +25,11 @@ User = get_user_model()
 
 COMMUNITY_ROOM_KEY = "community:global"
 COMMUNITY_NAME = "Climate Wavers Community"
+COMMUNITY_DESCRIPTION = (
+    "Official Climate Wavers community — disaster alerts, climate tips, "
+    "and peer support. Be respectful, verify sources, and follow local "
+    "emergency guidance."
+)
 
 
 def user_public_dict(user):
@@ -105,14 +110,25 @@ def group_room_key(group_id):
 
 
 def ensure_community_conversation(user):
-    conv, _ = Conversation.objects.get_or_create(
+    conv, created = Conversation.objects.get_or_create(
         room_key=COMMUNITY_ROOM_KEY,
         defaults={
             "conversation_type": "community",
             "name": COMMUNITY_NAME,
+            "description": COMMUNITY_DESCRIPTION,
             "created_by": user,
         },
     )
+    updates = []
+    if not created:
+        if not conv.name:
+            conv.name = COMMUNITY_NAME
+            updates.append("name")
+        if not (conv.description or "").strip():
+            conv.description = COMMUNITY_DESCRIPTION
+            updates.append("description")
+        if updates:
+            conv.save(update_fields=updates)
     ConversationMember.objects.get_or_create(conversation=conv, user=user)
     return conv
 
@@ -307,11 +323,11 @@ def conversation_dict(conv, current_user, *, last_message=None, unread=0, member
             if m.user_id in online_ids and m.user_id != current_user.id
         ][:20]
 
-    avatar = None
-    description = ""
+    avatar = getattr(conv, "avatar", None) or None
+    description = getattr(conv, "description", "") or ""
     if conv.conversation_type == "group" and getattr(conv, "social_group", None):
-        avatar = conv.social_group.cover_image or None
-        description = conv.social_group.description or ""
+        avatar = conv.social_group.cover_image or avatar
+        description = conv.social_group.description or description
 
     return {
         "id": conv.id,
@@ -672,14 +688,37 @@ class ChatConversationMembersView(APIView):
             person = user_public_dict(row.user)
             if not person:
                 continue
-            person["role"] = "member"
+            # Community room: mark staff/superusers as admins in the info panel.
+            if conv.conversation_type == "community" and (
+                getattr(row.user, "is_staff", False)
+                or getattr(row.user, "is_superuser", False)
+            ):
+                person["role"] = "admin"
+            else:
+                person["role"] = "member"
             person["is_online"] = row.user_id in online
             members.append(person)
+
+        profile = None
+        if conv.conversation_type in {"community", "responder", "group"}:
+            profile = {
+                "id": conv.id,
+                "name": conv.name
+                or (
+                    COMMUNITY_NAME
+                    if conv.conversation_type == "community"
+                    else conversation_title(conv, request.user)
+                ),
+                "description": conv.description or "",
+                "cover_image": conv.avatar or "",
+                "member_count": len(members),
+            }
+
         return Response(
             {
                 "conversation_id": conv.id,
                 "conversation_type": conv.conversation_type,
-                "group": None,
+                "group": profile,
                 "members": members,
             }
         )

@@ -1861,6 +1861,13 @@ class Conversation(models.Model):
 
     conversation_type = models.CharField(max_length=20, choices=TYPE_CHOICES)
     name = models.CharField(max_length=200, blank=True, default="")
+    description = models.TextField(blank=True, default="")
+    avatar = models.URLField(
+        max_length=500,
+        blank=True,
+        null=True,
+        help_text="Room logo/avatar URL (community & rooms without a social group)",
+    )
     # Stable key: community:global, responder:{org_id}, dm:{min}:{max}, group:{group_id}
     room_key = models.CharField(max_length=120, unique=True, db_index=True)
     responder_org = models.ForeignKey(

@@ -21,13 +21,16 @@ const ChatGroupInfo = ({ open, onClose, loading, data, conversationName }) => {
   const logo = secureMediaUrl(group?.cover_image || "", "");
   const admins = members.filter((m) => m.role === "owner" || m.role === "admin");
   const others = members.filter((m) => m.role !== "owner" && m.role !== "admin");
+  const isCommunity = data?.conversation_type === "community";
+  const title = isCommunity ? "Community info" : "Group info";
+  const kindLabel = isCommunity ? "Community" : "Group";
 
   return (
     <div className="fixed inset-0 z-40 flex justify-end bg-foreground/30" role="dialog" aria-modal="true">
-      <button type="button" className="flex-1 cursor-default" aria-label="Close group info" onClick={onClose} />
+      <button type="button" className="flex-1 cursor-default" aria-label={`Close ${title}`} onClick={onClose} />
       <aside className="h-full w-full max-w-md bg-surface border-l border-border shadow-lg flex flex-col">
         <header className="shrink-0 flex items-center justify-between gap-3 px-4 py-3 border-b border-border">
-          <h2 className="text-base font-semibold">Group info</h2>
+          <h2 className="text-base font-semibold">{title}</h2>
           <button
             type="button"
             onClick={onClose}
@@ -50,7 +53,7 @@ const ChatGroupInfo = ({ open, onClose, loading, data, conversationName }) => {
             <div className="text-center">
               <p className="text-lg font-semibold">{group?.name || conversationName || "Group"}</p>
               <p className="mt-1 text-sm text-muted">
-                Group · {group?.member_count ?? members.length} members
+                {kindLabel} · {group?.member_count ?? members.length} members
               </p>
             </div>
           </div>

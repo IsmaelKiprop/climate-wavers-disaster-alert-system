@@ -330,7 +330,20 @@ class ResponderDispatchAdmin(ModelAdmin):
 class ConversationAdmin(ModelAdmin):
     list_display = ("id", "conversation_type", "name", "room_key", "updated_at")
     list_filter = ("conversation_type",)
-    search_fields = ("name", "room_key")
+    search_fields = ("name", "room_key", "description")
+    fields = (
+        "conversation_type",
+        "name",
+        "description",
+        "avatar",
+        "room_key",
+        "responder_org",
+        "social_group",
+        "created_by",
+        "created_at",
+        "updated_at",
+    )
+    readonly_fields = ("created_at", "updated_at")
 
 
 @admin.register(ConversationMember)
