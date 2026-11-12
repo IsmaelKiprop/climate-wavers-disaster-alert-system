@@ -58,5 +58,6 @@ export const endpoints = {
     "chatDirectory": "/api/v1/chat/directory/",
     "chatPresence": "/api/v1/chat/presence/",
     "chatMessages": (id) => `/api/v1/chat/conversations/${id}/messages/`,
+    "chatMembers": (id) => `/api/v1/chat/conversations/${id}/members/`,
     "chatRead": (id) => `/api/v1/chat/conversations/${id}/read/`,
 }

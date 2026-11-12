@@ -1924,6 +1924,13 @@ class ConversationMember(models.Model):
 
 
 class ChatMessage(models.Model):
+    MEDIA_TYPE_CHOICES = [
+        ("image", "Image"),
+        ("video", "Video"),
+        ("audio", "Audio"),
+        ("file", "File"),
+    ]
+
     conversation = models.ForeignKey(
         Conversation,
         on_delete=models.CASCADE,
@@ -1934,7 +1941,12 @@ class ChatMessage(models.Model):
         on_delete=models.CASCADE,
         related_name="chat_messages",
     )
-    body = models.TextField()
+    body = models.TextField(blank=True, default="")
+    media_url = models.TextField(blank=True, default="")
+    media_type = models.CharField(
+        max_length=16, choices=MEDIA_TYPE_CHOICES, blank=True, default=""
+    )
+    mentions = models.JSONField(default=list, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     edited_at = models.DateTimeField(null=True, blank=True)
     is_deleted = models.BooleanField(default=False)

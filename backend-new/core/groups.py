@@ -145,6 +145,11 @@ class SocialGroupListCreateView(APIView):
         )
 
 
+def _can_manage_group(user, group):
+    membership = SocialGroupMembership.objects.filter(group=group, user=user).first()
+    return bool(membership and membership.role in {"owner", "admin"})
+
+
 class SocialGroupDetailView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -153,6 +158,63 @@ class SocialGroupDetailView(APIView):
             group = SocialGroup.objects.get(id=group_id)
         except SocialGroup.DoesNotExist:
             return Response({"detail": "Not found"}, status=404)
+        return Response(SocialGroupSerializer(group, context={"request": request}).data)
+
+    def patch(self, request, group_id):
+        try:
+            group = SocialGroup.objects.get(id=group_id)
+        except SocialGroup.DoesNotExist:
+            return Response({"detail": "Not found"}, status=404)
+        if not _can_manage_group(request.user, group):
+            return Response(
+                {"detail": "Only group owners or admins can edit this group"},
+                status=403,
+            )
+
+        data = request.data or {}
+        updates = []
+
+        if "name" in data:
+            name = (data.get("name") or "").strip()
+            if len(name) < 3:
+                return Response(
+                    {"detail": "Group name must be at least 3 characters"},
+                    status=400,
+                )
+            group.name = name[:120]
+            updates.append("name")
+
+        if "description" in data:
+            description = (data.get("description") or "").strip()
+            if len(description) > 512:
+                return Response(
+                    {"detail": "Short description must be 512 characters or fewer"},
+                    status=400,
+                )
+            group.description = description[:512]
+            updates.append("description")
+
+        if "cover_image" in data or "logo" in data:
+            cover = data.get("cover_image")
+            if cover is None:
+                cover = data.get("logo")
+            cover = (str(cover).strip() if cover is not None else "") or None
+            if cover and len(cover) > 500:
+                return Response({"detail": "Logo URL is too long"}, status=400)
+            group.cover_image = cover
+            updates.append("cover_image")
+
+        if not updates:
+            return Response({"detail": "No changes provided"}, status=400)
+
+        updates.append("updated_at")
+        with transaction.atomic():
+            group.save(update_fields=updates)
+            if "name" in updates:
+                Conversation.objects.filter(
+                    social_group_id=group.id, conversation_type="group"
+                ).update(name=group.name)
+
         return Response(SocialGroupSerializer(group, context={"request": request}).data)
 
 

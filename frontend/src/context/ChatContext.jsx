@@ -67,11 +67,14 @@ export const ChatProvider = ({ children }) => {
   );
 
   const sendMessage = useCallback(
-    (conversationId, body, clientId) =>
+    (conversationId, body, clientId, extra = {}) =>
       send("send_message", {
         conversation_id: Number(conversationId),
-        body,
+        body: body || "",
         client_id: clientId,
+        media_url: extra.media_url || "",
+        media_type: extra.media_type || "",
+        mentions: Array.isArray(extra.mentions) ? extra.mentions : [],
       }),
     [send]
   );

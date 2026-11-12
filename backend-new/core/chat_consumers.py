@@ -179,6 +179,9 @@ class ChatConsumer(AsyncWebsocketConsumer):
     async def _handle_send_message(self, payload):
         conversation_id = payload.get("conversation_id")
         body = (payload.get("body") or "").strip()
+        media_url = (payload.get("media_url") or "").strip()
+        media_type = (payload.get("media_type") or "").strip().lower()
+        mentions = payload.get("mentions") or []
         client_id = (payload.get("client_id") or "")[:64]
         try:
             conversation_id = int(conversation_id)
@@ -187,7 +190,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 {"event": "error", "payload": {"detail": "conversation_id required"}}
             )
             return
-        if not body:
+        if not body and not media_url:
             await self.send_json(
                 {"event": "error", "payload": {"detail": "Empty message"}}
             )
@@ -198,7 +201,14 @@ class ChatConsumer(AsyncWebsocketConsumer):
             )
             return
 
-        msg = await self._create_message(conversation_id, body, client_id)
+        msg = await self._create_message(
+            conversation_id,
+            body,
+            client_id,
+            media_url=media_url,
+            media_type=media_type,
+            mentions=mentions,
+        )
         if not msg:
             await self.send_json(
                 {"event": "error", "payload": {"detail": "Forbidden or not found"}}
@@ -349,8 +359,16 @@ class ChatConsumer(AsyncWebsocketConsumer):
         return True
 
     @database_sync_to_async
-    def _create_message(self, conversation_id, body, client_id):
-        from .chat import message_dict, user_can_access
+    def _create_message(
+        self,
+        conversation_id,
+        body,
+        client_id,
+        media_url="",
+        media_type="",
+        mentions=None,
+    ):
+        from .chat import _normalize_mentions, message_dict, user_can_access
         from .models import ChatMessage, Conversation, ConversationMember
 
         try:
@@ -370,11 +388,22 @@ class ChatConsumer(AsyncWebsocketConsumer):
             if existing:
                 return message_dict(existing, self.user_id)
 
+        media_url = (media_url or "").strip()
+        media_type = (media_type or "").strip().lower()
+        if media_type and media_type not in {"image", "video", "audio", "file"}:
+            media_type = "file"
+        if not media_url:
+            media_type = ""
+        mention_rows = _normalize_mentions(mentions)
+
         ConversationMember.objects.get_or_create(conversation=conv, user=self.user)
         msg = ChatMessage.objects.create(
             conversation=conv,
             sender=self.user,
-            body=body,
+            body=body or "",
+            media_url=media_url,
+            media_type=media_type,
+            mentions=mention_rows,
             client_id=client_id or "",
         )
         Conversation.objects.filter(id=conv.id).update(updated_at=timezone.now())

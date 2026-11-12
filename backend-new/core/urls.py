@@ -51,6 +51,7 @@ from .chat import (
     ChatBootstrapView,
     ChatDirectMessageView,
     ChatMessageListCreateView,
+    ChatConversationMembersView,
     ChatMarkReadView,
     ChatPresenceView,
     ChatDirectoryView,
@@ -218,6 +219,11 @@ urlpatterns = [
         'chat/conversations/<int:conversation_id>/messages/',
         ChatMessageListCreateView.as_view(),
         name='chat-messages',
+    ),
+    path(
+        'chat/conversations/<int:conversation_id>/members/',
+        ChatConversationMembersView.as_view(),
+        name='chat-members',
     ),
     path(
         'chat/conversations/<int:conversation_id>/read/',

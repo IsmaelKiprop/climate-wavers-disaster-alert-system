@@ -39,12 +39,50 @@ def user_public_dict(user):
     }
 
 
+def _normalize_mentions(raw):
+    if not isinstance(raw, list):
+        return []
+    out = []
+    seen = set()
+    for item in raw[:20]:
+        if isinstance(item, dict):
+            try:
+                uid = int(item.get("id"))
+            except (TypeError, ValueError):
+                continue
+            if uid in seen:
+                continue
+            seen.add(uid)
+            out.append(
+                {
+                    "id": uid,
+                    "username": str(item.get("username") or "")[:150],
+                    "first_name": str(item.get("first_name") or "")[:150],
+                    "last_name": str(item.get("last_name") or "")[:150],
+                }
+            )
+        else:
+            try:
+                uid = int(item)
+            except (TypeError, ValueError):
+                continue
+            if uid in seen:
+                continue
+            seen.add(uid)
+            out.append({"id": uid, "username": "", "first_name": "", "last_name": ""})
+    return out
+
+
 def message_dict(msg, current_user_id=None):
+    deleted = bool(msg.is_deleted)
     return {
         "id": msg.id,
         "conversation_id": msg.conversation_id,
-        "body": "" if msg.is_deleted else msg.body,
-        "is_deleted": msg.is_deleted,
+        "body": "" if deleted else (msg.body or ""),
+        "media_url": "" if deleted else (msg.media_url or ""),
+        "media_type": "" if deleted else (msg.media_type or ""),
+        "mentions": [] if deleted else (msg.mentions or []),
+        "is_deleted": deleted,
         "client_id": msg.client_id or None,
         "created_at": msg.created_at.isoformat() if msg.created_at else None,
         "edited_at": msg.edited_at.isoformat() if msg.edited_at else None,
@@ -534,10 +572,19 @@ class ChatMessageListCreateView(APIView):
             return Response({"detail": "Forbidden"}, status=403)
 
         body = (request.data.get("body") or "").strip()
-        if not body:
-            return Response({"detail": "Message body is required"}, status=400)
+        media_url = (request.data.get("media_url") or "").strip()
+        media_type = (request.data.get("media_type") or "").strip().lower()
+        if media_type and media_type not in {"image", "video", "audio", "file"}:
+            media_type = "file"
+        if not media_url:
+            media_type = ""
+        mentions = _normalize_mentions(request.data.get("mentions"))
+        if not body and not media_url:
+            return Response({"detail": "Message body or media is required"}, status=400)
         if len(body) > 4000:
             return Response({"detail": "Message too long"}, status=400)
+        if len(media_url) > 2000:
+            return Response({"detail": "Media URL too long"}, status=400)
 
         client_id = (request.data.get("client_id") or "")[:64]
         if client_id:
@@ -552,6 +599,9 @@ class ChatMessageListCreateView(APIView):
             conversation=conv,
             sender=request.user,
             body=body,
+            media_url=media_url,
+            media_type=media_type,
+            mentions=mentions,
             client_id=client_id,
         )
         Conversation.objects.filter(id=conv.id).update(updated_at=timezone.now())
@@ -562,6 +612,77 @@ class ChatMessageListCreateView(APIView):
         payload = message_dict(msg, request.user.id)
         broadcast_chat_event(conv.id, "message", payload)
         return Response(payload, status=201)
+
+
+class ChatConversationMembersView(APIView):
+    """Roster for @mentions and group/community info panels."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, conversation_id):
+        try:
+            conv = Conversation.objects.select_related("social_group").get(
+                id=conversation_id
+            )
+        except Conversation.DoesNotExist:
+            return Response({"detail": "Not found"}, status=404)
+        if not user_can_access(request.user, conv):
+            return Response({"detail": "Forbidden"}, status=403)
+
+        online = set(online_user_ids())
+        members = []
+
+        if conv.conversation_type == "group" and conv.social_group_id:
+            rows = (
+                SocialGroupMembership.objects.filter(group_id=conv.social_group_id)
+                .select_related("user")
+                .order_by("role", "created_at")
+            )
+            role_rank = {"owner": 0, "admin": 1, "member": 2}
+            rows = sorted(rows, key=lambda r: (role_rank.get(r.role, 9), r.created_at))
+            for row in rows:
+                person = user_public_dict(row.user)
+                if not person:
+                    continue
+                person["role"] = row.role
+                person["is_online"] = row.user_id in online
+                members.append(person)
+            group = conv.social_group
+            return Response(
+                {
+                    "conversation_id": conv.id,
+                    "conversation_type": conv.conversation_type,
+                    "group": {
+                        "id": group.id,
+                        "name": group.name,
+                        "description": group.description or "",
+                        "cover_image": group.cover_image or "",
+                        "member_count": len(members),
+                    },
+                    "members": members,
+                }
+            )
+
+        rows = (
+            ConversationMember.objects.filter(conversation=conv)
+            .select_related("user")
+            .order_by("joined_at")
+        )
+        for row in rows[:200]:
+            person = user_public_dict(row.user)
+            if not person:
+                continue
+            person["role"] = "member"
+            person["is_online"] = row.user_id in online
+            members.append(person)
+        return Response(
+            {
+                "conversation_id": conv.id,
+                "conversation_type": conv.conversation_type,
+                "group": None,
+                "members": members,
+            }
+        )
 
 
 class ChatMarkReadView(APIView):

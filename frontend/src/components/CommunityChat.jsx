@@ -1,9 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import EmojiPicker from "emoji-picker-react";
 import {
   IoArrowBack,
+  IoAttachOutline,
   IoChatbubblesOutline,
   IoCheckmarkDone,
+  IoClose,
+  IoHappyOutline,
   IoPeopleOutline,
   IoSearchOutline,
   IoSend,
@@ -14,6 +18,14 @@ import { endpoints } from "../utils/endpoints";
 import { avatarUrl, getUser, secureMediaUrl } from "../utils/factory";
 import { useChatSocket } from "../context/ChatContext";
 import { unwrapList } from "../utils/apiData";
+import { uploadFiles } from "../services/upload.service";
+import {
+  bindNotificationSoundUnlock,
+  playIncomingChatSound,
+  playOutgoingChatSound,
+  unlockNotificationSound,
+} from "../utils/notificationSound";
+import ChatGroupInfo from "./ChatGroupInfo";
 
 function displayName(person) {
   if (!person) return "Member";
@@ -73,6 +85,54 @@ function clientMessageId() {
   return `c_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
 }
 
+function mediaKindFromFile(file) {
+  if (!file?.type) return "file";
+  if (file.type.startsWith("image/")) return "image";
+  if (file.type.startsWith("video/")) return "video";
+  if (file.type.startsWith("audio/")) return "audio";
+  return "file";
+}
+
+function previewLabel(msg) {
+  if (!msg) return "Say hello";
+  if (msg.body) return msg.body;
+  if (msg.media_type === "image") return "Photo";
+  if (msg.media_type === "video") return "Video";
+  if (msg.media_type === "audio") return "Audio";
+  if (msg.media_url) return "Attachment";
+  return "Say hello";
+}
+
+function renderMessageBody(body, mentions = []) {
+  const text = body || "";
+  if (!text) return null;
+  const names = (mentions || [])
+    .map((m) => m.username)
+    .filter(Boolean)
+    .sort((a, b) => b.length - a.length);
+  if (!names.length) {
+    return <span className="whitespace-pre-wrap break-words">{text}</span>;
+  }
+  const pattern = new RegExp(
+    `(@(?:${names.map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")}))`,
+    "gi"
+  );
+  const parts = text.split(pattern);
+  return (
+    <span className="whitespace-pre-wrap break-words">
+      {parts.map((part, idx) =>
+        part.startsWith("@") ? (
+          <span key={`${part}-${idx}`} className="font-semibold underline underline-offset-2">
+            {part}
+          </span>
+        ) : (
+          <span key={`${idx}-${part.slice(0, 8)}`}>{part}</span>
+        )
+      )}
+    </span>
+  );
+}
+
 const CommunityChat = () => {
   const me = getUser();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -104,8 +164,19 @@ const CommunityChat = () => {
   const [showNewChat, setShowNewChat] = useState(false);
   const [dirQuery, setDirQuery] = useState("");
   const [mobileShowThread, setMobileShowThread] = useState(false);
+  const [showEmoji, setShowEmoji] = useState(false);
+  const [mentionOpen, setMentionOpen] = useState(false);
+  const [mentionQuery, setMentionQuery] = useState("");
+  const [roomMembers, setRoomMembers] = useState([]);
+  const [pendingMentions, setPendingMentions] = useState([]);
+  const [pendingMedia, setPendingMedia] = useState(null);
+  const [groupInfoOpen, setGroupInfoOpen] = useState(false);
+  const [groupInfoLoading, setGroupInfoLoading] = useState(false);
+  const [groupInfoData, setGroupInfoData] = useState(null);
 
   const bottomRef = useRef(null);
+  const draftRef = useRef(null);
+  const attachRef = useRef(null);
   const typingTimeoutRef = useRef(null);
   const typingActiveRef = useRef(false);
   const activeIdRef = useRef(null);
@@ -293,6 +364,58 @@ const CommunityChat = () => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, typingUsers, activeId]);
 
+  useEffect(() => bindNotificationSoundUnlock(), []);
+
+  useEffect(() => {
+    setShowEmoji(false);
+    setMentionOpen(false);
+    setPendingMentions([]);
+    setPendingMedia((prev) => {
+      if (prev?.preview?.startsWith("blob:")) URL.revokeObjectURL(prev.preview);
+      return null;
+    });
+    setGroupInfoOpen(false);
+    setGroupInfoData(null);
+    setDraft("");
+  }, [activeId]);
+
+  const loadRoomMembers = useCallback(async (conversationId) => {
+    if (!conversationId) {
+      setRoomMembers([]);
+      return null;
+    }
+    try {
+      const res = await client.run(
+        "get",
+        endpoints.chatMembers(conversationId),
+        {},
+        true,
+        false,
+        false,
+        false
+      );
+      setRoomMembers(res?.members || []);
+      return res;
+    } catch {
+      setRoomMembers([]);
+      return null;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!activeId) return;
+    loadRoomMembers(activeId);
+  }, [activeId, loadRoomMembers]);
+
+  const openGroupInfo = async () => {
+    if (!activeConversation || activeConversation.conversation_type !== "group") return;
+    setGroupInfoOpen(true);
+    setGroupInfoLoading(true);
+    const res = await loadRoomMembers(activeConversation.id);
+    setGroupInfoData(res);
+    setGroupInfoLoading(false);
+  };
+
   useEffect(() => {
     if (!subscribe) return undefined;
     return subscribe((event, payload) => {
@@ -302,10 +425,14 @@ const CommunityChat = () => {
           payload.is_mine ||
           Number(payload.sender?.id) === Number(me?.id);
 
+        let shouldSound = true;
         setConversations((prev) => {
           const next = prev.map((c) => {
             if (Number(c.id) !== convId) return c;
-            if (c.last_message?.id && c.last_message.id === payload.id) return c;
+            if (c.last_message?.id && c.last_message.id === payload.id) {
+              shouldSound = false;
+              return c;
+            }
             return {
               ...c,
               last_message: payload,
@@ -327,11 +454,24 @@ const CommunityChat = () => {
         if (Number(activeIdRef.current) === convId) {
           setMessages((prev) => {
             if (payload.client_id && prev.some((m) => m.client_id === payload.client_id)) {
+              const wasPending = prev.some(
+                (m) => m.client_id === payload.client_id && m.pending
+              );
+              // Optimistic send already shown — still play outgoing once on ack.
+              if (wasPending && shouldSound) playOutgoingChatSound();
+              else shouldSound = false;
               return prev.map((m) =>
                 m.client_id === payload.client_id ? { ...payload, pending: false } : m
               );
             }
-            if (prev.some((m) => m.id === payload.id)) return prev;
+            if (prev.some((m) => m.id === payload.id)) {
+              shouldSound = false;
+              return prev;
+            }
+            if (shouldSound) {
+              if (mine) playOutgoingChatSound();
+              else playIncomingChatSound();
+            }
             return [...prev, payload];
           });
           if (!mine && markRead) {
@@ -342,6 +482,8 @@ const CommunityChat = () => {
             delete copy[payload.sender?.id];
             return copy;
           });
+        } else if (shouldSound && !mine) {
+          playIncomingChatSound();
         }
       }
 
@@ -439,8 +581,31 @@ const CommunityChat = () => {
     return n > 0 ? `${n} online in community` : "Community chat";
   }, [activeConversation, isOnline, lastSeenMap]);
 
+  const mentionCandidates = useMemo(() => {
+    if (!mentionOpen) return [];
+    const q = mentionQuery.toLowerCase();
+    return (roomMembers || [])
+      .filter((person) => Number(person.id) !== Number(me?.id))
+      .filter((person) => {
+        if (!q) return true;
+        const hay = `${person.username || ""} ${person.first_name || ""} ${person.last_name || ""}`.toLowerCase();
+        return hay.includes(q);
+      })
+      .slice(0, 8);
+  }, [mentionOpen, mentionQuery, roomMembers, me?.id]);
+
   const onDraftChange = (value) => {
     setDraft(value);
+    const cursor = draftRef.current?.selectionStart ?? value.length;
+    const upto = value.slice(0, cursor);
+    const match = upto.match(/(?:^|\s)@([a-zA-Z0-9_.]*)$/);
+    if (match) {
+      setMentionOpen(true);
+      setMentionQuery(match[1] || "");
+    } else {
+      setMentionOpen(false);
+      setMentionQuery("");
+    }
     if (!activeId || !sendTyping) return;
     if (!typingActiveRef.current) {
       typingActiveRef.current = true;
@@ -453,15 +618,117 @@ const CommunityChat = () => {
     }, 1200);
   };
 
+  const insertEmoji = (emojiData) => {
+    const emoji = emojiData?.emoji || "";
+    if (!emoji) return;
+    unlockNotificationSound();
+    const el = draftRef.current;
+    const start = el?.selectionStart ?? draft.length;
+    const end = el?.selectionEnd ?? draft.length;
+    const next = `${draft.slice(0, start)}${emoji}${draft.slice(end)}`;
+    setDraft(next);
+    setShowEmoji(false);
+    requestAnimationFrame(() => {
+      if (!draftRef.current) return;
+      const pos = start + emoji.length;
+      draftRef.current.focus();
+      draftRef.current.setSelectionRange(pos, pos);
+    });
+  };
+
+  const insertMention = (person) => {
+    if (!person) return;
+    const el = draftRef.current;
+    const cursor = el?.selectionStart ?? draft.length;
+    const upto = draft.slice(0, cursor);
+    const match = upto.match(/(?:^|\s)@([a-zA-Z0-9_.]*)$/);
+    const handle = person.username || displayName(person).replace(/\s+/g, "");
+    let next = draft;
+    if (match) {
+      const prefix = draft.slice(0, match.index + (match[0].startsWith(" ") ? 1 : 0));
+      const suffix = draft.slice(cursor);
+      next = `${prefix}@${handle} ${suffix}`;
+    } else {
+      next = `${draft}${draft.endsWith(" ") || !draft ? "" : " "}@${handle} `;
+    }
+    setDraft(next);
+    setPendingMentions((prev) => {
+      if (prev.some((m) => Number(m.id) === Number(person.id))) return prev;
+      return [
+        ...prev,
+        {
+          id: person.id,
+          username: person.username || "",
+          first_name: person.first_name || "",
+          last_name: person.last_name || "",
+        },
+      ];
+    });
+    setMentionOpen(false);
+    setMentionQuery("");
+    requestAnimationFrame(() => draftRef.current?.focus());
+  };
+
+  const onPickMedia = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    if (file.size > 25 * 1024 * 1024) {
+      return;
+    }
+    unlockNotificationSound();
+    if (pendingMedia?.preview?.startsWith("blob:")) {
+      URL.revokeObjectURL(pendingMedia.preview);
+    }
+    setPendingMedia({
+      file,
+      kind: mediaKindFromFile(file),
+      preview: file.type.startsWith("image/") ? URL.createObjectURL(file) : "",
+      name: file.name,
+    });
+  };
+
+  const clearPendingMedia = () => {
+    if (pendingMedia?.preview?.startsWith("blob:")) {
+      URL.revokeObjectURL(pendingMedia.preview);
+    }
+    setPendingMedia(null);
+  };
+
   const submitMessage = async (e) => {
     e?.preventDefault?.();
+    unlockNotificationSound();
     const body = draft.trim();
-    if (!body || !activeId || sending) return;
+    if ((!body && !pendingMedia) || !activeId || sending) return;
     const clientId = clientMessageId();
+    let media_url = "";
+    let media_type = "";
+    setSending(true);
+    try {
+      if (pendingMedia?.file) {
+        const uploaded = await uploadFiles(pendingMedia.file);
+        media_url = Array.isArray(uploaded) ? uploaded[0] : uploaded;
+        media_type = pendingMedia.kind || mediaKindFromFile(pendingMedia.file);
+        if (!media_url) {
+          setSending(false);
+          return;
+        }
+      }
+    } catch {
+      setSending(false);
+      return;
+    }
+
+    const mentions = pendingMentions.filter((m) =>
+      body.toLowerCase().includes(`@${(m.username || "").toLowerCase()}`)
+    );
     const optimistic = {
       id: `tmp_${clientId}`,
       conversation_id: activeId,
       body,
+      media_url,
+      media_type,
+      mentions,
       client_id: clientId,
       created_at: new Date().toISOString(),
       sender: {
@@ -476,19 +743,23 @@ const CommunityChat = () => {
     };
     setMessages((prev) => [...prev, optimistic]);
     setDraft("");
-    setSending(true);
+    setPendingMentions([]);
+    clearPendingMedia();
+    setShowEmoji(false);
+    setMentionOpen(false);
     if (typingActiveRef.current && sendTyping) {
       typingActiveRef.current = false;
       sendTyping(activeId, false);
     }
 
-    const viaSocket = sendMessage?.(activeId, body, clientId);
+    const extra = { media_url, media_type, mentions };
+    const viaSocket = sendMessage?.(activeId, body, clientId, extra);
     if (!viaSocket) {
       try {
         const saved = await client.run(
           "post",
           endpoints.chatMessages(activeId),
-          { body, client_id: clientId },
+          { body, client_id: clientId, ...extra },
           true
         );
         setMessages((prev) =>
@@ -716,7 +987,7 @@ const CommunityChat = () => {
                       </span>
                       <span className="flex items-center justify-between gap-2 mt-0.5">
                         <span className="text-xs text-muted truncate">
-                          {conv.last_message?.body ||
+                          {previewLabel(conv.last_message) ||
                             (conv.conversation_type === "responder"
                               ? "Responder coordination"
                               : conv.conversation_type === "group"
@@ -763,7 +1034,18 @@ const CommunityChat = () => {
               >
                 <IoArrowBack size={20} />
               </button>
-              <span className="relative shrink-0">
+              <button
+                type="button"
+                className="relative shrink-0"
+                onClick={() => {
+                  if (activeConversation.conversation_type === "group") openGroupInfo();
+                }}
+                aria-label={
+                  activeConversation.conversation_type === "group"
+                    ? "Open group info"
+                    : undefined
+                }
+              >
                 {roomAvatarSrc(activeConversation) ? (
                   <img
                     src={roomAvatarSrc(activeConversation)}
@@ -783,11 +1065,17 @@ const CommunityChat = () => {
                   : (activeConversation.online_count || 0) > 0) && (
                   <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full bg-success border-2 border-surface" />
                 )}
-              </span>
-              <div className="min-w-0 flex-1">
+              </button>
+              <button
+                type="button"
+                className="min-w-0 flex-1 text-left"
+                onClick={() => {
+                  if (activeConversation.conversation_type === "group") openGroupInfo();
+                }}
+              >
                 <p className="text-sm font-semibold truncate">{activeConversation.name}</p>
                 <p className="text-xs text-muted truncate">{headerSubtitle}</p>
-              </div>
+              </button>
             </header>
 
             <div className="flex-1 overflow-y-auto px-3 sm:px-4 py-4 space-y-4">
@@ -842,7 +1130,37 @@ const CommunityChat = () => {
                               {displayName(msg.sender)}
                             </p>
                           ) : null}
-                          <p className="text-sm whitespace-pre-wrap break-words">{msg.body}</p>
+                          {msg.media_url ? (
+                            <div className="mb-1.5 overflow-hidden">
+                              {msg.media_type === "image" ? (
+                                <img
+                                  src={secureMediaUrl(msg.media_url)}
+                                  alt=""
+                                  className="max-h-64 w-full object-cover"
+                                />
+                              ) : msg.media_type === "video" ? (
+                                <video
+                                  src={secureMediaUrl(msg.media_url)}
+                                  controls
+                                  className="max-h-64 w-full bg-background"
+                                />
+                              ) : msg.media_type === "audio" ? (
+                                <audio src={secureMediaUrl(msg.media_url)} controls className="w-full" />
+                              ) : (
+                                <a
+                                  href={secureMediaUrl(msg.media_url)}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-sm underline"
+                                >
+                                  Open attachment
+                                </a>
+                              )}
+                            </div>
+                          ) : null}
+                          {msg.body ? (
+                            <p className="text-sm">{renderMessageBody(msg.body, msg.mentions)}</p>
+                          ) : null}
                           <p
                             className={`mt-1 flex items-center justify-end gap-1 text-[10px] ${
                               mine ? "text-primary-foreground/80" : "text-muted"
@@ -871,37 +1189,138 @@ const CommunityChat = () => {
 
             <form
               onSubmit={submitMessage}
-              className="shrink-0 border-t border-border bg-surface p-3 flex items-end gap-2"
+              className="shrink-0 border-t border-border bg-surface p-3 space-y-2"
             >
-              <label className="sr-only" htmlFor="chat-draft">
-                Message
-              </label>
-              <textarea
-                id="chat-draft"
-                rows={1}
-                value={draft}
-                onChange={(e) => onDraftChange(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    submitMessage();
-                  }
-                }}
-                placeholder="Type a message"
-                className="flex-1 min-h-11 max-h-32 resize-none border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-primary"
-              />
-              <button
-                type="submit"
-                disabled={!draft.trim() || sending}
-                className="min-h-11 min-w-11 flex items-center justify-center bg-primary text-primary-foreground hover:bg-primary-dark disabled:opacity-50"
-                aria-label="Send message"
-              >
-                <IoSend size={18} />
-              </button>
+              {pendingMedia ? (
+                <div className="flex items-center gap-3 border border-border bg-background px-3 py-2">
+                  {pendingMedia.preview ? (
+                    <img src={pendingMedia.preview} alt="" className="h-12 w-12 object-cover" />
+                  ) : (
+                    <span className="text-xs text-muted truncate">{pendingMedia.name}</span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={clearPendingMedia}
+                    className="ml-auto min-h-8 min-w-8 flex items-center justify-center text-muted"
+                    aria-label="Remove attachment"
+                  >
+                    <IoClose size={16} />
+                  </button>
+                </div>
+              ) : null}
+
+              {mentionOpen && mentionCandidates.length ? (
+                <ul className="border border-border bg-background max-h-40 overflow-y-auto">
+                  {mentionCandidates.map((person) => (
+                    <li key={person.id}>
+                      <button
+                        type="button"
+                        onClick={() => insertMention(person)}
+                        className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-surface"
+                      >
+                        <img
+                          src={avatarUrl(person)}
+                          alt=""
+                          className="h-7 w-7 rounded-full object-cover"
+                        />
+                        <span className="min-w-0">
+                          <span className="block text-sm font-medium truncate">
+                            {displayName(person)}
+                          </span>
+                          <span className="block text-xs text-muted truncate">
+                            @{person.username}
+                          </span>
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+
+              {showEmoji ? (
+                <div className="border border-border bg-background overflow-hidden">
+                  <EmojiPicker
+                    onEmojiClick={insertEmoji}
+                    width="100%"
+                    height={320}
+                    previewConfig={{ showPreview: false }}
+                  />
+                </div>
+              ) : null}
+
+              <div className="flex items-end gap-1.5">
+                <input
+                  ref={attachRef}
+                  type="file"
+                  accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.txt"
+                  className="hidden"
+                  onChange={onPickMedia}
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    unlockNotificationSound();
+                    attachRef.current?.click();
+                  }}
+                  className="min-h-11 min-w-10 flex items-center justify-center text-muted hover:text-foreground"
+                  aria-label="Attach media"
+                >
+                  <IoAttachOutline size={22} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    unlockNotificationSound();
+                    setShowEmoji((v) => !v);
+                  }}
+                  className="min-h-11 min-w-10 flex items-center justify-center text-muted hover:text-foreground"
+                  aria-label="Emoji"
+                >
+                  <IoHappyOutline size={22} />
+                </button>
+                <label className="sr-only" htmlFor="chat-draft">
+                  Message
+                </label>
+                <textarea
+                  id="chat-draft"
+                  ref={draftRef}
+                  rows={1}
+                  value={draft}
+                  onChange={(e) => onDraftChange(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      submitMessage();
+                    }
+                    if (e.key === "Escape") {
+                      setShowEmoji(false);
+                      setMentionOpen(false);
+                    }
+                  }}
+                  placeholder="Type a message · @ to mention"
+                  className="flex-1 min-h-11 max-h-32 resize-none border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-primary"
+                />
+                <button
+                  type="submit"
+                  disabled={(!draft.trim() && !pendingMedia) || sending}
+                  className="min-h-11 min-w-11 flex items-center justify-center bg-primary text-primary-foreground hover:bg-primary-dark disabled:opacity-50"
+                  aria-label="Send message"
+                >
+                  <IoSend size={18} />
+                </button>
+              </div>
             </form>
           </>
         )}
       </section>
+
+      <ChatGroupInfo
+        open={groupInfoOpen}
+        onClose={() => setGroupInfoOpen(false)}
+        loading={groupInfoLoading}
+        data={groupInfoData}
+        conversationName={activeConversation?.name}
+      />
     </div>
   );
 };
