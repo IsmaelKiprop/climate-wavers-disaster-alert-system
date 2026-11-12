@@ -32,23 +32,23 @@ const SharedLayout = ({ showRight = true }) => {
 
   return (
     <div className="bg-background text-foreground h-[100dvh] flex flex-col overflow-hidden">
-      <header className="shrink-0 z-50 bg-navbar border-b border-border">
+      <header className="app-shell-navbar shrink-0 z-50 border-b border-border">
         <Topbar />
       </header>
 
-      <div className="flex flex-1 min-h-0 overflow-hidden">
+      <div className="flex flex-1 min-h-0 overflow-hidden relative">
         <DashboardSidebar>
           <Leftsidebar />
         </DashboardSidebar>
 
-        <main className="flex-1 min-w-0 overflow-y-auto overscroll-contain">
+        <main className="app-shell-main relative z-0 flex-1 min-w-0 overflow-y-auto overflow-x-hidden overscroll-contain">
           <div className={isChat ? "h-full px-4 sm:px-6 py-4 pb-4" : "max-w-4xl mx-auto px-4 sm:px-6 py-5 pb-6 md:pb-8"}>
             <Outlet />
           </div>
         </main>
 
         {showAside ? (
-          <aside className="hidden xl:block w-[280px] bg-sidebar border-l border-border h-full overflow-y-auto shrink-0">
+          <aside className="app-shell-sidebar hidden xl:block relative z-10 w-[280px] border-l border-border h-full overflow-y-auto shrink-0">
             <Rightsidebar />
           </aside>
         ) : null}

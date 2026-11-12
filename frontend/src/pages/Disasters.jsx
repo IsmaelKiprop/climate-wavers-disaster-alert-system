@@ -46,14 +46,14 @@ const DisasterPage = () => {
     <>
       <DisastersPageSEO />
       <div className="h-[100dvh] bg-background flex flex-col overflow-hidden">
-        <header className="shrink-0 z-50 bg-navbar border-b border-border">
+        <header className="app-shell-navbar shrink-0 z-50 border-b border-border">
           <Topbar />
         </header>
-        <div className="flex flex-1 min-h-0 overflow-hidden">
+        <div className="flex flex-1 min-h-0 overflow-hidden relative">
           <DashboardSidebar>
             <Menu />
           </DashboardSidebar>
-          <main className="flex-1 min-w-0 overflow-y-auto overscroll-contain px-3 sm:px-5 py-5 pb-6 md:pb-8">
+          <main className="app-shell-main relative z-0 flex-1 min-w-0 overflow-y-auto overflow-x-hidden overscroll-contain px-3 sm:px-5 py-5 pb-6 md:pb-8">
             <div className="max-w-4xl mx-auto">
               <div className="mb-5">
                 <p className="text-sm text-muted">Live USGS and NASA events</p>

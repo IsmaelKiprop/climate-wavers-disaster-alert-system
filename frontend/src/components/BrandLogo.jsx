@@ -10,7 +10,7 @@ export default function BrandLogo({
 }) {
   return (
     <span
-      className={`inline-flex items-center justify-center shrink-0 bg-[var(--color-logo-plate)] p-0.5 border border-[var(--color-logo-plate-border)] ${className}`}
+      className={`inline-flex items-center justify-center shrink-0 bg-[var(--cw-logo-plate)] p-0.5 border border-[var(--cw-logo-plate-border)] ${className}`}
       style={{ borderRadius: 5 }}
     >
       <img

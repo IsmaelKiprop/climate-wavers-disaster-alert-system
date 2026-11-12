@@ -298,7 +298,7 @@ const Posts = ({
           .map((post) => (
           <div
             key={`${post?.user?.id || 'unknown'}_${post?.id || 'unknown'}`}
-            className="bg-surface shadow-lg border border-border hover:shadow-xl transition-all duration-300 hover:border-primary/40 hover:-translate-y-1 group"
+            className="bg-surface shadow-lg border border-border hover:shadow-xl transition-shadow duration-300 hover:border-primary/40 group"
           >
             {isCommentModalOpen && (
               <Modal closeFn={() => setIsCommentModalOpen(false)}>

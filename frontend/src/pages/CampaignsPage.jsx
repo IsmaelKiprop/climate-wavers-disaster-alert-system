@@ -72,14 +72,14 @@ const CampaignsPage = () => {
     <>
       <CampaignsPageSEO />
       <div className="h-[100dvh] bg-background flex flex-col overflow-hidden">
-        <header className="shrink-0 z-50 bg-navbar border-b border-border">
+        <header className="app-shell-navbar shrink-0 z-50 border-b border-border">
           <Topbar />
         </header>
-        <div className="flex flex-1 min-h-0 overflow-hidden">
+        <div className="flex flex-1 min-h-0 overflow-hidden relative">
           <DashboardSidebar>
             <Menu />
           </DashboardSidebar>
-          <main className="flex-1 min-w-0 overflow-y-auto overscroll-contain px-4 sm:px-6 py-5 pb-6 md:pb-8">
+          <main className="app-shell-main relative z-0 flex-1 min-w-0 overflow-y-auto overflow-x-hidden overscroll-contain px-4 sm:px-6 py-5 pb-6 md:pb-8">
             <h1 className="text-xl sm:text-2xl font-semibold text-foreground">
               Support live climate projects
             </h1>
