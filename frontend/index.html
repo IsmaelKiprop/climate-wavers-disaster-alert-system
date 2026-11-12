@@ -107,7 +107,24 @@
     
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600&family=Lora:wght@400;600&family=Merriweather:wght@400;700&family=Montserrat+Alternates:wght@700&family=Montserrat:wght@400;600&family=Nunito:wght@400;700&family=Playfair+Display:wght@400;700&family=Poppins:wght@400;600&family=Roboto+Slab:wght@400;700&family=Space+Grotesk:wght@400;600&display=swap" rel="stylesheet" />
+    <!-- Non-blocking post-font pack (Montserrat/Poppins already local in font.css) -->
+    <link
+      rel="preload"
+      as="style"
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600&family=Lora:wght@400;600&family=Merriweather:wght@400;700&family=Montserrat+Alternates:wght@700&family=Nunito:wght@400;700&family=Playfair+Display:wght@400;700&family=Roboto+Slab:wght@400;700&family=Space+Grotesk:wght@400;600&display=swap"
+    />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600&family=Lora:wght@400;600&family=Merriweather:wght@400;700&family=Montserrat+Alternates:wght@700&family=Nunito:wght@400;700&family=Playfair+Display:wght@400;700&family=Roboto+Slab:wght@400;700&family=Space+Grotesk:wght@400;600&display=swap"
+      media="print"
+      onload="this.media='all'"
+    />
+    <noscript>
+      <link
+        rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600&family=Lora:wght@400;600&family=Merriweather:wght@400;700&family=Montserrat+Alternates:wght@700&family=Nunito:wght@400;700&family=Playfair+Display:wght@400;700&family=Roboto+Slab:wght@400;700&family=Space+Grotesk:wght@400;600&display=swap"
+      />
+    </noscript>
     
     <!-- Structured Data -->
     <script type="application/ld+json">

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Dialog, Text, Button, Flex } from "@radix-ui/themes";
+import "@radix-ui/themes/styles.css";
 import { toast } from "react-toastify";
 
 const IncidentIntegration = () => {

@@ -10,6 +10,7 @@ import {
   IoChatbubbles,
 } from "react-icons/io5";
 import { RiAlarmWarningLine, RiAlarmWarningFill } from "react-icons/ri";
+import { prefetchHandlers } from "../utils/routePrefetch";
 
 const itemClass =
   "flex flex-col items-center justify-center gap-0.5 min-w-0 flex-1 h-full pt-1.5 pb-1 text-[10px] leading-tight font-medium";
@@ -42,7 +43,13 @@ const Footer = () => {
       aria-label="Mobile"
     >
       {items.map(({ to, label, Icon, ActiveIcon, end }) => (
-        <NavLink key={to} to={to} end={Boolean(end)} className={itemClass}>
+        <NavLink
+          key={to}
+          to={to}
+          end={Boolean(end)}
+          className={itemClass}
+          {...prefetchHandlers(to)}
+        >
           {({ isActive }) => {
             const Glyph = isActive ? ActiveIcon : Icon;
             return (

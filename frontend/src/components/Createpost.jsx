@@ -7,7 +7,7 @@ import { getUser, avatarUrl } from "../utils/factory";
 import { uploadFiles } from "../services/upload.service";
 import { getAuthToken } from "../utils/factory";
 import { toast } from "react-toastify";
-import EmojiPicker from "emoji-picker-react";
+import LazyEmojiPicker from "./LazyEmojiPicker";
 import { IoSend, IoCloseSharp, IoLocationOutline, IoHappyOutline, IoVideocamOutline, IoImageOutline, IoSparklesOutline } from "react-icons/io5";
 import { MdEmojiEmotions, MdLocationOn, MdVideocam, MdImage, MdAutoAwesome } from "react-icons/md";
 import { env } from "../config/env";
@@ -610,7 +610,7 @@ export default function Createpost({ type, postId, parentId, closeModal }) {
             
             {showEmojiPicker && (
               <div className="absolute bottom-full left-0 mb-2 z-10">
-                <EmojiPicker
+                <LazyEmojiPicker
                   onEmojiClick={(emojiData) => handleEmojiClick(emojiData.emoji)}
                   width={300}
                   height={350}

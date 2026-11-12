@@ -11,6 +11,7 @@ import { IoNotifications, IoNotificationsOutline, IoSearch, IoLogOutOutline, IoP
 import { useNotifications } from "../context/NotificationContext";
 import { useSidebar } from "../context/SidebarContext";
 import { useTheme } from "../context/ThemeContext";
+import { prefetchHandlers, prefetchRoute } from "../utils/routePrefetch";
 
 const Topbar = () => {
   const location = useLocation();
@@ -98,7 +99,11 @@ const Topbar = () => {
           </button>
         ) : null}
         {isOpen ? <Mobilemenu setIsOpen={setIsOpen} /> : null}
-        <Link to={homeTo} className="hidden md:flex items-center gap-2 text-foreground">
+        <Link
+          to={homeTo}
+          className="hidden md:flex items-center gap-2 text-foreground"
+          {...prefetchHandlers(homeTo)}
+        >
           <BrandLogo imgClassName="h-8 w-auto" />
           <span className="hidden lg:inline text-sm font-semibold">Climate Wavers</span>
         </Link>
@@ -140,7 +145,13 @@ const Topbar = () => {
           </Modal>
         ) : null}
 
-        <NavLink to={notificationsTo} onClick={markAsRead} className="relative p-2" aria-label="Notifications">
+        <NavLink
+          to={notificationsTo}
+          onClick={markAsRead}
+          className="relative p-2"
+          aria-label="Notifications"
+          {...prefetchHandlers(notificationsTo)}
+        >
           {({ isActive }) => (
             <>
               {isActive ? (
@@ -186,6 +197,8 @@ const Topbar = () => {
                 href={profileTo}
                 className="flex items-center px-4 py-2.5 text-sm hover:bg-background"
                 onClick={goToProfile}
+                onMouseEnter={() => prefetchRoute(profileTo)}
+                onFocus={() => prefetchRoute(profileTo)}
               >
                 <IoPersonOutline className="w-4 h-4 mr-3" />
                 Profile

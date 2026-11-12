@@ -186,8 +186,20 @@ export const ChatProvider = ({ children }) => {
   useEffect(() => {
     const user = getUser();
     if (!user?.id && !getAuthToken()) return undefined;
-    connect();
+
+    // Defer chat socket so first paint / route chunks win the network.
+    let idleId;
+    let timeoutId;
+    const start = () => connect();
+    if (typeof window !== "undefined" && window.requestIdleCallback) {
+      idleId = window.requestIdleCallback(start, { timeout: 2500 });
+    } else {
+      timeoutId = window.setTimeout(start, 1200);
+    }
+
     return () => {
+      if (idleId && window.cancelIdleCallback) window.cancelIdleCallback(idleId);
+      if (timeoutId) window.clearTimeout(timeoutId);
       if (reconnectRef.current) clearTimeout(reconnectRef.current);
       if (heartbeatRef.current) clearInterval(heartbeatRef.current);
       if (socketRef.current) {

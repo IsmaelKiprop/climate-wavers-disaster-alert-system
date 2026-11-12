@@ -1,4 +1,5 @@
 import { NavLink, useLocation } from "react-router-dom";
+import { prefetchHandlers } from "../../utils/routePrefetch";
 import {
   IoHomeOutline,
   IoHome,
@@ -155,6 +156,7 @@ const AppNav = ({ onNavigate, compact = false }) => {
             title={label}
             aria-label={label}
             onClick={close}
+            {...prefetchHandlers(to)}
             className={({ isActive }) =>
               `flex items-center min-h-11 text-sm font-medium ${
                 isCompact ? "justify-center px-0" : "gap-3 px-3"

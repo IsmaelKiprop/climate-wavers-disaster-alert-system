@@ -8,7 +8,7 @@ import { useState, useRef, useEffect } from "react";
 import { IoSend, IoHappyOutline, IoLocationOutline, IoCloseOutline, IoVideocamOutline, IoImageOutline } from "react-icons/io5";
 import { MdVideocam, MdImage } from "react-icons/md";
 import { toast } from "react-toastify";
-import EmojiPicker from "emoji-picker-react";
+import LazyEmojiPicker from "./LazyEmojiPicker";
 import { env } from "../config/env";
 
 const Createcomment = ({ type, postId, parentId, button = "reply" }) => {
@@ -424,7 +424,7 @@ const Createcomment = ({ type, postId, parentId, button = "reply" }) => {
                 <IoCloseOutline className="w-3 h-3 md:w-4 md:h-4" />
               </button>
             </div>
-            <EmojiPicker
+            <LazyEmojiPicker
               onEmojiClick={(emojiData) => addEmoji(emojiData.emoji)}
               width={280}
               height={300}

@@ -13,6 +13,7 @@ import {
   getAuthToken,
   getUser,
 } from "../utils/factory";
+import { prefetchRoute } from "../utils/routePrefetch";
 
 const SharedLayout = ({ showRight = true }) => {
   const location = useLocation();
@@ -28,6 +29,30 @@ const SharedLayout = ({ showRight = true }) => {
     const user = getUser();
     if (user && avatarUrl(user) !== "/avatar.png" && user.first_name) return;
     completeAuthSession({ access_token: token, ...(user || {}) });
+  }, []);
+
+  // Warm common destinations after first paint.
+  useEffect(() => {
+    const warm = () => {
+      [
+        "/app",
+        "/app/chat",
+        "/app/community",
+        "/app/notifications",
+        "/disasters",
+        "/app/plant-tree",
+      ].forEach(prefetchRoute);
+    };
+    const idleId = window.requestIdleCallback
+      ? window.requestIdleCallback(warm, { timeout: 4000 })
+      : window.setTimeout(warm, 2000);
+    return () => {
+      if (window.cancelIdleCallback && typeof idleId === "number") {
+        window.cancelIdleCallback(idleId);
+      } else {
+        window.clearTimeout(idleId);
+      }
+    };
   }, []);
 
   return (

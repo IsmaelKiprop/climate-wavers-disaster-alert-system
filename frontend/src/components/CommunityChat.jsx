@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import EmojiPicker from "emoji-picker-react";
+import LazyEmojiPicker from "./LazyEmojiPicker";
 import {
   IoArrowBack,
   IoAttachOutline,
@@ -1535,7 +1535,7 @@ const CommunityChat = () => {
 
               {showEmoji ? (
                 <div className="border border-border bg-background overflow-hidden">
-                  <EmojiPicker
+                  <LazyEmojiPicker
                     onEmojiClick={insertEmoji}
                     width="100%"
                     height={320}

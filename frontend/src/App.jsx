@@ -3,12 +3,12 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { HelmetProvider } from "react-helmet-async";
 import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
-import LandingPage from "./pages/LandingPage";
 import ScrollToTop from "./components/ScrollToTop";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { lazyWithRetry as lazy } from "./utils/lazyWithRetry";
 import { useTheme } from "./context/ThemeContext";
 
+const LandingPage = lazy(() => import("./pages/LandingPage"));
 const Signin = lazy(() => import("./pages/Auth/Signin"));
 const Signup = lazy(() => import("./pages/Auth/Signup"));
 const ForgotPassword = lazy(() => import("./pages/Auth/ForgotPassword"));
