@@ -1,5 +1,6 @@
 import { Link, useLocation } from "react-router-dom";
 import { AuthUtilitySEO } from "./SEOComponents";
+import BrandLogo from "./BrandLogo";
 
 const AuthLayout = ({
   title,
@@ -23,12 +24,7 @@ const AuthLayout = ({
       <aside className="hidden lg:flex w-[42%] xl:w-[480px] shrink-0 bg-primary text-primary-foreground flex-col p-8 xl:p-10 min-h-[100dvh]">
         <div>
           <Link to="/" className="flex items-center gap-3 text-primary-foreground">
-            <img
-              src="/logo.jpg"
-              alt=""
-              className="h-10 w-auto bg-surface p-1"
-              style={{ borderRadius: 5 }}
-            />
+            <BrandLogo decorative imgClassName="h-10 w-auto" />
             <span className="text-lg font-semibold">Climate Wavers</span>
           </Link>
           <div className="mt-8 xl:mt-10">
@@ -80,12 +76,7 @@ const AuthLayout = ({
             to="/"
             className="lg:hidden inline-flex items-center gap-2 mb-6 text-primary font-medium"
           >
-            <img
-              src="/logo.jpg"
-              alt="Climate Wavers"
-              className="h-8 w-auto"
-              style={{ borderRadius: 5 }}
-            />
+            <BrandLogo imgClassName="h-8 w-auto" />
             Climate Wavers
           </Link>
           <Link

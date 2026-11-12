@@ -3,6 +3,7 @@ import { SITE } from "../config/site";
 import { getAuthToken } from "../utils/factory";
 import SEO from "./SEO";
 import SiteFooter from "./SiteFooter";
+import BrandLogo from "./BrandLogo";
 
 export default function PublicPage({
   title,
@@ -39,8 +40,8 @@ export default function PublicPage({
       <main className="min-h-[100dvh] bg-background text-foreground flex flex-col overflow-x-hidden">
         <header className="bg-surface border-b border-border">
           <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between gap-3">
-            <Link to={homeTo} className="flex items-center min-w-0">
-              <img alt="Climate Wavers" src="/logo.jpg" className="h-8 w-auto mr-3" width="32" height="32" />
+            <Link to={homeTo} className="flex items-center min-w-0 gap-3">
+              <BrandLogo imgClassName="h-8 w-auto" />
               <span className="font-semibold text-primary truncate">{SITE.name}</span>
             </Link>
             <Link

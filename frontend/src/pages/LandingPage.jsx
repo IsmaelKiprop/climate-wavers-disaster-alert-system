@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useRef, lazy, Suspense } from "react";
 import { Link } from "react-router-dom";
 import { LandingPageSEO } from "../components/SEOComponents";
 import SiteFooter from "../components/SiteFooter";
+import BrandLogo from "../components/BrandLogo";
 import { SITE } from "../config/site";
 import { fetchDisasters, fetchTreeStats, mapDisasterForMap, buildLiveCharts, formatTimeAgo } from "../utils/apiData";
 
@@ -202,7 +203,7 @@ const LandingPage = () => {
             <div className="flex items-center">
               <div className="flex-shrink-0 flex items-center">
                 <Link to="/">
-                  <img alt="Climate Wavers" src="/logo.jpg" className="h-9 sm:h-11 w-auto" width="44" height="44" fetchPriority="high" decoding="async" />
+                  <BrandLogo imgClassName="h-9 sm:h-11 w-auto" />
                 </Link>
               </div>
             </div>

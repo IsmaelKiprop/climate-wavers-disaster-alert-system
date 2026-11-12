@@ -8,6 +8,7 @@ import { formatDistanceToNow } from "date-fns";
 import PropTypes from "prop-types";
 import { avatarUrl } from "../utils/factory";
 import LinkifiedText from "./LinkifiedText";
+import { postFontStyle } from "../utils/postFonts";
 
 const ProfileContent = ({ content, type, onLike, onUnlike, onRepost, onUnrepost, onSave, onUnsave }) => {
   const navigate = useNavigate();
@@ -80,7 +81,10 @@ const ProfileContent = ({ content, type, onLike, onUnlike, onRepost, onUnrepost,
               </div>
               
               <div className="mb-6">
-                <p className="text-gray-900 text-base leading-relaxed">
+                <p
+                  className="text-foreground text-base leading-relaxed"
+                  style={postFontStyle(content.font_family)}
+                >
                   <LinkifiedText text={content.content || ""} />
                 </p>
                 
@@ -231,7 +235,10 @@ const ProfileContent = ({ content, type, onLike, onUnlike, onRepost, onUnrepost,
                         <span className="text-sm font-medium text-gray-900">{content.post.user?.first_name} {content.post.user?.last_name}</span>
                         <span className="text-xs text-gray-500">@{content.post.user?.username}</span>
                       </div>
-                      <p className="text-gray-800 text-sm">
+                      <p
+                        className="text-foreground text-sm"
+                        style={postFontStyle(content.post?.font_family)}
+                      >
                         <LinkifiedText text={content.post?.content || ""} />
                       </p>
                       
@@ -266,7 +273,10 @@ const ProfileContent = ({ content, type, onLike, onUnlike, onRepost, onUnrepost,
                 </div>
                 
                 <div className="mb-4">
-                  <p className="text-gray-900 text-base leading-relaxed">
+                  <p
+                  className="text-foreground text-base leading-relaxed"
+                  style={postFontStyle(content.font_family)}
+                >
                   <LinkifiedText text={content.content || ""} />
                 </p>
                   
@@ -398,7 +408,10 @@ const ProfileContent = ({ content, type, onLike, onUnlike, onRepost, onUnrepost,
                           <p className="text-sm text-gray-500">@{content.post.user?.username}</p>
                         </div>
                       </div>
-                      <p className="text-gray-900">
+                      <p
+                        className="text-foreground"
+                        style={postFontStyle(content.post?.font_family)}
+                      >
                         <LinkifiedText text={content.post?.content || ""} />
                       </p>
                       {content.post.image && (
@@ -472,7 +485,12 @@ const ProfileContent = ({ content, type, onLike, onUnlike, onRepost, onUnrepost,
               <div className="mb-6">
                 <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded-lg mb-4">
                   <p className="text-sm text-yellow-600 font-medium mb-2">🔖 Bookmarked:</p>
-                  <p className="text-gray-900 text-base leading-relaxed">{content.post?.content}</p>
+                  <p
+                    className="text-foreground text-base leading-relaxed"
+                    style={postFontStyle(content.post?.font_family)}
+                  >
+                    {content.post?.content}
+                  </p>
                   {content.post?.image && (
                     <div className="mt-3">
                       {content.post.image.includes('.mp4') || content.post.image.includes('.mov') || content.post.image.includes('.avi') || content.post.image.includes('.webm') ? (
@@ -542,7 +560,12 @@ const ProfileContent = ({ content, type, onLike, onUnlike, onRepost, onUnrepost,
               <div className="mb-6">
                 <div className="bg-red-50 border-l-4 border-red-400 p-4 rounded-lg mb-4">
                   <p className="text-sm text-red-600 font-medium mb-2">❤️ Liked:</p>
-                  <p className="text-gray-900 text-base leading-relaxed">{content.post?.content}</p>
+                  <p
+                    className="text-foreground text-base leading-relaxed"
+                    style={postFontStyle(content.post?.font_family)}
+                  >
+                    {content.post?.content}
+                  </p>
                   {content.post?.image && (
                     <div className="mt-3">
                       {content.post.image.includes('.mp4') || content.post.image.includes('.mov') || content.post.image.includes('.avi') || content.post.image.includes('.webm') ? (

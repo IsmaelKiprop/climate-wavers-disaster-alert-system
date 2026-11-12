@@ -1,5 +1,6 @@
 import { getUser } from "../utils/factory";
 import QuestionContainer from "./QuestionContainer";
+import BrandLogo from "./BrandLogo";
 
 const data = [
   {
@@ -30,12 +31,8 @@ export default function NewChat({handleClick}) {
   return (
     <div className="md:h-[80vh] h-[76vh] max-sm:w-[100%] md:px-8 max-sm:px-1 grid gap-y-4 place-content-end">
       <div className="flex flex-row">
-        <img
-          src="/logo.jpg"
-          alt="WaverX"
-          className="h-[80px] object-cover"
-        />
-        <h1 className="text-[#2F4F4F] ml-2 font-serif font-[300px] max-sm:self-center  md:text-[65px] max-sm:text-4xl">
+        <BrandLogo alt="WaverX" imgClassName="h-[80px] w-auto object-contain" />
+        <h1 className="text-secondary ml-2 font-serif font-[300px] max-sm:self-center  md:text-[65px] max-sm:text-4xl">
           Waver
         </h1>
         <div>

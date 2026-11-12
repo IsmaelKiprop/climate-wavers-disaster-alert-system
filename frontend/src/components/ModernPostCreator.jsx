@@ -24,6 +24,8 @@ import {
   readDevicePosition,
   reverseGeocode,
 } from "../utils/formatLocation";
+import PostFontPicker from "./PostFontPicker";
+import { DEFAULT_POST_FONT, postFontStyle } from "../utils/postFonts";
 
 const ModernPostCreator = ({ type = "post", postId, parentId, closeModal }) => {
   const queryClient = useQueryClient();
@@ -45,6 +47,7 @@ const ModernPostCreator = ({ type = "post", postId, parentId, closeModal }) => {
   const [showLocationPicker, setShowLocationPicker] = useState(false);
   const [selectedLocation, setSelectedLocation] = useState(null);
   const [locationAddress, setLocationAddress] = useState(null);
+  const [fontFamily, setFontFamily] = useState(DEFAULT_POST_FONT);
   const fileInputRef = useRef(null);
   const videoInputRef = useRef(null);
   const content = watch("content", "");
@@ -365,6 +368,7 @@ const ModernPostCreator = ({ type = "post", postId, parentId, closeModal }) => {
       // Add text content
       formData.append('content', data.content);
       formData.append('visibility', data.visibility || 'Everyone');
+      formData.append('font_family', fontFamily || DEFAULT_POST_FONT);
       
       // Add location if available
       if (data.location) {
@@ -423,6 +427,7 @@ const ModernPostCreator = ({ type = "post", postId, parentId, closeModal }) => {
       setLocationAddress(null);
       setSuggestedHashtags([]);
       setContentAnalysis(null);
+      setFontFamily(DEFAULT_POST_FONT);
       setIsDisabled(false);
 
       await queryClient.invalidateQueries({ queryKey: ["post"] });
@@ -437,9 +442,9 @@ const ModernPostCreator = ({ type = "post", postId, parentId, closeModal }) => {
   };
 
   return (
-    <div className="w-full max-w-2xl mx-auto bg-white rounded-xl md:rounded-2xl shadow-lg border border-gray-100">
+    <div className="w-full max-w-2xl mx-auto bg-surface shadow-lg border border-border">
       {/* Header */}
-      <div className="p-3 md:p-4 border-b border-gray-100">
+      <div className="p-3 md:p-4 border-b border-border">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center space-x-2 md:space-x-3">
             <img
@@ -452,8 +457,8 @@ const ModernPostCreator = ({ type = "post", postId, parentId, closeModal }) => {
               }}
             />
             <div className="min-w-0 flex-1">
-              <h3 className="font-semibold text-gray-900 text-sm md:text-base truncate">{user?.first_name} {user?.last_name}</h3>
-              <p className="text-xs md:text-sm text-gray-500">Share your climate action</p>
+              <h3 className="font-semibold text-foreground text-sm md:text-base truncate">{user?.first_name} {user?.last_name}</h3>
+              <p className="text-xs md:text-sm text-muted">Share your climate action</p>
             </div>
           </div>
         </div>
@@ -518,7 +523,8 @@ const ModernPostCreator = ({ type = "post", postId, parentId, closeModal }) => {
         <div className="relative">
           <textarea
             placeholder="Share your thoughts on climate action, sustainability, or environmental topics..."
-            className="w-full min-h-[100px] md:min-h-[120px] p-3 md:p-4 border-2 border-gray-200 rounded-xl resize-none focus:border-blue-500 focus:outline-none transition-colors duration-200 text-gray-900 placeholder-gray-400 text-sm md:text-base"
+            className="w-full min-h-[100px] md:min-h-[120px] p-3 md:p-4 border-2 border-border bg-surface resize-none focus:border-primary focus:outline-none transition-colors duration-200 text-foreground placeholder:text-muted text-sm md:text-base"
+            style={postFontStyle(fontFamily)}
             {...register("content", { 
               required: "Content is required",
               minLength: {
@@ -533,14 +539,20 @@ const ModernPostCreator = ({ type = "post", postId, parentId, closeModal }) => {
           />
           
           {/* Character Counter */}
-          <div className="absolute bottom-2 right-2 text-xs text-gray-400">
+          <div className="absolute bottom-2 right-2 text-xs text-muted">
             {content?.length || 0}/500
           </div>
         </div>
 
+        <PostFontPicker
+          value={fontFamily}
+          onChange={setFontFamily}
+          className="mt-3"
+        />
+
         {/* Error Messages */}
         {errors.content && (
-          <div className="mt-2 text-red-500 text-sm flex items-center space-x-1">
+          <div className="mt-2 text-destructive text-sm flex items-center space-x-1">
             <IoWarningOutline className="w-4 h-4" />
             <span>{errors.content.message}</span>
           </div>

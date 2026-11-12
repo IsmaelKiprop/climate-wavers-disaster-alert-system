@@ -4,6 +4,7 @@ import PropTypes from "prop-types";
 import { FOOTER_INFORMATION, FOOTER_SERVICES, SITE } from "../config/site";
 import { client } from "../api";
 import { endpoints } from "../utils/endpoints";
+import BrandLogo from "./BrandLogo";
 import fb from "../assets/Icons/fb.webp";
 import exx from "../assets/Icons/x.png";
 import linkedIn from "../assets/Icons/lin.webp";
@@ -81,8 +82,8 @@ const SiteFooter = ({ showNewsletter = true }) => {
           {/* Brand + newsletter */}
           <div className="sm:col-span-2 lg:col-span-5 min-w-0 order-1">
             <div className="flex items-center gap-3 mb-4">
-              <img alt="" src="/logo.jpg" className="h-8 sm:h-10 w-auto shrink-0" />
-              <h3 className="text-xl sm:text-2xl font-bold text-[#067d83] truncate">
+              <BrandLogo decorative imgClassName="h-8 sm:h-10 w-auto" />
+              <h3 className="text-xl sm:text-2xl font-bold text-[#2bb8bf] truncate">
                 {SITE.name}
               </h3>
             </div>

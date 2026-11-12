@@ -94,13 +94,13 @@ const Accountcard = ({ user }) => {
             />
             {user?.is_online ? (
               <div
-                className="absolute -bottom-0.5 -right-0.5 h-3 w-3 bg-primary border-2 border-white rounded-full"
+                className="absolute -bottom-0.5 -right-0.5 h-3 w-3 bg-primary border-2 border-surface rounded-full"
                 title="Online"
               />
             ) : null}
           </div>
           <div className="min-w-0 flex-1">
-            <h3 className="text-sm font-semibold text-gray-900 truncate group-hover:text-teal-600 transition-colors duration-200 inline-flex items-center gap-1 max-w-full">
+            <h3 className="text-sm font-semibold text-foreground truncate group-hover:text-primary transition-colors duration-200 inline-flex items-center gap-1 max-w-full">
               <span className="truncate">{displayName}</span>
               {verified ? (
                 <span
@@ -111,7 +111,7 @@ const Accountcard = ({ user }) => {
                 </span>
               ) : null}
             </h3>
-            <p className="text-xs text-gray-500 truncate">{subtitle}</p>
+            <p className="text-xs text-muted truncate">{subtitle}</p>
           </div>
         </div>
       </Link>
@@ -138,8 +138,8 @@ const Accountcard = ({ user }) => {
             }}
             className={`px-2.5 py-1.5 text-xs font-medium transition-all duration-200 disabled:opacity-60 ${
               followed
-                ? "bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200"
-                : "bg-teal-500 text-white hover:bg-teal-600 shadow-sm hover:shadow-md"
+                ? "bg-surface-muted text-foreground hover:bg-background border border-border"
+                : "bg-primary text-primary-foreground hover:bg-primary-dark"
             }`}
             style={{ borderRadius: 5 }}
           >

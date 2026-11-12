@@ -14,6 +14,7 @@ import Createpost from "./Createpost";
 import PropTypes from "prop-types";
 import ImageLightbox from "./ImageLightbox";
 import LinkifiedText from "./LinkifiedText";
+import { postFontStyle } from "../utils/postFonts";
 
 const Posts = ({
   type,
@@ -297,7 +298,7 @@ const Posts = ({
           .map((post) => (
           <div
             key={`${post?.user?.id || 'unknown'}_${post?.id || 'unknown'}`}
-            className="bg-white rounded-2xl shadow-lg border border-gray-100 hover:shadow-xl transition-all duration-300 hover:border-gray-200 hover:-translate-y-1 group"
+            className="bg-surface shadow-lg border border-border hover:shadow-xl transition-all duration-300 hover:border-primary/40 hover:-translate-y-1 group"
           >
             {isCommentModalOpen && (
               <Modal closeFn={() => setIsCommentModalOpen(false)}>
@@ -449,11 +450,14 @@ const Posts = ({
             
             <button onClick={() => commentPage(post)} className="w-full text-left group-hover:bg-gray-50/50 transition-colors duration-200">
               <div className="px-6 pb-4">
-              <p className="text-gray-900 text-lg leading-relaxed font-medium group-hover:text-gray-800 transition-colors duration-200">
+              <p
+                className="text-foreground text-lg leading-relaxed font-medium transition-colors duration-200"
+                style={postFontStyle(post?.font_family)}
+              >
                 <LinkifiedText
                   text={post?.content || ""}
-                  linkClassName="text-[#067d83] font-semibold underline underline-offset-2 break-all hover:text-[#055a5f]"
-                  hashtagClassName="text-[#067d83] font-semibold hover:text-[#055a5f] transition-colors duration-200"
+                  linkClassName="text-primary font-semibold underline underline-offset-2 break-all hover:text-primary-dark"
+                  hashtagClassName="text-primary font-semibold hover:text-primary-dark transition-colors duration-200"
                 />
               </p>
               {(post?.image || post?.video) && (
