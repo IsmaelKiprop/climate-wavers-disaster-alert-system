@@ -101,21 +101,32 @@ const Accountcard = ({ user }) => {
         </div>
       </Link>
       {me?.id !== user?.id && (
-        <button
-          type="button"
-          disabled={busy}
-          aria-pressed={followed}
-          onClick={() => {
-            handleFollow(user?.id);
-          }}
-          className={`px-2.5 py-1.5 text-xs font-medium rounded-full transition-all duration-200 flex-shrink-0 disabled:opacity-60 ${
-            followed
-              ? "bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200"
-              : "bg-teal-500 text-white hover:bg-teal-600 shadow-sm hover:shadow-md"
-          }`}
-        >
-          {busy ? "…" : followed ? "Following" : "Follow"}
-        </button>
+        <div className="flex items-center gap-1.5 flex-shrink-0">
+          <Link
+            to={`/app/chat?dm=${user?.id}`}
+            className="px-2.5 py-1.5 text-xs font-medium border border-border text-foreground hover:border-primary"
+            style={{ borderRadius: 5 }}
+            aria-label={`Message ${displayName}`}
+          >
+            Message
+          </Link>
+          <button
+            type="button"
+            disabled={busy}
+            aria-pressed={followed}
+            onClick={() => {
+              handleFollow(user?.id);
+            }}
+            className={`px-2.5 py-1.5 text-xs font-medium transition-all duration-200 disabled:opacity-60 ${
+              followed
+                ? "bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200"
+                : "bg-teal-500 text-white hover:bg-teal-600 shadow-sm hover:shadow-md"
+            }`}
+            style={{ borderRadius: 5 }}
+          >
+            {busy ? "…" : followed ? "Following" : "Follow"}
+          </button>
+        </div>
       )}
     </div>
   );

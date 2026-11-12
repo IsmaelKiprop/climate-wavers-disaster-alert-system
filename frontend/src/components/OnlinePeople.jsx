@@ -27,11 +27,12 @@ const OnlineSkeleton = () => (
 const OnlinePersonRow = ({ user, onNavigate }) => {
   const name = displayName(user);
   return (
-    <div className="flex items-center gap-2 px-2 py-2 hover:bg-background transition-colors">
+    <div className="flex items-center gap-1 px-1 py-1 hover:bg-background transition-colors">
       <Link
-        to={`/app/${user.id}/profile`}
+        to={`/app/chat?dm=${user.id}`}
         onClick={onNavigate}
-        className="flex items-center gap-3 min-w-0 flex-1"
+        className="flex items-center gap-3 min-w-0 flex-1 px-1 py-1.5"
+        aria-label={`Message ${name}`}
       >
         <div className="relative shrink-0">
           <img
@@ -49,16 +50,16 @@ const OnlinePersonRow = ({ user, onNavigate }) => {
         </div>
         <div className="min-w-0 flex-1">
           <p className="text-sm font-medium text-foreground truncate">{name}</p>
-          <p className="text-xs text-muted truncate">Active now</p>
+          <p className="text-xs text-muted truncate">Active now · Message</p>
         </div>
       </Link>
       <Link
-        to={`/app/chat?dm=${user.id}`}
+        to={`/app/${user.id}/profile`}
         onClick={onNavigate}
-        className="shrink-0 text-xs font-medium text-primary px-2 py-1.5 hover:bg-background"
-        aria-label={`Message ${name}`}
+        className="shrink-0 text-xs text-muted px-2 py-1.5 hover:text-foreground"
+        aria-label={`View ${name} profile`}
       >
-        Chat
+        Profile
       </Link>
     </div>
   );

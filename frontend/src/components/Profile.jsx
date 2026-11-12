@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { BsBriefcase } from "react-icons/bs";
 import { FiMapPin } from "react-icons/fi";
-import { IoCreateOutline, IoCamera, IoCallOutline, IoGlobeOutline, IoLeaf, IoShareOutline, IoQrCodeOutline } from "react-icons/io5";
+import { IoCreateOutline, IoCamera, IoCallOutline, IoGlobeOutline, IoLeaf, IoShareOutline, IoQrCodeOutline, IoChatbubbleEllipsesOutline } from "react-icons/io5";
 import TreeBadge from "./TreeBadge";
 import { toast } from "react-toastify";
 import Feed from "./Feed";
@@ -370,6 +370,14 @@ const Profile = () => {
                 <div className="flex flex-col sm:flex-row gap-2">
                   <button
                     type="button"
+                    onClick={() => navigate(`/app/chat?dm=${profile.id}`)}
+                    className="h-11 px-4 bg-primary text-primary-foreground text-sm font-medium inline-flex items-center justify-center gap-2"
+                  >
+                    <IoChatbubbleEllipsesOutline size={18} />
+                    Message
+                  </button>
+                  <button
+                    type="button"
                     onClick={() =>
                       navigate(
                         giftTreesPath(
@@ -378,7 +386,7 @@ const Profile = () => {
                         )
                       )
                     }
-                    className="h-11 px-4 bg-primary text-primary-foreground text-sm font-medium inline-flex items-center justify-center gap-2"
+                    className="h-11 px-4 border border-border bg-surface text-foreground text-sm font-medium inline-flex items-center justify-center gap-2"
                   >
                     <IoLeaf size={18} />
                     Gift a tree

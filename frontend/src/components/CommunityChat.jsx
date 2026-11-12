@@ -169,45 +169,48 @@ const CommunityChat = () => {
     }
   }, [markRead]);
 
+  const openDmWithUser = useCallback(
+    async (dmUserId) => {
+      if (!dmUserId) return null;
+      const conv = await client.run(
+        "post",
+        endpoints.chatDm,
+        { user_id: Number(dmUserId) },
+        true
+      );
+      setConversations((prev) => {
+        if (prev.some((c) => Number(c.id) === Number(conv.id))) {
+          return prev.map((c) =>
+            Number(c.id) === Number(conv.id) ? { ...c, ...conv } : c
+          );
+        }
+        return [conv, ...prev];
+      });
+      setActiveId(conv.id);
+      setMobileShowThread(true);
+      setShowNewChat(false);
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.delete("dm");
+          next.set("c", String(conv.id));
+          return next;
+        },
+        { replace: true }
+      );
+      return conv;
+    },
+    [setSearchParams]
+  );
+
   useEffect(() => {
     let cancelled = false;
     const fromQuery = searchParams.get("c");
     const dmUserId = searchParams.get("dm");
     loadConversations().then(async (list) => {
       if (cancelled) return;
-      if (dmUserId) {
-        try {
-          const conv = await client.run(
-            "post",
-            endpoints.chatDm,
-            { user_id: Number(dmUserId) },
-            true
-          );
-          if (cancelled) return;
-          setConversations((prev) => {
-            if (prev.some((c) => Number(c.id) === Number(conv.id))) {
-              return prev.map((c) =>
-                Number(c.id) === Number(conv.id) ? { ...c, ...conv } : c
-              );
-            }
-            return [conv, ...prev];
-          });
-          setActiveId(conv.id);
-          setMobileShowThread(true);
-          setSearchParams(
-            (prev) => {
-              const next = new URLSearchParams(prev);
-              next.delete("dm");
-              next.set("c", String(conv.id));
-              return next;
-            },
-            { replace: true }
-          );
-          return;
-        } catch {
-          // fall through to normal selection
-        }
-      }
+      // Fresh DM deep-links are handled by the dedicated effect below
+      if (dmUserId) return;
       const preferred =
         (fromQuery && list.find((c) => String(c.id) === String(fromQuery))) ||
         list.find((c) => c.conversation_type === "community") ||
@@ -222,9 +225,22 @@ const CommunityChat = () => {
     return () => {
       cancelled = true;
     };
-    // Intentionally bootstrap once on mount
+    // Bootstrap once on mount; dm deep-links handled below
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadConversations]);
+
+  // Open a DM whenever ?dm= appears (profile Message, contacts Chat, etc.)
+  useEffect(() => {
+    const dmUserId = searchParams.get("dm");
+    if (!dmUserId) return undefined;
+    let cancelled = false;
+    openDmWithUser(dmUserId).catch(() => {
+      if (!cancelled) setListError("Could not start that conversation.");
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [searchParams, openDmWithUser]);
 
   useEffect(() => {
     if (!activeId) return undefined;
@@ -466,16 +482,9 @@ const CommunityChat = () => {
 
   const startDm = async (userId) => {
     try {
-      const conv = await client.run("post", endpoints.chatDm, { user_id: userId }, true);
-      setConversations((prev) => {
-        if (prev.some((c) => Number(c.id) === Number(conv.id))) {
-          return prev.map((c) => (Number(c.id) === Number(conv.id) ? { ...c, ...conv } : c));
-        }
-        return [conv, ...prev];
-      });
-      openConversation(conv);
+      await openDmWithUser(userId);
     } catch {
-      // ignore
+      setListError("Could not start that conversation.");
     }
   };
 

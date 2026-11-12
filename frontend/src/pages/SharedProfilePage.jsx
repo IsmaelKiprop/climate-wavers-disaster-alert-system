@@ -166,9 +166,21 @@ const SharedProfilePage = () => {
                   ) : null}
                 </div>
                 <div className="flex flex-wrap gap-2">
+                  {loggedIn && String(me?.id) !== String(userId) ? (
+                    <Link
+                      to={`/app/chat?dm=${userId}`}
+                      className="h-11 px-4 bg-primary text-primary-foreground text-sm font-medium inline-flex items-center gap-2"
+                    >
+                      Message
+                    </Link>
+                  ) : null}
                   <Link
                     to={giftHref}
-                    className="h-11 px-4 bg-primary text-primary-foreground text-sm font-medium inline-flex items-center gap-2"
+                    className={`h-11 px-4 text-sm font-medium inline-flex items-center gap-2 ${
+                      loggedIn && String(me?.id) !== String(userId)
+                        ? "border border-border bg-surface text-foreground"
+                        : "bg-primary text-primary-foreground"
+                    }`}
                   >
                     <FaTree /> Gift trees
                   </Link>
