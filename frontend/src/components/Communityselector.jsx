@@ -1,4 +1,5 @@
 import { NavLink } from "react-router-dom";
+import { useMemo } from "react";
 import { useLiveDisasters } from "../hooks/useLiveDisasters";
 import { useTrending } from "../hooks/useTrending";
 import { formatTimeAgo } from "../utils/apiData";
@@ -7,7 +8,21 @@ import { hashtagPath } from "../utils/hashtag";
 const Communityselector = () => {
   const { data: events = [], isFetching } = useLiveDisasters();
   const { data: hashtags = [] } = useTrending();
-  const live = (events || []).slice(0, 5);
+
+  const earthquakes = useMemo(() => {
+    return (events || [])
+      .filter((event) => {
+        const type = String(event.disasterType || event.type || "").toLowerCase();
+        const source = String(event.source || event.provider || "").toLowerCase();
+        return type.includes("earthquake") || source.includes("usgs");
+      })
+      .slice(0, 5);
+  }, [events]);
+
+  const otherLive = useMemo(() => {
+    const quakeIds = new Set(earthquakes.map((e) => e.id));
+    return (events || []).filter((e) => !quakeIds.has(e.id)).slice(0, 3);
+  }, [events, earthquakes]);
 
   return (
     <div>
@@ -38,25 +53,59 @@ const Communityselector = () => {
             <span className="block text-xs text-muted">{item.count} posts</span>
           </NavLink>
         ))}
-        {live.map((event) => (
+      </div>
+
+      <div className="mt-4 px-1 mb-2 flex items-center justify-between">
+        <h3 className="text-sm font-semibold">Live Earthquake Feed</h3>
+        <NavLink to="/app/community" className="text-xs text-primary">
+          All alerts
+        </NavLink>
+      </div>
+      <div className="flex flex-col border border-border bg-surface">
+        {earthquakes.map((event) => (
           <NavLink
             key={event.id}
             to={`/disasters/${encodeURIComponent(event.id)}`}
-            className="px-3 py-2.5 text-sm border-b border-border hover:bg-background"
+            className="px-3 py-2.5 text-sm border-b border-border hover:bg-background last:border-b-0"
           >
             <span className="block truncate">{event.name || event.title}</span>
             <span className="block text-xs text-muted truncate">
-              {String(event.disasterType || "").replace(/_/g, " ")}
+              earthquake
               {event.lastUpdated || event.startDate
                 ? ` · ${formatTimeAgo(event.lastUpdated || event.startDate)}`
                 : ""}
             </span>
           </NavLink>
         ))}
-        {!live.length && !hashtags.length ? (
-          <p className="px-3 py-3 text-sm text-muted">Live events will appear here.</p>
+        {!earthquakes.length ? (
+          <p className="px-3 py-3 text-sm text-muted">No recent USGS earthquakes.</p>
         ) : null}
       </div>
+
+      {otherLive.length ? (
+        <>
+          <div className="mt-4 px-1 mb-2">
+            <h3 className="text-sm font-semibold">Other live events</h3>
+          </div>
+          <div className="flex flex-col">
+            {otherLive.map((event) => (
+              <NavLink
+                key={event.id}
+                to={`/disasters/${encodeURIComponent(event.id)}`}
+                className="px-3 py-2.5 text-sm border-b border-border hover:bg-background"
+              >
+                <span className="block truncate">{event.name || event.title}</span>
+                <span className="block text-xs text-muted truncate">
+                  {String(event.disasterType || "").replace(/_/g, " ")}
+                  {event.lastUpdated || event.startDate
+                    ? ` · ${formatTimeAgo(event.lastUpdated || event.startDate)}`
+                    : ""}
+                </span>
+              </NavLink>
+            ))}
+          </div>
+        </>
+      ) : null}
     </div>
   );
 };

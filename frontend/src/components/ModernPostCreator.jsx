@@ -1,6 +1,6 @@
 import { useForm } from "react-hook-form";
 import { useState, useRef, useEffect } from "react";
-import { client } from "../api";
+import { useQueryClient } from "@tanstack/react-query";
 import { endpoints } from "../utils/endpoints";
 import { getUser, getAuthToken, avatarUrl } from "../utils/factory";
 import { uploadFiles } from "../services/upload.service";
@@ -26,10 +26,16 @@ import {
 } from "../utils/formatLocation";
 
 const ModernPostCreator = ({ type = "post", postId, parentId, closeModal }) => {
-  const { register, handleSubmit, reset, watch, setValue, formState: { errors } } = useForm();
+  const queryClient = useQueryClient();
+  const { register, handleSubmit, reset, watch, setValue, formState: { errors } } = useForm({
+    defaultValues: { visibility: "Everyone", location: "" },
+  });
   const [user, setUserState] = useState(() => getUser() || null);
   const [imagePreview, setImagePreview] = useState(null);
   const [videoPreview, setVideoPreview] = useState(null);
+  const [audioPreview, setAudioPreview] = useState(null);
+  const [audioFileName, setAudioFileName] = useState("");
+  const audioInputRef = useRef(null);
   const [isDisabled, setIsDisabled] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [suggestedHashtags, setSuggestedHashtags] = useState([]);
@@ -254,6 +260,26 @@ const ModernPostCreator = ({ type = "post", postId, parentId, closeModal }) => {
     }
   };
 
+  const handleAudioChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 20 * 1024 * 1024) {
+      toast.error("Audio size must be less than 20MB");
+      return;
+    }
+    if (audioPreview) URL.revokeObjectURL(audioPreview);
+    setAudioPreview(URL.createObjectURL(file));
+    setAudioFileName(file.name);
+  };
+
+  const removeAudio = () => {
+    if (audioPreview) URL.revokeObjectURL(audioPreview);
+    setAudioPreview(null);
+    setAudioFileName("");
+    if (audioInputRef.current) audioInputRef.current.value = "";
+    setValue("audio", null);
+  };
+
   // Emoji picker functionality
   const addEmoji = (emoji) => {
     const currentContent = watch('content') || '';
@@ -351,6 +377,7 @@ const ModernPostCreator = ({ type = "post", postId, parentId, closeModal }) => {
       
       // Add text content
       formData.append('content', data.content);
+      formData.append('visibility', data.visibility || 'Everyone');
       
       // Add location if available
       if (data.location) {
@@ -363,50 +390,34 @@ const ModernPostCreator = ({ type = "post", postId, parentId, closeModal }) => {
       
       // Handle image files - upload to Cloudinary and send URL
       if (data.image && data.image.length > 0 && data.image[0] instanceof File) {
-        console.log("Uploading image file:", data.image[0].name, data.image[0].type, data.image[0].size);
         const imageUrl = await uploadFiles(data.image[0]);
         if (imageUrl && imageUrl.length > 0) {
           formData.append('image', imageUrl[0]);
-          console.log("Image uploaded successfully:", imageUrl[0]);
         }
       }
       
       // Handle video files - upload to Cloudinary and send URL
       if (data.video && data.video.length > 0 && data.video[0] instanceof File) {
-        console.log("Uploading video file:", data.video[0].name, data.video[0].type, data.video[0].size);
         const videoUrl = await uploadFiles(data.video[0]);
         if (videoUrl && videoUrl.length > 0) {
           formData.append('video', videoUrl[0]);
-          console.log("Video uploaded successfully:", videoUrl[0]);
-          console.log("Video URL added to FormData");
-        } else {
-          console.error("Video upload failed - no URL returned");
         }
-      } else {
-        console.log("No video file found. Video data:", data.video);
       }
       
-      // Handle audio files - send as File object
+      // Handle audio files - upload to Cloudinary and send URL (same as image/video)
       if (data.audio && data.audio.length > 0 && data.audio[0] instanceof File) {
-        console.log("Adding audio file:", data.audio[0].name, data.audio[0].type, data.audio[0].size);
-        formData.append('audio', data.audio[0]);
+        const audioUrl = await uploadFiles(data.audio[0]);
+        if (audioUrl && audioUrl.length > 0) {
+          formData.append('audio', audioUrl[0]);
+        }
       }
       
       const endpoint = endpoints[type];
-      console.log("Using endpoint:", endpoint);
-      
-      // Debug: Log FormData contents
-      console.log("FormData contents:");
-      for (let [key, value] of formData.entries()) {
-        console.log(`${key}:`, value);
-      }
-      
       const token = getAuthToken();
       const response = await fetch(`${env.backendUrl}${endpoint}`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
-          // Don't set Content-Type, let browser set it with boundary for FormData
         },
         body: formData
       });
@@ -417,12 +428,17 @@ const ModernPostCreator = ({ type = "post", postId, parentId, closeModal }) => {
       
       toast.success("Post created successfully! 🌱");
       
-      reset();
+      reset({ visibility: "Everyone", location: "", content: "" });
       setImagePreview(null);
       setVideoPreview(null);
+      removeAudio();
+      setSelectedLocation(null);
+      setLocationAddress(null);
       setSuggestedHashtags([]);
       setContentAnalysis(null);
       setIsDisabled(false);
+
+      await queryClient.invalidateQueries({ queryKey: ["post"] });
       
       if (closeModal) closeModal();
       
@@ -579,6 +595,34 @@ const ModernPostCreator = ({ type = "post", postId, parentId, closeModal }) => {
           </div>
         )}
 
+        {/* Audio Preview */}
+        {audioPreview && (
+          <div className="mt-4 relative border border-border bg-surface p-3 rounded-xl">
+            <p className="text-sm font-medium text-foreground mb-2 truncate">
+              {audioFileName || "Audio attached"}
+            </p>
+            <audio src={audioPreview} controls className="w-full" />
+            <button
+              type="button"
+              onClick={removeAudio}
+              className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 transition-colors"
+            >
+              <IoCloseOutline className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
+        <div className="mt-3">
+          <label className="block text-xs font-medium text-muted mb-1">Who can see this</label>
+          <select
+            className="h-10 w-full px-3 border border-border bg-background text-sm"
+            {...register("visibility")}
+          >
+            <option value="Everyone">Everyone</option>
+            <option value="Friends">Friends (people you follow)</option>
+          </select>
+        </div>
+
         {/* Emoji Picker */}
         {showEmojiPicker && (
           <div className="mt-4 p-4 bg-gray-50 rounded-xl border">
@@ -717,7 +761,18 @@ const ModernPostCreator = ({ type = "post", postId, parentId, closeModal }) => {
                 type="file"
                 accept="audio/*"
                 className="hidden"
-                {...register("audio")}
+                {...(() => {
+                  const { ref, ...rest } = register("audio", {
+                    onChange: handleAudioChange,
+                  });
+                  return {
+                    ...rest,
+                    ref: (el) => {
+                      audioInputRef.current = el;
+                      ref(el);
+                    },
+                  };
+                })()}
               />
             </label>
 

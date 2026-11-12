@@ -12,6 +12,7 @@ import { PiBookmark, PiBookmarkFill } from "react-icons/pi";
 import Modal from "./Modal";
 import Createpost from "./Createpost";
 import PropTypes from "prop-types";
+import { hashtagPath } from "../utils/hashtag";
 
 const Posts = ({
   type,
@@ -452,9 +453,14 @@ const Posts = ({
               >
                 {post?.content?.split(/(\s+)/).map((word, index) =>
                   word.startsWith("#") ? (
-                      <span key={index} className="text-[#067d83] font-semibold hover:text-[#055a5f] transition-colors duration-200">
+                    <Link
+                      key={index}
+                      to={hashtagPath(word)}
+                      onClick={(e) => e.stopPropagation()}
+                      className="text-[#067d83] font-semibold hover:text-[#055a5f] transition-colors duration-200"
+                    >
                       {word}
-                    </span>
+                    </Link>
                   ) : (
                     word
                   )
@@ -513,10 +519,11 @@ const Posts = ({
                           className="flex-1"
                           controls
                           preload="metadata"
+                          src={secureMediaUrl(post.audio)}
                         >
-                          <source src={post.audio} type="audio/mpeg" />
-                          <source src={post.audio} type="audio/wav" />
-                          <source src={post.audio} type="audio/ogg" />
+                          <source src={secureMediaUrl(post.audio)} type="audio/mpeg" />
+                          <source src={secureMediaUrl(post.audio)} type="audio/wav" />
+                          <source src={secureMediaUrl(post.audio)} type="audio/ogg" />
                           Your browser does not support the audio element.
                         </audio>
                       </div>

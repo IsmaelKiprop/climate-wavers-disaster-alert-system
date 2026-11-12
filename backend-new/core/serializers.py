@@ -222,10 +222,10 @@ class PostSerializer(serializers.ModelSerializer):
     is_bookmarked = serializers.SerializerMethodField()
     is_reposted = serializers.SerializerMethodField()
     
-    # Custom field handling for image, video and audio
+    # Custom field handling for image, video and audio (Cloudinary / media URLs)
     image = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     video = serializers.CharField(required=False, allow_blank=True, allow_null=True)
-    audio = serializers.FileField(required=False, allow_null=True)
+    audio = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     location = serializers.CharField(required=False, allow_blank=True, allow_null=True)
 
     def _annotated_flag(self, obj, field_name):
@@ -296,9 +296,11 @@ class PostSerializer(serializers.ModelSerializer):
         return value
     
     def validate_audio(self, value):
-        """Validate audio field - should be a file or None"""
+        """Validate audio field - should be a string (URL) or None"""
         if value is None or value == '':
             return None
+        if isinstance(value, str):
+            return value
         return value
     
     def validate_location(self, value):

@@ -53,7 +53,7 @@ class Post(models.Model):
     hashtags = models.CharField(max_length=255, blank=True, null=True)
     image = models.TextField(blank=True, null=True)
     video = models.TextField(blank=True, null=True)
-    audio = models.FileField(upload_to="posts/audio/", blank=True, null=True)
+    audio = models.TextField(blank=True, null=True, help_text="Audio media URL")
     location = models.CharField(max_length=255, blank=True, null=True)
     emoji = models.CharField(max_length=255, blank=True)
     gif = models.URLField(blank=True)
@@ -124,12 +124,64 @@ class Post(models.Model):
         """
         Returns the full URL for the audio file if it exists.
         """
-        if self.audio and hasattr(self.audio, "url"):
+        if not self.audio:
+            return None
+        if hasattr(self.audio, "url"):
             return self.audio.url
-        return None
+        return str(self.audio)
 
     class Meta:
         ordering = ["-created_at"]
+
+
+class SocialGroup(models.Model):
+    """Community interest group for Climate Wavers members."""
+
+    name = models.CharField(max_length=120)
+    slug = models.SlugField(max_length=140, unique=True)
+    description = models.TextField(blank=True, default="")
+    cover_image = models.URLField(max_length=500, blank=True, null=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_social_groups",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
+
+
+class SocialGroupMembership(models.Model):
+    ROLE_CHOICES = [
+        ("owner", "Owner"),
+        ("admin", "Admin"),
+        ("member", "Member"),
+    ]
+
+    group = models.ForeignKey(
+        SocialGroup, on_delete=models.CASCADE, related_name="memberships"
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="social_group_memberships",
+    )
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES, default="member")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("group", "user")
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.user_id} @ {self.group_id}"
 
 
 class Poll(models.Model):

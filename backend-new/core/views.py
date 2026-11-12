@@ -164,7 +164,10 @@ class PostViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         """
         Override get_queryset to add annotations for comment, reaction, view, and repost counts.
+        Friends-only posts are visible to the author and people who follow them.
         """
+        from django.db.models import Q
+
         queryset = super().get_queryset().select_related("user")
 
         queryset = queryset.annotate(
@@ -177,6 +180,14 @@ class PostViewSet(viewsets.ModelViewSet):
 
         user = getattr(self.request, "user", None)
         if user is not None and user.is_authenticated:
+            following_ids = Follow.objects.filter(follower=user).values_list(
+                "following_id", flat=True
+            )
+            queryset = queryset.filter(
+                Q(visibility="Everyone")
+                | Q(user=user)
+                | Q(visibility="Friends", user_id__in=following_ids)
+            )
             queryset = queryset.annotate(
                 is_reacted=Exists(
                     Reaction.objects.filter(post_id=OuterRef("pk"), user=user)
@@ -194,6 +205,7 @@ class PostViewSet(viewsets.ModelViewSet):
                 ),
             )
         else:
+            queryset = queryset.filter(visibility="Everyone")
             queryset = queryset.annotate(
                 is_reacted=Value(False, output_field=BooleanField()),
                 is_bookmarked=Value(False, output_field=BooleanField()),

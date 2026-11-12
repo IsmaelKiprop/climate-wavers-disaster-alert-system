@@ -40,6 +40,12 @@ from .tree_admin import (
     TreeAdminPublicApplyView,
     TreeAdminMeView,
 )
+from .groups import (
+    SocialGroupListCreateView,
+    SocialGroupDetailView,
+    SocialGroupJoinView,
+    SocialGroupLeaveView,
+)
 from .profile_share import public_profile
 from .chat import (
     ChatBootstrapView,
@@ -141,6 +147,22 @@ urlpatterns = [
         name="tree-admin-apply-public",
     ),
     path("tree-admin/me/", TreeAdminMeView.as_view(), name="tree-admin-me"),
+    path("groups/", SocialGroupListCreateView.as_view(), name="social-groups"),
+    path(
+        "groups/<int:group_id>/",
+        SocialGroupDetailView.as_view(),
+        name="social-group-detail",
+    ),
+    path(
+        "groups/<int:group_id>/join/",
+        SocialGroupJoinView.as_view(),
+        name="social-group-join",
+    ),
+    path(
+        "groups/<int:group_id>/leave/",
+        SocialGroupLeaveView.as_view(),
+        name="social-group-leave",
+    ),
     path('notifications/', NotificationListView.as_view(),
          name='notification_list'),
     path('notifications/mark-read/', MarkNotificationsAsReadView.as_view(),

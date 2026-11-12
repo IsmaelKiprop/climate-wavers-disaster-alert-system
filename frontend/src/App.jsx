@@ -42,6 +42,8 @@ const SharedProfilePage = lazy(() => import("./pages/SharedProfilePage"));
 const AuthSharedLayout = lazy(() => import("./pages/AuthenticatedPages/SharedLayout"));
 const AuthMainfeed = lazy(() => import("./pages/AuthenticatedPages/Mainfeed"));
 const AuthCommunity = lazy(() => import("./pages/AuthenticatedPages/Community"));
+const AuthNetwork = lazy(() => import("./pages/AuthenticatedPages/Network"));
+const AuthGroups = lazy(() => import("./pages/AuthenticatedPages/Groups"));
 const AuthNotification = lazy(() => import("./pages/AuthenticatedPages/Notification"));
 const AuthProfile = lazy(() => import("./pages/AuthenticatedPages/Profile"));
 const AuthComment = lazy(() => import("./pages/AuthenticatedPages/Comment"));
@@ -154,6 +156,8 @@ function App() {
               <Route path="/app" element={<AuthSharedLayout />}>
                 <Route index element={<AuthMainfeed />} />
                 <Route path="/app/community" element={<AuthCommunity />} />
+                <Route path="/app/network" element={<AuthNetwork />} />
+                <Route path="/app/groups" element={<AuthGroups />} />
                 <Route path="/app/chat" element={<AuthChat />} />
                 <Route path="/app/hashtag/:tag" element={<AuthHashtag />} />
                 <Route path="/app/notifications" element={<AuthNotification />} />
