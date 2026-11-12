@@ -353,7 +353,11 @@ WAVERX_TWITTER_ENABLED = env.bool("WAVERX_TWITTER_ENABLED", default=False)  # pa
 WAVERX_TWITTER_AI_POLISH = env.bool("WAVERX_TWITTER_AI_POLISH", default=False)
 WAVERX_MIRROR_FEED = env.bool("WAVERX_MIRROR_FEED", default=True)
 WAVERX_USERNAME = env("WAVERX_USERNAME", default="waverx")
+WAVERX_EMAIL = env("WAVERX_EMAIL", default="waverx@climatewavers.org")
+WAVERX_AVATAR_URL = env("WAVERX_AVATAR_URL", default="")
+WAVERX_COVER_URL = env("WAVERX_COVER_URL", default="")
 OPENAI_API_KEY = env("OPENAI_API_KEY", default="")
+
 
 
 try:

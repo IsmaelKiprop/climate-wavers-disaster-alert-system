@@ -79,7 +79,7 @@ def _force_https(url):
     if not url:
         return url
     value = str(url).strip()
-    if value.startswith("http://"):
+    if value.startswith("http://") and "localhost" not in value and "127.0.0.1" not in value:
         return f"https://{value[7:]}"
     return value
 
@@ -163,6 +163,9 @@ class PostAuthorSerializer(serializers.ModelSerializer):
             "profile_picture",
             "profile_pic",
             "is_following",
+            "is_verified",
+            "profession",
+            "bio",
         )
 
 

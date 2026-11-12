@@ -11,9 +11,13 @@ import LinkifiedText from "./LinkifiedText";
 export const DisaxPostCard = ({ post }) => {
   const postUser = {
     image: "",
-    username: post.username,
+    username: post.username || "waverx",
     first_name: "WaverX",
-    userId: post.userId,
+    last_name: "Climate Wavers",
+    id: post.userId || post.user_id || post.user?.id,
+    userId: post.userId || post.user_id || post.user?.id,
+    is_verified: true,
+    profession: "Climate & disaster assistant · Climate Wavers",
   };
   // const [isModalOpen, setIsModalOpen] = useState(false);
 

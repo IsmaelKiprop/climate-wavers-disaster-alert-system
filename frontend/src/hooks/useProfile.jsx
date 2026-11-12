@@ -10,12 +10,14 @@ const seedUser = (userId) => {
   return undefined;
 };
 
-export const useProfile = ({ user_id }) => {
+export const useProfile = ({ user_id, username } = {}) => {
   const seed = seedUser(user_id);
+  const key = user_id ? `id:${user_id}` : username ? `user:${username}` : "";
 
   const details = useQuery({
-    queryKey: ["profile", String(user_id || "")],
+    queryKey: ["profile", key],
     queryFn: async () => {
+      if (!user_id) return null;
       const remote = await client.run("get", `${endpoints.users}${user_id}/`, {}, true);
       const user = normalizeUser(remote) || remote;
       if (seed && user?.id && String(user.id) === String(seed.id)) {
@@ -31,10 +33,14 @@ export const useProfile = ({ user_id }) => {
   });
 
   const activity = useQuery({
-    queryKey: ["profile-activity", String(user_id || "")],
-    queryFn: async () =>
-      client.run("post", endpoints.profile, { user_id: Number(user_id) || user_id }, true),
-    enabled: Boolean(user_id),
+    queryKey: ["profile-activity", key],
+    queryFn: async () => {
+      const body = user_id
+        ? { user_id: Number(user_id) || user_id }
+        : { username };
+      return client.run("post", endpoints.profile, body, true);
+    },
+    enabled: Boolean(user_id || username),
     staleTime: 15000,
     gcTime: 300000,
     retry: 1,
@@ -44,8 +50,9 @@ export const useProfile = ({ user_id }) => {
 
   return {
     error: details.error || activity.error,
-    isFetched: details.isFetched || Boolean(user),
-    isLoading: details.isLoading && !user,
+    isFetched: details.isFetched || activity.isFetched || Boolean(user),
+    isLoading: (details.isLoading || activity.isLoading) && !user,
+    isPending: details.isPending || activity.isPending,
     data: activity.data
       ? activity.data
       : user

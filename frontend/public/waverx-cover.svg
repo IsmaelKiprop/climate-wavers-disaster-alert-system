@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 400" role="img" aria-label="Climate Wavers cover">
+  <defs>
+    <linearGradient id="sky" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#042F2E"/>
+      <stop offset="45%" stop-color="#0F766E"/>
+      <stop offset="100%" stop-color="#134E4A"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="400" fill="url(#sky)"/>
+  <path d="M0 260 C 150 210, 300 310, 450 250 S 750 180, 900 250 S 1100 300, 1200 240 L1200 400 L0 400 Z" fill="#115E59" opacity="0.85"/>
+  <path d="M0 300 C 200 250, 350 330, 520 280 S 820 220, 1000 290 S 1120 320, 1200 280 L1200 400 L0 400 Z" fill="#0D9488" opacity="0.55"/>
+  <circle cx="980" cy="90" r="42" fill="#99F6E4" opacity="0.35"/>
+  <text x="64" y="120" font-family="Segoe UI, Arial, sans-serif" font-size="48" font-weight="700" fill="#ECFDF5">Climate Wavers</text>
+  <text x="64" y="168" font-family="Segoe UI, Arial, sans-serif" font-size="24" fill="#CCFBF1">Verified alerts · creative climate tips · WaverX</text>
+</svg>

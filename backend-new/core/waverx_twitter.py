@@ -78,20 +78,27 @@ def post_tweet_text(text: str) -> dict[str, Any]:
         return {"ok": False, "error": str(exc)}
 
 
+def ensure_waverx_user():
+    """Create/refresh the official WaverX profile if missing."""
+    from django.core.management import call_command
+    from io import StringIO
+
+    out = StringIO()
+    call_command("ensure_waverx_profile", stdout=out)
+    from django.contrib.auth import get_user_model
+
+    username = (getattr(settings, "WAVERX_USERNAME", "") or "waverx").strip()
+    return get_user_model().objects.filter(username__iexact=username).first()
+
+
 def _create_feed_post(text: str, *, kind: str) -> str | None:
     """Create a Post as the WaverX user (free, in-app)."""
-    username = (getattr(settings, "WAVERX_USERNAME", "") or "").strip()
-    if not username:
-        logger.warning("WAVERX_USERNAME not set; cannot publish to feed")
-        return None
     try:
-        from django.contrib.auth import get_user_model
         from .models import Post
 
-        User = get_user_model()
-        user = User.objects.filter(username=username).first()
+        user = ensure_waverx_user()
         if not user:
-            logger.warning("WaverX user '%s' not found", username)
+            logger.warning("WaverX user could not be ensured")
             return None
         title = "Verified alert" if kind == "alert" else "Climate tip"
         post = Post.objects.create(

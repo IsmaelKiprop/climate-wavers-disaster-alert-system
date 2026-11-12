@@ -103,7 +103,8 @@ class User(AbstractBaseUser, PermissionsMixin):
         if not url:
             return None
         value = str(url).strip()
-        if value.startswith("http://"):
+        # Keep localhost on http so local avatars/covers still load in dev.
+        if value.startswith("http://") and "localhost" not in value and "127.0.0.1" not in value:
             return f"https://{value[7:]}"
         return value
 

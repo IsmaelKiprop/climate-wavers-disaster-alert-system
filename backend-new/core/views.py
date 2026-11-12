@@ -525,18 +525,29 @@ class UserViewSet(viewsets.ModelViewSet):
         """
         try:
             user_id = request.data.get("user_id")
-            if not user_id:
+            username = (request.data.get("username") or "").strip()
+            if not user_id and not username:
                 return Response(
-                    {"detail": "user_id is required"}, 
-                    status=status.HTTP_400_BAD_REQUEST
+                    {"detail": "user_id or username is required"},
+                    status=status.HTTP_400_BAD_REQUEST,
                 )
-            
+
             try:
-                user = User.objects.get(id=user_id)
+                if user_id:
+                    user = User.objects.get(id=user_id)
+                else:
+                    user = User.objects.get(username__iexact=username)
+                    user_id = user.id
             except User.DoesNotExist:
                 return Response(
-                    {"detail": f"User with ID {user_id} does not exist"}, 
-                    status=status.HTTP_404_NOT_FOUND
+                    {
+                        "detail": (
+                            f"User with ID {user_id} does not exist"
+                            if user_id
+                            else f"User @{username} does not exist"
+                        )
+                    },
+                    status=status.HTTP_404_NOT_FOUND,
                 )
             posts = Post.objects.filter(user=user).annotate(
                 total_comments=Count('comments', distinct=True),

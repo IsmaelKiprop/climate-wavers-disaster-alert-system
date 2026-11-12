@@ -310,11 +310,22 @@ const Profile = () => {
           <div className="px-4 md:px-6 lg:px-8 pt-12 md:pt-14 pb-6">
             <div className="flex flex-col gap-5 max-w-3xl">
               <div>
-                <h1 className="text-2xl md:text-3xl font-semibold text-foreground tracking-tight">
-                  {displayName || "Profile"}
+                <h1 className="text-2xl md:text-3xl font-semibold text-foreground tracking-tight inline-flex items-center gap-2 flex-wrap">
+                  <span>{displayName || "Profile"}</span>
+                  {profile?.is_verified ? (
+                    <span className="text-xs font-semibold uppercase tracking-wide text-primary border border-primary/40 px-2 py-0.5">
+                      Verified
+                    </span>
+                  ) : null}
                 </h1>
                 {profile?.username ? (
                   <p className="mt-1 text-sm text-muted">@{profile.username}</p>
+                ) : null}
+                {String(profile?.username || "").toLowerCase() === "waverx" ||
+                String(profile?.first_name || "").toLowerCase() === "waverx" ? (
+                  <p className="mt-2 text-sm text-primary font-medium">
+                    Official Climate Wavers assistant · verified alerts & climate tips
+                  </p>
                 ) : null}
                 {profile?.bio ? (
                   <p className="mt-3 text-sm md:text-base text-foreground leading-relaxed max-w-2xl">
@@ -370,11 +381,19 @@ const Profile = () => {
                 <div className="flex flex-col sm:flex-row gap-2">
                   <button
                     type="button"
-                    onClick={() => navigate(`/app/chat?dm=${profile.id}`)}
+                    onClick={() =>
+                      navigate(
+                        String(profile?.username || "").toLowerCase() === "waverx"
+                          ? "/app/waverx"
+                          : `/app/chat?dm=${profile.id}`
+                      )
+                    }
                     className="h-11 px-4 bg-primary text-primary-foreground text-sm font-medium inline-flex items-center justify-center gap-2"
                   >
                     <IoChatbubbleEllipsesOutline size={18} />
-                    Message
+                    {String(profile?.username || "").toLowerCase() === "waverx"
+                      ? "Chat with WaverX"
+                      : "Message"}
                   </button>
                   <button
                     type="button"

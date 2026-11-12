@@ -2,20 +2,23 @@ import Posts from "./Posts";
 import { usePostMutations } from "../hooks/usePostMutations";
 import { useProfile } from "../hooks/useProfile";
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { toast } from "react-toastify";
 
 const WaverXPosts = () => {
-  // Use the WaverX user ID we just created (ID: 5)
-  const waverxId = import.meta.env.VITE_APP_WAVERX_ID || 5;
+  const waverxId = import.meta.env.VITE_APP_WAVERX_ID || "";
   const [activities, setActivities] = useState([]);
   const {
     isPending,
     error,
     isFetched,
-    data: user,
-  } = useProfile({
-    user_id: waverxId,
-  });
+    data,
+    user: waverxUser,
+  } = useProfile(
+    waverxId
+      ? { user_id: waverxId }
+      : { username: "waverx" }
+  );
 
   useEffect(() => {
     if (isPending) {
@@ -24,9 +27,8 @@ const WaverXPosts = () => {
         autoClose: 200,
       });
     }
-    if (isFetched && user) {
-      // Handle the case where user might be undefined or posts might not exist
-      setActivities(user.posts || []);
+    if (isFetched && data) {
+      setActivities(data.posts || []);
     }
 
     if (error) {
@@ -34,7 +36,7 @@ const WaverXPosts = () => {
       console.error("WaverX Activities Error:", error);
       toast.error("Unable to fetch WaverX activities. The AI assistant may not be available yet.");
     }
-  }, [isFetched, isPending, error, user]);
+  }, [isFetched, isPending, error, data]);
 
   const {
     likeMutation,
@@ -45,8 +47,20 @@ const WaverXPosts = () => {
     unsaveMutation,
   } = usePostMutations();
 
+  const profileId = waverxUser?.id || data?.user?.id;
+
   return (
     <div>
+      {profileId ? (
+        <div className="px-3 py-2 border-b border-border mb-2">
+          <Link
+            to={`/app/${profileId}/profile`}
+            className="text-sm font-medium text-primary hover:underline"
+          >
+            View Climate Wavers · WaverX profile
+          </Link>
+        </div>
+      ) : null}
       {activities.length > 0 ? (
         <Posts
           posts={activities}
@@ -62,8 +76,17 @@ const WaverXPosts = () => {
       ) : (
         <div className="p-6 text-center bg-white rounded-lg shadow-sm border border-gray-200">
           <div className="text-gray-500 text-base">WaverX is ready to assist!</div>
-          <div className="text-gray-400 text-sm mt-2">The AI assistant will share insights and updates here</div>
-          <div className="text-gray-300 text-xs mt-1">Check back later for WaverX activities</div>
+          <div className="text-gray-400 text-sm mt-2">
+            Verified alerts and climate tips will appear here
+          </div>
+          {profileId ? (
+            <Link
+              to={`/app/${profileId}/profile`}
+              className="inline-block mt-3 text-sm text-primary hover:underline"
+            >
+              Open profile
+            </Link>
+          ) : null}
         </div>
       )}
     </div>

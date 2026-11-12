@@ -22,7 +22,8 @@ const alreadyFollowing = (error) => {
 const Accountcard = ({ user }) => {
   const me = getUser();
   const { isFollowing, setFollowing } = useFollow();
-  const followed = isFollowing(user?.id, user?.is_following);
+  const profileId = user?.id || user?.userId || user?.pk;
+  const followed = isFollowing(profileId, user?.is_following);
   const [busy, setBusy] = useState(false);
 
   const follow = async (userId) => {
@@ -71,10 +72,16 @@ const Accountcard = ({ user }) => {
   };
 
   const displayName = [user?.first_name, user?.last_name].filter(Boolean).join(" ") || user?.username;
+  const verified = Boolean(user?.is_verified);
+  const subtitle = user?.profession || (user?.username ? `@${user.username}` : "");
 
   return (
     <div className="flex items-center justify-between gap-2 px-2 py-1.5">
-      <Link to={`/app/${user?.id}/profile`} className="flex-1 min-w-0 group">
+      <Link
+        to={profileId ? `/app/${profileId}/profile` : "#"}
+        className="flex-1 min-w-0 group"
+        aria-label={displayName ? `Open ${displayName} profile` : "Open profile"}
+      >
         <div className="flex items-center gap-2.5 min-w-0">
           <div className="relative flex-shrink-0">
             <img
@@ -93,17 +100,29 @@ const Accountcard = ({ user }) => {
             ) : null}
           </div>
           <div className="min-w-0 flex-1">
-            <h3 className="text-sm font-semibold text-gray-900 truncate group-hover:text-teal-600 transition-colors duration-200">
-              {displayName}
+            <h3 className="text-sm font-semibold text-gray-900 truncate group-hover:text-teal-600 transition-colors duration-200 inline-flex items-center gap-1 max-w-full">
+              <span className="truncate">{displayName}</span>
+              {verified ? (
+                <span
+                  className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-primary"
+                  title="Verified"
+                >
+                  ✓
+                </span>
+              ) : null}
             </h3>
-            <p className="text-xs text-gray-500 truncate">@{user?.username}</p>
+            <p className="text-xs text-gray-500 truncate">{subtitle}</p>
           </div>
         </div>
       </Link>
-      {me?.id !== user?.id && (
+      {profileId && me?.id !== profileId && (
         <div className="flex items-center gap-1.5 flex-shrink-0">
           <Link
-            to={`/app/chat?dm=${user?.id}`}
+            to={
+              String(user?.username || "").toLowerCase() === "waverx"
+                ? "/app/waverx"
+                : `/app/chat?dm=${profileId}`
+            }
             className="px-2.5 py-1.5 text-xs font-medium border border-border text-foreground hover:border-primary"
             style={{ borderRadius: 5 }}
             aria-label={`Message ${displayName}`}
@@ -115,7 +134,7 @@ const Accountcard = ({ user }) => {
             disabled={busy}
             aria-pressed={followed}
             onClick={() => {
-              handleFollow(user?.id);
+              handleFollow(profileId);
             }}
             className={`px-2.5 py-1.5 text-xs font-medium transition-all duration-200 disabled:opacity-60 ${
               followed
