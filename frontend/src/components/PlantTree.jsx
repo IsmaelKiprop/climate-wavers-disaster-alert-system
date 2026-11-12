@@ -12,6 +12,7 @@ import { endpoints } from '../utils/endpoints';
 import { getAuthToken, getUser } from '../utils/factory';
 import { useExchangeRate } from '../hooks/useExchangeRate';
 import ProjectCard from './ProjectCard';
+import TreeAnalyticsPanel from './TreeAnalyticsPanel';
 import { client } from '../api';
 import { apiUrl } from '../config/env';
 import { unwrapList } from '../utils/apiData';
@@ -255,10 +256,10 @@ const PlantTree = () => {
           <div className="flex flex-col sm:flex-row items-center justify-center mb-4">
             <FaTree className="text-4xl sm:text-6xl text-green-600 mb-2 sm:mb-0 sm:mr-4" />
             <div>
-              <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-900 mb-2">
+              <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-foreground mb-2">
                 {giftUserId ? "Gift a Tree" : "Plant a Tree"}
               </h1>
-              <p className="text-lg sm:text-xl text-gray-600 px-4 sm:px-0">
+              <p className="text-lg sm:text-xl text-muted px-4 sm:px-0">
                 {giftUserId
                   ? `Plant trees for ${giftProfile?.display_name || giftName || "this Climate Wavers member"}`
                   : "Make a lasting impact on our planet, one tree at a time"}
@@ -318,6 +319,13 @@ const PlantTree = () => {
             </div>
           ) : null}
         </div>
+
+        <TreeAnalyticsPanel
+          className="mb-6"
+          projects={africanProjects}
+          userTrees={userTrees}
+          userStats={userStats}
+        />
 
         {!giftUserIdParam ? (
           <GiftRecipientPicker
