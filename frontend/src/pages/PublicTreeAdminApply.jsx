@@ -1,11 +1,22 @@
 import { useMemo, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import Cookies from "js-cookie";
 import { toast } from "react-toastify";
 import PublicPage from "../components/PublicPage";
+import {
+  ApplyBenefits,
+  ApplyField,
+  ApplyHero,
+  ApplyLayout,
+  ApplyPlanCards,
+  ApplySection,
+  ApplySteps,
+  fieldClass,
+  textareaClass,
+} from "../components/PartnerApplyShell";
 import { client } from "../api";
 import { endpoints } from "../utils/endpoints";
-import { TREE_ADMIN_PLAN_OPTIONS } from "../config/pricing";
+import { TREE_ADMIN_PLAN_OPTIONS, TREE_ADMIN_PLANS, TREE_PLATFORM_FEE_NOTE } from "../config/pricing";
 
 const ORG_TYPES = [
   { value: "nursery", label: "Tree Nursery" },
@@ -17,11 +28,34 @@ const ORG_TYPES = [
   { value: "other", label: "Other" },
 ];
 
+const STEPS = [
+  {
+    title: "Apply",
+    body: "Tell us who you are, where you plant, and create your org workspace login.",
+  },
+  {
+    title: "Verify & review",
+    body: "Confirm your email. Our team verifies your nursery, school, CBO, or site.",
+  },
+  {
+    title: "Publish & plant",
+    body: "Open Tree Admin, publish projects, upload proof, and receive funded trees.",
+  },
+];
+
+const BENEFITS = [
+  "90-day free pilot after verification",
+  "Create planting projects supporters can fund",
+  "Photo proof builds trust for gifts and certificates",
+  TREE_PLATFORM_FEE_NOTE,
+  "Works for nurseries, CBOs, schools, and faith groups",
+];
+
 const emptyForm = {
   name: "",
   org_type: "cbo",
   country: "Kenya",
-  city: "Eldoret",
+  city: "",
   contact_email: "",
   contact_phone: "",
   contact_first_name: "",
@@ -41,6 +75,12 @@ const PublicTreeAdminApply = () => {
   }, [searchParams]);
   const [form, setForm] = useState({ ...emptyForm, plan: initialPlan });
   const [submitting, setSubmitting] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+
+  const planCards = useMemo(
+    () => TREE_ADMIN_PLANS.filter((p) => p.key !== "partner"),
+    []
+  );
 
   const update = (key, value) => setForm((prev) => ({ ...prev, [key]: value }));
 
@@ -91,192 +131,194 @@ const PublicTreeAdminApply = () => {
       description="Apply to host Climate Wavers planting sites. Free 90-day pilot after verification."
       wide
     >
-      <p className="text-xs font-medium uppercase tracking-wide text-muted">
-        For nurseries, CBOs, schools, and faith groups
-      </p>
-      <h1 className="mt-2 text-3xl sm:text-4xl font-semibold">
-        Become a Tree Admin
-      </h1>
-      <p className="mt-3 text-muted max-w-2xl">
-        Host a planting site, plant funded trees, and share photo proof. After admin
-        approval you get a{" "}
-        <strong className="text-foreground font-medium">90-day free pilot</strong>.
-        Supporters pay for trees; Climate Wavers keeps an 18% platform fee — see{" "}
-        <Link to="/pricing" className="text-primary">
-          pricing
-        </Link>
-        .
-      </p>
+      <ApplyHero
+        eyebrow="Tree Admin · Climate Wavers partners"
+        title="Host a planting site. Turn gifts into rooted trees."
+        description={
+          <>
+            Built for nurseries, CBOs, schools, and faith groups. After approval you get a{" "}
+            <strong className="text-foreground font-medium">90-day free pilot</strong> to
+            publish projects, upload proof, and receive funded trees from supporters.
+          </>
+        }
+        links={[
+          { to: "/login?redirect=/app/admin/tree-projects", label: "Already have an account? Sign in" },
+          { to: "/pricing", label: "Tree Admin pricing" },
+          { to: "/app/plant-tree", label: "Plant a tree" },
+          { to: "/responders/apply", label: "Apply as responder instead" },
+        ]}
+      />
 
-      <div className="mt-4 flex flex-wrap gap-3 text-sm">
-        <Link to="/login?redirect=/app/admin/tree-projects" className="text-primary">
-          Already have an account? Sign in
-        </Link>
-        <span className="text-muted">·</span>
-        <Link to="/pricing" className="text-primary">
-          View Tree Admin pricing
-        </Link>
-        <span className="text-muted">·</span>
-        <Link to="/app/plant-tree" className="text-primary">
-          Plant a tree
-        </Link>
-      </div>
+      <ApplySteps steps={STEPS} />
 
-      <form className="mt-8 max-w-2xl space-y-5" onSubmit={onSubmit}>
-        <section className="border border-border bg-surface p-4 sm:p-5 space-y-4">
-          <h2 className="font-semibold">Organization</h2>
-          <label className="block text-sm">
-            <span className="font-medium">Organization name</span>
-            <input
-              className="mt-1 h-11 w-full px-3 border border-border bg-background"
-              value={form.name}
-              onChange={(e) => update("name", e.target.value)}
-              placeholder="e.g. Green Wetlands Eldoret"
-              required
-            />
-          </label>
-          <label className="block text-sm">
-            <span className="font-medium">Organization type</span>
-            <select
-              className="mt-1 h-11 w-full px-3 border border-border bg-background"
-              value={form.org_type}
-              onChange={(e) => update("org_type", e.target.value)}
-            >
-              {ORG_TYPES.map((t) => (
-                <option key={t.value} value={t.value}>
-                  {t.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="block text-sm">
-            <span className="font-medium">Plan</span>
-            <select
-              className="mt-1 h-11 w-full px-3 border border-border bg-background"
+      <ApplyLayout
+        benefits={<ApplyBenefits title="What you get" items={BENEFITS} />}
+      >
+        <form className="space-y-5" onSubmit={onSubmit}>
+          <ApplySection
+            title="Organization"
+            description="Tell us who plants, and where supporters’ gifts will go into the ground."
+          >
+            <ApplyField label="Organization name">
+              <input
+                className={fieldClass}
+                value={form.name}
+                onChange={(e) => update("name", e.target.value)}
+                placeholder="e.g. Green Wetlands Eldoret"
+                required
+                autoComplete="organization"
+              />
+            </ApplyField>
+
+            <ApplyField label="Organization type">
+              <select
+                className={fieldClass}
+                value={form.org_type}
+                onChange={(e) => update("org_type", e.target.value)}
+              >
+                {ORG_TYPES.map((t) => (
+                  <option key={t.value} value={t.value}>
+                    {t.label}
+                  </option>
+                ))}
+              </select>
+            </ApplyField>
+
+            <ApplyPlanCards
+              plans={planCards}
               value={form.plan}
-              onChange={(e) => update("plan", e.target.value)}
+              onChange={(key) => update("plan", key)}
+              note="Every approved Tree Admin starts with a free 90-day pilot."
+            />
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <ApplyField label="City">
+                <input
+                  className={fieldClass}
+                  value={form.city}
+                  onChange={(e) => update("city", e.target.value)}
+                  placeholder="Eldoret"
+                  required
+                  autoComplete="address-level2"
+                />
+              </ApplyField>
+              <ApplyField label="Country">
+                <input
+                  className={fieldClass}
+                  value={form.country}
+                  onChange={(e) => update("country", e.target.value)}
+                  required
+                  autoComplete="country-name"
+                />
+              </ApplyField>
+            </div>
+
+            <ApplyField
+              label="Where can you plant?"
+              hint="Be specific — school grounds, nursery beds, riverbank, church compound…"
             >
-              {TREE_ADMIN_PLAN_OPTIONS.map((p) => (
-                <option key={p.value} value={p.value}>
-                  {p.label}
-                </option>
-              ))}
-            </select>
-            <span className="mt-1 block text-xs text-muted">
-              Every approved Tree Admin starts with a free 90-day pilot.
-            </span>
-          </label>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <label className="block text-sm">
-              <span className="font-medium">City</span>
-              <input
-                className="mt-1 h-11 w-full px-3 border border-border bg-background"
-                value={form.city}
-                onChange={(e) => update("city", e.target.value)}
-                placeholder="Eldoret"
-                required
+              <textarea
+                className={textareaClass}
+                value={form.planting_sites_note}
+                onChange={(e) => update("planting_sites_note", e.target.value)}
+                placeholder="Describe your planting sites and capacity"
               />
-            </label>
-            <label className="block text-sm">
-              <span className="font-medium">Country</span>
-              <input
-                className="mt-1 h-11 w-full px-3 border border-border bg-background"
-                value={form.country}
-                onChange={(e) => update("country", e.target.value)}
-                required
-              />
-            </label>
-          </div>
-          <label className="block text-sm">
-            <span className="font-medium">Where can you plant?</span>
-            <textarea
-              className="mt-1 min-h-24 w-full px-3 py-2 border border-border bg-background"
-              value={form.planting_sites_note}
-              onChange={(e) => update("planting_sites_note", e.target.value)}
-              placeholder="School grounds, nursery beds, riverbank, church compound…"
-            />
-          </label>
-          <label className="block text-sm">
-            <span className="font-medium">Website</span>
-            <input
-              className="mt-1 h-11 w-full px-3 border border-border bg-background"
-              value={form.website}
-              onChange={(e) => update("website", e.target.value)}
-              placeholder="https://"
-            />
-          </label>
-        </section>
+            </ApplyField>
 
-        <section className="border border-border bg-surface p-4 sm:p-5 space-y-4">
-          <div>
-            <h2 className="font-semibold">Workspace login</h2>
-            <p className="mt-1 text-sm text-muted">
-              Org owner account used to open Tree Admin and manage planting projects.
-            </p>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <label className="block text-sm">
-              <span className="font-medium">Contact first name</span>
+            <ApplyField label="Website" hint="Optional">
               <input
-                className="mt-1 h-11 w-full px-3 border border-border bg-background"
-                value={form.contact_first_name}
-                onChange={(e) => update("contact_first_name", e.target.value)}
-                required
+                className={fieldClass}
+                value={form.website}
+                onChange={(e) => update("website", e.target.value)}
+                placeholder="https://"
+                inputMode="url"
               />
-            </label>
-            <label className="block text-sm">
-              <span className="font-medium">Contact last name</span>
-              <input
-                className="mt-1 h-11 w-full px-3 border border-border bg-background"
-                value={form.contact_last_name}
-                onChange={(e) => update("contact_last_name", e.target.value)}
-                required
-              />
-            </label>
-          </div>
-          <label className="block text-sm">
-            <span className="font-medium">Organization email</span>
-            <input
-              type="email"
-              className="mt-1 h-11 w-full px-3 border border-border bg-background"
-              value={form.contact_email}
-              onChange={(e) => update("contact_email", e.target.value)}
-              placeholder="ops@your-org.org"
-              required
-            />
-          </label>
-          <label className="block text-sm">
-            <span className="font-medium">Phone</span>
-            <input
-              className="mt-1 h-11 w-full px-3 border border-border bg-background"
-              value={form.contact_phone}
-              onChange={(e) => update("contact_phone", e.target.value)}
-            />
-          </label>
-          <label className="block text-sm">
-            <span className="font-medium">Create password</span>
-            <input
-              type="password"
-              minLength={8}
-              className="mt-1 h-11 w-full px-3 border border-border bg-background"
-              value={form.password}
-              onChange={(e) => update("password", e.target.value)}
-              required
-            />
-          </label>
-        </section>
+            </ApplyField>
+          </ApplySection>
 
-        <button
-          type="submit"
-          disabled={submitting}
-          className="w-full min-h-12 bg-primary text-primary-foreground font-medium disabled:opacity-60"
-        >
-          {submitting ? "Submitting…" : "Create workspace & apply"}
-        </button>
-        <p className="text-xs text-muted">
-          After submit you verify email, then wait for admin approval before publishing projects.
-        </p>
-      </form>
+          <ApplySection
+            title="Workspace login"
+            description="Org owner account used to open Tree Admin and manage planting projects."
+          >
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <ApplyField label="Contact first name">
+                <input
+                  className={fieldClass}
+                  value={form.contact_first_name}
+                  onChange={(e) => update("contact_first_name", e.target.value)}
+                  required
+                  autoComplete="given-name"
+                />
+              </ApplyField>
+              <ApplyField label="Contact last name">
+                <input
+                  className={fieldClass}
+                  value={form.contact_last_name}
+                  onChange={(e) => update("contact_last_name", e.target.value)}
+                  required
+                  autoComplete="family-name"
+                />
+              </ApplyField>
+            </div>
+
+            <ApplyField label="Organization email">
+              <input
+                type="email"
+                className={fieldClass}
+                value={form.contact_email}
+                onChange={(e) => update("contact_email", e.target.value)}
+                placeholder="ops@your-org.org"
+                required
+                autoComplete="email"
+              />
+            </ApplyField>
+
+            <ApplyField label="Phone" hint="Optional — WhatsApp-ready if you have one">
+              <input
+                className={fieldClass}
+                value={form.contact_phone}
+                onChange={(e) => update("contact_phone", e.target.value)}
+                placeholder="+254…"
+                autoComplete="tel"
+              />
+            </ApplyField>
+
+            <ApplyField label="Create password" hint="At least 8 characters">
+              <div className="mt-1 flex gap-2">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  minLength={8}
+                  className={`${fieldClass} mt-0`}
+                  value={form.password}
+                  onChange={(e) => update("password", e.target.value)}
+                  required
+                  autoComplete="new-password"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  className="h-11 px-3 border border-border bg-background text-sm text-foreground shrink-0"
+                >
+                  {showPassword ? "Hide" : "Show"}
+                </button>
+              </div>
+            </ApplyField>
+          </ApplySection>
+
+          <div className="border border-border bg-surface-muted p-4 text-sm text-muted">
+            After submit you verify email, then wait for admin approval before publishing
+            projects.
+          </div>
+
+          <button
+            type="submit"
+            disabled={submitting}
+            className="w-full min-h-12 bg-primary text-primary-foreground font-medium disabled:opacity-60 hover:bg-primary-dark"
+          >
+            {submitting ? "Submitting…" : "Create workspace & apply"}
+          </button>
+        </form>
+      </ApplyLayout>
     </PublicPage>
   );
 };
