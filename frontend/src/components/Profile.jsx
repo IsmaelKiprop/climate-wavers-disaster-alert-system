@@ -20,6 +20,7 @@ import {
   getProfileCompleteness,
   giftTreesPath,
 } from "../utils/profileCompleteness";
+import ClimateVerifiedBadge from "./ClimateVerifiedBadge";
 
 const seedOwnProfile = (userId) => {
   const me = normalizeUser(getUser()) || {};
@@ -321,9 +322,7 @@ const Profile = () => {
                 <h1 className="text-2xl md:text-3xl font-semibold text-foreground tracking-tight inline-flex items-center gap-2 flex-wrap">
                   <span>{displayName || "Profile"}</span>
                   {profile?.is_verified ? (
-                    <span className="text-xs font-semibold uppercase tracking-wide text-primary border border-primary/40 px-2 py-0.5">
-                      Verified
-                    </span>
+                    <ClimateVerifiedBadge size="lg" showLabel />
                   ) : null}
                 </h1>
                 {profile?.username ? (

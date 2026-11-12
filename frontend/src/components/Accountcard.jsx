@@ -7,6 +7,7 @@ import { IoLeafOutline } from "react-icons/io5";
 import { avatarUrl, getUser } from "../utils/factory";
 import { useFollow } from "../context/FollowContext";
 import { giftTreesPath } from "../utils/profileCompleteness";
+import ClimateVerifiedBadge from "./ClimateVerifiedBadge";
 
 const alreadyFollowing = (error) => {
   const data = error?.response?.data;
@@ -104,14 +105,7 @@ const Accountcard = ({ user }) => {
           <div className="min-w-0 flex-1 overflow-hidden">
             <h3 className="flex items-center gap-1 min-w-0 max-w-full text-sm font-semibold text-foreground group-hover:text-primary transition-colors duration-200">
               <span className="truncate min-w-0">{displayName}</span>
-              {verified ? (
-                <span
-                  className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-primary"
-                  title="Verified"
-                >
-                  ✓
-                </span>
-              ) : null}
+              {verified ? <ClimateVerifiedBadge size="sm" /> : null}
             </h3>
             {subtitle ? (
               <p className="text-xs text-muted truncate block min-w-0" title={subtitle}>
