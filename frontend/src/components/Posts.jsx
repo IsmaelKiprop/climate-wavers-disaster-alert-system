@@ -13,6 +13,7 @@ import Modal from "./Modal";
 import Createpost from "./Createpost";
 import PropTypes from "prop-types";
 import { hashtagPath } from "../utils/hashtag";
+import ImageLightbox from "./ImageLightbox";
 
 const Posts = ({
   type,
@@ -34,6 +35,7 @@ const Posts = ({
   const [openMenuId, setOpenMenuId] = useState(null);
   const menuRef = useRef(null);
   const [localPosts, setLocalPosts] = useState([]);
+  const [mediaPreview, setMediaPreview] = useState(null);
 
   useEffect(() => {
     if (!Array.isArray(posts)) {
@@ -473,25 +475,80 @@ const Posts = ({
                     }`}
                   >
                     {post?.image && (
-                      <div className="overflow-hidden rounded-xl bg-gray-100 flex items-center justify-center max-h-[min(70vh,520px)] shadow-md group-hover:shadow-lg transition-shadow duration-300">
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        className="overflow-hidden rounded-xl bg-gray-100 flex items-center justify-center max-h-[min(70vh,520px)] shadow-md group-hover:shadow-lg transition-shadow duration-300 cursor-zoom-in"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setMediaPreview({
+                            type: "image",
+                            src: secureMediaUrl(post.image),
+                            alt: "Post image",
+                          });
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setMediaPreview({
+                              type: "image",
+                              src: secureMediaUrl(post.image),
+                              alt: "Post image",
+                            });
+                          }
+                        }}
+                        aria-label="Preview image"
+                      >
                         <img
-                          className="w-full max-h-[min(70vh,520px)] object-contain"
+                          className="w-full max-h-[min(70vh,520px)] object-contain pointer-events-none"
                           src={secureMediaUrl(post.image)}
                           alt="Post content"
                         />
                       </div>
                     )}
                     {post?.video && (
-                      <div className="overflow-hidden rounded-xl bg-gray-100 flex items-center justify-center max-h-[min(70vh,520px)] shadow-md group-hover:shadow-lg transition-shadow duration-300">
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        className="relative overflow-hidden rounded-xl bg-gray-100 flex items-center justify-center max-h-[min(70vh,520px)] shadow-md group-hover:shadow-lg transition-shadow duration-300 cursor-zoom-in text-left"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setMediaPreview({
+                            type: "video",
+                            src: secureMediaUrl(post.video),
+                            alt: "Post video",
+                          });
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setMediaPreview({
+                              type: "video",
+                              src: secureMediaUrl(post.video),
+                              alt: "Post video",
+                            });
+                          }
+                        }}
+                        aria-label="Preview video"
+                      >
                         <video
-                          className="w-full max-h-[min(70vh,520px)] object-contain"
-                          controls
+                          className="w-full max-h-[min(70vh,520px)] object-contain pointer-events-none"
                           preload="metadata"
                           playsInline
+                          muted
                         >
                           <source src={secureMediaUrl(post.video)} type="video/mp4" />
                           Your browser does not support the video tag.
                         </video>
+                        <span className="absolute inset-0 flex items-center justify-center bg-black/20 pointer-events-none">
+                          <span className="rounded-full bg-black/60 text-white text-xs font-medium px-3 py-1.5">
+                            Play preview
+                          </span>
+                        </span>
                       </div>
                     )}
                   </div>
@@ -618,6 +675,14 @@ const Posts = ({
             </div>
           </div>
         ))
+      ) : null}
+      {mediaPreview?.src ? (
+        <ImageLightbox
+          src={mediaPreview.src}
+          alt={mediaPreview.alt}
+          type={mediaPreview.type || "image"}
+          onClose={() => setMediaPreview(null)}
+        />
       ) : null}
     </div>
   );

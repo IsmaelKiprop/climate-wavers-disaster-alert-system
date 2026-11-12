@@ -7,8 +7,9 @@ const MIN_SCALE = 1;
 const MAX_SCALE = 3;
 const STEP = 0.5;
 
-const ImageLightbox = ({ src, alt = "", onClose }) => {
+const ImageLightbox = ({ src, alt = "", type = "image", onClose }) => {
   const [scale, setScale] = useState(1);
+  const isVideo = type === "video";
 
   const close = useCallback(() => {
     setScale(1);
@@ -21,6 +22,7 @@ const ImageLightbox = ({ src, alt = "", onClose }) => {
 
     const onKey = (event) => {
       if (event.key === "Escape") close();
+      if (isVideo) return;
       if (event.key === "+" || event.key === "=") {
         setScale((s) => Math.min(MAX_SCALE, Number((s + STEP).toFixed(1))));
       }
@@ -34,7 +36,7 @@ const ImageLightbox = ({ src, alt = "", onClose }) => {
       document.body.style.overflow = prevOverflow;
       window.removeEventListener("keydown", onKey);
     };
-  }, [close]);
+  }, [close, isVideo]);
 
   if (!src) return null;
 
@@ -48,36 +50,42 @@ const ImageLightbox = ({ src, alt = "", onClose }) => {
       className="fixed inset-0 z-[100] flex flex-col bg-black/90"
       role="dialog"
       aria-modal="true"
-      aria-label={alt || "Image preview"}
+      aria-label={alt || (isVideo ? "Video preview" : "Image preview")}
       onClick={close}
     >
       <div
         className="flex items-center justify-between gap-3 px-4 py-3 shrink-0"
         onClick={(e) => e.stopPropagation()}
       >
-        <p className="text-sm text-white/80 truncate">{alt || "Preview"}</p>
+        <p className="text-sm text-white/80 truncate">
+          {alt || (isVideo ? "Video preview" : "Preview")}
+        </p>
         <div className="flex items-center gap-1">
-          <button
-            type="button"
-            className="p-2 text-white/90 hover:bg-white/10 disabled:opacity-40"
-            onClick={zoomOut}
-            disabled={scale <= MIN_SCALE}
-            aria-label="Zoom out"
-          >
-            <IoRemove size={22} />
-          </button>
-          <span className="min-w-[3rem] text-center text-xs text-white/70 tabular-nums">
-            {Math.round(scale * 100)}%
-          </span>
-          <button
-            type="button"
-            className="p-2 text-white/90 hover:bg-white/10 disabled:opacity-40"
-            onClick={zoomIn}
-            disabled={scale >= MAX_SCALE}
-            aria-label="Zoom in"
-          >
-            <IoAdd size={22} />
-          </button>
+          {!isVideo ? (
+            <>
+              <button
+                type="button"
+                className="p-2 text-white/90 hover:bg-white/10 disabled:opacity-40"
+                onClick={zoomOut}
+                disabled={scale <= MIN_SCALE}
+                aria-label="Zoom out"
+              >
+                <IoRemove size={22} />
+              </button>
+              <span className="min-w-[3rem] text-center text-xs text-white/70 tabular-nums">
+                {Math.round(scale * 100)}%
+              </span>
+              <button
+                type="button"
+                className="p-2 text-white/90 hover:bg-white/10 disabled:opacity-40"
+                onClick={zoomIn}
+                disabled={scale >= MAX_SCALE}
+                aria-label="Zoom in"
+              >
+                <IoAdd size={22} />
+              </button>
+            </>
+          ) : null}
           <button
             type="button"
             className="p-2 text-white/90 hover:bg-white/10"
@@ -90,20 +98,34 @@ const ImageLightbox = ({ src, alt = "", onClose }) => {
       </div>
 
       <div className="flex-1 min-h-0 overflow-auto flex items-center justify-center p-4">
-        <img
-          src={src}
-          alt={alt}
-          className="max-w-full max-h-[calc(100dvh-5.5rem)] object-contain select-none transition-transform duration-200 origin-center cursor-zoom-in"
-          style={{
-            transform: `scale(${scale})`,
-            cursor: scale > 1 ? "zoom-out" : "zoom-in",
-          }}
-          onClick={(e) => {
-            e.stopPropagation();
-            setScale((s) => (s > 1 ? 1 : 2));
-          }}
-          draggable={false}
-        />
+        {isVideo ? (
+          <video
+            src={src}
+            controls
+            autoPlay
+            playsInline
+            className="max-w-full max-h-[calc(100dvh-5.5rem)] w-full object-contain bg-black"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <source src={src} type="video/mp4" />
+            Your browser does not support the video tag.
+          </video>
+        ) : (
+          <img
+            src={src}
+            alt={alt}
+            className="max-w-full max-h-[calc(100dvh-5.5rem)] object-contain select-none transition-transform duration-200 origin-center cursor-zoom-in"
+            style={{
+              transform: `scale(${scale})`,
+              cursor: scale > 1 ? "zoom-out" : "zoom-in",
+            }}
+            onClick={(e) => {
+              e.stopPropagation();
+              setScale((s) => (s > 1 ? 1 : 2));
+            }}
+            draggable={false}
+          />
+        )}
       </div>
     </div>,
     document.body
@@ -113,6 +135,7 @@ const ImageLightbox = ({ src, alt = "", onClose }) => {
 ImageLightbox.propTypes = {
   src: PropTypes.string,
   alt: PropTypes.string,
+  type: PropTypes.oneOf(["image", "video"]),
   onClose: PropTypes.func,
 };
 
