@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import { client } from "../../api";
 import { endpoints } from "../../utils/endpoints";
@@ -6,6 +7,7 @@ import { endpoints } from "../../utils/endpoints";
 const emptyForm = { name: "", description: "" };
 
 const Groups = () => {
+  const navigate = useNavigate();
   const [groups, setGroups] = useState([]);
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState(emptyForm);
@@ -28,6 +30,16 @@ const Groups = () => {
     load();
   }, [load]);
 
+  const openGroupChat = (conversationId, groupName) => {
+    if (!conversationId) {
+      toast.info("Open Chats to find this group room.");
+      navigate("/app/chat");
+      return;
+    }
+    toast.success(`${groupName || "Group"} chat is ready.`);
+    navigate(`/app/chat?c=${conversationId}`);
+  };
+
   const createGroup = async (event) => {
     event.preventDefault();
     if (!form.name.trim()) {
@@ -36,10 +48,10 @@ const Groups = () => {
     }
     setCreating(true);
     try {
-      await client.run("post", endpoints.groups, form, true);
+      const data = await client.run("post", endpoints.groups, form, true);
       setForm(emptyForm);
-      toast.success("Group created.");
       await load();
+      openGroupChat(data?.conversation_id || data?.conversation?.id, data?.name || form.name);
     } catch (err) {
       const detail = err?.response?.data?.detail || "Could not create group.";
       toast.error(typeof detail === "string" ? detail : "Could not create group.");
@@ -51,9 +63,12 @@ const Groups = () => {
   const joinGroup = async (groupId) => {
     setBusy(true);
     try {
-      await client.run("post", `${endpoints.groups}${groupId}/join/`, {}, true);
-      toast.success("Joined group.");
+      const data = await client.run("post", `${endpoints.groups}${groupId}/join/`, {}, true);
       await load();
+      openGroupChat(
+        data?.conversation_id || data?.conversation?.id,
+        data?.group?.name
+      );
     } catch (err) {
       const detail = err?.response?.data?.detail || "Could not join group.";
       toast.error(typeof detail === "string" ? detail : "Could not join group.");
@@ -66,7 +81,7 @@ const Groups = () => {
     setBusy(true);
     try {
       await client.run("post", `${endpoints.groups}${groupId}/leave/`, {}, true);
-      toast.success("Left group.");
+      toast.success("Left group. Chat removed from your list.");
       await load();
     } catch (err) {
       const detail = err?.response?.data?.detail || "Could not leave group.";
@@ -80,7 +95,11 @@ const Groups = () => {
     <div className="p-4 sm:p-6 max-w-2xl mx-auto">
       <h1 className="text-2xl font-semibold">Groups</h1>
       <p className="mt-1 text-sm text-muted">
-        Join climate and disaster-response communities, or start your own.
+        Join a climate community. Membership automatically adds a group chat under{" "}
+        <Link to="/app/chat" className="text-primary">
+          Chats
+        </Link>
+        .
       </p>
 
       <form onSubmit={createGroup} className="mt-6 border border-border bg-surface p-4 space-y-3">
@@ -130,25 +149,39 @@ const Groups = () => {
                   {group.my_role ? ` · you are ${group.my_role}` : ""}
                 </p>
               </div>
-              {group.is_member ? (
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => leaveGroup(group.id)}
-                  className="min-h-10 px-3 text-sm border border-border bg-background disabled:opacity-60"
-                >
-                  Leave
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => joinGroup(group.id)}
-                  className="min-h-10 px-3 text-sm bg-primary text-primary-foreground disabled:opacity-60"
-                >
-                  Join
-                </button>
-              )}
+              <div className="flex flex-wrap gap-2">
+                {group.is_member ? (
+                  <>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() =>
+                        openGroupChat(group.conversation_id, group.name)
+                      }
+                      className="min-h-10 px-3 text-sm bg-primary text-primary-foreground disabled:opacity-60"
+                    >
+                      Open chat
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => leaveGroup(group.id)}
+                      className="min-h-10 px-3 text-sm border border-border bg-background disabled:opacity-60"
+                    >
+                      Leave
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => joinGroup(group.id)}
+                    className="min-h-10 px-3 text-sm bg-primary text-primary-foreground disabled:opacity-60"
+                  >
+                    Join
+                  </button>
+                )}
+              </div>
             </div>
           ))
         )}

@@ -53,6 +53,13 @@ app.post("/api/v1/mail", async (req, res) => {
     else if (type === "disaster_alert") await controller.sendDisasterAlert(data || req.body)
     else if (type === "disaster_alert_whatsapp") {
       const result = await controller.sendDisasterAlertWhatsApp(data || req.body)
+      if (!result?.sent) {
+        return res.status(502).json({
+          ok: false,
+          error: "whatsapp send failed",
+          whatsapp: result,
+        })
+      }
       return res.json({ ok: true, whatsapp: result })
     }
     else return res.status(400).json({ error: "unknown type" })

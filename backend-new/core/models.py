@@ -1850,20 +1850,28 @@ class TreeAdminMembership(models.Model):
 
 
 class Conversation(models.Model):
-    """Community, DM, or responder-org chat room."""
+    """Community, DM, responder-org, or social-group chat room."""
 
     TYPE_CHOICES = [
         ("community", "Community"),
         ("dm", "Direct"),
         ("responder", "Responder"),
+        ("group", "Group"),
     ]
 
     conversation_type = models.CharField(max_length=20, choices=TYPE_CHOICES)
     name = models.CharField(max_length=200, blank=True, default="")
-    # Stable key for singleton rooms: community:global, responder:{org_id}, dm:{min}:{max}
+    # Stable key: community:global, responder:{org_id}, dm:{min}:{max}, group:{group_id}
     room_key = models.CharField(max_length=120, unique=True, db_index=True)
     responder_org = models.ForeignKey(
         "ResponderOrganization",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="chat_rooms",
+    )
+    social_group = models.ForeignKey(
+        "SocialGroup",
         on_delete=models.CASCADE,
         null=True,
         blank=True,

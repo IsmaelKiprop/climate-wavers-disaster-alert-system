@@ -17,6 +17,7 @@ from .models import (
     Conversation,
     ConversationMember,
     ResponderMembership,
+    SocialGroupMembership,
     UserChatPresence,
 )
 
@@ -59,6 +60,10 @@ def dm_room_key(user_a_id, user_b_id):
 
 def responder_room_key(org_id):
     return f"responder:{int(org_id)}"
+
+
+def group_room_key(group_id):
+    return f"group:{int(group_id)}"
 
 
 def ensure_community_conversation(user):
@@ -117,6 +122,71 @@ def ensure_responder_conversations(user):
     return rooms
 
 
+def ensure_group_conversation(user, group):
+    """Create/join the chat room for a SocialGroup. Sync all current members."""
+    key = group_room_key(group.id)
+    with transaction.atomic():
+        conv, _ = Conversation.objects.get_or_create(
+            room_key=key,
+            defaults={
+                "conversation_type": "group",
+                "name": group.name,
+                "social_group_id": group.id,
+                "created_by": user,
+            },
+        )
+        updates = []
+        if conv.conversation_type != "group":
+            conv.conversation_type = "group"
+            updates.append("conversation_type")
+        if not conv.social_group_id:
+            conv.social_group_id = group.id
+            updates.append("social_group_id")
+        if conv.name != group.name:
+            conv.name = group.name
+            updates.append("name")
+        if updates:
+            updates.append("updated_at")
+            conv.save(update_fields=updates)
+
+        ConversationMember.objects.get_or_create(conversation=conv, user=user)
+        peer_ids = SocialGroupMembership.objects.filter(group_id=group.id).values_list(
+            "user_id", flat=True
+        )
+        existing = set(
+            ConversationMember.objects.filter(conversation=conv).values_list(
+                "user_id", flat=True
+            )
+        )
+        to_add = [
+            ConversationMember(conversation=conv, user_id=uid)
+            for uid in peer_ids
+            if uid not in existing
+        ]
+        if to_add:
+            ConversationMember.objects.bulk_create(to_add, ignore_conflicts=True)
+    return conv
+
+
+def ensure_user_group_conversations(user):
+    """Ensure every SocialGroup the user belongs to has a chat room in their list."""
+    memberships = SocialGroupMembership.objects.filter(user=user).select_related("group")
+    rooms = []
+    for membership in memberships:
+        rooms.append(ensure_group_conversation(user, membership.group))
+    return rooms
+
+
+def leave_group_conversation(user, group):
+    """Remove the user from the group chat room (room itself stays for others)."""
+    key = group_room_key(group.id)
+    conv = Conversation.objects.filter(room_key=key).first()
+    if not conv:
+        return None
+    ConversationMember.objects.filter(conversation=conv, user=user).delete()
+    return conv
+
+
 def ensure_dm_conversation(user, other_user):
     if user.id == other_user.id:
         raise ValueError("Cannot DM yourself")
@@ -146,12 +216,21 @@ def user_can_access(user, conversation):
             user=user,
             org__verification_status="approved",
         ).exists()
+    if conversation.conversation_type == "group" and conversation.social_group_id:
+        return SocialGroupMembership.objects.filter(
+            group_id=conversation.social_group_id,
+            user=user,
+        ).exists()
     return False
 
 
 def conversation_title(conv, current_user, members_by_conv=None):
     if conv.conversation_type == "community":
         return conv.name or COMMUNITY_NAME
+    if conv.conversation_type == "group":
+        if conv.social_group_id and getattr(conv, "social_group", None):
+            return conv.name or conv.social_group.name
+        return conv.name or "Group chat"
     if conv.conversation_type == "responder":
         if conv.responder_org_id and getattr(conv, "responder_org", None):
             return conv.name or f"{conv.responder_org.name} Responders"
@@ -196,6 +275,7 @@ def conversation_dict(conv, current_user, *, last_message=None, unread=0, member
         "room_key": conv.room_key,
         "name": conversation_title(conv, current_user, {conv.id: members}),
         "responder_org_id": conv.responder_org_id,
+        "social_group_id": conv.social_group_id,
         "updated_at": conv.updated_at.isoformat() if conv.updated_at else None,
         "created_at": conv.created_at.isoformat() if conv.created_at else None,
         "member_count": len(members),
@@ -284,12 +364,14 @@ class ChatBootstrapView(APIView):
         user = request.user
         ensure_community_conversation(user)
         ensure_responder_conversations(user)
+        ensure_user_group_conversations(user)
 
         memberships = (
             ConversationMember.objects.filter(user=user)
             .select_related(
                 "conversation",
                 "conversation__responder_org",
+                "conversation__social_group",
             )
         )
         conv_ids = [m.conversation_id for m in memberships]
@@ -301,7 +383,7 @@ class ChatBootstrapView(APIView):
 
         conversations = list(
             Conversation.objects.filter(id__in=conv_ids)
-            .select_related("responder_org")
+            .select_related("responder_org", "social_group")
             .annotate(member_total=Count("memberships", distinct=True))
             .order_by("-updated_at")
         )

@@ -2,18 +2,25 @@
 
 from django.db import transaction
 from django.utils.text import slugify
-from rest_framework import serializers, status
+from rest_framework import serializers
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import SocialGroup, SocialGroupMembership
+from .chat import (
+    conversation_dict,
+    ensure_group_conversation,
+    leave_group_conversation,
+    online_user_ids,
+)
+from .models import Conversation, SocialGroup, SocialGroupMembership
 
 
 class SocialGroupSerializer(serializers.ModelSerializer):
     member_count = serializers.SerializerMethodField()
     is_member = serializers.SerializerMethodField()
     my_role = serializers.SerializerMethodField()
+    conversation_id = serializers.SerializerMethodField()
 
     class Meta:
         model = SocialGroup
@@ -26,6 +33,7 @@ class SocialGroupSerializer(serializers.ModelSerializer):
             "member_count",
             "is_member",
             "my_role",
+            "conversation_id",
             "created_at",
             "updated_at",
         )
@@ -47,6 +55,21 @@ class SocialGroupSerializer(serializers.ModelSerializer):
         membership = obj.memberships.filter(user=user).first()
         return membership.role if membership else None
 
+    def get_conversation_id(self, obj):
+        user = self.context.get("request").user if self.context.get("request") else None
+        if not user or not user.is_authenticated:
+            return None
+        if not obj.memberships.filter(user=user).exists():
+            return None
+        conv = (
+            Conversation.objects.filter(
+                social_group_id=obj.id, conversation_type="group"
+            )
+            .only("id")
+            .first()
+        )
+        return conv.id if conv else None
+
 
 def _unique_slug(name: str) -> str:
     base = slugify(name)[:120] or "group"
@@ -56,6 +79,17 @@ def _unique_slug(name: str) -> str:
         n += 1
         candidate = f"{base}-{n}"[:140]
     return candidate
+
+
+def _group_chat_payload(user, group):
+    conv = ensure_group_conversation(user, group)
+    members = list(conv.memberships.select_related("user", "user__chat_presence"))
+    return conversation_dict(
+        conv,
+        user,
+        members=members,
+        online_ids=online_user_ids(),
+    )
 
 
 class SocialGroupListCreateView(APIView):
@@ -86,8 +120,14 @@ class SocialGroupListCreateView(APIView):
             SocialGroupMembership.objects.create(
                 group=group, user=request.user, role="owner"
             )
+            conversation = _group_chat_payload(request.user, group)
         return Response(
-            SocialGroupSerializer(group, context={"request": request}).data,
+            {
+                **SocialGroupSerializer(group, context={"request": request}).data,
+                "conversation_id": conversation["id"],
+                "conversation": conversation,
+                "chat_path": f"/app/chat?c={conversation['id']}",
+            },
             status=201,
         )
 
@@ -114,12 +154,16 @@ class SocialGroupJoinView(APIView):
         membership, created = SocialGroupMembership.objects.get_or_create(
             group=group, user=request.user, defaults={"role": "member"}
         )
+        conversation = _group_chat_payload(request.user, group)
         return Response(
             {
                 "joined": True,
                 "created": created,
                 "role": membership.role,
                 "group": SocialGroupSerializer(group, context={"request": request}).data,
+                "conversation_id": conversation["id"],
+                "conversation": conversation,
+                "chat_path": f"/app/chat?c={conversation['id']}",
             }
         )
 
@@ -145,4 +189,5 @@ class SocialGroupLeaveView(APIView):
                     status=400,
                 )
         membership.delete()
+        leave_group_conversation(request.user, group)
         return Response({"left": True})

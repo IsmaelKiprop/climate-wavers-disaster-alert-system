@@ -9,6 +9,7 @@ const AlertSettings = () => {
   const [saving, setSaving] = useState(false);
   const [otpBusy, setOtpBusy] = useState(false);
   const [code, setCode] = useState("");
+  const [otpNotice, setOtpNotice] = useState(null);
   const [form, setForm] = useState({
     email_alerts: true,
     whatsapp_alerts: false,
@@ -99,6 +100,7 @@ const AlertSettings = () => {
 
   const requestCode = async () => {
     setOtpBusy(true);
+    setOtpNotice(null);
     try {
       const data = await client.run(
         "post",
@@ -109,13 +111,30 @@ const AlertSettings = () => {
         false,
         false
       );
-      const via = Array.isArray(data?.sent_via) ? data.sent_via.join(" + ") : "channel";
+      const via = Array.isArray(data?.sent_via) ? data.sent_via : [];
       const to = data?.sent_to ? `+${data.sent_to}` : form.phone;
-      toast.success(
-        data?.message ||
-          `Code sent to ${to} via ${via}. Open WhatsApp chat with FlowOps Africa.`
-      );
+      if (via.includes("whatsapp")) {
+        const msg =
+          data?.message ||
+          `Code sent to ${to} on WhatsApp (FlowOps Africa).`;
+        setOtpNotice({ tone: "ok", text: msg });
+        toast.success(msg);
+      } else if (via.includes("email")) {
+        const msg =
+          data?.message ||
+          "WhatsApp could not deliver the code. Check your account email (and spam) for the 6-digit code, then enter it here.";
+        setOtpNotice({ tone: "warn", text: msg });
+        toast.warn(msg);
+      } else {
+        const msg = data?.message || "Verification code sent.";
+        setOtpNotice({ tone: "ok", text: msg });
+        toast.success(msg);
+      }
     } catch (error) {
+      setOtpNotice({
+        tone: "warn",
+        text: "Could not send verification code. Try again shortly.",
+      });
       toast.error("Could not send verification code.");
     } finally {
       setOtpBusy(false);
@@ -135,6 +154,7 @@ const AlertSettings = () => {
         false
       );
       setForm((prev) => ({ ...prev, phone_verified: true }));
+      setOtpNotice(null);
       toast.success("Phone verified for WhatsApp alerts.");
     } catch (error) {
       toast.error("Invalid or expired code.");
@@ -314,6 +334,18 @@ const AlertSettings = () => {
             Confirm
           </button>
         </div>
+        {otpNotice ? (
+          <p
+            role="status"
+            className={
+              otpNotice.tone === "warn"
+                ? "text-sm text-amber-800 bg-amber-50 border border-amber-200 px-3 py-2"
+                : "text-sm text-muted"
+            }
+          >
+            {otpNotice.text}
+          </p>
+        ) : null}
 
         <button
           type="submit"

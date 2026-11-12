@@ -58,7 +58,7 @@ function formatLastSeen(iso, isOnline) {
 
 function roomIcon(type) {
   if (type === "responder") return IoShieldCheckmarkOutline;
-  if (type === "community") return IoPeopleOutline;
+  if (type === "community" || type === "group") return IoPeopleOutline;
   return IoChatbubblesOutline;
 }
 
@@ -205,10 +205,10 @@ const CommunityChat = () => {
 
   useEffect(() => {
     let cancelled = false;
-    const fromQuery = searchParams.get("c");
-    const dmUserId = searchParams.get("dm");
     loadConversations().then(async (list) => {
       if (cancelled) return;
+      const fromQuery = searchParams.get("c");
+      const dmUserId = searchParams.get("dm");
       // Fresh DM deep-links are handled by the dedicated effect below
       if (dmUserId) return;
       const preferred =
@@ -225,9 +225,35 @@ const CommunityChat = () => {
     return () => {
       cancelled = true;
     };
-    // Bootstrap once on mount; dm deep-links handled below
+    // Bootstrap once on mount; deep-links handled below
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadConversations]);
+
+  // Open a conversation when Groups (or shares) navigate with ?c=
+  useEffect(() => {
+    const fromQuery = searchParams.get("c");
+    if (!fromQuery || searchParams.get("dm")) return undefined;
+    if (String(activeId) === String(fromQuery)) return undefined;
+
+    let cancelled = false;
+    (async () => {
+      let found = conversations.find((c) => String(c.id) === String(fromQuery));
+      if (!found) {
+        const list = await loadConversations();
+        if (cancelled) return;
+        found = list.find((c) => String(c.id) === String(fromQuery));
+      }
+      if (found && !cancelled) {
+        setActiveId(found.id);
+        setMobileShowThread(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // Only react to the conversation deep-link changing
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams.get("c")]);
 
   // Open a DM whenever ?dm= appears (profile Message, contacts Chat, etc.)
   useEffect(() => {
@@ -393,6 +419,13 @@ const CommunityChat = () => {
     if (activeConversation.conversation_type === "responder") {
       const n = activeConversation.online_count || 0;
       return n > 0 ? `${n} responder${n === 1 ? "" : "s"} online` : "Responder team chat";
+    }
+    if (activeConversation.conversation_type === "group") {
+      const n = activeConversation.online_count || 0;
+      const members = activeConversation.member_count || 0;
+      return n > 0
+        ? `${n} online · ${members} member${members === 1 ? "" : "s"}`
+        : `Group chat · ${members} member${members === 1 ? "" : "s"}`;
     }
     const n = activeConversation.online_count || 0;
     return n > 0 ? `${n} online in community` : "Community chat";
@@ -677,7 +710,9 @@ const CommunityChat = () => {
                           {conv.last_message?.body ||
                             (conv.conversation_type === "responder"
                               ? "Responder coordination"
-                              : "Say hello")}
+                              : conv.conversation_type === "group"
+                                ? "Group chat — say hello"
+                                : "Say hello")}
                         </span>
                         {conv.unread_count > 0 ? (
                           <span className="shrink-0 min-w-5 h-5 px-1.5 rounded-full bg-primary text-primary-foreground text-[10px] font-semibold flex items-center justify-center">
