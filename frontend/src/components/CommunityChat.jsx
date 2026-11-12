@@ -11,7 +11,7 @@ import {
 } from "react-icons/io5";
 import { client } from "../api";
 import { endpoints } from "../utils/endpoints";
-import { avatarUrl, getUser } from "../utils/factory";
+import { avatarUrl, getUser, secureMediaUrl } from "../utils/factory";
 import { useChatSocket } from "../context/ChatContext";
 import { unwrapList } from "../utils/apiData";
 
@@ -60,6 +60,12 @@ function roomIcon(type) {
   if (type === "responder") return IoShieldCheckmarkOutline;
   if (type === "community" || type === "group") return IoPeopleOutline;
   return IoChatbubblesOutline;
+}
+
+function roomAvatarSrc(conv) {
+  if (!conv) return "";
+  if (conv.conversation_type === "dm" && conv.peer) return avatarUrl(conv.peer);
+  return secureMediaUrl(conv.avatar || conv.cover_image || "", "");
 }
 
 function clientMessageId() {
@@ -421,6 +427,8 @@ const CommunityChat = () => {
       return n > 0 ? `${n} responder${n === 1 ? "" : "s"} online` : "Responder team chat";
     }
     if (activeConversation.conversation_type === "group") {
+      const desc = (activeConversation.description || "").trim();
+      if (desc) return desc;
       const n = activeConversation.online_count || 0;
       const members = activeConversation.member_count || 0;
       return n > 0
@@ -668,6 +676,7 @@ const CommunityChat = () => {
           <ul>
             {filteredConversations.map((conv) => {
               const Icon = roomIcon(conv.conversation_type);
+              const avatarSrc = roomAvatarSrc(conv);
               const active = Number(conv.id) === Number(activeId);
               const peerOnline =
                 conv.conversation_type === "dm" &&
@@ -682,9 +691,9 @@ const CommunityChat = () => {
                     }`}
                   >
                     <span className="relative shrink-0">
-                      {conv.conversation_type === "dm" && conv.peer ? (
+                      {avatarSrc ? (
                         <img
-                          src={avatarUrl(conv.peer)}
+                          src={avatarSrc}
                           alt=""
                           className="h-11 w-11 rounded-full object-cover bg-background"
                         />
@@ -755,9 +764,9 @@ const CommunityChat = () => {
                 <IoArrowBack size={20} />
               </button>
               <span className="relative shrink-0">
-                {activeConversation.conversation_type === "dm" && activeConversation.peer ? (
+                {roomAvatarSrc(activeConversation) ? (
                   <img
-                    src={avatarUrl(activeConversation.peer)}
+                    src={roomAvatarSrc(activeConversation)}
                     alt=""
                     className="h-10 w-10 rounded-full object-cover bg-background"
                   />

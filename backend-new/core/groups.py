@@ -108,12 +108,25 @@ class SocialGroupListCreateView(APIView):
         if len(name) < 3:
             return Response({"detail": "Group name must be at least 3 characters"}, status=400)
         description = (request.data.get("description") or "").strip()
-        cover = (request.data.get("cover_image") or "").strip() or None
+        if len(description) > 512:
+            return Response(
+                {"detail": "Short description must be 512 characters or fewer"},
+                status=400,
+            )
+        # Accept cover_image or logo (WhatsApp-style group photo URL).
+        cover = (
+            request.data.get("cover_image")
+            or request.data.get("logo")
+            or ""
+        )
+        cover = str(cover).strip() or None
+        if cover and len(cover) > 500:
+            return Response({"detail": "Logo URL is too long"}, status=400)
         with transaction.atomic():
             group = SocialGroup.objects.create(
                 name=name[:120],
                 slug=_unique_slug(name),
-                description=description[:2000],
+                description=description[:512],
                 cover_image=cover,
                 created_by=request.user,
             )

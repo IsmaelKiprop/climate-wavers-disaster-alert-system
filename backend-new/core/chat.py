@@ -269,11 +269,19 @@ def conversation_dict(conv, current_user, *, last_message=None, unread=0, member
             if m.user_id in online_ids and m.user_id != current_user.id
         ][:20]
 
+    avatar = None
+    description = ""
+    if conv.conversation_type == "group" and getattr(conv, "social_group", None):
+        avatar = conv.social_group.cover_image or None
+        description = conv.social_group.description or ""
+
     return {
         "id": conv.id,
         "conversation_type": conv.conversation_type,
         "room_key": conv.room_key,
         "name": conversation_title(conv, current_user, {conv.id: members}),
+        "avatar": avatar,
+        "description": description,
         "responder_org_id": conv.responder_org_id,
         "social_group_id": conv.social_group_id,
         "updated_at": conv.updated_at.isoformat() if conv.updated_at else None,
