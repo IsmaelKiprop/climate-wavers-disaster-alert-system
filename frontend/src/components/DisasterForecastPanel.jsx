@@ -19,6 +19,7 @@ import { IoDownloadOutline, IoRefreshOutline } from "react-icons/io5";
 import { client } from "../api";
 import { endpoints } from "../utils/endpoints";
 import { buildClientForecast } from "../utils/disasterForecastClient";
+import { useTheme } from "../context/ThemeContext";
 
 ChartJS.register(
   CategoryScale,
@@ -34,51 +35,64 @@ ChartJS.register(
 );
 
 const TEAL = "#0D9488";
-const INK = "#111827";
-const MUTED = "#6B7280";
-const SURFACE = "#F9FAFB";
+const TEAL_DARK = "#2bb8bf";
 
-const baseOptions = {
-  responsive: true,
-  maintainAspectRatio: false,
-  plugins: {
-    legend: {
-      display: false,
-      labels: { color: MUTED, font: { size: 11 } },
-    },
-    tooltip: {
-      backgroundColor: INK,
-      titleColor: "#fff",
-      bodyColor: "#fff",
-      borderColor: TEAL,
-      borderWidth: 1,
-      cornerRadius: 4,
-    },
-  },
-  scales: {
-    x: {
-      grid: { display: false },
-      ticks: { color: MUTED, font: { size: 10 }, maxRotation: 0 },
-    },
-    y: {
-      beginAtZero: true,
-      grid: { color: "#E5E7EB" },
-      ticks: { color: MUTED, font: { size: 10 }, precision: 0 },
-    },
-  },
-};
+function chartTheme(isDark) {
+  const muted = isDark ? "#9ca3af" : "#6B7280";
+  const ink = isDark ? "#f3f5f5" : "#111827";
+  const grid = isDark ? "#2d3737" : "#E5E7EB";
+  const accent = isDark ? TEAL_DARK : TEAL;
+  return { muted, ink, grid, accent };
+}
 
-const doughnutOptions = {
-  responsive: true,
-  maintainAspectRatio: false,
-  plugins: {
-    legend: {
-      position: "bottom",
-      labels: { color: MUTED, font: { size: 10 }, boxWidth: 10, padding: 10 },
+function buildBaseOptions(isDark) {
+  const { muted, ink, grid, accent } = chartTheme(isDark);
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        display: false,
+        labels: { color: muted, font: { size: 11 } },
+      },
+      tooltip: {
+        backgroundColor: ink,
+        titleColor: isDark ? "#0f1414" : "#fff",
+        bodyColor: isDark ? "#0f1414" : "#fff",
+        borderColor: accent,
+        borderWidth: 1,
+        cornerRadius: 4,
+      },
     },
-    tooltip: baseOptions.plugins.tooltip,
-  },
-};
+    scales: {
+      x: {
+        grid: { display: false },
+        ticks: { color: muted, font: { size: 10 }, maxRotation: 0 },
+      },
+      y: {
+        beginAtZero: true,
+        grid: { color: grid },
+        ticks: { color: muted, font: { size: 10 }, precision: 0 },
+      },
+    },
+  };
+}
+
+function buildDoughnutOptions(isDark) {
+  const base = buildBaseOptions(isDark);
+  const { muted } = chartTheme(isDark);
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        position: "bottom",
+        labels: { color: muted, font: { size: 10 }, boxWidth: 10, padding: 10 },
+      },
+      tooltip: base.plugins.tooltip,
+    },
+  };
+}
 
 function palette(n) {
   const colors = [
@@ -99,10 +113,14 @@ function palette(n) {
  */
 const DisasterForecastPanel = ({ events = [], compact = false, className = "" }) => {
   const reportRef = useRef(null);
+  const { isDark } = useTheme();
   const [report, setReport] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [downloading, setDownloading] = useState(false);
+  const accent = isDark ? TEAL_DARK : TEAL;
+  const baseOptions = useMemo(() => buildBaseOptions(isDark), [isDark]);
+  const doughnutOptions = useMemo(() => buildDoughnutOptions(isDark), [isDark]);
 
   const load = async () => {
     setLoading(true);
@@ -144,15 +162,15 @@ const DisasterForecastPanel = ({ events = [], compact = false, className = "" })
         {
           label: "Events",
           data: charts.daily_activity?.values || [],
-          borderColor: TEAL,
-          backgroundColor: "rgba(13, 148, 136, 0.12)",
+          borderColor: accent,
+          backgroundColor: isDark ? "rgba(43, 184, 191, 0.18)" : "rgba(13, 148, 136, 0.12)",
           fill: true,
           tension: 0.3,
           pointRadius: 2,
         },
       ],
     }),
-    [charts.daily_activity]
+    [charts.daily_activity, accent, isDark]
   );
 
   const typeData = useMemo(
@@ -176,12 +194,12 @@ const DisasterForecastPanel = ({ events = [], compact = false, className = "" })
         {
           label: "Projected next 7 days",
           data: charts.outlook_by_type?.values || [],
-          backgroundColor: TEAL,
+          backgroundColor: accent,
           borderRadius: 4,
         },
       ],
     }),
-    [charts.outlook_by_type]
+    [charts.outlook_by_type, accent]
   );
 
   const countryData = useMemo(
@@ -191,12 +209,12 @@ const DisasterForecastPanel = ({ events = [], compact = false, className = "" })
         {
           label: "Events",
           data: charts.by_country?.values || [],
-          backgroundColor: "#115E59",
+          backgroundColor: isDark ? "#1f949a" : "#115E59",
           borderRadius: 4,
         },
       ],
     }),
-    [charts.by_country]
+    [charts.by_country, isDark]
   );
 
   const downloadPdf = async () => {
@@ -206,7 +224,7 @@ const DisasterForecastPanel = ({ events = [], compact = false, className = "" })
       const canvas = await html2canvas(reportRef.current, {
         scale: 2,
         useCORS: true,
-        backgroundColor: "#ffffff",
+        backgroundColor: isDark ? "#171d1d" : "#ffffff",
         logging: false,
       });
       const img = canvas.toDataURL("image/png");
@@ -281,7 +299,7 @@ const DisasterForecastPanel = ({ events = [], compact = false, className = "" })
 
       {error ? <p className="px-4 pt-3 text-sm text-destructive">{error}</p> : null}
 
-      <div ref={reportRef} className="p-4 space-y-5 bg-white">
+      <div ref={reportRef} className="p-4 space-y-5 bg-surface text-foreground">
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
           {[
             { label: "Analyzed", value: summary.events_analyzed ?? 0 },
@@ -289,7 +307,11 @@ const DisasterForecastPanel = ({ events = [], compact = false, className = "" })
             { label: "Next 7 days*", value: summary.projected_next_7_days ?? 0 },
             { label: "Next 14 days*", value: summary.projected_next_14_days ?? 0 },
           ].map((stat) => (
-            <div key={stat.label} className="border border-border p-3" style={{ background: SURFACE }}>
+            <div
+              key={stat.label}
+              className="border border-border bg-surface-muted p-3"
+              style={{ borderRadius: 5 }}
+            >
               <p className="text-[11px] sm:text-xs text-muted">{stat.label}</p>
               <p className="text-xl sm:text-2xl font-semibold text-foreground mt-1 tabular-nums">
                 {stat.value}
@@ -354,11 +376,11 @@ const DisasterForecastPanel = ({ events = [], compact = false, className = "" })
                 {report.type_outlook.map((row) => (
                   <tr key={row.type} className="border-t border-border">
                     <td className="px-3 py-2 capitalize font-medium text-foreground">{row.type}</td>
-                    <td className="px-3 py-2 tabular-nums">{row.historical_count}</td>
-                    <td className="px-3 py-2 tabular-nums">{row.share_pct}%</td>
-                    <td className="px-3 py-2 tabular-nums">{row.projected_next_7_days}</td>
-                    <td className="px-3 py-2 capitalize">{row.trend}</td>
-                    <td className="px-3 py-2 capitalize">{row.risk_band}</td>
+                    <td className="px-3 py-2 tabular-nums text-foreground">{row.historical_count}</td>
+                    <td className="px-3 py-2 tabular-nums text-foreground">{row.share_pct}%</td>
+                    <td className="px-3 py-2 tabular-nums text-foreground">{row.projected_next_7_days}</td>
+                    <td className="px-3 py-2 capitalize text-foreground">{row.trend}</td>
+                    <td className="px-3 py-2 capitalize text-foreground">{row.risk_band}</td>
                   </tr>
                 ))}
               </tbody>
