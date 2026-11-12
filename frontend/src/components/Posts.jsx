@@ -12,8 +12,8 @@ import { PiBookmark, PiBookmarkFill } from "react-icons/pi";
 import Modal from "./Modal";
 import Createpost from "./Createpost";
 import PropTypes from "prop-types";
-import { hashtagPath } from "../utils/hashtag";
 import ImageLightbox from "./ImageLightbox";
+import LinkifiedText from "./LinkifiedText";
 
 const Posts = ({
   type,
@@ -449,24 +449,12 @@ const Posts = ({
             
             <button onClick={() => commentPage(post)} className="w-full text-left group-hover:bg-gray-50/50 transition-colors duration-200">
               <div className="px-6 pb-4">
-              <p
-                  className="text-gray-900 text-lg leading-relaxed font-medium group-hover:text-gray-800 transition-colors duration-200"
-                style={{ whiteSpace: "pre-wrap" }}
-              >
-                {post?.content?.split(/(\s+)/).map((word, index) =>
-                  word.startsWith("#") ? (
-                    <Link
-                      key={index}
-                      to={hashtagPath(word)}
-                      onClick={(e) => e.stopPropagation()}
-                      className="text-[#067d83] font-semibold hover:text-[#055a5f] transition-colors duration-200"
-                    >
-                      {word}
-                    </Link>
-                  ) : (
-                    word
-                  )
-                )}
+              <p className="text-gray-900 text-lg leading-relaxed font-medium group-hover:text-gray-800 transition-colors duration-200">
+                <LinkifiedText
+                  text={post?.content || ""}
+                  linkClassName="text-[#067d83] font-semibold underline underline-offset-2 break-all hover:text-[#055a5f]"
+                  hashtagClassName="text-[#067d83] font-semibold hover:text-[#055a5f] transition-colors duration-200"
+                />
               </p>
               {(post?.image || post?.video) && (
                   <div

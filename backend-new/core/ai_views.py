@@ -196,12 +196,14 @@ def analyze_content(request):
         # Check for inappropriate content
         has_bad_words = any(word in content_lower for word in BAD_WORDS)
         
-        # Check for links (basic detection)
-        has_links = any(link in content_lower for link in ['http://', 'https://', 'www.', '.com', '.org'])
+        # Links are allowed in posts; still reported for UI hints.
+        has_links = any(
+            token in content_lower for token in ("http://", "https://", "www.")
+        )
         
         # Determine if content is appropriate
         is_climate_relevant = climate_score > 0
-        is_appropriate = not has_bad_words and not has_links
+        is_appropriate = not has_bad_words
         is_suitable = is_climate_relevant and is_appropriate
         
         return Response({
@@ -213,8 +215,7 @@ def analyze_content(request):
             'has_bad_words': has_bad_words,
             'suggestions': [
                 'Focus on climate and environmental topics',
-                'Avoid promotional links',
-                'Use positive, constructive language'
+                'Use positive, constructive language',
             ] if not is_suitable else []
         })
         

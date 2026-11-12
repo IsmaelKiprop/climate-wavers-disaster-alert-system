@@ -7,6 +7,7 @@ import { BsBarChart } from "react-icons/bs";
 import { formatDistanceToNow } from "date-fns";
 import PropTypes from "prop-types";
 import { avatarUrl } from "../utils/factory";
+import LinkifiedText from "./LinkifiedText";
 
 const ProfileContent = ({ content, type, onLike, onUnlike, onRepost, onUnrepost, onSave, onUnsave }) => {
   const navigate = useNavigate();
@@ -79,7 +80,9 @@ const ProfileContent = ({ content, type, onLike, onUnlike, onRepost, onUnrepost,
               </div>
               
               <div className="mb-6">
-                <p className="text-gray-900 whitespace-pre-wrap text-base leading-relaxed">{content.content}</p>
+                <p className="text-gray-900 text-base leading-relaxed">
+                  <LinkifiedText text={content.content || ""} />
+                </p>
                 
                 {/* Handle both images and videos */}
                 {content.image && (
@@ -228,7 +231,9 @@ const ProfileContent = ({ content, type, onLike, onUnlike, onRepost, onUnrepost,
                         <span className="text-sm font-medium text-gray-900">{content.post.user?.first_name} {content.post.user?.last_name}</span>
                         <span className="text-xs text-gray-500">@{content.post.user?.username}</span>
                       </div>
-                      <p className="text-gray-800 text-sm">{content.post.content}</p>
+                      <p className="text-gray-800 text-sm">
+                        <LinkifiedText text={content.post?.content || ""} />
+                      </p>
                       
                       {/* Show original post attachments */}
                       {content.post.image && (
@@ -261,7 +266,9 @@ const ProfileContent = ({ content, type, onLike, onUnlike, onRepost, onUnrepost,
                 </div>
                 
                 <div className="mb-4">
-                  <p className="text-gray-900 whitespace-pre-wrap text-base leading-relaxed">{content.content}</p>
+                  <p className="text-gray-900 text-base leading-relaxed">
+                  <LinkifiedText text={content.content || ""} />
+                </p>
                   
                   {/* Show comment attachments */}
                   {content.image && (
@@ -391,7 +398,9 @@ const ProfileContent = ({ content, type, onLike, onUnlike, onRepost, onUnrepost,
                           <p className="text-sm text-gray-500">@{content.post.user?.username}</p>
                         </div>
                       </div>
-                      <p className="text-gray-900">{content.post.content}</p>
+                      <p className="text-gray-900">
+                        <LinkifiedText text={content.post?.content || ""} />
+                      </p>
                       {content.post.image && (
                         <div className="mt-3">
                           {content.post.image.includes('.mp4') || content.post.image.includes('.mov') || content.post.image.includes('.avi') || content.post.image.includes('.webm') ? (

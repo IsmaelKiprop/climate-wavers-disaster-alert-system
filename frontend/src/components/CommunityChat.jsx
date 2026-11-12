@@ -26,6 +26,7 @@ import {
   unlockNotificationSound,
 } from "../utils/notificationSound";
 import ChatGroupInfo from "./ChatGroupInfo";
+import LinkifiedText from "./LinkifiedText";
 
 function displayName(person) {
   if (!person) return "Member";
@@ -103,33 +104,25 @@ function previewLabel(msg) {
   return "Say hello";
 }
 
-function renderMessageBody(body, mentions = []) {
+function renderMessageBody(body, mentions = [], mine = false) {
   const text = body || "";
   if (!text) return null;
-  const names = (mentions || [])
-    .map((m) => m.username)
-    .filter(Boolean)
-    .sort((a, b) => b.length - a.length);
-  if (!names.length) {
-    return <span className="whitespace-pre-wrap break-words">{text}</span>;
-  }
-  const pattern = new RegExp(
-    `(@(?:${names.map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")}))`,
-    "gi"
-  );
-  const parts = text.split(pattern);
   return (
-    <span className="whitespace-pre-wrap break-words">
-      {parts.map((part, idx) =>
-        part.startsWith("@") ? (
-          <span key={`${part}-${idx}`} className="font-semibold underline underline-offset-2">
-            {part}
-          </span>
-        ) : (
-          <span key={`${idx}-${part.slice(0, 8)}`}>{part}</span>
-        )
-      )}
-    </span>
+    <LinkifiedText
+      text={text}
+      mentions={mentions}
+      linkClassName={
+        mine
+          ? "underline underline-offset-2 break-all text-primary-foreground"
+          : "underline underline-offset-2 break-all text-primary"
+      }
+      hashtagClassName={
+        mine
+          ? "font-semibold underline underline-offset-2"
+          : "font-semibold text-primary"
+      }
+      mentionClassName="font-semibold underline underline-offset-2"
+    />
   );
 }
 
@@ -1159,7 +1152,9 @@ const CommunityChat = () => {
                             </div>
                           ) : null}
                           {msg.body ? (
-                            <p className="text-sm">{renderMessageBody(msg.body, msg.mentions)}</p>
+                            <p className="text-sm">
+                              {renderMessageBody(msg.body, msg.mentions, mine)}
+                            </p>
                           ) : null}
                           <p
                             className={`mt-1 flex items-center justify-end gap-1 text-[10px] ${

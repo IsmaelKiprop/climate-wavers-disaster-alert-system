@@ -6,6 +6,7 @@ import { Link } from "react-router-dom";
 import { FaDonate } from "react-icons/fa";
 import { RiAlarmWarningFill } from "react-icons/ri";
 import PropTypes from "prop-types";
+import LinkifiedText from "./LinkifiedText";
 
 export const DisaxPostCard = ({ post }) => {
   const postUser = {
@@ -20,7 +21,9 @@ export const DisaxPostCard = ({ post }) => {
     <div className="disaster-post-card border-b-[1px] border-gray-700 py-4">
       <Accountcard user={postUser} />
       <div>
-        <p className="text-left text-sm px-3 my-3 ">{post.body}</p>
+        <p className="text-left text-sm px-3 my-3">
+          <LinkifiedText text={post.body || ""} />
+        </p>
         {post.image && (
           <div className="px-3 overflow-hidden flex items-center justify-center max-h-[min(70vh,520px)] bg-gray-100">
             <img

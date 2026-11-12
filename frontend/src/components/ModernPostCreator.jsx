@@ -133,10 +133,10 @@ const ModernPostCreator = ({ type = "post", postId, parentId, closeModal }) => {
       if (!token) {
         // Use basic validation if no token
         const basicAnalysis = {
-          is_appropriate: text.length >= 5 && !text.includes('http'),
-          reason: text.length < 5 ? "Content is too short" : text.includes('http') ? "Links are not allowed" : "",
+          is_appropriate: text.length >= 5,
+          reason: text.length < 5 ? "Content is too short" : "",
           climate_related: text.toLowerCase().includes('climate') || text.toLowerCase().includes('environment'),
-          has_links: text.includes('http'),
+          has_links: /https?:\/\/|www\./i.test(text),
           has_bad_words: false,
           suggestions: []
         };
@@ -157,24 +157,12 @@ const ModernPostCreator = ({ type = "post", postId, parentId, closeModal }) => {
       if (response.ok) {
         const analysis = await response.json();
         setContentAnalysis(analysis);
-      } else if (response.status === 401) {
-        // Token invalid, use basic validation
+      } else if (response.status === 401 || response.status === 503) {
         const basicAnalysis = {
-          is_appropriate: text.length >= 5 && !text.includes('http'),
-          reason: text.length < 5 ? "Content is too short" : text.includes('http') ? "Links are not allowed" : "",
+          is_appropriate: text.length >= 5,
+          reason: text.length < 5 ? "Content is too short" : "",
           climate_related: text.toLowerCase().includes('climate') || text.toLowerCase().includes('environment'),
-          has_links: text.includes('http'),
-          has_bad_words: false,
-          suggestions: []
-        };
-        setContentAnalysis(basicAnalysis);
-      } else if (response.status === 503) {
-        // AI service not available, use basic validation
-        const basicAnalysis = {
-          is_appropriate: text.length >= 5 && !text.includes('http'),
-          reason: text.length < 5 ? "Content is too short" : text.includes('http') ? "Links are not allowed" : "",
-          climate_related: text.toLowerCase().includes('climate') || text.toLowerCase().includes('environment'),
-          has_links: text.includes('http'),
+          has_links: /https?:\/\/|www\./i.test(text),
           has_bad_words: false,
           suggestions: []
         };
@@ -184,12 +172,11 @@ const ModernPostCreator = ({ type = "post", postId, parentId, closeModal }) => {
       }
     } catch (error) {
       console.error('Content analysis error:', error);
-      // Use basic validation as fallback
       const basicAnalysis = {
-        is_appropriate: text.length >= 5 && !text.includes('http'),
-        reason: text.length < 5 ? "Content is too short" : text.includes('http') ? "Links are not allowed" : "",
+        is_appropriate: text.length >= 5,
+        reason: text.length < 5 ? "Content is too short" : "",
         climate_related: text.toLowerCase().includes('climate') || text.toLowerCase().includes('environment'),
-        has_links: text.includes('http'),
+        has_links: /https?:\/\/|www\./i.test(text),
         has_bad_words: false,
         suggestions: []
       };
