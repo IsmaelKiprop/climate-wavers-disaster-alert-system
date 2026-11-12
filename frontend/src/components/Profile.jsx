@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { BsBriefcase } from "react-icons/bs";
 import { FiMapPin } from "react-icons/fi";
 import { IoCreateOutline, IoCamera, IoCallOutline, IoGlobeOutline, IoLeaf, IoShareOutline, IoQrCodeOutline, IoChatbubbleEllipsesOutline, IoLogoWhatsapp } from "react-icons/io5";
@@ -48,10 +48,12 @@ const Profile = () => {
   const [profile, setProfile] = useState(() => seedOwnProfile(userId));
   const [feed, setFeed] = useState({});
   const [isFollowLocal, setIsFollowLocal] = useState(false);
+  const [followBusy, setFollowBusy] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const [showGiftQrModal, setShowGiftQrModal] = useState(false);
   const [lightbox, setLightbox] = useState(null);
+  const followSeededFor = useRef(null);
   const { isFollowing, setFollowing } = useFollow();
   const isFollow = isFollowing(profile?.id || userId, isFollowLocal);
   const completeness = getProfileCompleteness(profile);
@@ -79,6 +81,8 @@ const Profile = () => {
   ];
 
   useEffect(() => {
+    followSeededFor.current = null;
+    setIsFollowLocal(false);
     const seed = seedOwnProfile(userId);
     if (seed?.id) {
       setProfile((prev) => mergeProfileFields(seed, prev?.id ? prev : seed));
@@ -97,10 +101,25 @@ const Profile = () => {
   useEffect(() => {
     const nextUser = normalizeUser(user?.user || loadedUser);
     if (nextUser?.id) {
-      setProfile((prev) => mergeProfileFields(prev || {}, nextUser));
-      const following = Boolean(nextUser.is_following);
-      setIsFollowLocal(following);
-      setFollowing(nextUser.id, following);
+      // Keep optimistic follow state — don't let a stale is_following:false
+      // from a re-render wipe the Follow → Following toggle.
+      setProfile((prev) => {
+        const merged = mergeProfileFields(prev || {}, nextUser);
+        if (prev && typeof prev.is_following === "boolean" && followSeededFor.current === String(nextUser.id)) {
+          return { ...merged, is_following: prev.is_following };
+        }
+        return merged;
+      });
+      const key = String(nextUser.id);
+      if (followSeededFor.current !== key) {
+        followSeededFor.current = key;
+        const following = Boolean(nextUser.is_following);
+        setIsFollowLocal(following);
+        setFollowing(nextUser.id, following);
+      } else if (nextUser.is_following) {
+        setIsFollowLocal(true);
+        setFollowing(nextUser.id, true);
+      }
     }
     if (user) {
       setFeed({
@@ -180,45 +199,68 @@ const Profile = () => {
     setUser(nextProfile);
   };
 
+  const applyFollowState = (targetId, next) => {
+    setIsFollowLocal(next);
+    setFollowing(targetId, next);
+    setProfile((prev) =>
+      prev ? { ...prev, is_following: next } : prev
+    );
+  };
+
   const follow = async (targetId) => {
-    setIsFollowLocal(true);
-    setFollowing(targetId, true);
+    applyFollowState(targetId, true);
     try {
-      await client.run("post", endpoints?.follow, { following_id: Number(targetId) }, true);
-      setIsFollowLocal(true);
-      setFollowing(targetId, true);
+      await client.run(
+        "post",
+        endpoints?.follow,
+        { following_id: Number(targetId) },
+        true
+      );
+      applyFollowState(targetId, true);
     } catch (error) {
-      const detail = String(error?.response?.data?.detail || "").toLowerCase();
+      const detail = String(
+        error?.response?.data?.detail ||
+          error?.response?.data?.following_id?.[0] ||
+          ""
+      ).toLowerCase();
       if (detail.includes("already following")) {
-        setIsFollowLocal(true);
-        setFollowing(targetId, true);
+        applyFollowState(targetId, true);
         return;
       }
-      setIsFollowLocal(false);
-      setFollowing(targetId, false);
+      applyFollowState(targetId, false);
       throw error;
     }
   };
 
   const unfollow = async (targetId) => {
-    setIsFollowLocal(false);
-    setFollowing(targetId, false);
+    applyFollowState(targetId, false);
     try {
       await client.run("delete", `${endpoints?.follow}${targetId}/`, {}, true);
-      setIsFollowLocal(false);
-      setFollowing(targetId, false);
+      applyFollowState(targetId, false);
     } catch (error) {
-      setIsFollowLocal(true);
-      setFollowing(targetId, true);
+      applyFollowState(targetId, true);
       throw error;
     }
   };
 
   const handleFollow = async (targetId) => {
-    if (!isFollow) {
-      await follow(targetId);
-    } else {
-      await unfollow(targetId);
+    if (!targetId || followBusy) return;
+    setFollowBusy(true);
+    try {
+      if (!isFollow) {
+        await follow(targetId);
+      } else {
+        await unfollow(targetId);
+      }
+    } catch (error) {
+      const detail =
+        error?.response?.data?.detail ||
+        error?.response?.data?.following_id?.[0];
+      toast.error(
+        typeof detail === "string" ? detail : "Could not update follow."
+      );
+    } finally {
+      setFollowBusy(false);
     }
   };
 
@@ -428,14 +470,16 @@ const Profile = () => {
                   </button>
                   <button
                     type="button"
-                    onClick={() => handleFollow(profile?.id)}
-                    className={`h-11 px-4 text-sm font-medium inline-flex items-center justify-center gap-2 border ${
+                    disabled={followBusy}
+                    aria-pressed={isFollow}
+                    onClick={() => handleFollow(profile?.id || userId)}
+                    className={`h-11 px-4 text-sm font-medium inline-flex items-center justify-center gap-2 border disabled:opacity-60 ${
                       isFollow
                         ? "border-border bg-surface text-foreground"
                         : "border-transparent bg-foreground text-background"
                     }`}
                   >
-                    {isFollow ? "Following" : "Follow"}
+                    {followBusy ? "…" : isFollow ? "Following" : "Follow"}
                   </button>
                 </div>
               ) : null}
