@@ -22,6 +22,7 @@ from .models import (
     UserAlertPreference,
     EmergencyAgency,
     OfficialAlertEvent,
+    WaverXTweet,
     ResponderOrganization,
     ResponderMembership,
     ResponderSeatInvite,
@@ -119,6 +120,14 @@ class OfficialAlertEventAdmin(ModelAdmin):
     list_display = ("event_id", "source", "title", "disaster_type", "created_at")
     list_filter = ("source", "disaster_type")
     search_fields = ("event_id", "title")
+
+
+@admin.register(WaverXTweet)
+class WaverXTweetAdmin(ModelAdmin):
+    list_display = ("kind", "status", "fingerprint", "tweet_id", "posted_at", "created_at")
+    list_filter = ("kind", "status")
+    search_fields = ("fingerprint", "event_id", "tweet_id", "text")
+    readonly_fields = ("created_at", "posted_at")
 
 
 @admin.register(ResponderOrganization)

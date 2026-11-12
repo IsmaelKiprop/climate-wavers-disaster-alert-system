@@ -1460,6 +1460,42 @@ class OfficialAlertEvent(models.Model):
         return f"{self.source}:{self.event_id}"
 
 
+class WaverXTweet(models.Model):
+    """Log of WaverX posts to X (Twitter) — alerts, tips, and dry-runs."""
+
+    KIND_CHOICES = [
+        ("alert", "Verified alert"),
+        ("tip", "Climate tip"),
+    ]
+    STATUS_CHOICES = [
+        ("posted", "Posted"),
+        ("failed", "Failed"),
+        ("skipped", "Skipped"),
+        ("dry_run", "Dry run"),
+    ]
+
+    kind = models.CharField(max_length=16, choices=KIND_CHOICES)
+    fingerprint = models.CharField(max_length=160, unique=True)
+    event_id = models.CharField(max_length=120, blank=True, default="")
+    text = models.TextField()
+    tweet_id = models.CharField(max_length=64, blank=True, default="")
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default="skipped")
+    response = models.JSONField(default=dict, blank=True)
+    feed_post_id = models.CharField(max_length=64, blank=True, default="")
+    posted_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["kind", "status"]),
+            models.Index(fields=["event_id"]),
+        ]
+
+    def __str__(self):
+        return f"{self.kind}:{self.fingerprint}:{self.status}"
+
+
 class ResponderOrganization(models.Model):
     """Verified disaster-response org (Red Cross, county, UN, NGO, etc.)."""
 

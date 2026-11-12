@@ -165,3 +165,58 @@ def send_notifications():
     except Exception as e:
         logger.error(f"Error sending notifications: {str(e)}")
         return f"Error: {str(e)}"
+
+
+@shared_task
+def waverx_tweet_climate_tip():
+    """Post WaverX's daily creative climate tip to the free in-app feed."""
+    try:
+        from .waverx_twitter import tweet_climate_tip
+
+        result = tweet_climate_tip(dry_run=False, polish=True)
+        logger.info("WaverX tip tweet: %s", result)
+        return result
+    except Exception as e:
+        logger.error("WaverX tip tweet error: %s", e)
+        return f"Error: {str(e)}"
+
+
+@shared_task
+def waverx_tweet_recent_alerts():
+    """Backfill WaverX feed posts for recent official alerts not yet published."""
+    try:
+        from .models import OfficialAlertEvent, WaverXTweet
+        from .waverx_twitter import tweet_verified_alert
+
+        posted_ids = set(
+            WaverXTweet.objects.filter(kind="alert", status="posted").values_list(
+                "event_id", flat=True
+            )
+        )
+        count = 0
+        for ev in OfficialAlertEvent.objects.order_by("-created_at")[:20]:
+            if ev.event_id in posted_ids:
+                continue
+            payload = ev.payload if isinstance(ev.payload, dict) else {}
+            event = {
+                "id": ev.event_id,
+                "event_id": ev.event_id,
+                "title": ev.title,
+                "disaster_type": ev.disaster_type or payload.get("disaster_type"),
+                "magnitude": float(ev.magnitude) if ev.magnitude is not None else None,
+                "city": payload.get("city"),
+                "region": payload.get("region"),
+                "country": payload.get("country"),
+                "official_source": ev.source,
+                "source_url": ev.source_url,
+                "ai_summary": ev.ai_summary,
+                "isOfficial": True,
+            }
+            tweet_verified_alert(event)
+            count += 1
+            if count >= 3:
+                break
+        return f"WaverX alert tweets attempted={count}"
+    except Exception as e:
+        logger.error("WaverX alert tweet backfill error: %s", e)
+        return f"Error: {str(e)}"

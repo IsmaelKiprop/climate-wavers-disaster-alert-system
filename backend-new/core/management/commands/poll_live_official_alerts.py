@@ -4,6 +4,7 @@ from core.ai_alert_summary import generate_alert_summary
 from core.alerts import dispatch_disaster_alert
 from core.live_feeds import fetch_live_official_events, passes_severity_gate
 from core.models import OfficialAlertEvent
+from core.waverx_twitter import tweet_verified_alert
 
 
 class Command(BaseCommand):
@@ -88,6 +89,17 @@ class Command(BaseCommand):
                 continue
 
             result = dispatch_disaster_alert(payload)
+            try:
+                tweet_result = tweet_verified_alert(payload, dry_run=False)
+                result["waverx_tweet"] = {
+                    "ok": tweet_result.get("ok"),
+                    "tweet_id": tweet_result.get("tweet_id"),
+                    "deduped": tweet_result.get("deduped"),
+                    "skipped": tweet_result.get("skipped"),
+                }
+            except Exception as exc:
+                result["waverx_tweet"] = {"ok": False, "error": str(exc)}
+                self.stderr.write(f"WaverX tweet skipped for {event_id}: {exc}")
             OfficialAlertEvent.objects.create(
                 event_id=event_id,
                 source=event.get("official_source") or "official",

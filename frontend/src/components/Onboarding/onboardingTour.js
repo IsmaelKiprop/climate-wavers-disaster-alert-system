@@ -194,7 +194,7 @@ export const tour = {
       {
         title: "WaverX",
         message:
-          "Ask Climate Wavers’ assistant for help navigating alerts, planting, and climate questions.",
+          "Ask Climate Wavers’ assistant for help navigating alerts, planting, and climate questions. WaverX also shares verified alerts and creative climate tips in your feed.",
       },
       {
         title: "You’re ready",

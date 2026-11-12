@@ -343,6 +343,36 @@ CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = 'UTC'
 
+# WaverX broadcasts (free): post to Climate Wavers feed. Paid X API stays OFF.
+TWITTER_BEARER_TOKEN = env("TWITTER_BEARER_TOKEN", default="")
+TWITTER_API_KEY = env("TWITTER_API_KEY", default="")
+TWITTER_API_SECRET = env("TWITTER_API_SECRET", default="")
+TWITTER_ACCESS_TOKEN = env("TWITTER_ACCESS_TOKEN", default="")
+TWITTER_ACCESS_TOKEN_SECRET = env("TWITTER_ACCESS_TOKEN_SECRET", default="")
+WAVERX_TWITTER_ENABLED = env.bool("WAVERX_TWITTER_ENABLED", default=False)  # paid — leave false
+WAVERX_TWITTER_AI_POLISH = env.bool("WAVERX_TWITTER_AI_POLISH", default=False)
+WAVERX_MIRROR_FEED = env.bool("WAVERX_MIRROR_FEED", default=True)
+WAVERX_USERNAME = env("WAVERX_USERNAME", default="waverx")
+OPENAI_API_KEY = env("OPENAI_API_KEY", default="")
+
+
+try:
+    from celery.schedules import crontab
+
+    CELERY_BEAT_SCHEDULE = {
+        "waverx-daily-climate-tip": {
+            "task": "core.tasks.waverx_tweet_climate_tip",
+            "schedule": crontab(hour=8, minute=15),  # ~08:15 UTC
+        },
+        "waverx-alert-tweet-backfill": {
+            "task": "core.tasks.waverx_tweet_recent_alerts",
+            "schedule": crontab(minute="*/45"),
+        },
+    }
+except Exception:
+    CELERY_BEAT_SCHEDULE = {}
+
+
 # Redis configuration (optional for development)
 try:
     redis_url = env("REDIS")

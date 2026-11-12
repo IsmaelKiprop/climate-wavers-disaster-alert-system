@@ -51,6 +51,14 @@ app.conf.beat_schedule = {
         'task': 'core.tasks.update_statistics',
         'schedule': 600.0,  # Every 10 minutes
     },
+    'waverx-daily-climate-tip': {
+        'task': 'core.tasks.waverx_tweet_climate_tip',
+        'schedule': 86400.0,  # Daily
+    },
+    'waverx-alert-tweet-backfill': {
+        'task': 'core.tasks.waverx_tweet_recent_alerts',
+        'schedule': 2700.0,  # Every 45 minutes
+    },
 }
 
 app.conf.timezone = 'UTC'
