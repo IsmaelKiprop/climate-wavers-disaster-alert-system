@@ -1,60 +1,51 @@
-import  { useState } from "react";
-import {useNavigate } from "react-router-dom";
-import IconButton from "@mui/material/IconButton";
-import OutlinedInput from "@mui/material/OutlinedInput";
-import InputLabel from "@mui/material/InputLabel";
-import InputAdornment from "@mui/material/InputAdornment";
-import FormControl from "@mui/material/FormControl";
-import Visibility from "@mui/icons-material/Visibility";
-import VisibilityOff from "@mui/icons-material/VisibilityOff";
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import bgReset from "../../assets/nextReset.svg";
 
 const PhoneCode = () => {
   const [showPassword, setShowPassword] = useState(false);
+  const [code, setCode] = useState("");
   const navigate = useNavigate();
 
-  const handleClickShowPassword = () => setShowPassword((show) => !show);
-
-  const handleMouseDownPassword = (event) => {
-    event.preventDefault();
-  };
-
   return (
-    <div className="lg:h-[100vh] md:h-[100vh] flex justify-between">
+    <div className="lg:h-[100vh] md:h-[100vh] flex justify-between bg-background text-foreground">
       <div
         className="w-[100%] lg:w-[50%] md:w-[50%] bg-cover bg-center hidden lg:flex md:flex"
         style={{ backgroundImage: `url(${bgReset})` }}
-      ></div>
+      />
       <div className="w-[100%] lg:w-[30%] md:w-[50%] py-8 lg:px-16 md:px-16 px-6 m-auto text-center max-sm:pt-[200px]">
-        <h1 className="lg:text-[40px] md:text-[40px] text-[24px] text-[#2F4F4F] font-bold font-serif  mb-4">
-       Phone Verification
+        <h1 className="lg:text-[40px] md:text-[40px] text-[24px] text-primary font-bold mb-4">
+          Phone Verification
         </h1>
-        <p className="lg:text-[24px] md:text-[24px] font-serif text-[18px] mb-10">
-        Check your phone for verification code
+        <p className="lg:text-[24px] md:text-[24px] text-[18px] mb-10 text-muted">
+          Check your phone for verification code
         </p>
-        <FormControl sx={{ m: 1, width: "70%", my: 3 }} variant="outlined" color="success">
-          <InputLabel htmlFor="outlined-adornment-password">
-           Input Code
-          </InputLabel>
-          <OutlinedInput
-            id="outlined-adornment-password"
+        <div className="relative w-[70%] mx-auto my-3">
+          <label htmlFor="phone-code" className="sr-only">
+            Input code
+          </label>
+          <input
+            id="phone-code"
             type={showPassword ? "text" : "password"}
-            endAdornment={
-              <InputAdornment position="end">
-                <IconButton
-                  aria-label="toggle password visibility"
-                  onClick={handleClickShowPassword}
-                  onMouseDown={handleMouseDownPassword}
-                  edge="end"
-                >
-                  {showPassword ? <VisibilityOff /> : <Visibility />}
-                </IconButton>
-              </InputAdornment>
-            }
-            label="Password"
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            placeholder="Input code"
+            className="w-full h-12 px-3 pr-16 border border-border bg-surface text-foreground"
           />
-        </FormControl>
-        <button className="bg-[#2F4F4F] text-white py-4 w-[70%] m-2  rounded-md mt-4" onClick={() => navigate('/passwordreset')}>
+          <button
+            type="button"
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-sm text-muted px-2 py-1"
+            onClick={() => setShowPassword((v) => !v)}
+            aria-label={showPassword ? "Hide code" : "Show code"}
+          >
+            {showPassword ? "Hide" : "Show"}
+          </button>
+        </div>
+        <button
+          type="button"
+          className="bg-primary text-primary-foreground py-4 w-[70%] m-2 mt-4"
+          onClick={() => navigate("/passwordreset")}
+        >
           Confirm
         </button>
       </div>

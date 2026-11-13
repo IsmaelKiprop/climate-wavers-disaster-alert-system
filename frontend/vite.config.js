@@ -44,22 +44,15 @@ export default defineConfig(({ command }) => ({
     chunkSizeWarningLimit: 900,
     rollupOptions: {
       output: {
+        // Only split leaf / heavy libs. Do NOT force-split react, @mui, or @emotion —
+        // that caused "Cannot access before initialization" circular chunk errors.
         manualChunks(id) {
           if (!id.includes('node_modules')) return undefined
-          if (id.includes('react-dom') || id.includes('/react/') || id.includes('react-router')) {
-            return 'vendor-react'
-          }
-          if (id.includes('@tanstack/react-query')) return 'vendor-query'
           if (id.includes('chart.js') || id.includes('react-chartjs')) return 'vendor-charts'
           if (id.includes('leaflet')) return 'vendor-leaflet'
           if (id.includes('emoji-picker')) return 'vendor-emoji'
-          if (id.includes('firebase')) return 'vendor-firebase'
-          if (id.includes('@mui') || id.includes('@emotion')) return 'vendor-mui'
           if (id.includes('html2canvas') || id.includes('jspdf')) return 'vendor-pdf'
-          if (id.includes('framer-motion')) return 'vendor-motion'
-          if (id.includes('axios') || id.includes('date-fns') || id.includes('js-cookie')) {
-            return 'vendor-utils'
-          }
+          if (id.includes('firebase')) return 'vendor-firebase'
           return undefined
         },
       },

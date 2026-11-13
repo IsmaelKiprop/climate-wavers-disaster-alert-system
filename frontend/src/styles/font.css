@@ -1,49 +1,13 @@
-@font-face {
-  font-display: swap;
-  font-style: normal;
-  src: url("/fonts/MontserratRomanMedium.ttf");
-  font-family: "Montserrat";
-  font-weight: 500;
+/*
+  UI fonts are loaded from Google Fonts in index.html (non-blocking).
+  Local /fonts/*.ttf files are not shipped in public/, so do not @font-face
+  them here — browsers were decoding HTML 404 pages as fonts (OTS errors).
+*/
+:root {
+  --cw-font-sans: "Montserrat", "Poppins", system-ui, sans-serif;
+  --cw-font-display: "Montserrat Alternates", "Montserrat", system-ui, sans-serif;
 }
-@font-face {
-  font-display: swap;
-  font-style: normal;
-  src: url("/fonts/MontserratRomanRegular.ttf");
-  font-family: "Montserrat";
-  font-weight: 400;
-}
-@font-face {
-  font-display: swap;
-  font-style: normal;
-  src: url("/fonts/MontserratRomanBold.ttf");
-  font-family: "Montserrat";
-  font-weight: 700;
-}
-@font-face {
-  font-display: swap;
-  font-style: normal;
-  src: url("/fonts/MontserratRomanSemiBold.ttf");
-  font-family: "Montserrat";
-  font-weight: 600;
-}
-@font-face {
-  font-display: swap;
-  font-style: normal;
-  src: url("/fonts/MontserratAlternatesBold.ttf");
-  font-family: "Montserrat Alternates";
-  font-weight: 700;
-}
-@font-face {
-  font-display: swap;
-  font-style: normal;
-  src: url("/fonts/PoppinsRegular.ttf");
-  font-family: "Poppins";
-  font-weight: 400;
-}
-@font-face {
-  font-display: swap;
-  font-style: normal;
-  src: url("/fonts/DMSansRegular.ttf");
-  font-family: "DM Sans";
-  font-weight: 400;
+
+body {
+  font-family: var(--cw-font-sans);
 }
