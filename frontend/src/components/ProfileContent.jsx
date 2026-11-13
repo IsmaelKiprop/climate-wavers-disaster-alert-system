@@ -6,11 +6,25 @@ import { PiBookmark, PiBookmarkFill } from "react-icons/pi";
 import { BsBarChart } from "react-icons/bs";
 import { formatDistanceToNow } from "date-fns";
 import PropTypes from "prop-types";
-import { avatarUrl } from "../utils/factory";
+import { avatarUrl, secureMediaUrl } from "../utils/factory";
 import LinkifiedText from "./LinkifiedText";
 import { postFontStyle } from "../utils/postFonts";
 import PostOwnerMenu from "./PostOwnerMenu";
 import PostEditPanel from "./PostEditPanel";
+import PostMediaViewer from "./PostMediaViewer";
+import { parsePostImages } from "../utils/postMedia";
+
+const PostImageFallback = ({ image, alt = "Post image", className = "" }) => {
+  const urls = parsePostImages(image);
+  if (!urls.length) return null;
+  return (
+    <img
+      src={secureMediaUrl(urls[0])}
+      alt={alt}
+      className={className}
+    />
+  );
+};
 
 const ProfileContent = ({ content, type, onLike, onUnlike, onRepost, onUnrepost, onSave, onUnsave }) => {
   const navigate = useNavigate();
@@ -134,40 +148,9 @@ const ProfileContent = ({ content, type, onLike, onUnlike, onRepost, onUnrepost,
                 </p>
                 )}
                 
-                {/* Handle both images and videos */}
-                {!editing && content.image && (
-                  <div className="mt-4">
-                    {content.image.includes('.mp4') || content.image.includes('.mov') || content.image.includes('.avi') || content.image.includes('.webm') ? (
-                      <video
-                        src={content.image}
-                        controls
-                        className="rounded-xl w-full max-h-[min(70vh,520px)] object-contain bg-gray-100 shadow-md"
-                        preload="metadata"
-                      >
-                        Your browser does not support the video tag.
-                      </video>
-                    ) : (
-                      <img
-                        src={content.image}
-                        alt="Post image"
-                        className="rounded-xl w-full max-h-[min(70vh,520px)] object-contain bg-gray-100 shadow-md"
-                      />
-                    )}
-                  </div>
-                )}
-                
-                {!editing && content.video && (
-                  <div className="mt-4">
-                    <video
-                      src={content.video}
-                      controls
-                      className="rounded-xl w-full max-h-[min(70vh,520px)] object-contain bg-gray-100 shadow-md"
-                      preload="metadata"
-                    >
-                      Your browser does not support the video tag.
-                    </video>
-                  </div>
-                )}
+                {!editing && (content.image || content.video) ? (
+                  <PostMediaViewer image={content.image} video={content.video} />
+                ) : null}
                 
                 {!editing && content.audio && (
                   <div className="mt-4">
@@ -289,26 +272,15 @@ const ProfileContent = ({ content, type, onLike, onUnlike, onRepost, onUnrepost,
                       </p>
                       
                       {/* Show original post attachments */}
-                      {content.post.image && (
+                      {content.post.image ? (
                         <div className="mt-2">
-                          {content.post.image.includes('.mp4') || content.post.image.includes('.mov') || content.post.image.includes('.avi') || content.post.image.includes('.webm') ? (
-                            <video
-                              src={content.post.image}
-                              controls
-                              className="rounded-lg max-w-full h-32 object-cover"
-                              preload="metadata"
-                            >
-                              Your browser does not support the video tag.
-                            </video>
-                          ) : (
-                            <img
-                              src={content.post.image}
-                              alt="Original post image"
-                              className="rounded-lg max-w-full h-32 object-cover"
-                            />
-                          )}
+                          <PostImageFallback
+                            image={content.post.image}
+                            alt="Original post image"
+                            className="rounded-lg max-w-full h-32 object-cover"
+                          />
                         </div>
-                      )}
+                      ) : null}
                     </div>
                   ) : (
                     <div className="bg-white p-3 rounded border">
@@ -326,40 +298,9 @@ const ProfileContent = ({ content, type, onLike, onUnlike, onRepost, onUnrepost,
                   <LinkifiedText text={content.content || ""} />
                 </p>
                   
-                  {/* Show comment attachments */}
-                  {content.image && (
-                    <div className="mt-3">
-                      {content.image.includes('.mp4') || content.image.includes('.mov') || content.image.includes('.avi') || content.image.includes('.webm') ? (
-                        <video
-                          src={content.image}
-                          controls
-                          className="rounded-lg w-full max-h-[min(70vh,520px)] object-contain bg-gray-100 shadow-sm"
-                          preload="metadata"
-                        >
-                          Your browser does not support the video tag.
-                        </video>
-                      ) : (
-                        <img
-                          src={content.image}
-                          alt="Comment image"
-                          className="rounded-lg w-full max-h-[min(70vh,520px)] object-contain bg-gray-100 shadow-sm"
-                        />
-                      )}
-                    </div>
-                  )}
-                  
-                  {content.video && (
-                    <div className="mt-3">
-                      <video
-                        src={content.video}
-                        controls
-                        className="rounded-lg w-full max-h-[min(70vh,520px)] object-contain bg-gray-100 shadow-sm"
-                        preload="metadata"
-                      >
-                        Your browser does not support the video tag.
-                      </video>
-                    </div>
-                  )}
+                  {(content.image || content.video) ? (
+                    <PostMediaViewer image={content.image} video={content.video} />
+                  ) : null}
                   
                   {content.audio && (
                     <div className="mt-3">
@@ -460,26 +401,12 @@ const ProfileContent = ({ content, type, onLike, onUnlike, onRepost, onUnrepost,
                       >
                         <LinkifiedText text={content.post?.content || ""} />
                       </p>
-                      {content.post.image && (
-                        <div className="mt-3">
-                          {content.post.image.includes('.mp4') || content.post.image.includes('.mov') || content.post.image.includes('.avi') || content.post.image.includes('.webm') ? (
-                            <video
-                              src={content.post.image}
-                              controls
-                              className="rounded-lg w-full max-h-[min(70vh,520px)] object-contain bg-gray-100 shadow-sm"
-                              preload="metadata"
-                            >
-                              Your browser does not support the video tag.
-                            </video>
-                          ) : (
-                            <img
-                              src={content.post.image}
-                              alt="Reposted post image"
-                              className="rounded-lg w-full max-h-[min(70vh,520px)] object-contain bg-gray-100 shadow-sm"
-                            />
-                          )}
-                        </div>
-                      )}
+                      {content.post.image || content.post.video ? (
+                        <PostMediaViewer
+                          image={content.post.image}
+                          video={content.post.video}
+                        />
+                      ) : null}
                       
                       {content.post.location && (
                         <div className="mt-3 p-2 bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg border border-purple-100">
@@ -537,24 +464,12 @@ const ProfileContent = ({ content, type, onLike, onUnlike, onRepost, onUnrepost,
                   >
                     {content.post?.content}
                   </p>
-                  {content.post?.image && (
+                  {(content.post?.image || content.post?.video) && (
                     <div className="mt-3">
-                      {content.post.image.includes('.mp4') || content.post.image.includes('.mov') || content.post.image.includes('.avi') || content.post.image.includes('.webm') ? (
-                        <video
-                          src={content.post.image}
-                          controls
-                          className="rounded-lg w-full max-h-[min(70vh,520px)] object-contain bg-gray-100 shadow-md"
-                          preload="metadata"
-                        >
-                          Your browser does not support the video tag.
-                        </video>
-                      ) : (
-                        <img
-                          src={content.post.image}
-                          alt="Bookmarked post image"
-                          className="rounded-lg w-full max-h-[min(70vh,520px)] object-contain bg-gray-100 shadow-md"
-                        />
-                      )}
+                      <PostMediaViewer
+                        image={content.post.image}
+                        video={content.post.video}
+                      />
                       
                       {content.post.location && (
                         <div className="mt-3 p-2 bg-gradient-to-r from-yellow-50 to-orange-50 rounded-lg border border-yellow-100">
@@ -612,24 +527,12 @@ const ProfileContent = ({ content, type, onLike, onUnlike, onRepost, onUnrepost,
                   >
                     {content.post?.content}
                   </p>
-                  {content.post?.image && (
+                  {(content.post?.image || content.post?.video) && (
                     <div className="mt-3">
-                      {content.post.image.includes('.mp4') || content.post.image.includes('.mov') || content.post.image.includes('.avi') || content.post.image.includes('.webm') ? (
-                        <video
-                          src={content.post.image}
-                          controls
-                          className="rounded-lg w-full max-h-[min(70vh,520px)] object-contain bg-gray-100 shadow-md"
-                          preload="metadata"
-                        >
-                          Your browser does not support the video tag.
-                        </video>
-                      ) : (
-                        <img
-                          src={content.post.image}
-                          alt="Liked post image"
-                          className="rounded-lg w-full max-h-[min(70vh,520px)] object-contain bg-gray-100 shadow-md"
-                        />
-                      )}
+                      <PostMediaViewer
+                        image={content.post.image}
+                        video={content.post.video}
+                      />
                     </div>
                   )}
                 </div>

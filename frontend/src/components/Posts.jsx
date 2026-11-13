@@ -13,6 +13,7 @@ import PostEditPanel from "./PostEditPanel";
 import PropTypes from "prop-types";
 import ImageLightbox from "./ImageLightbox";
 import LinkifiedText from "./LinkifiedText";
+import PostMediaViewer from "./PostMediaViewer";
 import { postFontStyle } from "../utils/postFonts";
 
 const Posts = ({
@@ -314,89 +315,11 @@ const Posts = ({
               </button>
               )}
               {editingId !== post.id && (post?.image || post?.video) && (
-                  <div
-                    className={`mt-4 grid gap-2 ${
-                      post?.image && post?.video ? "grid-cols-2" : "grid-cols-1"
-                    }`}
-                  >
-                    {post?.image && (
-                      <div
-                        role="button"
-                        tabIndex={0}
-                        className="overflow-hidden rounded-xl bg-gray-100 flex items-center justify-center max-h-[min(70vh,520px)] shadow-md group-hover:shadow-lg transition-shadow duration-300 cursor-zoom-in"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          setMediaPreview({
-                            type: "image",
-                            src: secureMediaUrl(post.image),
-                            alt: "Post image",
-                          });
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" || e.key === " ") {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            setMediaPreview({
-                              type: "image",
-                              src: secureMediaUrl(post.image),
-                              alt: "Post image",
-                            });
-                          }
-                        }}
-                        aria-label="Preview image"
-                      >
-                        <img
-                          className="w-full max-h-[min(70vh,520px)] object-contain pointer-events-none"
-                          src={secureMediaUrl(post.image)}
-                          alt="Post content"
-                        />
-                      </div>
-                    )}
-                    {post?.video && (
-                      <div
-                        role="button"
-                        tabIndex={0}
-                        className="relative overflow-hidden rounded-xl bg-gray-100 flex items-center justify-center max-h-[min(70vh,520px)] shadow-md group-hover:shadow-lg transition-shadow duration-300 cursor-zoom-in text-left"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          setMediaPreview({
-                            type: "video",
-                            src: secureMediaUrl(post.video),
-                            alt: "Post video",
-                          });
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" || e.key === " ") {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            setMediaPreview({
-                              type: "video",
-                              src: secureMediaUrl(post.video),
-                              alt: "Post video",
-                            });
-                          }
-                        }}
-                        aria-label="Preview video"
-                      >
-                        <video
-                          className="w-full max-h-[min(70vh,520px)] object-contain pointer-events-none"
-                          preload="metadata"
-                          playsInline
-                          muted
-                        >
-                          <source src={secureMediaUrl(post.video)} type="video/mp4" />
-                          Your browser does not support the video tag.
-                        </video>
-                        <span className="absolute inset-0 flex items-center justify-center bg-black/20 pointer-events-none">
-                          <span className="rounded-full bg-black/60 text-white text-xs font-medium px-3 py-1.5">
-                            Play preview
-                          </span>
-                        </span>
-                      </div>
-                    )}
-                  </div>
+                  <PostMediaViewer
+                    image={post.image}
+                    video={post.video}
+                    onPreview={setMediaPreview}
+                  />
                 )}
                 {editingId !== post.id && post?.audio && (
                   <div className="mt-4">

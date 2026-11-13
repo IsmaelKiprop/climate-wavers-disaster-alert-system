@@ -17,12 +17,19 @@ import {
   reverseGeocode,
 } from "../utils/formatLocation";
 import PostFontPicker from "./PostFontPicker";
+import PostMediaCarousel from "./PostMediaCarousel";
 import { DEFAULT_POST_FONT, postFontStyle } from "../utils/postFonts";
+import {
+  createMediaItem,
+  encodePostImages,
+  revokeMediaItems,
+} from "../utils/postMedia";
+
+const MAX_MEDIA = 10;
 
 export default function Createpost({ type, postId, parentId, closeModal }) {
   const { register, handleSubmit, reset, watch, setValue } = useForm();
-  const [imagePreview, setImagePreview] = useState(null);
-  const [videoPreview, setVideoPreview] = useState(null);
+  const [mediaItems, setMediaItems] = useState([]);
   const [isDisabled, setIsDisabled] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showLocationPicker, setShowLocationPicker] = useState(false);
@@ -35,8 +42,7 @@ export default function Createpost({ type, postId, parentId, closeModal }) {
   const [aiGeneratedContent, setAiGeneratedContent] = useState("");
   const [isGeneratingContent, setIsGeneratingContent] = useState(false);
   const [fontFamily, setFontFamily] = useState(DEFAULT_POST_FONT);
-  const fileInputRef = useRef(null);
-  const videoInputRef = useRef(null);
+  const mediaInputRef = useRef(null);
   const aiPromptRef = useRef(null);
   const [user, setUserState] = useState(() => getUser() || null);
 
@@ -46,24 +52,45 @@ export default function Createpost({ type, postId, parentId, closeModal }) {
     return () => window.removeEventListener("userUpdated", sync);
   }, []);
 
-  const handleImageChange = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      setImagePreview(URL.createObjectURL(file));
-      setVideoPreview(null); // Clear video if image is selected
-    } else {
-      setImagePreview(null);
+  useEffect(() => {
+    return () => revokeMediaItems(mediaItems);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const addMediaFiles = (fileList) => {
+    const incoming = Array.from(fileList || []);
+    if (!incoming.length) return;
+    const room = MAX_MEDIA - mediaItems.length;
+    if (room <= 0) {
+      toast.error(`You can add up to ${MAX_MEDIA} photos or videos`);
+      return;
     }
+    const next = [];
+    for (const file of incoming.slice(0, room)) {
+      const item = createMediaItem(file);
+      if (item) next.push(item);
+      else toast.error(`${file.name} is not a supported photo or video`);
+    }
+    if (next.length) setMediaItems((prev) => [...prev, ...next]);
   };
 
-  const handleVideoChange = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      setVideoPreview(URL.createObjectURL(file));
-      setImagePreview(null); // Clear image if video is selected
-    } else {
-      setVideoPreview(null);
-    }
+  const handleMediaInputChange = (e) => {
+    addMediaFiles(e.target.files);
+    e.target.value = "";
+  };
+
+  const removeMediaAt = (index) => {
+    setMediaItems((prev) => {
+      const target = prev[index];
+      if (target?.previewUrl) URL.revokeObjectURL(target.previewUrl);
+      return prev.filter((_, i) => i !== index);
+    });
+  };
+
+  const clearMedia = () => {
+    revokeMediaItems(mediaItems);
+    setMediaItems([]);
+    if (mediaInputRef.current) mediaInputRef.current.value = "";
   };
 
   const handleEmojiClick = (emoji) => {
@@ -392,24 +419,22 @@ export default function Createpost({ type, postId, parentId, closeModal }) {
       if (postId) formData.append('post_id', postId);
       if (parentId) formData.append('parent_comment', parentId);
       
-      // Handle image files - upload to Cloudinary and send URL
-      if (data.image && data.image.length > 0 && data.image[0] instanceof File) {
-        console.log("Uploading image file:", data.image[0].name, data.image[0].type, data.image[0].size);
-        const imageUrl = await uploadFiles(data.image[0]);
-        if (imageUrl && imageUrl.length > 0) {
-          formData.append('image', imageUrl[0]);
-          console.log("Image uploaded successfully:", imageUrl[0]);
-        }
+      const imageFiles = mediaItems
+        .filter((item) => item.kind === "image")
+        .map((item) => item.file);
+      const videoFiles = mediaItems
+        .filter((item) => item.kind === "video")
+        .map((item) => item.file);
+
+      if (imageFiles.length) {
+        const imageUrls = await uploadFiles(imageFiles);
+        const encoded = encodePostImages(imageUrls);
+        if (encoded) formData.append("image", encoded);
       }
-      
-      // Handle video files - upload to Cloudinary and send URL
-      if (data.video && data.video.length > 0 && data.video[0] instanceof File) {
-        console.log("Uploading video file:", data.video[0].name, data.video[0].type, data.video[0].size);
-        const videoUrl = await uploadFiles(data.video[0]);
-        if (videoUrl && videoUrl.length > 0) {
-          formData.append('video', videoUrl[0]);
-          console.log("Video uploaded successfully:", videoUrl[0]);
-        }
+
+      if (videoFiles.length) {
+        const videoUrls = await uploadFiles(videoFiles);
+        if (videoUrls?.[0]) formData.append("video", videoUrls[0]);
       }
       
       // Handle audio files - send as File object
@@ -444,8 +469,7 @@ export default function Createpost({ type, postId, parentId, closeModal }) {
       toast.success("Post created successfully! 🌱");
       
       reset();
-      setImagePreview(null);
-      setVideoPreview(null);
+      clearMedia();
       setSelectedLocation(null);
       setFontFamily(DEFAULT_POST_FONT);
       setIsDisabled(false);
@@ -526,41 +550,16 @@ export default function Createpost({ type, postId, parentId, closeModal }) {
           </div>
         </div>
       )}
-      {/* Image Preview */}
-      {imagePreview && (
-        <div className="relative group">
-          <img
-            src={imagePreview}
-            alt="Preview"
-            className="w-full max-h-64 object-cover rounded-xl shadow-md"
-          />
-          <button
-            type="button"
-            onClick={() => setImagePreview(null)}
-            className="absolute top-2 right-2 p-2 bg-black/50 text-white rounded-full hover:bg-black/70 transition-colors opacity-0 group-hover:opacity-100"
-          >
-            <IoCloseSharp size={16} />
-          </button>
-        </div>
-      )}
-
-      {/* Video Preview */}
-      {videoPreview && (
-        <div className="relative group">
-          <video
-            src={videoPreview}
-            controls
-            className="w-full max-h-64 object-cover rounded-xl shadow-md"
-          />
-          <button
-            type="button"
-            onClick={() => setVideoPreview(null)}
-            className="absolute top-2 right-2 p-2 bg-black/50 text-white rounded-full hover:bg-black/70 transition-colors opacity-0 group-hover:opacity-100"
-          >
-            <IoCloseSharp size={16} />
-          </button>
-        </div>
-      )}
+      {mediaItems.length ? (
+        <PostMediaCarousel
+          items={mediaItems}
+          onAddFiles={addMediaFiles}
+          onRemoveAt={removeMediaAt}
+          onClear={clearMedia}
+          maxItems={MAX_MEDIA}
+          className="!mx-0"
+        />
+      ) : null}
 
       {/* Selected Location Display */}
       {selectedLocation && (
@@ -581,21 +580,23 @@ export default function Createpost({ type, postId, parentId, closeModal }) {
       )}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between pt-4 border-t border-gray-100 gap-4">
         <div className="flex flex-wrap items-center gap-2 sm:gap-4">
-          {/* Image Upload */}
-          <label htmlFor="image" className="cursor-pointer">
-            <div className="flex items-center gap-1 sm:gap-2 p-2 rounded-lg hover:bg-gray-100 transition-colors duration-200">
-              <MdImage className="w-5 h-5 sm:w-6 sm:h-6 text-gray-600" />
-              <span className="text-xs sm:text-sm font-medium text-gray-600 hidden sm:inline">Photo</span>
-            </div>
-          </label>
+          <button
+            type="button"
+            onClick={() => mediaInputRef.current?.click()}
+            className="flex items-center gap-1 sm:gap-2 p-2 rounded-lg hover:bg-gray-100 transition-colors duration-200"
+          >
+            <MdImage className="w-5 h-5 sm:w-6 sm:h-6 text-gray-600" />
+            <span className="text-xs sm:text-sm font-medium text-gray-600 hidden sm:inline">Photo</span>
+          </button>
 
-          {/* Video Upload */}
-          <label htmlFor="video" className="cursor-pointer">
-            <div className="flex items-center gap-1 sm:gap-2 p-2 rounded-lg hover:bg-gray-100 transition-colors duration-200">
-              <MdVideocam className="w-5 h-5 sm:w-6 sm:h-6 text-gray-600" />
-              <span className="text-xs sm:text-sm font-medium text-gray-600 hidden sm:inline">Video</span>
-            </div>
-          </label>
+          <button
+            type="button"
+            onClick={() => mediaInputRef.current?.click()}
+            className="flex items-center gap-1 sm:gap-2 p-2 rounded-lg hover:bg-gray-100 transition-colors duration-200"
+          >
+            <MdVideocam className="w-5 h-5 sm:w-6 sm:h-6 text-gray-600" />
+            <span className="text-xs sm:text-sm font-medium text-gray-600 hidden sm:inline">Video</span>
+          </button>
 
           {/* Emoji Picker */}
           <div className="relative">
@@ -704,29 +705,13 @@ export default function Createpost({ type, postId, parentId, closeModal }) {
             <span className="text-xs sm:text-sm font-medium text-purple-600 hidden sm:inline">AI</span>
           </button>
 
-          {/* Hidden File Inputs */}
           <input
-            id="image"
-            ref={fileInputRef}
+            ref={mediaInputRef}
             type="file"
-            accept="image/*"
+            accept="image/*,video/*"
+            multiple
             className="hidden"
-            {...register("image", {
-              required: false,
-              onChange: handleImageChange,
-            })}
-          />
-          
-          <input
-            id="video"
-            ref={videoInputRef}
-            type="file"
-            accept="video/*"
-            className="hidden"
-            {...register("video", {
-              required: false,
-              onChange: handleVideoChange,
-            })}
+            onChange={handleMediaInputChange}
           />
         </div>
 

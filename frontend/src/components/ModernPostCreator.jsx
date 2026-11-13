@@ -27,8 +27,16 @@ import {
   reverseGeocode,
 } from "../utils/formatLocation";
 import PostFontPicker from "./PostFontPicker";
+import PostMediaCarousel from "./PostMediaCarousel";
 import { DEFAULT_POST_FONT, postFontStyle } from "../utils/postFonts";
+import {
+  createMediaItem,
+  encodePostImages,
+  revokeMediaItems,
+} from "../utils/postMedia";
 import UserAvatar from "./UserAvatar";
+
+const MAX_MEDIA = 10;
 
 const ModernPostCreator = ({ type = "post", postId, parentId, closeModal }) => {
   const queryClient = useQueryClient();
@@ -36,8 +44,7 @@ const ModernPostCreator = ({ type = "post", postId, parentId, closeModal }) => {
     defaultValues: { visibility: "Everyone", location: "" },
   });
   const [user, setUserState] = useState(() => getUser() || null);
-  const [imagePreview, setImagePreview] = useState(null);
-  const [videoPreview, setVideoPreview] = useState(null);
+  const [mediaItems, setMediaItems] = useState([]);
   const [audioPreview, setAudioPreview] = useState(null);
   const [audioFileName, setAudioFileName] = useState("");
   const audioInputRef = useRef(null);
@@ -53,8 +60,7 @@ const ModernPostCreator = ({ type = "post", postId, parentId, closeModal }) => {
   const [selectedLocation, setSelectedLocation] = useState(null);
   const [locationAddress, setLocationAddress] = useState(null);
   const [fontFamily, setFontFamily] = useState(DEFAULT_POST_FONT);
-  const fileInputRef = useRef(null);
-  const videoInputRef = useRef(null);
+  const mediaInputRef = useRef(null);
   const textareaRef = useRef(null);
   const content = watch("content", "");
   const visibility = watch("visibility", "Everyone");
@@ -65,13 +71,18 @@ const ModernPostCreator = ({ type = "post", postId, parentId, closeModal }) => {
   const isExpanded =
     composerOpen ||
     Boolean(content?.trim()) ||
-    Boolean(imagePreview || videoPreview || audioPreview || selectedLocation);
+    Boolean(mediaItems.length || audioPreview || selectedLocation);
 
   useEffect(() => {
     const sync = () => setUserState(getUser() || null);
     sync();
     window.addEventListener("userUpdated", sync);
     return () => window.removeEventListener("userUpdated", sync);
+  }, []);
+
+  useEffect(() => {
+    return () => revokeMediaItems(mediaItems);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Token validation helper
@@ -214,55 +225,57 @@ const ModernPostCreator = ({ type = "post", postId, parentId, closeModal }) => {
     return () => clearTimeout(timer);
   }, [content]);
 
-  // Image handling
-  const handleImageChange = (e) => {
-    const file = e.target.files[0];
-    console.log("Image file selected:", file);
-    if (file) {
-      if (file.size > 5 * 1024 * 1024) { // 5MB limit
-        toast.error("Image size must be less than 5MB");
-        return;
+  const addMediaFiles = (fileList) => {
+    const incoming = Array.from(fileList || []);
+    if (!incoming.length) return;
+
+    const room = MAX_MEDIA - mediaItems.length;
+    if (room <= 0) {
+      toast.error(`You can add up to ${MAX_MEDIA} photos or videos`);
+      return;
+    }
+
+    const next = [];
+    for (const file of incoming.slice(0, room)) {
+      if (file.type.startsWith("image/") && file.size > 5 * 1024 * 1024) {
+        toast.error(`${file.name} is larger than 5MB`);
+        continue;
       }
-      console.log("Image file details:", {
-        name: file.name,
-        type: file.type,
-        size: file.size
-      });
-      setImagePreview(URL.createObjectURL(file));
-    }
-  };
-
-  const removeImage = () => {
-    setImagePreview(null);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
-  };
-
-  // Video handling
-  const handleVideoChange = (e) => {
-    const file = e.target.files[0];
-    console.log("Video file selected:", file);
-    if (file) {
-      if (file.size > 50 * 1024 * 1024) { // 50MB limit
-        toast.error("Video size must be less than 50MB");
-        return;
+      if (file.type.startsWith("video/") && file.size > 50 * 1024 * 1024) {
+        toast.error(`${file.name} is larger than 50MB`);
+        continue;
       }
-      console.log("Video file details:", {
-        name: file.name,
-        type: file.type,
-        size: file.size
-      });
-      setVideoPreview(URL.createObjectURL(file));
-      setImagePreview(null); // Clear image if video is selected
+      const item = createMediaItem(file);
+      if (item) next.push(item);
+      else toast.error(`${file.name} is not a supported photo or video`);
+    }
+
+    if (next.length) {
+      setMediaItems((prev) => [...prev, ...next]);
+      setComposerOpen(true);
+    }
+    if (incoming.length > room) {
+      toast.info(`Only ${room} more slot${room === 1 ? "" : "s"} available`);
     }
   };
 
-  const removeVideo = () => {
-    setVideoPreview(null);
-    if (videoInputRef.current) {
-      videoInputRef.current.value = '';
-    }
+  const handleMediaInputChange = (e) => {
+    addMediaFiles(e.target.files);
+    e.target.value = "";
+  };
+
+  const removeMediaAt = (index) => {
+    setMediaItems((prev) => {
+      const target = prev[index];
+      if (target?.previewUrl) URL.revokeObjectURL(target.previewUrl);
+      return prev.filter((_, i) => i !== index);
+    });
+  };
+
+  const clearMedia = () => {
+    revokeMediaItems(mediaItems);
+    setMediaItems([]);
+    if (mediaInputRef.current) mediaInputRef.current.value = "";
   };
 
   const handleAudioChange = (e) => {
@@ -371,46 +384,37 @@ const ModernPostCreator = ({ type = "post", postId, parentId, closeModal }) => {
     setIsDisabled(true);
     
     try {
-      // Create FormData for mixed file handling
       const formData = new FormData();
-      
-      // Debug: Log all form data
-      console.log("Form data received:", data);
-      console.log("Image data:", data.image);
-      console.log("Video data:", data.video);
-      console.log("Audio data:", data.audio);
-      
-      // Add text content
+
       formData.append('content', data.content);
       formData.append('visibility', data.visibility || 'Everyone');
       formData.append('font_family', fontFamily || DEFAULT_POST_FONT);
-      
-      // Add location if available
+
       if (data.location) {
         formData.append('location', data.location);
       }
-      
-      // Add post/comment relationships
+
       if (postId) formData.append('post', postId);
       if (parentId) formData.append('parent_comment', parentId);
-      
-      // Handle image files - upload to Cloudinary and send URL
-      if (data.image && data.image.length > 0 && data.image[0] instanceof File) {
-        const imageUrl = await uploadFiles(data.image[0]);
-        if (imageUrl && imageUrl.length > 0) {
-          formData.append('image', imageUrl[0]);
-        }
+
+      const imageFiles = mediaItems
+        .filter((item) => item.kind === "image")
+        .map((item) => item.file);
+      const videoFiles = mediaItems
+        .filter((item) => item.kind === "video")
+        .map((item) => item.file);
+
+      if (imageFiles.length) {
+        const imageUrls = await uploadFiles(imageFiles);
+        const encoded = encodePostImages(imageUrls);
+        if (encoded) formData.append("image", encoded);
       }
-      
-      // Handle video files - upload to Cloudinary and send URL
-      if (data.video && data.video.length > 0 && data.video[0] instanceof File) {
-        const videoUrl = await uploadFiles(data.video[0]);
-        if (videoUrl && videoUrl.length > 0) {
-          formData.append('video', videoUrl[0]);
-        }
+
+      if (videoFiles.length) {
+        const videoUrls = await uploadFiles(videoFiles);
+        if (videoUrls?.[0]) formData.append("video", videoUrls[0]);
       }
-      
-      // Handle audio files - upload to Cloudinary and send URL (same as image/video)
+
       if (data.audio && data.audio.length > 0 && data.audio[0] instanceof File) {
         const audioUrl = await uploadFiles(data.audio[0]);
         if (audioUrl && audioUrl.length > 0) {
@@ -435,14 +439,14 @@ const ModernPostCreator = ({ type = "post", postId, parentId, closeModal }) => {
       toast.success("Post created successfully! 🌱");
       
       reset({ visibility: "Everyone", location: "", content: "" });
-      setImagePreview(null);
-      setVideoPreview(null);
+      clearMedia();
       removeAudio();
       setSelectedLocation(null);
       setLocationAddress(null);
       setSuggestedHashtags([]);
       setContentAnalysis(null);
       setFontFamily(DEFAULT_POST_FONT);
+      setComposerOpen(false);
       setIsDisabled(false);
 
       await queryClient.invalidateQueries({ queryKey: ["post"] });
@@ -582,32 +586,14 @@ const ModernPostCreator = ({ type = "post", postId, parentId, closeModal }) => {
             ) : null}
           </div>
 
-          {imagePreview ? (
-            <div className="relative mx-4 mb-3 border border-border overflow-hidden">
-              <img src={imagePreview} alt="Preview" className="w-full max-h-72 object-cover" />
-              <button
-                type="button"
-                onClick={removeImage}
-                className="absolute top-2 right-2 h-8 w-8 inline-flex items-center justify-center bg-background/95 border border-border text-foreground"
-                aria-label="Remove image"
-              >
-                <IoCloseOutline size={16} />
-              </button>
-            </div>
-          ) : null}
-
-          {videoPreview ? (
-            <div className="relative mx-4 mb-3 border border-border overflow-hidden">
-              <video src={videoPreview} controls className="w-full max-h-72 object-contain bg-background" />
-              <button
-                type="button"
-                onClick={removeVideo}
-                className="absolute top-2 right-2 h-8 w-8 inline-flex items-center justify-center bg-background/95 border border-border text-foreground"
-                aria-label="Remove video"
-              >
-                <IoCloseOutline size={16} />
-              </button>
-            </div>
+          {mediaItems.length ? (
+            <PostMediaCarousel
+              items={mediaItems}
+              onAddFiles={addMediaFiles}
+              onRemoveAt={removeMediaAt}
+              onClear={clearMedia}
+              maxItems={MAX_MEDIA}
+            />
           ) : null}
 
           {audioPreview ? (
@@ -740,28 +726,32 @@ const ModernPostCreator = ({ type = "post", postId, parentId, closeModal }) => {
           <div className="mx-4 mb-3 flex flex-wrap items-center justify-between gap-2 border border-border px-2 py-1.5">
             <p className="text-sm font-medium text-foreground px-1">Add to your post</p>
             <div className="flex items-center gap-0.5">
-              <label className={`${toolBtn} cursor-pointer`} title="Photo">
+              <button
+                type="button"
+                className={toolBtn}
+                title="Photo / video"
+                onClick={() => mediaInputRef.current?.click()}
+              >
                 <IoImageOutline size={22} className="text-primary" />
-                <span className="sr-only">Photo</span>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  {...register("image", { onChange: handleImageChange })}
-                />
-              </label>
-              <label className={`${toolBtn} cursor-pointer`} title="Video">
+                <span className="sr-only">Photo or video</span>
+              </button>
+              <button
+                type="button"
+                className={toolBtn}
+                title="Video"
+                onClick={() => mediaInputRef.current?.click()}
+              >
                 <IoVideocamOutline size={22} className="text-primary" />
                 <span className="sr-only">Video</span>
-                <input
-                  ref={videoInputRef}
-                  type="file"
-                  accept="video/*"
-                  className="hidden"
-                  {...register("video", { onChange: handleVideoChange })}
-                />
-              </label>
+              </button>
+              <input
+                ref={mediaInputRef}
+                type="file"
+                accept="image/*,video/*"
+                multiple
+                className="hidden"
+                onChange={handleMediaInputChange}
+              />
               <label className={`${toolBtn} cursor-pointer`} title="Audio">
                 <IoMusicalNotesOutline size={22} className="text-primary" />
                 <span className="sr-only">Audio</span>
@@ -832,7 +822,7 @@ const ModernPostCreator = ({ type = "post", postId, parentId, closeModal }) => {
             <button
               type="button"
               onClick={() => {
-                if (!content?.trim() && !imagePreview && !videoPreview && !audioPreview) {
+                if (!content?.trim() && !mediaItems.length && !audioPreview) {
                   setComposerOpen(false);
                 }
               }}
