@@ -2,7 +2,7 @@ import { useForm } from "react-hook-form";
 import { useState, useRef, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { endpoints } from "../utils/endpoints";
-import { getUser, getAuthToken, avatarUrl } from "../utils/factory";
+import { getUser, getAuthToken } from "../utils/factory";
 import { uploadFiles } from "../services/upload.service";
 import { 
   IoSend, 
@@ -14,10 +14,12 @@ import {
   IoCloseOutline,
   IoCheckmarkCircleOutline,
   IoWarningOutline,
-  IoVideocamOutline
+  IoVideocamOutline,
+  IoEarthOutline,
+  IoPeopleOutline,
+  IoTextOutline,
 } from "react-icons/io5";
 import { toast } from "react-toastify";
-import AuthStatus from "./AuthStatus";
 import { env } from "../config/env";
 import {
   QUICK_CITIES,
@@ -26,6 +28,7 @@ import {
 } from "../utils/formatLocation";
 import PostFontPicker from "./PostFontPicker";
 import { DEFAULT_POST_FONT, postFontStyle } from "../utils/postFonts";
+import UserAvatar from "./UserAvatar";
 
 const ModernPostCreator = ({ type = "post", postId, parentId, closeModal }) => {
   const queryClient = useQueryClient();
@@ -45,12 +48,24 @@ const ModernPostCreator = ({ type = "post", postId, parentId, closeModal }) => {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showLocationPicker, setShowLocationPicker] = useState(false);
+  const [showFontPicker, setShowFontPicker] = useState(false);
+  const [composerOpen, setComposerOpen] = useState(false);
   const [selectedLocation, setSelectedLocation] = useState(null);
   const [locationAddress, setLocationAddress] = useState(null);
   const [fontFamily, setFontFamily] = useState(DEFAULT_POST_FONT);
   const fileInputRef = useRef(null);
   const videoInputRef = useRef(null);
+  const textareaRef = useRef(null);
   const content = watch("content", "");
+  const visibility = watch("visibility", "Everyone");
+  const displayName =
+    [user?.first_name, user?.last_name].filter(Boolean).join(" ") ||
+    user?.username ||
+    "there";
+  const isExpanded =
+    composerOpen ||
+    Boolean(content?.trim()) ||
+    Boolean(imagePreview || videoPreview || audioPreview || selectedLocation);
 
   useEffect(() => {
     const sync = () => setUserState(getUser() || null);
@@ -441,261 +456,186 @@ const ModernPostCreator = ({ type = "post", postId, parentId, closeModal }) => {
     }
   };
 
+  const contentRegister = register("content", {
+    required: "Content is required",
+    minLength: {
+      value: 5,
+      message: "Please enter at least 5 characters",
+    },
+    maxLength: {
+      value: 500,
+      message: "Content must be less than 500 characters",
+    },
+  });
+
+  const openComposer = () => {
+    setComposerOpen(true);
+    window.requestAnimationFrame(() => textareaRef.current?.focus());
+  };
+
+  const toolBtn =
+    "inline-flex h-10 w-10 items-center justify-center text-foreground hover:bg-background transition-colors";
+
   return (
-    <div className="w-full max-w-2xl mx-auto bg-surface shadow-lg border border-border">
-      {/* Header */}
-      <div className="p-3 md:p-4 border-b border-border">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center space-x-2 md:space-x-3">
-            <img
-              key={avatarUrl(user)}
-              src={avatarUrl(user)}
-              alt=""
-              className="w-8 h-8 md:w-10 md:h-10 rounded-full object-cover"
-              onError={(e) => {
-                e.target.src = "/avatar.png";
-              }}
-            />
-            <div className="min-w-0 flex-1">
-              <h3 className="font-semibold text-foreground text-sm md:text-base truncate">{user?.first_name} {user?.last_name}</h3>
-              <p className="text-xs md:text-sm text-muted">Share your climate action</p>
-            </div>
-          </div>
-        </div>
-        
-        {/* Auth Status */}
-        <AuthStatus 
-          isAuthenticated={!!getAuthToken()} 
-          onLogin={() => window.location.href = '/login'} 
-        />
-        
-        {/* AI Generate Button */}
-        <div className="flex justify-end mt-3">
-          <button
-            onClick={generateContent}
-            disabled={isGenerating}
-            className={`flex items-center space-x-1 md:space-x-2 px-3 md:px-4 py-2 rounded-full text-xs md:text-sm font-medium transition-all duration-200 ${
-              getAuthToken() 
-                ? "bg-gradient-to-r from-blue-500 to-purple-600 text-white hover:from-blue-600 hover:to-purple-700" 
-                : "bg-gradient-to-r from-green-500 to-blue-600 text-white hover:from-green-600 hover:to-blue-700"
-            } ${isGenerating ? "opacity-50" : ""}`}
-          >
-            <IoSparklesOutline className="w-3 h-3 md:w-4 md:h-4" />
-            <span className="hidden sm:inline">
-              {isGenerating ? "Generating..." : 
-               !getAuthToken() ? "Generate Content" : "AI Generate"}
-            </span>
-            <span className="sm:hidden">
-              {isGenerating ? "..." : "AI"}
-            </span>
-          </button>
-        </div>
+    <div className="w-full max-w-2xl mx-auto bg-surface border border-border overflow-hidden">
+      <div className="px-4 py-3 border-b border-border">
+        <h2 className="text-base font-semibold text-foreground text-center">Create post</h2>
       </div>
 
-      {/* Content Analysis */}
-      {contentAnalysis && (
-        <div className={`p-2 md:p-3 mx-2 md:mx-4 mt-3 rounded-lg border ${
-          contentAnalysis.is_appropriate 
-            ? 'bg-green-50 border-green-200' 
-            : 'bg-red-50 border-red-200'
-        }`}>
-          <div className="flex items-center space-x-2">
-            {contentAnalysis.is_appropriate ? (
-              <IoCheckmarkCircleOutline className="w-4 h-4 md:w-5 md:h-5 text-green-600" />
-            ) : (
-              <IoWarningOutline className="w-4 h-4 md:w-5 md:h-5 text-red-600" />
-            )}
-            <span className={`text-xs md:text-sm font-medium ${
-              contentAnalysis.is_appropriate ? 'text-green-800' : 'text-red-800'
-            }`}>
-              {contentAnalysis.is_appropriate ? 'Content approved' : 'Content needs review'}
-            </span>
+      {!isExpanded ? (
+        <button
+          type="button"
+          onClick={openComposer}
+          className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-background/60 transition-colors"
+        >
+          <UserAvatar user={user} className="h-10 w-10" textClassName="text-sm" alt="" />
+          <span className="flex-1 min-h-10 flex items-center px-4 bg-background border border-border text-muted text-sm md:text-base">
+            What&apos;s on your mind, {user?.first_name || displayName}?
+          </span>
+        </button>
+      ) : (
+        <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col">
+          <div className="px-4 pt-4 pb-2 flex items-start gap-3">
+            <UserAvatar user={user} className="h-10 w-10 shrink-0" textClassName="text-sm" alt="" />
+            <div className="min-w-0 flex-1">
+              <p className="font-semibold text-foreground text-sm leading-tight truncate">
+                {displayName}
+              </p>
+              <label className="mt-1.5 inline-flex items-center gap-1.5 min-h-8 px-2.5 border border-border bg-background text-xs font-medium text-foreground cursor-pointer hover:border-primary">
+                {visibility === "Friends" ? (
+                  <IoPeopleOutline size={14} className="text-primary" />
+                ) : (
+                  <IoEarthOutline size={14} className="text-primary" />
+                )}
+                <select
+                  className="bg-transparent border-0 text-xs font-medium text-foreground focus:outline-none cursor-pointer pr-1"
+                  {...register("visibility")}
+                >
+                  <option value="Everyone">Everyone</option>
+                  <option value="Friends">Friends</option>
+                </select>
+              </label>
+            </div>
+            <button
+              type="button"
+              onClick={generateContent}
+              disabled={isGenerating}
+              className="inline-flex items-center gap-1.5 min-h-8 px-2.5 text-xs font-medium text-primary border border-border hover:bg-background disabled:opacity-60"
+              title="Draft with AI"
+            >
+              <IoSparklesOutline size={14} />
+              {isGenerating ? "Drafting…" : "Draft"}
+            </button>
           </div>
-          {contentAnalysis.reason && (
-            <p className="text-xs md:text-sm text-gray-600 mt-1">{contentAnalysis.reason}</p>
-          )}
-        </div>
-      )}
 
-      {/* Main Form */}
-      <form onSubmit={handleSubmit(onSubmit)} className="p-3 md:p-4">
-        {/* Text Area */}
-        <div className="relative">
-          <textarea
-            placeholder="Share your thoughts on climate action, sustainability, or environmental topics..."
-            className="w-full min-h-[100px] md:min-h-[120px] p-3 md:p-4 border-2 border-border bg-surface resize-none focus:border-primary focus:outline-none transition-colors duration-200 text-foreground placeholder:text-muted text-sm md:text-base"
-            style={postFontStyle(fontFamily)}
-            {...register("content", { 
-              required: "Content is required",
-              minLength: {
-                value: 5,
-                message: "Please enter at least 5 characters"
-              },
-              maxLength: {
-                value: 500,
-                message: "Content must be less than 500 characters"
-              }
-            })}
-          />
-          
-          {/* Character Counter */}
-          <div className="absolute bottom-2 right-2 text-xs text-muted">
-            {content?.length || 0}/500
-          </div>
-        </div>
+          {contentAnalysis ? (
+            <div
+              className={`mx-4 mb-2 px-3 py-2 border text-xs ${
+                contentAnalysis.is_appropriate
+                  ? "border-border bg-background text-foreground"
+                  : "border-destructive/40 bg-background text-destructive"
+              }`}
+            >
+              <div className="flex items-center gap-1.5 font-medium">
+                {contentAnalysis.is_appropriate ? (
+                  <IoCheckmarkCircleOutline size={14} />
+                ) : (
+                  <IoWarningOutline size={14} />
+                )}
+                {contentAnalysis.is_appropriate
+                  ? "Looks good to post"
+                  : "Needs a quick review"}
+              </div>
+              {contentAnalysis.reason ? (
+                <p className="mt-1 text-muted">{contentAnalysis.reason}</p>
+              ) : null}
+            </div>
+          ) : null}
 
-        <PostFontPicker
-          value={fontFamily}
-          onChange={setFontFamily}
-          className="mt-3"
-        />
-
-        {/* Error Messages */}
-        {errors.content && (
-          <div className="mt-2 text-destructive text-sm flex items-center space-x-1">
-            <IoWarningOutline className="w-4 h-4" />
-            <span>{errors.content.message}</span>
-          </div>
-        )}
-
-        {/* Image Preview */}
-        {imagePreview && (
-          <div className="mt-4 relative">
-            <img
-              src={imagePreview}
-              alt="Preview"
-              className="w-full max-h-64 object-cover rounded-xl"
+          <div className="px-4">
+            <textarea
+              {...contentRegister}
+              ref={(el) => {
+                contentRegister.ref(el);
+                textareaRef.current = el;
+              }}
+              onFocus={() => setComposerOpen(true)}
+              placeholder={`What's on your mind, ${user?.first_name || displayName}?`}
+              rows={4}
+              className="w-full min-h-[120px] md:min-h-[140px] resize-none border-0 bg-transparent text-foreground placeholder:text-muted text-lg leading-relaxed focus:outline-none"
+              style={postFontStyle(fontFamily)}
             />
-            <button
-              type="button"
-              onClick={removeImage}
-              className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 transition-colors"
-            >
-              <IoCloseOutline className="w-4 h-4" />
-            </button>
+            <div className="flex justify-end pb-1">
+              <span
+                className={`text-xs ${
+                  (content?.length || 0) > 480 ? "text-destructive" : "text-muted"
+                }`}
+              >
+                {content?.length || 0}/500
+              </span>
+            </div>
+            {errors.content ? (
+              <p className="pb-2 text-sm text-destructive flex items-center gap-1">
+                <IoWarningOutline size={14} />
+                {errors.content.message}
+              </p>
+            ) : null}
           </div>
-        )}
 
-        {/* Video Preview */}
-        {videoPreview && (
-          <div className="mt-4 relative">
-            <video
-              src={videoPreview}
-              controls
-              className="w-full max-h-64 object-cover rounded-xl"
-            />
-            <button
-              type="button"
-              onClick={removeVideo}
-              className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 transition-colors"
-            >
-              <IoCloseOutline className="w-4 h-4" />
-            </button>
-          </div>
-        )}
-
-        {/* Audio Preview */}
-        {audioPreview && (
-          <div className="mt-4 relative border border-border bg-surface p-3 rounded-xl">
-            <p className="text-sm font-medium text-foreground mb-2 truncate">
-              {audioFileName || "Audio attached"}
-            </p>
-            <audio src={audioPreview} controls className="w-full" />
-            <button
-              type="button"
-              onClick={removeAudio}
-              className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 transition-colors"
-            >
-              <IoCloseOutline className="w-4 h-4" />
-            </button>
-          </div>
-        )}
-
-        <div className="mt-3">
-          <label className="block text-xs font-medium text-muted mb-1">Who can see this</label>
-          <select
-            className="h-10 w-full px-3 border border-border bg-background text-sm"
-            {...register("visibility")}
-          >
-            <option value="Everyone">Everyone</option>
-            <option value="Friends">Friends (people you follow)</option>
-          </select>
-        </div>
-
-        {/* Emoji Picker */}
-        {showEmojiPicker && (
-          <div className="mt-4 p-4 bg-gray-50 rounded-xl border">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-medium text-gray-700">Choose an emoji</h3>
+          {imagePreview ? (
+            <div className="relative mx-4 mb-3 border border-border overflow-hidden">
+              <img src={imagePreview} alt="Preview" className="w-full max-h-72 object-cover" />
               <button
                 type="button"
-                onClick={() => setShowEmojiPicker(false)}
-                className="text-gray-500 hover:text-gray-700"
+                onClick={removeImage}
+                className="absolute top-2 right-2 h-8 w-8 inline-flex items-center justify-center bg-background/95 border border-border text-foreground"
+                aria-label="Remove image"
               >
-                <IoCloseOutline className="w-4 h-4" />
+                <IoCloseOutline size={16} />
               </button>
             </div>
-            <div className="grid grid-cols-10 gap-2">
-              {commonEmojis.map((emoji, index) => (
-                <button
-                  key={index}
-                  type="button"
-                  onClick={() => addEmoji(emoji)}
-                  className="text-2xl hover:bg-gray-200 rounded-lg p-2 transition-colors"
-                >
-                  {emoji}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
+          ) : null}
 
-        {/* Location picker */}
-        {showLocationPicker && (
-          <div className="mt-4 p-3 border border-border bg-background">
-            <p className="text-sm font-medium text-foreground mb-2">Add location</p>
-            <button
-              type="button"
-              onClick={handleUseCurrentLocation}
-              className="w-full text-left px-3 py-2 text-sm border border-border hover:bg-surface mb-2"
-            >
-              Use my current GPS location
-            </button>
-            <p className="text-xs text-muted mb-2">Or choose a city</p>
-            <div className="flex flex-wrap gap-2">
-              {QUICK_CITIES.map((city) => (
-                <button
-                  key={city.name}
-                  type="button"
-                  onClick={() => {
-                    applyLocationLabel(city.name);
-                    toast.success(`Location set to ${city.name}`);
-                  }}
-                  className="px-3 py-1.5 text-xs border border-border hover:border-primary hover:text-primary"
-                >
-                  {city.name}
-                </button>
-              ))}
+          {videoPreview ? (
+            <div className="relative mx-4 mb-3 border border-border overflow-hidden">
+              <video src={videoPreview} controls className="w-full max-h-72 object-contain bg-background" />
+              <button
+                type="button"
+                onClick={removeVideo}
+                className="absolute top-2 right-2 h-8 w-8 inline-flex items-center justify-center bg-background/95 border border-border text-foreground"
+                aria-label="Remove video"
+              >
+                <IoCloseOutline size={16} />
+              </button>
             </div>
-          </div>
-        )}
+          ) : null}
 
-        {/* Location Display */}
-        {selectedLocation && locationAddress && (
-          <div className="mt-4 p-3 border border-border bg-surface">
-            <div className="flex items-start gap-2">
+          {audioPreview ? (
+            <div className="relative mx-4 mb-3 border border-border bg-background p-3">
+              <p className="text-sm font-medium text-foreground mb-2 truncate pr-8">
+                {audioFileName || "Audio attached"}
+              </p>
+              <audio src={audioPreview} controls className="w-full" />
+              <button
+                type="button"
+                onClick={removeAudio}
+                className="absolute top-2 right-2 h-8 w-8 inline-flex items-center justify-center border border-border text-foreground"
+                aria-label="Remove audio"
+              >
+                <IoCloseOutline size={16} />
+              </button>
+            </div>
+          ) : null}
+
+          {selectedLocation && locationAddress ? (
+            <div className="mx-4 mb-3 flex items-start gap-2 border border-border bg-background px-3 py-2">
               <IoLocationOutline className="w-4 h-4 text-primary mt-0.5 shrink-0" />
               <div className="min-w-0 flex-1">
-                <p className="text-sm text-foreground">
-                  Location added: {locationAddress}
-                </p>
+                <p className="text-sm text-foreground">{locationAddress}</p>
                 {selectedLocation.latitude != null && selectedLocation.longitude != null ? (
-                  <p className="text-xs text-muted mt-1">
+                  <p className="text-xs text-muted mt-0.5">
                     {Number(selectedLocation.latitude).toFixed(5)},{" "}
                     {Number(selectedLocation.longitude).toFixed(5)}
-                    {selectedLocation.accuracy
-                      ? ` · ±${Math.round(selectedLocation.accuracy)} m`
-                      : ""}
                   </p>
                 ) : null}
               </div>
@@ -709,144 +649,217 @@ const ModernPostCreator = ({ type = "post", postId, parentId, closeModal }) => {
                 className="text-muted hover:text-foreground"
                 aria-label="Remove location"
               >
-                <IoCloseOutline className="w-4 h-4" />
+                <IoCloseOutline size={16} />
               </button>
             </div>
-          </div>
-        )}
+          ) : null}
 
-        {/* Hashtag Suggestions */}
-        {suggestedHashtags.length > 0 && (
-          <div className="mt-4">
-            <p className="text-sm font-medium text-gray-700 mb-2">Suggested hashtags:</p>
-            <div className="flex flex-wrap gap-2">
-              {suggestedHashtags.map((hashtag, index) => (
+          {showFontPicker ? (
+            <div className="mx-4 mb-3 border border-border bg-background p-3">
+              <PostFontPicker
+                value={fontFamily}
+                onChange={setFontFamily}
+                compact
+              />
+            </div>
+          ) : null}
+
+          {showEmojiPicker ? (
+            <div className="mx-4 mb-3 border border-border bg-background p-3">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-sm font-medium text-foreground">Emoji</p>
                 <button
-                  key={index}
+                  type="button"
+                  onClick={() => setShowEmojiPicker(false)}
+                  className="text-muted hover:text-foreground"
+                  aria-label="Close emoji"
+                >
+                  <IoCloseOutline size={16} />
+                </button>
+              </div>
+              <div className="grid grid-cols-8 sm:grid-cols-10 gap-1">
+                {commonEmojis.map((emoji) => (
+                  <button
+                    key={emoji}
+                    type="button"
+                    onClick={() => addEmoji(emoji)}
+                    className="h-9 text-xl hover:bg-surface"
+                  >
+                    {emoji}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {showLocationPicker ? (
+            <div className="mx-4 mb-3 border border-border bg-background p-3">
+              <p className="text-sm font-medium text-foreground mb-2">Add location</p>
+              <button
+                type="button"
+                onClick={handleUseCurrentLocation}
+                className="w-full text-left px-3 py-2 text-sm border border-border hover:bg-surface mb-2"
+              >
+                Use my current GPS location
+              </button>
+              <div className="flex flex-wrap gap-2">
+                {QUICK_CITIES.map((city) => (
+                  <button
+                    key={city.name}
+                    type="button"
+                    onClick={() => {
+                      applyLocationLabel(city.name);
+                      toast.success(`Location set to ${city.name}`);
+                    }}
+                    className="px-3 py-1.5 text-xs border border-border hover:border-primary hover:text-primary"
+                  >
+                    {city.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {suggestedHashtags.length > 0 ? (
+            <div className="mx-4 mb-3 flex flex-wrap gap-2">
+              {suggestedHashtags.map((hashtag) => (
+                <button
+                  key={hashtag}
                   type="button"
                   onClick={() => addHashtag(hashtag)}
-                  className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm hover:bg-blue-200 transition-colors"
+                  className="px-2.5 py-1 text-xs border border-border text-primary hover:bg-background"
                 >
                   {hashtag}
                 </button>
               ))}
             </div>
+          ) : null}
+
+          <input type="hidden" {...register("location")} />
+
+          <div className="mx-4 mb-3 flex flex-wrap items-center justify-between gap-2 border border-border px-2 py-1.5">
+            <p className="text-sm font-medium text-foreground px-1">Add to your post</p>
+            <div className="flex items-center gap-0.5">
+              <label className={`${toolBtn} cursor-pointer`} title="Photo">
+                <IoImageOutline size={22} className="text-primary" />
+                <span className="sr-only">Photo</span>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  {...register("image", { onChange: handleImageChange })}
+                />
+              </label>
+              <label className={`${toolBtn} cursor-pointer`} title="Video">
+                <IoVideocamOutline size={22} className="text-primary" />
+                <span className="sr-only">Video</span>
+                <input
+                  ref={videoInputRef}
+                  type="file"
+                  accept="video/*"
+                  className="hidden"
+                  {...register("video", { onChange: handleVideoChange })}
+                />
+              </label>
+              <label className={`${toolBtn} cursor-pointer`} title="Audio">
+                <IoMusicalNotesOutline size={22} className="text-primary" />
+                <span className="sr-only">Audio</span>
+                <input
+                  type="file"
+                  accept="audio/*"
+                  className="hidden"
+                  {...(() => {
+                    const { ref, ...rest } = register("audio", {
+                      onChange: handleAudioChange,
+                    });
+                    return {
+                      ...rest,
+                      ref: (el) => {
+                        audioInputRef.current = el;
+                        ref(el);
+                      },
+                    };
+                  })()}
+                />
+              </label>
+              <button
+                type="button"
+                className={toolBtn}
+                title="Emoji"
+                onClick={() => {
+                  setShowEmojiPicker((v) => !v);
+                  setShowLocationPicker(false);
+                  setShowFontPicker(false);
+                }}
+              >
+                <IoHappyOutline size={22} className="text-primary" />
+              </button>
+              <button
+                type="button"
+                className={toolBtn}
+                title="Location"
+                onClick={() => {
+                  handleLocationClick();
+                  setShowEmojiPicker(false);
+                  setShowFontPicker(false);
+                }}
+              >
+                <IoLocationOutline size={22} className="text-primary" />
+              </button>
+              <button
+                type="button"
+                className={toolBtn}
+                title="Font"
+                aria-pressed={showFontPicker}
+                onClick={() => {
+                  setShowFontPicker((v) => !v);
+                  setShowEmojiPicker(false);
+                  setShowLocationPicker(false);
+                }}
+              >
+                <IoTextOutline size={22} className="text-primary" />
+              </button>
+            </div>
           </div>
-        )}
 
-        {/* Attachment Options */}
-        <div className="flex items-center justify-between mt-4">
-          <div className="flex items-center space-x-2 md:space-x-4 overflow-x-auto">
-            {/* Image Upload */}
-            <label className="flex items-center space-x-1 md:space-x-2 text-gray-600 hover:text-blue-600 cursor-pointer transition-colors min-w-0">
-              <IoImageOutline className="w-4 h-4 md:w-5 md:h-5 flex-shrink-0" />
-              <span className="text-xs md:text-sm hidden sm:inline">Image</span>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                {...register("image", {
-                  onChange: handleImageChange,
-                })}
-              />
-            </label>
-
-            {/* Audio Upload */}
-            <label className="flex items-center space-x-1 md:space-x-2 text-gray-600 hover:text-blue-600 cursor-pointer transition-colors min-w-0">
-              <IoMusicalNotesOutline className="w-4 h-4 md:w-5 md:h-5 flex-shrink-0" />
-              <span className="text-xs md:text-sm hidden sm:inline">Audio</span>
-              <input
-                type="file"
-                accept="audio/*"
-                className="hidden"
-                {...(() => {
-                  const { ref, ...rest } = register("audio", {
-                    onChange: handleAudioChange,
-                  });
-                  return {
-                    ...rest,
-                    ref: (el) => {
-                      audioInputRef.current = el;
-                      ref(el);
-                    },
-                  };
-                })()}
-              />
-            </label>
-
-            {/* Video Upload */}
-            <label className="flex items-center space-x-1 md:space-x-2 text-gray-600 hover:text-blue-600 cursor-pointer transition-colors min-w-0">
-              <IoVideocamOutline className="w-4 h-4 md:w-5 md:h-5 flex-shrink-0" />
-              <span className="text-xs md:text-sm hidden sm:inline">Video</span>
-              <input
-                ref={videoInputRef}
-                type="file"
-                accept="video/*"
-                className="hidden"
-                {...register("video", {
-                  onChange: handleVideoChange,
-                })}
-              />
-            </label>
-
-            {/* Hidden location field */}
-            <input
-              type="hidden"
-              {...register("location")}
-            />
-
-            {/* Emoji Picker */}
-            <button
-              type="button"
-              onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-              className="flex items-center space-x-2 text-gray-600 hover:text-blue-600 transition-colors"
-            >
-              <IoHappyOutline className="w-5 h-5" />
-              <span className="text-sm">Emoji</span>
-            </button>
-
-            {/* Location */}
-            <button
-              type="button"
-              onClick={handleLocationClick}
-              className="flex items-center space-x-2 text-gray-600 hover:text-blue-600 transition-colors"
-            >
-              <IoLocationOutline className="w-5 h-5" />
-              <span className="text-sm">Location</span>
-            </button>
-          </div>
-
-          {/* Post Button */}
-          <button
-            type="submit"
-            disabled={isDisabled || isAnalyzing}
-            className="flex items-center space-x-1 md:space-x-2 px-4 md:px-6 py-2 bg-gradient-to-r from-green-500 to-blue-600 text-white rounded-full font-medium hover:from-green-600 hover:to-blue-700 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed text-sm md:text-base"
-          >
-            {isDisabled ? (
-              <>
-                <div className="w-3 h-3 md:w-4 md:h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                <span className="hidden sm:inline">Posting...</span>
-                <span className="sm:hidden">...</span>
-              </>
+          <div className="px-4 pb-4 flex items-center gap-2">
+            {isAnalyzing ? (
+              <p className="text-xs text-muted flex-1">Checking your post…</p>
             ) : (
-              <>
-                <IoSend className="w-3 h-3 md:w-4 md:h-4" />
-                <span className="hidden sm:inline">Post</span>
-                <span className="sm:hidden">✓</span>
-              </>
+              <span className="flex-1" />
             )}
-          </button>
-        </div>
-
-        {/* Analysis Indicator */}
-        {isAnalyzing && (
-          <div className="mt-3 flex items-center space-x-2 text-blue-600">
-            <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-            <span className="text-sm">Analyzing content...</span>
+            <button
+              type="button"
+              onClick={() => {
+                if (!content?.trim() && !imagePreview && !videoPreview && !audioPreview) {
+                  setComposerOpen(false);
+                }
+              }}
+              className="min-h-10 px-3 text-sm font-medium border border-border text-foreground hover:bg-background"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={isDisabled || isAnalyzing}
+              className="min-h-10 px-5 bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary-dark disabled:opacity-50 inline-flex items-center gap-2"
+            >
+              {isDisabled ? (
+                <>
+                  <span className="h-3.5 w-3.5 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" />
+                  Posting…
+                </>
+              ) : (
+                <>
+                  <IoSend size={15} />
+                  Post
+                </>
+              )}
+            </button>
           </div>
-        )}
-      </form>
+        </form>
+      )}
     </div>
   );
 };
