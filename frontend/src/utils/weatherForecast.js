@@ -39,24 +39,66 @@ export function describeWeatherCode(code) {
   return WMO[Number(code)] || { label: "Conditions unknown", tone: "cloud", IconHint: "cloud" };
 }
 
-function formatHourLabel(iso) {
+/**
+ * Open-Meteo timestamps are local wall times without an offset.
+ * Convert using the response utc_offset_seconds so hour slicing matches the forecast zone.
+ */
+function parseForecastTime(iso, utcOffsetSeconds = 0) {
+  if (!iso || typeof iso !== "string") return null;
+  const m = iso.match(
+    /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2}))?)?/
+  );
+  if (!m) {
+    const fallback = new Date(iso);
+    return Number.isNaN(fallback.getTime()) ? null : fallback;
+  }
+  const year = Number(m[1]);
+  const month = Number(m[2]) - 1;
+  const day = Number(m[3]);
+  const hour = Number(m[4] || 0);
+  const minute = Number(m[5] || 0);
+  const second = Number(m[6] || 0);
+  const utcMs = Date.UTC(year, month, day, hour, minute, second);
+  return new Date(utcMs - Number(utcOffsetSeconds || 0) * 1000);
+}
+
+function formatHourLabel(date, timeZone) {
+  if (!date) return "";
   try {
-    return new Date(iso).toLocaleTimeString(undefined, {
+    return date.toLocaleTimeString(undefined, {
       hour: "numeric",
       hour12: true,
+      timeZone: timeZone || undefined,
     });
   } catch {
-    return "";
+    return date.toLocaleTimeString(undefined, { hour: "numeric", hour12: true });
   }
 }
 
-function formatDayLabel(iso, index) {
+function formatDayLabel(date, index, timeZone) {
   if (index === 0) return "Today";
   if (index === 1) return "Tomorrow";
+  if (!date) return `Day ${index + 1}`;
   try {
-    return new Date(iso).toLocaleDateString(undefined, { weekday: "short" });
+    return date.toLocaleDateString(undefined, {
+      weekday: "short",
+      timeZone: timeZone || undefined,
+    });
   } catch {
-    return `Day ${index + 1}`;
+    return date.toLocaleDateString(undefined, { weekday: "short" });
+  }
+}
+
+function formatClock(date, timeZone) {
+  if (!date) return "—";
+  try {
+    return date.toLocaleTimeString(undefined, {
+      hour: "numeric",
+      minute: "2-digit",
+      timeZone: timeZone || undefined,
+    });
+  } catch {
+    return date.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
   }
 }
 
@@ -72,19 +114,47 @@ async function reverseGeocodeLabel(latitude, longitude) {
     const data = await res.json();
     const a = data?.address || {};
     const city =
-      a.city || a.town || a.village || a.municipality || a.county || a.state || null;
-    const region = a.state || a.region || a.country || null;
-    const parts = [city, region].filter(Boolean).filter((v, i, arr) => arr.indexOf(v) === i);
-    return parts.slice(0, 2).join(", ") || data?.display_name?.split(",").slice(0, 2).join(",") || null;
+      a.city || a.town || a.village || a.municipality || a.suburb || null;
+    const region = a.state || a.county || a.region || null;
+    const country = a.country || null;
+    const parts = [];
+    if (city) parts.push(city);
+    if (region && region !== city && !String(region).includes(String(city || ""))) {
+      parts.push(region);
+    } else if (country && country !== city) {
+      parts.push(country);
+    }
+    if (parts.length) return parts.slice(0, 2).join(", ");
+    return data?.display_name?.split(",").slice(0, 2).join(",").trim() || null;
   } catch {
     return null;
   }
 }
 
+function pickHourlyStartIndex(hourlyTimes, utcOffsetSeconds, nowMs = Date.now()) {
+  if (!hourlyTimes.length) return 0;
+  let best = 0;
+  for (let i = 0; i < hourlyTimes.length; i += 1) {
+    const t = parseForecastTime(hourlyTimes[i], utcOffsetSeconds);
+    if (!t) continue;
+    // Current hour = first slot that has not fully ended yet.
+    if (t.getTime() + 60 * 60 * 1000 > nowMs) {
+      return i;
+    }
+    best = i;
+  }
+  return best;
+}
+
 /**
  * Fetch 7-day + hourly forecast from Open-Meteo (no API key).
  */
-export async function fetchWeatherForecast({ latitude, longitude, label = null }) {
+export async function fetchWeatherForecast({
+  latitude,
+  longitude,
+  label = null,
+  refreshPlaceLabel = false,
+} = {}) {
   const lat = Number(latitude);
   const lon = Number(longitude);
   if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
@@ -141,36 +211,37 @@ export async function fetchWeatherForecast({ latitude, longitude, label = null }
   }
   const data = await res.json();
 
-  let placeLabel = label;
+  const utcOffsetSeconds = Number(data.utc_offset_seconds || 0);
+  const timeZone = data.timezone || undefined;
+
+  let placeLabel = refreshPlaceLabel ? null : label;
   if (!placeLabel) {
     placeLabel = await reverseGeocodeLabel(lat, lon);
-    if (placeLabel) {
-      persistLocation({
-        latitude: lat,
-        longitude: lon,
-        label: placeLabel,
-        source: "device",
-      });
-    }
+  }
+  if (placeLabel) {
+    persistLocation({
+      latitude: lat,
+      longitude: lon,
+      label: placeLabel,
+      source: "device",
+    });
   }
 
   const currentMeta = describeWeatherCode(data.current?.weather_code);
-  const nowMs = Date.now();
   const hourlyTimes = data.hourly?.time || [];
-  const startIdx = Math.max(
-    0,
-    hourlyTimes.findIndex((t) => new Date(t).getTime() >= nowMs - 30 * 60 * 1000)
-  );
+  const startIdx = pickHourlyStartIndex(hourlyTimes, utcOffsetSeconds);
+
   const hourlySlice = hourlyTimes.slice(startIdx, startIdx + 24).map((time, i) => {
     const idx = startIdx + i;
     const code = data.hourly.weather_code?.[idx];
     const meta = describeWeatherCode(code);
+    const parsed = parseForecastTime(time, utcOffsetSeconds);
     return {
       time,
-      label: formatHourLabel(time),
-      temp: Math.round(data.hourly.temperature_2m?.[idx] ?? 0),
-      precipProb: data.hourly.precipitation_probability?.[idx] ?? 0,
-      precip: data.hourly.precipitation?.[idx] ?? 0,
+      label: formatHourLabel(parsed, timeZone),
+      temp: Math.round(Number(data.hourly.temperature_2m?.[idx] ?? 0)),
+      precipProb: Number(data.hourly.precipitation_probability?.[idx] ?? 0),
+      precip: Number(data.hourly.precipitation?.[idx] ?? 0),
       humidity: data.hourly.relative_humidity_2m?.[idx] ?? null,
       weatherCode: code,
       condition: meta.label,
@@ -182,17 +253,22 @@ export async function fetchWeatherForecast({ latitude, longitude, label = null }
   const daily = (data.daily?.time || []).map((time, i) => {
     const code = data.daily.weather_code?.[i];
     const meta = describeWeatherCode(code);
+    const parsed = parseForecastTime(time, utcOffsetSeconds);
+    const sunrise = parseForecastTime(data.daily.sunrise?.[i], utcOffsetSeconds);
+    const sunset = parseForecastTime(data.daily.sunset?.[i], utcOffsetSeconds);
     return {
       time,
-      label: formatDayLabel(time, i),
-      high: Math.round(data.daily.temperature_2m_max?.[i] ?? 0),
-      low: Math.round(data.daily.temperature_2m_min?.[i] ?? 0),
+      label: formatDayLabel(parsed, i, timeZone),
+      high: Math.round(Number(data.daily.temperature_2m_max?.[i] ?? 0)),
+      low: Math.round(Number(data.daily.temperature_2m_min?.[i] ?? 0)),
       precipSum: Number(data.daily.precipitation_sum?.[i] ?? 0),
-      precipProb: data.daily.precipitation_probability_max?.[i] ?? 0,
+      precipProb: Number(data.daily.precipitation_probability_max?.[i] ?? 0),
       uv: data.daily.uv_index_max?.[i] ?? null,
       windMax: data.daily.wind_speed_10m_max?.[i] ?? null,
       sunrise: data.daily.sunrise?.[i] || null,
       sunset: data.daily.sunset?.[i] || null,
+      sunriseLabel: formatClock(sunrise, timeZone),
+      sunsetLabel: formatClock(sunset, timeZone),
       weatherCode: code,
       condition: meta.label,
       tone: meta.tone,
@@ -200,23 +276,26 @@ export async function fetchWeatherForecast({ latitude, longitude, label = null }
     };
   });
 
+  const today = daily[0] || null;
   const temps = hourlySlice.map((h) => h.temp);
   const tempMin = temps.length ? Math.min(...temps) : 0;
   const tempMax = temps.length ? Math.max(...temps) : 0;
 
   return {
     location: {
-      latitude: lat,
-      longitude: lon,
+      latitude: Number(data.latitude ?? lat),
+      longitude: Number(data.longitude ?? lon),
       label: placeLabel || `${lat.toFixed(2)}°, ${lon.toFixed(2)}°`,
-      timezone: data.timezone || "local",
+      timezone: timeZone || "local",
+      utcOffsetSeconds,
+      elevation: data.elevation ?? null,
     },
     current: {
-      temp: Math.round(data.current?.temperature_2m ?? 0),
-      feelsLike: Math.round(data.current?.apparent_temperature ?? 0),
+      temp: Math.round(Number(data.current?.temperature_2m ?? 0)),
+      feelsLike: Math.round(Number(data.current?.apparent_temperature ?? 0)),
       humidity: data.current?.relative_humidity_2m ?? null,
-      precip: data.current?.precipitation ?? 0,
-      wind: Math.round(data.current?.wind_speed_10m ?? 0),
+      precip: Number(data.current?.precipitation ?? 0),
+      wind: Math.round(Number(data.current?.wind_speed_10m ?? 0)),
       windDir: data.current?.wind_direction_10m ?? null,
       cloudCover: data.current?.cloud_cover ?? null,
       isDay: Boolean(data.current?.is_day),
@@ -226,6 +305,7 @@ export async function fetchWeatherForecast({ latitude, longitude, label = null }
       IconHint: currentMeta.IconHint,
       observedAt: data.current?.time || null,
     },
+    today,
     hourly: hourlySlice,
     daily,
     chart: {

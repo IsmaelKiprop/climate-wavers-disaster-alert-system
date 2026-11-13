@@ -111,7 +111,11 @@ const WeatherForecastPanel = ({ compact = false, className = "" }) => {
       const report = await fetchWeatherForecast({
         latitude: coords.latitude,
         longitude: coords.longitude,
-        label: coords.label || (coords.source === "default" ? DEFAULT_LOCATION.label : null),
+        label:
+          forceRefresh
+            ? null
+            : coords.label || (coords.source === "default" ? DEFAULT_LOCATION.label : null),
+        refreshPlaceLabel: forceRefresh,
       });
       setForecast(report);
     } catch (err) {
@@ -252,7 +256,7 @@ const WeatherForecastPanel = ({ compact = false, className = "" }) => {
     );
   }
 
-  const { current, hourly, daily, location, units } = forecast;
+  const { current, hourly, daily, location, units, today } = forecast;
   const days = compact ? daily.slice(0, 5) : daily;
 
   return (
@@ -359,6 +363,46 @@ const WeatherForecastPanel = ({ compact = false, className = "" }) => {
           </div>
         </div>
 
+        {/* Daily fields from Open-Meteo (high/low/rain) were underused before */}
+        {today ? (
+          <div
+            className={`border p-3 sm:p-4 ${toneClasses(today.tone)}`}
+            style={{ borderRadius: 5 }}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-xs uppercase tracking-wide opacity-80">Today&apos;s outlook</p>
+                <p className="text-sm sm:text-base font-medium mt-1">{today.condition}</p>
+              </div>
+              <WeatherGlyph hint={today.IconHint} className="w-7 h-7 shrink-0 opacity-90" />
+            </div>
+            <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <div>
+                <p className="text-[11px] opacity-80">High / low</p>
+                <p className="text-sm font-semibold tabular-nums mt-0.5">
+                  {today.high}° / {today.low}°
+                </p>
+              </div>
+              <div>
+                <p className="text-[11px] opacity-80">Rain chance</p>
+                <p className="text-sm font-semibold tabular-nums mt-0.5">{today.precipProb}%</p>
+              </div>
+              <div>
+                <p className="text-[11px] opacity-80">Expected rain</p>
+                <p className="text-sm font-semibold tabular-nums mt-0.5">
+                  {today.precipSum.toFixed(1)} {units.precip}
+                </p>
+              </div>
+              <div>
+                <p className="text-[11px] opacity-80">UV index</p>
+                <p className="text-sm font-semibold tabular-nums mt-0.5">
+                  {today.uv != null ? Number(today.uv).toFixed(1) : "—"}
+                </p>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
         {/* Hourly strip */}
         <div>
           <div className="flex items-baseline justify-between gap-2 mb-2 px-0.5">
@@ -444,37 +488,27 @@ const WeatherForecastPanel = ({ compact = false, className = "" }) => {
           </ul>
         </div>
 
-        {!compact && daily[0] ? (
+        {!compact && today ? (
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             {[
               {
-                label: "UV index",
-                value: daily[0].uv != null ? Number(daily[0].uv).toFixed(1) : "—",
-              },
-              {
                 label: "Max wind",
                 value:
-                  daily[0].windMax != null
-                    ? `${Math.round(daily[0].windMax)} ${units.wind}`
+                  today.windMax != null
+                    ? `${Math.round(today.windMax)} ${units.wind}`
                     : "—",
               },
               {
                 label: "Sunrise",
-                value: daily[0].sunrise
-                  ? new Date(daily[0].sunrise).toLocaleTimeString(undefined, {
-                      hour: "numeric",
-                      minute: "2-digit",
-                    })
-                  : "—",
+                value: today.sunriseLabel || "—",
               },
               {
                 label: "Sunset",
-                value: daily[0].sunset
-                  ? new Date(daily[0].sunset).toLocaleTimeString(undefined, {
-                      hour: "numeric",
-                      minute: "2-digit",
-                    })
-                  : "—",
+                value: today.sunsetLabel || "—",
+              },
+              {
+                label: "Timezone",
+                value: location.timezone || "local",
               },
             ].map((item) => (
               <div
@@ -483,7 +517,7 @@ const WeatherForecastPanel = ({ compact = false, className = "" }) => {
                 style={{ borderRadius: 5 }}
               >
                 <p className="text-[11px] text-muted">{item.label}</p>
-                <p className="text-sm font-semibold text-foreground mt-1 tabular-nums">
+                <p className="text-sm font-semibold text-foreground mt-1 tabular-nums truncate">
                   {item.value}
                 </p>
               </div>
