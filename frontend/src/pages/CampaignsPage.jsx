@@ -141,11 +141,27 @@ const CampaignsPage = () => {
           </main>
         </div>
         {isModalOpen && (
-          <Modal closeFn={() => setIsModalOpen(false)}>
+          <Modal
+            title="Support project"
+            closeFn={() => {
+              setIsModalOpen(false);
+              navigate("/campaigns", { replace: true });
+            }}
+          >
             <Payment
               campaignId={campaign.id}
               campaignTitle={campaign.title}
-              targetAmount={parseInt(campaign.amount, 10) || 0}
+              targetAmount={Number(campaign.amount) || 0}
+              treePrice={
+                Number(campaign.raw?.tree_price) ||
+                Number(campaign.tree_price) ||
+                5
+              }
+              onSuccess={() => {
+                setIsModalOpen(false);
+                navigate("/campaigns", { replace: true });
+                loadCampaigns();
+              }}
             />
           </Modal>
         )}

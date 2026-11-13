@@ -83,8 +83,8 @@ const Donations = () => {
                   
                   <div className="mb-4">
                     <div className="flex justify-between text-sm text-gray-600 mb-1">
-                      <span>Raised: ₦{campaign.raisedAmount.toLocaleString()}</span>
-                      <span>Target: ₦{campaign.targetAmount.toLocaleString()}</span>
+                      <span>Raised: ${campaign.raisedAmount.toLocaleString()}</span>
+                      <span>Target: ${campaign.targetAmount.toLocaleString()}</span>
                     </div>
                     <div className="w-full bg-gray-200 rounded-full h-2">
                       <div

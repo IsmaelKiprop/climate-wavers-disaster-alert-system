@@ -116,7 +116,9 @@ const TreeAnalyticsPanel = ({
   userTrees = [],
   userStats = {},
   className = "",
+  variant = "default",
 }) => {
+  const isAdmin = variant === "admin";
   const reportRef = useRef(null);
   const { isDark } = useTheme();
   const [report, setReport] = useState(null);
@@ -296,12 +298,18 @@ const TreeAnalyticsPanel = ({
     <section className={`border border-border bg-surface ${className}`}>
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 p-4 border-b border-border">
         <div className="min-w-0">
-          <p className="text-xs uppercase tracking-wide text-muted">Tree impact pulse</p>
+          <p className="text-xs uppercase tracking-wide text-muted">
+            {isAdmin ? "Admin analytics" : "Tree impact pulse"}
+          </p>
           <h2 className="text-lg sm:text-xl font-semibold text-foreground mt-0.5">
-            Reforestation analytics & AI briefing
+            {isAdmin
+              ? "Project performance & funding"
+              : "Reforestation analytics & AI briefing"}
           </h2>
           <p className="text-sm text-muted mt-1">
-            Visualize verified projects, then download a shareable impact report.
+            {isAdmin
+              ? "Charts for trees, USD raised, project mix, and progress — plus a downloadable report."
+              : "Visualize verified projects, then download a shareable impact report."}
           </p>
         </div>
         <div className="flex flex-wrap gap-2 shrink-0">
@@ -336,10 +344,13 @@ const TreeAnalyticsPanel = ({
             { label: "Active projects", value: summary.active_projects ?? 0 },
             { label: "Verified", value: summary.verified_projects ?? 0 },
             {
-              label: "Funds raised",
+              label: "Funds raised (USD)",
               value: `$${Math.round(summary.total_funds_raised || 0).toLocaleString()}`,
             },
-            { label: "Your trees", value: summary.my_trees ?? 0 },
+            {
+              label: isAdmin ? "Listed projects" : "Your trees",
+              value: isAdmin ? projects.length : summary.my_trees ?? 0,
+            },
             { label: "Top country", value: summary.top_country || "—" },
           ].map((stat) => (
             <div
@@ -412,7 +423,9 @@ const TreeAnalyticsPanel = ({
             </div>
           </div>
           <div className="border border-border p-3" style={{ borderRadius: 5 }}>
-            <h3 className="text-sm font-medium mb-2">Your 7-day plantings</h3>
+            <h3 className="text-sm font-medium mb-2">
+              {isAdmin ? "Network 7-day activity" : "Your 7-day plantings"}
+            </h3>
             <div className="h-48">
               <Line data={activityData} options={baseOptions} />
             </div>
