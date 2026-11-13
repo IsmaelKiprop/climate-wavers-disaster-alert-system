@@ -14,7 +14,13 @@ import {
   Filler,
 } from "chart.js";
 import { Bar, Doughnut, Radar } from "react-chartjs-2";
-import { IoDownloadOutline, IoRefreshOutline, IoSparklesOutline } from "react-icons/io5";
+import {
+  IoChevronDown,
+  IoChevronUp,
+  IoDownloadOutline,
+  IoRefreshOutline,
+  IoSparklesOutline,
+} from "react-icons/io5";
 import { client } from "../api";
 import { endpoints } from "../utils/endpoints";
 import { useLiveDisasters } from "../hooks/useLiveDisasters";
@@ -55,8 +61,15 @@ function palette(n) {
   return Array.from({ length: n }, (_, i) => colors[i % colors.length]);
 }
 
+function clampPct(n) {
+  const v = Number(n);
+  if (!Number.isFinite(v)) return 0;
+  return Math.max(0, Math.min(100, v));
+}
+
 /**
  * Unique profile lens: resilience radar + hazard/hope balance + AI briefing.
+ * Compact strip by default; expand for charts and AI brief.
  */
 const ProfileImpactPanel = ({ profile, feed = {}, className = "" }) => {
   const reportRef = useRef(null);
@@ -70,6 +83,7 @@ const ProfileImpactPanel = ({ profile, feed = {}, className = "" }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [downloading, setDownloading] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const accent = isDark ? TEAL_DARK : TEAL;
   const { muted, ink, grid } = chartTheme(isDark);
 
@@ -145,6 +159,13 @@ const ProfileImpactPanel = ({ profile, feed = {}, className = "" }) => {
   const summary = report?.summary || {};
   const resilience = summary.resilience_index ?? 0;
 
+  const compactStats = [
+    { label: "Trees", value: summary.trees_total ?? 0 },
+    { label: "Posts", value: summary.posts ?? 0 },
+    { label: "Nearby", value: summary.nearby_signals ?? 0 },
+    { label: "High / critical", value: summary.high_nearby ?? 0 },
+  ];
+
   const radarData = useMemo(
     () => ({
       labels: report?.radar?.labels || [],
@@ -219,10 +240,28 @@ const ProfileImpactPanel = ({ profile, feed = {}, className = "" }) => {
     [report?.hazard_mix]
   );
 
+  const waitForPaint = () =>
+    new Promise((resolve) => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          setTimeout(resolve, 120);
+        });
+      });
+    });
+
   const downloadPdf = async () => {
-    if (!reportRef.current || downloading) return;
+    if (downloading || !report) return;
     setDownloading(true);
+    const wasExpanded = expanded;
     try {
+      if (!wasExpanded) {
+        setExpanded(true);
+        await waitForPaint();
+      }
+      if (!reportRef.current) {
+        setError("PDF download failed. Try again.");
+        return;
+      }
       const stamp = new Date().toISOString().slice(0, 10);
       const safeName = String(summary.name || "Profile")
         .replace(/[^\w\-]+/g, "_")
@@ -236,20 +275,24 @@ const ProfileImpactPanel = ({ profile, feed = {}, className = "" }) => {
       console.error(err);
       setError("PDF download failed. Try again.");
     } finally {
+      if (!wasExpanded) setExpanded(false);
       setDownloading(false);
     }
   };
 
   if (loading && !report) {
     return (
-      <section className={`border border-border bg-surface p-4 ${className}`}>
+      <section className={`border border-border bg-surface p-4 ${className}`} style={{ borderRadius: 5 }}>
         <p className="text-sm text-muted">Mapping impact constellation…</p>
       </section>
     );
   }
 
   return (
-    <section className={`border border-border bg-surface ${className}`}>
+    <section
+      className={`border border-border bg-surface ${className}`}
+      style={{ borderRadius: 5 }}
+    >
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 p-4 border-b border-border">
         <div className="min-w-0">
           <p className="text-xs uppercase tracking-wide text-muted">Impact constellation</p>
@@ -257,7 +300,7 @@ const ProfileImpactPanel = ({ profile, feed = {}, className = "" }) => {
             Resilience lens · disasters × personal action
           </h2>
           <p className="text-sm text-muted mt-1">
-            A unique scorecard that weighs live hazard pressure against this member’s canopy and voice.
+            Live hazard pressure weighed against this member’s canopy and voice.
           </p>
         </div>
         <div className="flex flex-wrap gap-2 shrink-0">
@@ -278,54 +321,58 @@ const ProfileImpactPanel = ({ profile, feed = {}, className = "" }) => {
             style={{ borderRadius: 5 }}
           >
             <IoDownloadOutline size={16} />
-            {downloading ? "Preparing…" : "Download report"}
+            {downloading ? "Preparing…" : "Download"}
+          </button>
+          <button
+            type="button"
+            onClick={() => setExpanded((v) => !v)}
+            aria-expanded={expanded}
+            className="h-10 px-3 border border-border text-sm inline-flex items-center gap-1.5 hover:bg-background text-foreground"
+            style={{ borderRadius: 5 }}
+          >
+            {expanded ? <IoChevronUp size={16} /> : <IoChevronDown size={16} />}
+            {expanded ? "Collapse" : "Expand"}
           </button>
         </div>
       </div>
 
       {error ? <p className="px-4 pt-3 text-sm text-destructive">{error}</p> : null}
 
-      <div ref={reportRef} className="p-4 sm:p-5 space-y-5 bg-surface text-foreground">
-        <div className="grid grid-cols-1 lg:grid-cols-[200px_1fr] gap-4 items-stretch">
+      <div ref={reportRef} className="p-4 sm:p-5 space-y-4 bg-surface text-foreground">
+        {/* Compact strip: always visible */}
+        <div className="grid grid-cols-1 sm:grid-cols-[140px_1fr] gap-3 items-stretch">
           <div
-            className="border border-border bg-surface-muted p-4 flex flex-col items-center justify-center text-center"
+            className="border border-border bg-surface-muted px-3 py-3 flex flex-col items-center justify-center text-center"
             style={{ borderRadius: 5, breakInside: "avoid" }}
           >
-            <p className="text-[11px] uppercase tracking-wide text-muted">Resilience Index</p>
+            <p className="text-[11px] uppercase tracking-wide text-muted">Resilience</p>
             <p
-              className="mt-2 text-5xl font-semibold tabular-nums"
+              className="mt-1 text-4xl font-semibold tabular-nums leading-none"
               style={{ color: accent }}
             >
               {resilience}
             </p>
-            <p className="text-xs text-muted mt-1">of 100</p>
-            <div className="mt-3 w-full h-2 bg-background border border-border overflow-hidden" style={{ borderRadius: 5 }}>
+            <p className="text-[11px] text-muted mt-1">of 100</p>
+            <div
+              className="mt-2 w-full h-1.5 bg-background border border-border overflow-hidden"
+              style={{ borderRadius: 5 }}
+            >
               <div
                 className="h-full"
                 style={{ width: `${clampPct(resilience)}%`, background: accent }}
               />
             </div>
-            <p className="mt-3 text-xs text-muted leading-relaxed">
-              Canopy · Voice · Echo · Vigilance · Continuity
-            </p>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
-            {[
-              { label: "Trees (ledger)", value: summary.trees_total ?? 0 },
-              { label: "Posts", value: summary.posts ?? 0 },
-              { label: "Nearby signals", value: summary.nearby_signals ?? 0 },
-              { label: "High / critical", value: summary.high_nearby ?? 0 },
-              { label: "Climate feed %", value: `${summary.climate_share_pct ?? 0}%` },
-              { label: "Watch place", value: summary.place || "—" },
-            ].map((stat) => (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {compactStats.map((stat) => (
               <div
                 key={stat.label}
-                className="border border-border bg-surface-muted p-3 min-w-0"
+                className="border border-border bg-surface-muted px-3 py-2.5 min-w-0"
                 style={{ borderRadius: 5, breakInside: "avoid" }}
               >
-                <p className="text-[11px] text-muted">{stat.label}</p>
-                <p className="text-base sm:text-lg font-semibold mt-1 truncate tabular-nums">
+                <p className="text-[11px] text-muted truncate">{stat.label}</p>
+                <p className="text-base sm:text-lg font-semibold mt-0.5 truncate tabular-nums">
                   {stat.value}
                 </p>
               </div>
@@ -333,95 +380,128 @@ const ProfileImpactPanel = ({ profile, feed = {}, className = "" }) => {
           </div>
         </div>
 
-        <div
-          className="border border-border bg-surface-muted p-4"
-          style={{ borderRadius: 5, breakInside: "avoid" }}
-        >
-          <div className="flex items-center gap-2 mb-2">
-            <IoSparklesOutline size={18} className="text-primary shrink-0" />
-            <h3 className="text-sm font-semibold">AI impact briefing</h3>
-            {aiLoading ? <span className="text-xs text-muted">Tuning lens…</span> : null}
-          </div>
-          <p className="text-sm whitespace-pre-line leading-relaxed">
-            {aiBrief || report?.narrative || "No briefing yet."}
-          </p>
-          {report?.disclaimer ? (
-            <p className="text-xs text-foreground/70 mt-3">{report.disclaimer}</p>
-          ) : null}
-        </div>
+        {expanded ? (
+          <>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
+              {[
+                { label: "Trees (ledger)", value: summary.trees_total ?? 0 },
+                { label: "Posts", value: summary.posts ?? 0 },
+                { label: "Nearby signals", value: summary.nearby_signals ?? 0 },
+                { label: "High / critical", value: summary.high_nearby ?? 0 },
+                { label: "Climate feed %", value: `${summary.climate_share_pct ?? 0}%` },
+                { label: "Watch place", value: summary.place || "—" },
+              ].map((stat) => (
+                <div
+                  key={stat.label}
+                  className="border border-border bg-surface-muted p-3 min-w-0"
+                  style={{ borderRadius: 5, breakInside: "avoid" }}
+                >
+                  <p className="text-[11px] text-muted">{stat.label}</p>
+                  <p className="text-base sm:text-lg font-semibold mt-1 truncate tabular-nums">
+                    {stat.value}
+                  </p>
+                </div>
+              ))}
+            </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="border border-border p-3" style={{ borderRadius: 5, breakInside: "avoid" }}>
-            <h3 className="text-sm font-medium mb-2">Resilience radar</h3>
-            <div className="h-56">
-              {(report?.radar?.labels || []).length ? (
-                <Radar data={radarData} options={radarOptions} />
-              ) : (
-                <p className="text-sm text-muted">Not enough signal yet.</p>
-              )}
+            <div
+              className="border border-border bg-surface-muted p-4"
+              style={{ borderRadius: 5, breakInside: "avoid" }}
+            >
+              <div className="flex items-center gap-2 mb-2">
+                <IoSparklesOutline size={18} className="text-primary shrink-0" />
+                <h3 className="text-sm font-semibold">AI impact briefing</h3>
+                {aiLoading ? <span className="text-xs text-muted">Tuning lens…</span> : null}
+              </div>
+              <p className="text-sm whitespace-pre-line leading-relaxed">
+                {aiBrief || report?.narrative || "No briefing yet."}
+              </p>
+              {report?.disclaimer ? (
+                <p className="text-xs text-foreground/70 mt-3">{report.disclaimer}</p>
+              ) : null}
             </div>
-          </div>
-          <div className="border border-border p-3" style={{ borderRadius: 5, breakInside: "avoid" }}>
-            <h3 className="text-sm font-medium mb-2">Hazard pressure vs canopy</h3>
-            <div className="h-56">
-              <Bar
-                data={balanceData}
-                options={{
-                  responsive: true,
-                  maintainAspectRatio: false,
-                  plugins: { legend: { display: false } },
-                  scales: {
-                    x: { ticks: { color: muted }, grid: { display: false } },
-                    y: {
-                      beginAtZero: true,
-                      max: 100,
-                      ticks: { color: muted },
-                      grid: { color: grid },
-                    },
-                  },
-                }}
-              />
-            </div>
-          </div>
-          <div className="border border-border p-3 md:col-span-2" style={{ borderRadius: 5, breakInside: "avoid" }}>
-            <h3 className="text-sm font-medium mb-2">
-              Hazard mix {summary.place ? `· ${summary.place}` : "· live field"}
-            </h3>
-            <div className="h-52 max-w-md mx-auto">
-              {(report?.hazard_mix?.labels || []).length ? (
-                <Doughnut
-                  data={hazardData}
-                  options={{
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                      legend: {
-                        position: "bottom",
-                        labels: { color: muted, boxWidth: 10, font: { size: 10 } },
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div
+                className="border border-border p-3"
+                style={{ borderRadius: 5, breakInside: "avoid" }}
+              >
+                <h3 className="text-sm font-medium mb-2">Resilience radar</h3>
+                <div className="h-56">
+                  {(report?.radar?.labels || []).length ? (
+                    <Radar data={radarData} options={radarOptions} />
+                  ) : (
+                    <p className="text-sm text-muted">Not enough signal yet.</p>
+                  )}
+                </div>
+              </div>
+              <div
+                className="border border-border p-3"
+                style={{ borderRadius: 5, breakInside: "avoid" }}
+              >
+                <h3 className="text-sm font-medium mb-2">Hazard pressure vs canopy</h3>
+                <div className="h-56">
+                  <Bar
+                    data={balanceData}
+                    options={{
+                      responsive: true,
+                      maintainAspectRatio: false,
+                      plugins: { legend: { display: false } },
+                      scales: {
+                        x: { ticks: { color: muted }, grid: { display: false } },
+                        y: {
+                          beginAtZero: true,
+                          max: 100,
+                          ticks: { color: muted },
+                          grid: { color: grid },
+                        },
                       },
-                    },
-                  }}
-                />
-              ) : (
-                <p className="text-sm text-muted">No hazard clusters in this watch window.</p>
-              )}
+                    }}
+                  />
+                </div>
+              </div>
+              <div
+                className="border border-border p-3 md:col-span-2"
+                style={{ borderRadius: 5, breakInside: "avoid" }}
+              >
+                <h3 className="text-sm font-medium mb-2">
+                  Hazard mix {summary.place ? `· ${summary.place}` : "· live field"}
+                </h3>
+                <div className="h-52 max-w-md mx-auto">
+                  {(report?.hazard_mix?.labels || []).length ? (
+                    <Doughnut
+                      data={hazardData}
+                      options={{
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                          legend: {
+                            position: "bottom",
+                            labels: { color: muted, boxWidth: 10, font: { size: 10 } },
+                          },
+                        },
+                      }}
+                    />
+                  ) : (
+                    <p className="text-sm text-muted">No hazard clusters in this watch window.</p>
+                  )}
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
 
-        <p className="text-[11px] text-foreground/70">
-          Generated {report?.generated_at ? new Date(report.generated_at).toLocaleString() : "—"} ·
-          Climate Wavers Impact Constellation
-        </p>
+            <p className="text-[11px] text-foreground/70">
+              Generated {report?.generated_at ? new Date(report.generated_at).toLocaleString() : "—"}{" "}
+              · Climate Wavers Impact Constellation
+            </p>
+          </>
+        ) : (
+          <p className="text-xs text-muted">
+            Expand for AI briefing, resilience radar, and hazard mix.
+          </p>
+        )}
       </div>
     </section>
   );
 };
-
-function clampPct(n) {
-  const v = Number(n);
-  if (!Number.isFinite(v)) return 0;
-  return Math.max(0, Math.min(100, v));
-}
 
 export default ProfileImpactPanel;

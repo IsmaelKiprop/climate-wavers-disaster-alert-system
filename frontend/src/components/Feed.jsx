@@ -32,15 +32,21 @@ const Feed = ({ feeds, feedData, activeFeed, setActiveFeed, isLoading, error, tr
 
   return (
     <div className="w-full">
-      <div className="text-lg md:text-xl border-border rounded-md h-[50px] border-2 font-bold bg-surface">
-        <div className="text-foreground font-bold flex flex-row px-2 sm:px-4 py-2 justify-between gap-x-2 sm:gap-x-4 h-[100%] text-sm sm:text-base overflow-x-auto">
+      <div className="sticky top-0 z-20 border-b border-border bg-surface">
+        <div
+          role="tablist"
+          className="flex flex-row items-stretch gap-x-2 sm:gap-x-4 px-2 sm:px-4 h-12 text-sm sm:text-base font-semibold overflow-x-auto"
+        >
           {feeds?.map((pageFeed) => (
-            <div
+            <button
+              type="button"
+              role="tab"
               key={pageFeed}
-              className={`cursor-pointer capitalize whitespace-nowrap ${
+              aria-selected={feed === pageFeed}
+              className={`capitalize whitespace-nowrap shrink-0 px-1 border-b-2 transition-colors ${
                 feed === pageFeed
-                  ? "border-b-4 border-primary text-foreground"
-                  : "text-muted hover:text-foreground"
+                  ? "border-primary text-foreground"
+                  : "border-transparent text-muted hover:text-foreground"
               }`}
               onClick={() => {
                 setFeed(pageFeed);
@@ -50,26 +56,25 @@ const Feed = ({ feeds, feedData, activeFeed, setActiveFeed, isLoading, error, tr
               }}
             >
               {pageFeed}
-            </div>
+            </button>
           ))}
         </div>
       </div>
       {/* Loading State */}
       {isLoading && (
-        <div className="p-6 sm:p-8 text-center bg-white rounded-lg shadow-sm border border-gray-200">
-          <div className="text-gray-500 text-base sm:text-lg">Loading {feed} content...</div>
-          <div className="text-gray-400 text-sm mt-1">Please wait while we fetch the latest posts</div>
+        <div className="p-6 sm:p-8 text-center border border-border bg-surface" style={{ borderRadius: 5 }}>
+          <div className="text-foreground text-base sm:text-lg">Loading {feed} content…</div>
+          <div className="text-muted text-sm mt-1">Fetching the latest posts</div>
           <div className="mt-3 flex justify-center">
-            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#2F4F4F]"></div>
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary" />
           </div>
         </div>
       )}
-      
-      {/* Error State */}
+
       {error && (
-        <div className="p-6 sm:p-8 text-center bg-white rounded-lg shadow-sm border border-red-200">
-          <div className="text-red-500 text-base sm:text-lg">Failed to load {feed} content</div>
-          <div className="text-red-400 text-sm mt-1">Please try refreshing the page</div>
+        <div className="p-6 sm:p-8 text-center border border-border bg-surface" style={{ borderRadius: 5 }}>
+          <div className="text-destructive text-base sm:text-lg">Failed to load {feed} content</div>
+          <div className="text-muted text-sm mt-1">Please try refreshing the page</div>
         </div>
       )}
       
@@ -140,22 +145,20 @@ const Feed = ({ feeds, feedData, activeFeed, setActiveFeed, isLoading, error, tr
             </div>
           ) : (
             // For profile feeds, show different content types
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+            <div className="border border-border bg-surface" style={{ borderRadius: 5 }}>
               {(() => {
-                // Get the appropriate data based on feed type
                 let contentData = [];
                 let contentType = "post";
-                
+
                 switch (feed) {
                   case "post":
                     contentData = feedData?.post || [];
                     contentType = "post";
                     break;
-          case "comments":
-            contentData = feedData?.comments || [];
-            contentType = "comment";
-            console.log("Comments feed data:", { contentData, contentType, feedData });
-            break;
+                  case "comments":
+                    contentData = feedData?.comments || [];
+                    contentType = "comment";
+                    break;
                   case "reposts":
                     contentData = feedData?.reposts || [];
                     contentType = "repost";
@@ -176,19 +179,16 @@ const Feed = ({ feeds, feedData, activeFeed, setActiveFeed, isLoading, error, tr
                     contentData = feedData?.post || [];
                     contentType = "post";
                 }
-                
-                console.log(`Rendering ${feed} feed:`, { contentData, contentType });
-                
+
                 if (contentData && contentData.length > 0) {
-                  // Sort posts by creation date (newest first)
                   const sortedContent = [...contentData].sort((a, b) => {
                     const dateA = new Date(a.created_at || a.date_created || 0);
                     const dateB = new Date(b.created_at || b.date_created || 0);
-                    return dateB - dateA; // Newest first
+                    return dateB - dateA;
                   });
 
                   return (
-                    <div className="grid gap-6 md:gap-8">
+                    <div className="grid gap-6 md:gap-8 p-1 sm:p-0">
                       {sortedContent.map((item, index) => (
                         <div key={item.id || index} className="w-full">
                           <ProfileContent
@@ -205,29 +205,23 @@ const Feed = ({ feeds, feedData, activeFeed, setActiveFeed, isLoading, error, tr
                       ))}
                     </div>
                   );
-                } else {
-                  return (
-                    <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-8 text-center">
-                      <div className="mb-4">
-                        {feed === "post" && "📝"}
-                        {feed === "comments" && "💬"}
-                        {feed === "reposts" && "🔄"}
-                        {feed === "bookmarks" && "🔖"}
-                        {feed === "likes" && "❤️"}
-                        {feed === "polls" && "📊"}
-                      </div>
-                      <div className="text-gray-500 text-lg font-semibold mb-2">No {feed} found</div>
-                      <div className="text-gray-400 text-sm">
-                        {feed === "post" && "This user hasn't posted anything yet"}
-                        {feed === "comments" && "This user hasn't commented on anything yet"}
-                        {feed === "reposts" && "This user hasn't reposted anything yet"}
-                        {feed === "bookmarks" && "This user hasn't bookmarked anything yet"}
-                        {feed === "likes" && "This user hasn't liked anything yet"}
-                        {feed === "polls" && "This user hasn't created any polls yet"}
-                      </div>
-                    </div>
-                  );
                 }
+
+                return (
+                  <div className="p-8 text-center">
+                    <div className="text-foreground text-base font-semibold mb-2">
+                      No {feed} yet
+                    </div>
+                    <div className="text-muted text-sm">
+                      {feed === "post" && "This user hasn’t posted anything yet."}
+                      {feed === "comments" && "This user hasn’t commented on anything yet."}
+                      {feed === "reposts" && "This user hasn’t reposted anything yet."}
+                      {feed === "bookmarks" && "This user hasn’t bookmarked anything yet."}
+                      {feed === "likes" && "This user hasn’t liked anything yet."}
+                      {feed === "polls" && "This user hasn’t created any polls yet."}
+                    </div>
+                  </div>
+                );
               })()}
             </div>
           )}

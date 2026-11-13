@@ -265,7 +265,7 @@ const Profile = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-background">
       {/* Modern Profile Header */}
       <div className="relative">
         {/* Cover Image Section */}
@@ -602,13 +602,13 @@ const Profile = () => {
           </div>
         </div>
       </div>
-      <div className="px-4 md:px-6 lg:px-8 pb-6 max-w-4xl mx-auto w-full">
+      <div className="pb-4 w-full">
         <ProfileImpactPanel profile={viewUser} feed={feed} />
       </div>
 
-      <Feed 
-        feeds={profileFeeds} 
-        feedData={feed} 
+      <Feed
+        feeds={profileFeeds}
+        feedData={feed}
         trendingData={trendingData}
         trendingLoading={trendingLoading}
         trendingError={trendingError}
