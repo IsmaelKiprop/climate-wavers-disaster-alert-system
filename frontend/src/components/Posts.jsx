@@ -6,8 +6,6 @@ import { secureMediaUrl } from "../utils/factory";
 import { AiOutlineHeart, AiFillHeart, AiOutlineRetweet } from "react-icons/ai";
 import { IoChatboxEllipsesOutline } from "react-icons/io5";
 import { PiBookmark, PiBookmarkFill } from "react-icons/pi";
-import Modal from "./Modal";
-import Createpost from "./Createpost";
 import PostOwnerMenu from "./PostOwnerMenu";
 import PostEditPanel from "./PostEditPanel";
 import PropTypes from "prop-types";
@@ -17,6 +15,8 @@ import PostMediaViewer from "./PostMediaViewer";
 import { postFontStyle } from "../utils/postFonts";
 import UserAvatar from "./UserAvatar";
 import ClimateVerifiedBadge from "./ClimateVerifiedBadge";
+import Createcomment from "./Createcomment";
+import { useQueryClient } from "@tanstack/react-query";
 
 const Posts = ({
   type,
@@ -33,11 +33,17 @@ const Posts = ({
   onRetry,
 }) => {
   const navigate = useNavigate();
-  const [isCommentModalOpen, setIsCommentModalOpen] = useState(false);
-  const [commentId, setCommentId] = useState("");
+  const queryClient = useQueryClient();
+  const [replyToId, setReplyToId] = useState(null);
   const [localPosts, setLocalPosts] = useState([]);
   const [mediaPreview, setMediaPreview] = useState(null);
   const [editingId, setEditingId] = useState(null);
+
+  const refreshComments = () => {
+    queryClient.invalidateQueries({ queryKey: ["post"] });
+    queryClient.invalidateQueries({ queryKey: ["posts"] });
+    setReplyToId(null);
+  };
 
   useEffect(() => {
     if (!Array.isArray(posts)) {
@@ -365,10 +371,9 @@ const Posts = ({
                   </button>
                   <button
                     type="button"
-                    onClick={() => {
-                      setCommentId(post.id);
-                      setIsCommentModalOpen(true);
-                    }}
+                    onClick={() =>
+                      setReplyToId((current) => (current === post.id ? null : post.id))
+                    }
                     className="hover:text-foreground hover:underline"
                   >
                     Reply
@@ -376,21 +381,22 @@ const Posts = ({
                   </button>
                   {timeLabel ? <span className="font-normal">{timeLabel}</span> : null}
                 </div>
+
+                {replyToId === post.id ? (
+                  <div className="mt-2 pl-1">
+                    <Createcomment
+                      type="comments"
+                      postId={postId}
+                      parentId={post.id}
+                      button="Reply"
+                      onSuccess={refreshComments}
+                    />
+                  </div>
+                ) : null}
               </div>
             </div>
           );
         })}
-
-        {isCommentModalOpen && (
-          <Modal closeFn={() => setIsCommentModalOpen(false)}>
-            <Createpost
-              parentId={commentId}
-              postId={postId}
-              type="comments"
-              closeModal={() => setIsCommentModalOpen(false)}
-            />
-          </Modal>
-        )}
 
         {mediaPreview?.src ? (
           <ImageLightbox
@@ -412,16 +418,6 @@ const Posts = ({
             key={`${post?.user?.id || 'unknown'}_${post?.id || 'unknown'}`}
             className="bg-surface shadow-lg border border-border hover:shadow-xl transition-shadow duration-300 hover:border-primary/40 group"
           >
-            {isCommentModalOpen && (
-              <Modal closeFn={() => setIsCommentModalOpen(false)}>
-                <Createpost
-                  parentId={type === "comments" ? commentId : ""}
-                  postId={type === "post" ? commentId : postId}
-                  type="comments"
-                  closeModal={() => setIsCommentModalOpen(false)}
-                />
-              </Modal>
-            )}
             <div className="p-6 pb-4 flex items-start justify-between gap-2">
               <div className="min-w-0 flex-1">
                 <Accountcard user={post?.user} />
@@ -533,23 +529,21 @@ const Posts = ({
               </div>
             </div>
             <div className="flex items-center justify-between px-6 py-4 border-t border-border bg-surface-muted/40">
-              <Link onClick={() => setIsCommentModalOpen(true)}>
-                <button
-                  className="flex items-center space-x-2 px-4 py-2.5 rounded-xl hover:bg-blue-50 transition-all duration-200 group/btn"
-                  onClick={() => {
-                    setIsCommentModalOpen(true);
-                    setCommentId(post.id);
-                  }}
-                >
-                  <IoChatboxEllipsesOutline 
-                    size={20} 
-                    className="text-gray-500 group-hover/btn:text-blue-500 transition-colors duration-200" 
-                  />
-                  <span className="text-sm font-medium text-gray-500 group-hover/btn:text-blue-500 transition-colors duration-200">
-                    {post?.total_comments || 0}
-                  </span>
-                </button>
-              </Link>
+              <button
+                type="button"
+                className="flex items-center space-x-2 px-4 py-2.5 hover:bg-surface-muted transition-all duration-200 group/btn"
+                style={{ borderRadius: 5 }}
+                onClick={() => commentPage(post)}
+                aria-label="View comments"
+              >
+                <IoChatboxEllipsesOutline
+                  size={20}
+                  className="text-muted group-hover/btn:text-primary transition-colors duration-200"
+                />
+                <span className="text-sm font-medium text-muted group-hover/btn:text-primary transition-colors duration-200">
+                  {post?.total_comments || 0}
+                </span>
+              </button>
               
               <button
                 className="flex items-center space-x-2 px-4 py-2.5 rounded-xl hover:bg-red-50 transition-all duration-200 group/btn"
