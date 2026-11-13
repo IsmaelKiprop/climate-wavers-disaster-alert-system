@@ -55,7 +55,7 @@ export function profileAppUrl(userId) {
  */
 export function profileOgShareUrl(userId) {
   // Cache-buster so WhatsApp re-scrapes after OG / logo-blend updates.
-  return `${siteOrigin()}/u/${userId}?v=og3`;
+  return `${siteOrigin()}/u/${userId}?v=og4`;
 }
 
 export function giftTreesPath(userId, displayName = "") {

@@ -132,7 +132,21 @@ def api_base():
 
 
 def og_image_url(user_id):
+    """Fallback server-composited OG image (non-Cloudinary photos)."""
     return f"{api_base()}/api/v1/users/{user_id}/og-image/"
+
+
+def share_og_image(photo_url, user_id):
+    """
+    Prefer a Cloudinary CDN URL with the logo blended on (fast + HEAD-friendly).
+    Fall back to the API compositor for non-Cloudinary photos.
+    """
+    from .og_brand import cloudinary_branded_og
+
+    branded = cloudinary_branded_og(photo_url)
+    if branded:
+        return branded
+    return og_image_url(user_id)
 
 
 def public_profile_payload(user):
@@ -156,7 +170,7 @@ def public_profile_payload(user):
         "website": user.website or "",
         "profile_picture": photo,
         "cover": cover,
-        "og_image": og_image_url(user.id),
+        "og_image": share_og_image(photo, user.id),
         "followers_count": Follow.objects.filter(following=user).count(),
         "following_count": Follow.objects.filter(follower=user).count(),
         "is_profile_complete": complete,
@@ -200,6 +214,7 @@ def share_profile_html(request, user_id):
 <meta property="og:description" content="This Climate Wavers profile is still being set up." />
 <meta property="og:url" content="{html.escape(share_url)}" />
 <meta property="og:image" content="{html.escape(site + '/og-image.jpg')}" />
+<meta property="og:image:type" content="image/jpeg" />
 <meta http-equiv="refresh" content="0;url={html.escape(site)}" />
 </head><body><p>This profile is not ready to share.</p></body></html>""",
             content_type="text/html; charset=utf-8",
@@ -214,7 +229,10 @@ def share_profile_html(request, user_id):
         bio
         or f"Climate Wavers member from {place}. {trees} trees planted for climate action. Gift a tree to support their impact."
     )
-    image = html.escape(payload.get("og_image") or og_image_url(user_id))
+    image = html.escape(
+        payload.get("og_image")
+        or share_og_image(payload.get("profile_picture"), user_id)
+    )
     canonical = html.escape(share_url)
     profile_href = html.escape(profile_url)
     crawler = _is_crawler(request)

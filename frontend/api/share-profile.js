@@ -12,12 +12,50 @@ const SITE = (
   process.env.VITE_SITE_URL || "https://alerts.flowops.africa"
 ).replace(/\/+$/, "");
 
+/** Cloudinary overlay public_id (slashes → colons). */
+const CLOUDINARY_LOGO_LAYER = "disax:climate-wavers:brand-logo";
+
 function escapeHtml(value) {
   return String(value || "")
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+/**
+ * Fast CDN OG image: 1200×630 + Climate Wavers logo.
+ * WhatsApp/Facebook need a quick HEAD/GET — Render compositing was too slow.
+ */
+function cloudinaryBrandedOg(photoUrl) {
+  if (!photoUrl) return null;
+  let url = String(photoUrl).trim();
+  if (url.startsWith("http://")) url = `https://${url.slice(7)}`;
+  const match = url.match(
+    /^(https:\/\/res\.cloudinary\.com\/[^/]+\/image\/upload)\/(.+)$/i
+  );
+  if (!match) return null;
+  const version = match[2].match(/(v\d+\/.+)$/);
+  if (!version) return null;
+  const transforms = [
+    "w_1200,h_630,c_fill,g_auto,q_auto,f_jpg",
+    `l_${CLOUDINARY_LOGO_LAYER}/c_scale,w_150`,
+    "fl_layer_apply,g_south_east,x_40,y_36",
+  ].join("/");
+  return `${match[1]}/${transforms}/${version[1]}`;
+}
+
+function resolveOgImage(profile, userId) {
+  if (profile?.og_image && !String(profile.og_image).includes("/og-image/")) {
+    return profile.og_image;
+  }
+  const photo = profile?.profile_picture;
+  return (
+    cloudinaryBrandedOg(photo) ||
+    (profile?.og_image) ||
+    photo ||
+    `${SITE}/og-image.jpg`
+  );
 }
 
 function buildHtml({ userId, title, description, image }) {
@@ -42,6 +80,7 @@ function buildHtml({ userId, title, description, image }) {
   <meta property="og:url" content="${safeUrl}" />
   <meta property="og:image" content="${safeImage}" />
   <meta property="og:image:secure_url" content="${safeImage}" />
+  <meta property="og:image:type" content="image/jpeg" />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
   <meta property="og:image:alt" content="${safeTitle}" />
@@ -65,7 +104,7 @@ function htmlResponse(body, status = 200) {
     status,
     headers: {
       "Content-Type": "text/html; charset=utf-8",
-      "Cache-Control": "public, s-maxage=120, stale-while-revalidate=600",
+      "Cache-Control": "public, s-maxage=60, stale-while-revalidate=600",
     },
   });
 }
@@ -85,12 +124,16 @@ export default async function handler(request) {
 
     let profile = null;
     try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 8000);
       const response = await fetch(`${API_BASE}/api/v1/users/${userId}/public/`, {
         headers: {
           Accept: "application/json",
           "User-Agent": "ClimateWavers-OG/1.0",
         },
+        signal: controller.signal,
       });
+      clearTimeout(timer);
       if (response.ok) {
         profile = await response.json();
       }
@@ -106,9 +149,7 @@ export default async function handler(request) {
     const description =
       (profile && profile.bio) ||
       "Climate action profile on Climate Wavers. Gift a tree to support their impact.";
-    const image =
-      (profile && (profile.og_image || profile.profile_picture)) ||
-      `${API_BASE}/api/v1/users/${userId}/og-image/`;
+    const image = resolveOgImage(profile, userId);
 
     return htmlResponse(
       buildHtml({ userId, title, description, image }),

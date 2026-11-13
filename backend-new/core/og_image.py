@@ -15,13 +15,14 @@ from rest_framework.permissions import AllowAny
 
 from api.models import User
 
+from .og_brand import cloudinary_resized
 from .profile_share import frontend_base, https_url
 
 logger = logging.getLogger(__name__)
 
 OG_W, OG_H = 1200, 630
 LOGO_PATH = Path(__file__).resolve().parent / "static_assets" / "logo.jpg"
-FETCH_TIMEOUT = 12
+FETCH_TIMEOUT = 8
 
 
 def _fetch_image(url: str) -> Image.Image | None:
@@ -88,13 +89,14 @@ def _fallback_canvas() -> Image.Image:
 
 
 def compose_profile_og(photo_url: str | None) -> bytes:
-    photo = _fetch_image(photo_url) if photo_url else None
+    # Prefer a small Cloudinary derivative — raw profile photos can be multi‑MB.
+    fetch_url = cloudinary_resized(photo_url) or photo_url
+    photo = _fetch_image(fetch_url) if fetch_url else None
     if photo:
         canvas = _cover_fit(photo, OG_W, OG_H)
     else:
         canvas = _fallback_canvas()
 
-    # Soft bottom fade so the logo plate reads clearly.
     fade = Image.new("RGBA", (OG_W, OG_H), (0, 0, 0, 0))
     fade_draw = ImageDraw.Draw(fade)
     for i in range(160):
@@ -114,7 +116,6 @@ def compose_profile_og(photo_url: str | None) -> bytes:
 
     if logo is not None:
         badge = _logo_badge(logo, badge_h=100)
-        # Soft shadow under the badge.
         shadow = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
         sx = OG_W - badge.width - 36
         sy = OG_H - badge.height - 32
@@ -136,20 +137,27 @@ def compose_profile_og(photo_url: str | None) -> bytes:
     return buf.getvalue()
 
 
-@api_view(["GET"])
+@api_view(["GET", "HEAD"])
 @permission_classes([AllowAny])
 def profile_og_image(request, user_id):
     """
-    1200×630 share preview: profile photo with Climate Wavers logo blended on.
-    Used as og:image for WhatsApp / Facebook / X crawlers.
+    1200×630 share preview for non-Cloudinary photos.
+    HEAD must succeed — Facebook/WhatsApp probe with HEAD before GET.
     """
     user = get_object_or_404(User, pk=user_id, is_active=True)
     photo = https_url(user.profile_picture) or f"{frontend_base()}/og-image.jpg"
+
     try:
         jpeg = compose_profile_og(photo)
     except Exception:
         logger.exception("OG compose failed for user %s", user_id)
         jpeg = compose_profile_og(None)
+
+    if request.method == "HEAD":
+        response = HttpResponse(status=200, content_type="image/jpeg")
+        response["Content-Length"] = str(len(jpeg))
+        response["Cache-Control"] = "public, max-age=3600, stale-while-revalidate=86400"
+        return response
 
     response = HttpResponse(jpeg, content_type="image/jpeg")
     response["Cache-Control"] = "public, max-age=3600, stale-while-revalidate=86400"
