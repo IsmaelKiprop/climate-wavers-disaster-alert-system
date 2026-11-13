@@ -107,7 +107,8 @@ export default async function handler(request) {
       (profile && profile.bio) ||
       "Climate action profile on Climate Wavers. Gift a tree to support their impact.";
     const image =
-      (profile && profile.profile_picture) || `${SITE}/og-image.jpg`;
+      (profile && (profile.og_image || profile.profile_picture)) ||
+      `${API_BASE}/api/v1/users/${userId}/og-image/`;
 
     return htmlResponse(
       buildHtml({ userId, title, description, image }),

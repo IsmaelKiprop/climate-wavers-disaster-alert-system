@@ -100,6 +100,41 @@ def trees_for_user(user):
     }
 
 
+def api_base():
+    """Public backend origin used for generated OG images (must be HTTPS in prod)."""
+    candidates = []
+    try:
+        from django.conf import settings
+
+        for key in ("BACKEND_PUBLIC_URL", "BASE_URL", "BACKEND_HOST"):
+            value = str(getattr(settings, key, "") or "").strip().rstrip("/")
+            if value:
+                candidates.append(value)
+    except Exception:
+        pass
+    for key in ("BACKEND_PUBLIC_URL", "BASE_URL", "BACKEND_HOST"):
+        value = os.getenv(key, "").strip().rstrip("/")
+        if value:
+            candidates.append(value)
+
+    public = [
+        url
+        for url in candidates
+        if url
+        and "," not in url
+        and "localhost" not in url
+        and "127.0.0.1" not in url
+    ]
+    if public:
+        return public[0]
+    # Production API (share crawlers hit this for branded og:image).
+    return "https://climate-wavers-api.onrender.com"
+
+
+def og_image_url(user_id):
+    return f"{api_base()}/api/v1/users/{user_id}/og-image/"
+
+
 def public_profile_payload(user):
     trees = trees_for_user(user)
     display_name = f"{user.first_name} {user.last_name}".strip() or user.username
@@ -121,6 +156,7 @@ def public_profile_payload(user):
         "website": user.website or "",
         "profile_picture": photo,
         "cover": cover,
+        "og_image": og_image_url(user.id),
         "followers_count": Follow.objects.filter(following=user).count(),
         "following_count": Follow.objects.filter(follower=user).count(),
         "is_profile_complete": complete,
@@ -178,7 +214,7 @@ def share_profile_html(request, user_id):
         bio
         or f"Climate Wavers member from {place}. {trees} trees planted for climate action. Gift a tree to support their impact."
     )
-    image = html.escape(payload["profile_picture"] or f"{site}/og-image.jpg")
+    image = html.escape(payload.get("og_image") or og_image_url(user_id))
     canonical = html.escape(share_url)
     profile_href = html.escape(profile_url)
     crawler = _is_crawler(request)

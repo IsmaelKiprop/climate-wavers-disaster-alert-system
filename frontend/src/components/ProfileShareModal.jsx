@@ -65,28 +65,37 @@ const ProfileShareModal = ({ user, treesTotal = 0, onClose, onOpenGiftQr }) => {
 
         <div className="p-5 space-y-4">
           <div className="border border-border overflow-hidden bg-background">
-            <div
-              className="h-28 bg-cover bg-center"
-              style={{
-                backgroundImage: `url(${secureMediaUrl(user?.cover, "/environment.jpg")})`,
-              }}
-            />
-            <div className="px-4 pb-4 -mt-8">
+            {/* WhatsApp-style OG preview: photo with Climate Wavers logo blended on */}
+            <div className="relative aspect-[1.91/1] bg-slate-900 overflow-hidden">
               <img
                 src={photo}
                 alt=""
-                className="h-16 w-16 object-cover border-2 border-surface bg-surface"
-                style={{ borderRadius: "50%" }}
+                className="absolute inset-0 h-full w-full object-cover"
                 onError={(e) => {
                   e.target.src = "/avatar.png";
                 }}
               />
-              <h4 className="mt-3 text-lg font-semibold text-foreground">{displayName}</h4>
-              <p className="text-sm text-muted">@{user?.username}</p>
-              {user?.bio ? (
-                <p className="mt-2 text-sm text-foreground line-clamp-3">{user.bio}</p>
-              ) : null}
-              <div className="mt-3 flex flex-wrap gap-3 text-xs text-muted">
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-black/45" />
+              <span
+                className="absolute bottom-3 right-3 inline-flex items-center justify-center bg-white border border-border p-1"
+                style={{ borderRadius: 8 }}
+              >
+                <img
+                  src="/logo.jpg"
+                  alt="Climate Wavers"
+                  className="h-8 w-auto object-contain"
+                  style={{ borderRadius: 4 }}
+                />
+              </span>
+            </div>
+            <div className="px-4 py-3">
+              <h4 className="text-base font-semibold text-foreground leading-snug">
+                {displayName} (@{user?.username}) on Climate Wavers
+              </h4>
+              <p className="mt-1 text-sm text-muted line-clamp-2">
+                {user?.bio || shareText}
+              </p>
+              <div className="mt-2 flex flex-wrap gap-3 text-xs text-muted">
                 {(user?.location || user?.country) && (
                   <span>{user.location || user.country}</span>
                 )}

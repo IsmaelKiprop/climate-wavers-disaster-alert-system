@@ -47,6 +47,7 @@ from .groups import (
     SocialGroupLeaveView,
 )
 from .profile_share import public_profile
+from .og_image import profile_og_image
 from .chat import (
     ChatBootstrapView,
     ChatDirectMessageView,
@@ -172,6 +173,11 @@ urlpatterns = [
         "users/<int:user_id>/public/",
         public_profile,
         name="public-profile",
+    ),
+    path(
+        "users/<int:user_id>/og-image/",
+        profile_og_image,
+        name="profile-og-image",
     ),
 
     # Additional custom actions for PostViewSet

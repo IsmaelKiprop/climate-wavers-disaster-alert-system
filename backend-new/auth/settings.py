@@ -28,6 +28,9 @@ ALLOWED_HOSTS = env.list(
 )
 
 BASE_URL = env("BASE_URL", default="http://127.0.0.1:8000")
+# Public API origin for OG image URLs (WhatsApp/Facebook crawlers).
+# Falls back to BASE_URL / production default in profile_share.api_base().
+BACKEND_PUBLIC_URL = env("BACKEND_PUBLIC_URL", default="")
 
 INSTALLED_APPS = [
     "unfold",
