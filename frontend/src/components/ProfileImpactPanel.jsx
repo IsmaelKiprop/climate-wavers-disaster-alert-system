@@ -133,7 +133,8 @@ const ProfileImpactPanel = ({ profile, feed = {}, className = "" }) => {
     setAiBrief(base?.narrative || "");
   };
 
-  useEffect(() => {
+  const load = (opts = {}) => {
+    const forceAi = Boolean(opts.forceAi);
     setLoading(true);
     setError("");
     const local = buildProfileImpactAnalytics({
@@ -143,9 +144,16 @@ const ProfileImpactPanel = ({ profile, feed = {}, className = "" }) => {
       trees,
     });
     setReport(local);
-    setAiBrief((prev) => prev || local.narrative || "");
+    setAiBrief((prev) => (forceAi ? local.narrative || "" : prev || local.narrative || ""));
     setLoading(false);
+    if (forceAi) {
+      aiForProfileRef.current = null;
+    }
     enrichWithAi(local, profile?.id);
+  };
+
+  useEffect(() => {
+    load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     profile?.id,
@@ -306,7 +314,7 @@ const ProfileImpactPanel = ({ profile, feed = {}, className = "" }) => {
         <div className="flex flex-wrap gap-2 shrink-0">
           <button
             type="button"
-            onClick={load}
+            onClick={() => load({ forceAi: true })}
             className="h-10 px-3 border border-border text-sm inline-flex items-center gap-1.5 hover:bg-background text-foreground"
             style={{ borderRadius: 5 }}
           >
