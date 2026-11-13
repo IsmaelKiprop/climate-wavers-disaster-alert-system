@@ -58,6 +58,31 @@ export function profileOgShareUrl(userId) {
   return `${siteOrigin()}/u/${userId}?v=og4`;
 }
 
+/** Cloudinary overlay public_id (slashes → colons). */
+const CLOUDINARY_LOGO_LAYER = "disax:climate-wavers:brand-logo";
+
+/**
+ * Same branded 1200×630 image crawlers use (photo + Climate Wavers logo).
+ * Falls back to the raw photo when not on Cloudinary.
+ */
+export function profileOgPreviewImage(photoUrl, fallback = "/og-image.jpg") {
+  if (!photoUrl) return fallback;
+  let url = String(photoUrl).trim();
+  if (url.startsWith("http://")) url = `https://${url.slice(7)}`;
+  const match = url.match(
+    /^(https:\/\/res\.cloudinary\.com\/[^/]+\/image\/upload)\/(.+)$/i
+  );
+  if (!match) return url || fallback;
+  const version = match[2].match(/(v\d+\/.+)$/);
+  if (!version) return url || fallback;
+  const transforms = [
+    "w_1200,h_630,c_fill,g_auto,q_auto,f_jpg",
+    `l_${CLOUDINARY_LOGO_LAYER}/c_scale,w_140,o_92`,
+    "fl_layer_apply,g_south_east,x_36,y_32",
+  ].join("/");
+  return `${match[1]}/${transforms}/${version[1]}`;
+}
+
 export function giftTreesPath(userId, displayName = "") {
   const params = new URLSearchParams();
   if (displayName) params.set("name", displayName);

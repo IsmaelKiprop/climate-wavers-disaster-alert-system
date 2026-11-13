@@ -37,8 +37,8 @@ def cloudinary_branded_og(photo_url: str | None) -> str | None:
     public_path = version.group(1)
     transforms = (
         "w_1200,h_630,c_fill,g_auto,q_auto,f_jpg/"
-        f"l_{CLOUDINARY_LOGO_LAYER}/c_scale,w_150/"
-        "fl_layer_apply,g_south_east,x_40,y_36"
+        f"l_{CLOUDINARY_LOGO_LAYER}/c_scale,w_140,o_92/"
+        "fl_layer_apply,g_south_east,x_36,y_32"
     )
     return f"{base}/{transforms}/{public_path}"
 

@@ -39,8 +39,8 @@ function cloudinaryBrandedOg(photoUrl) {
   if (!version) return null;
   const transforms = [
     "w_1200,h_630,c_fill,g_auto,q_auto,f_jpg",
-    `l_${CLOUDINARY_LOGO_LAYER}/c_scale,w_150`,
-    "fl_layer_apply,g_south_east,x_40,y_36",
+    `l_${CLOUDINARY_LOGO_LAYER}/c_scale,w_140,o_92`,
+    "fl_layer_apply,g_south_east,x_36,y_32",
   ].join("/");
   return `${match[1]}/${transforms}/${version[1]}`;
 }
