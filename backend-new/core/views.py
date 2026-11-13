@@ -86,9 +86,16 @@ class PostPagination(PageNumberPagination):
     max_page_size = 100
 
 
+class NotificationPagination(PageNumberPagination):
+    page_size = 40
+    page_size_query_param = "page_size"
+    max_page_size = 80
+
+
 class NotificationListView(generics.ListAPIView):
     serializer_class = NotificationSerializer
     permission_classes = [IsAuthenticated]
+    pagination_class = NotificationPagination
 
     def get_queryset(self):
         return Notification.objects.filter(user=self.request.user).order_by(
@@ -96,7 +103,7 @@ class NotificationListView(generics.ListAPIView):
         )
 
     def get_serializer_context(self):
-        return {'request': self.request}
+        return {"request": self.request}
 
 
 class MarkNotificationsAsReadView(generics.UpdateAPIView):
@@ -551,7 +558,7 @@ class UserViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=["post"], permission_classes=[IsAuthenticated])
     def activity(self, request):
         """
-        Custom action to get user activity statistics.
+        Profile activity feed tabs. Keep payloads small — full history OOMs free Render.
         """
         try:
             user_id = request.data.get("user_id")
@@ -580,67 +587,79 @@ class UserViewSet(viewsets.ModelViewSet):
                     },
                     status=status.HTTP_404_NOT_FOUND,
                 )
-            posts = Post.objects.filter(user=user).annotate(
-                total_comments=Count('comments', distinct=True),
-                total_reactions=Count('reactions', distinct=True),
-                total_views=Count('views', distinct=True),
-                total_reposts=Count('reposts', distinct=True),
-                total_bookmarks=Count('bookmarks', distinct=True)
-            )
-            print(f"DEBUG: Found {posts.count()} posts for user {user.id} ({user.username})")
-            comments = Comment.objects.filter(user=user).annotate(
-                total_comments=Count('subcomments', distinct=True),
-                total_reactions=Count('reactions', distinct=True),
-                total_reposts=Count('reposts', distinct=True),
-                total_bookmarks=Count('bookmarks', distinct=True)
-            )
-            reactions = Reaction.objects.filter(user=user)
-            reposts = Repost.objects.filter(user=user)
-            followers = Follow.objects.filter(following=user)
-            followings = Follow.objects.filter(follower=user)
-            bookmarks = Bookmark.objects.filter(user=user)
-            polls = Poll.objects.filter(user=user)
 
-            # Serialize the data manually to avoid serializer issues
-            from .serializers import PostSerializer, CommentSerializer, ReactionSerializer, RepostSerializer, FollowSerializer, BookmarkSerializer, PollSerializer, UserSerializer
-            
-            posts_data = PostSerializer(posts, many=True, context={'request': request}).data
-            comments_data = CommentSerializer(comments, many=True, context={'request': request}).data
-            reactions_data = ReactionSerializer(reactions, many=True, context={'request': request}).data
-            reposts_data = RepostSerializer(reposts, many=True, context={'request': request}).data
-            followers_data = FollowSerializer(followers, many=True, context={'request': request}).data
-            followings_data = FollowSerializer(followings, many=True, context={'request': request}).data
-            bookmarks_data = BookmarkSerializer(bookmarks, many=True, context={'request': request}).data
-            polls_data = PollSerializer(polls, many=True, context={'request': request}).data
-            user_data = UserSerializer(user, context={'request': request}).data
-            
-            print(f"DEBUG: User profile_pic: {user.profile_pic}")
-            print(f"DEBUG: User picture: {user.picture}")
-            print(f"DEBUG: User default_avatar: {user.default_avatar}")
-            print(f"DEBUG: User profile_picture property: {user.profile_picture}")
-            print(f"DEBUG: User cover: {user.cover}")
-            print(f"DEBUG: Serialized user data: {user_data}")
-            print(f"DEBUG: Serialized data counts - Posts: {len(posts_data)}, Comments: {len(comments_data)}, Reactions: {len(reactions_data)}")
-            print(f"DEBUG: Reposts: {len(reposts_data)}, Bookmarks: {len(bookmarks_data)}, Polls: {len(polls_data)}")
-            
+            # Hard caps — profile tabs only need recent items.
+            POST_LIMIT = 25
+            COMMENT_LIMIT = 25
+            REACTION_LIMIT = 40
+            REPOST_LIMIT = 25
+            BOOKMARK_LIMIT = 25
+            POLL_LIMIT = 15
+
+            posts = (
+                Post.objects.filter(user=user)
+                .annotate(
+                    total_comments=Count("comments", distinct=True),
+                    total_reactions=Count("reactions", distinct=True),
+                    total_views=Count("views", distinct=True),
+                    total_reposts=Count("reposts", distinct=True),
+                    total_bookmarks=Count("bookmarks", distinct=True),
+                )
+                .order_by("-created_at")[:POST_LIMIT]
+            )
+            comments = (
+                Comment.objects.filter(user=user)
+                .annotate(
+                    total_comments=Count("subcomments", distinct=True),
+                    total_reactions=Count("reactions", distinct=True),
+                    total_reposts=Count("reposts", distinct=True),
+                    total_bookmarks=Count("bookmarks", distinct=True),
+                )
+                .order_by("-created_at")[:COMMENT_LIMIT]
+            )
+            reactions = Reaction.objects.filter(user=user).order_by("-created_at")[
+                :REACTION_LIMIT
+            ]
+            reposts = Repost.objects.filter(user=user).order_by("-created_at")[
+                :REPOST_LIMIT
+            ]
+            bookmarks = Bookmark.objects.filter(user=user).order_by("-created_at")[
+                :BOOKMARK_LIMIT
+            ]
+            polls = Poll.objects.filter(user=user).order_by("-created_at")[:POLL_LIMIT]
+
+            from .serializers import (
+                PostSerializer,
+                CommentSerializer,
+                ReactionSerializer,
+                RepostSerializer,
+                BookmarkSerializer,
+                PollSerializer,
+                UserSerializer,
+            )
+
+            ctx = {"request": request}
             response_data = {
-                "posts": posts_data,
-                "comments": comments_data,
-                "reactions": reactions_data,
-                "repost": reposts_data,
-                "followers": followers_data,
-                "followings": followings_data,
-                "bookmarks": bookmarks_data,
-                "polls": polls_data,
+                "posts": PostSerializer(posts, many=True, context=ctx).data,
+                "comments": CommentSerializer(comments, many=True, context=ctx).data,
+                "reactions": ReactionSerializer(reactions, many=True, context=ctx).data,
+                "repost": RepostSerializer(reposts, many=True, context=ctx).data,
+                # Follow lists belong on /follows/network/ — skip here to save RAM.
+                "followers": [],
+                "followings": [],
+                "followers_count": Follow.objects.filter(following=user).count(),
+                "followings_count": Follow.objects.filter(follower=user).count(),
+                "bookmarks": BookmarkSerializer(bookmarks, many=True, context=ctx).data,
+                "polls": PollSerializer(polls, many=True, context=ctx).data,
                 "user_id": str(user_id),
-                "user": user_data
+                "user": UserSerializer(user, context=ctx).data,
             }
-            
+
             return Response(response_data)
         except Exception as e:
             return Response(
-                {"detail": f"Error retrieving user activities: {str(e)}"}, 
-                status=status.HTTP_400_BAD_REQUEST
+                {"detail": f"Error retrieving user activities: {str(e)}"},
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
     @action(detail=True, methods=["post"], permission_classes=[IsAuthenticated])
@@ -1512,7 +1531,10 @@ class DisasterViewSet(viewsets.ReadOnlyModelViewSet):
         """Proxy live USGS and NASA EONET events for the public map and charts."""
         from .live_feeds import fetch_live_official_events
 
-        return Response(fetch_live_official_events())
+        events = fetch_live_official_events()
+        response = Response(events)
+        response["Cache-Control"] = "public, max-age=60, stale-while-revalidate=120"
+        return response
 
     @action(detail=False, methods=["get", "post"], permission_classes=[AllowAny])
     def forecast(self, request):

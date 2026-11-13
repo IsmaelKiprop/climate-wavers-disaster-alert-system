@@ -16,7 +16,7 @@ const normalizeOnlinePayload = (data) => {
 
 const useOnlineUsers = (options = {}) => {
   const limit = options.limit ?? 100;
-  const refetchInterval = options.refetchInterval ?? 20000;
+  const refetchInterval = options.refetchInterval ?? 60000;
   const enabled = options.enabled !== false && Boolean(getAuthToken());
 
   return useQuery({

@@ -3,17 +3,24 @@
 from datetime import datetime
 
 import requests
+from django.core.cache import cache
 
 USGS_URL = (
     "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/4.5_week.geojson"
 )
 EONET_URL = "https://eonet.gsfc.nasa.gov/api/v3/events?status=open&limit=80"
+LIVE_CACHE_KEY = "cw_live_official_events_v1"
+LIVE_CACHE_TTL = 90  # seconds — avoids re-fetch storms that OOM free Render
 
 
 def fetch_live_official_events(timeout=20):
+    cached = cache.get(LIVE_CACHE_KEY)
+    if cached is not None:
+        return cached
     events = []
     events.extend(_fetch_usgs(timeout))
     events.extend(_fetch_eonet(timeout))
+    cache.set(LIVE_CACHE_KEY, events, LIVE_CACHE_TTL)
     return events
 
 

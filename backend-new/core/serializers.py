@@ -545,53 +545,89 @@ class UserActivitySerializer(serializers.Serializer):
     user = UserSerializer(read_only=True)
 
 
+def _notice_actor_dict(user):
+    if not user:
+        return None
+    profile = getattr(user, "profile_picture", None)
+    try:
+        profile_url = profile.url if profile and hasattr(profile, "url") else profile
+    except Exception:
+        profile_url = None
+    return {
+        "id": user.id,
+        "username": getattr(user, "username", "") or "",
+        "first_name": getattr(user, "first_name", "") or "",
+        "last_name": getattr(user, "last_name", "") or "",
+        "profile_picture": _force_https(profile_url) if profile_url else None,
+    }
+
+
+def _clip(text, limit=160):
+    value = (text or "").strip()
+    if len(value) <= limit:
+        return value
+    return f"{value[: limit - 3]}..."
+
+
 class NotificationSerializer(serializers.ModelSerializer):
-    user = UserSerializer(read_only=True)
+    """Lean notification payload — full User/Post embeds were OOMing Render."""
+
     content = serializers.SerializerMethodField()
     actor = serializers.SerializerMethodField()
 
     class Meta:
         model = Notification
-        fields = "__all__"
-        extra_kwargs = {
-            'post': {'write_only': True},
-            'comment': {'write_only': True},
-        }
+        fields = (
+            "id",
+            "message",
+            "notification_type",
+            "is_read",
+            "created_at",
+            "content",
+            "actor",
+        )
 
     def get_content(self, obj):
         if hasattr(obj, "_content_cache"):
             return obj._content_cache
-        request = self.context.get("request")
         payload = None
         try:
-            if obj.content_type and obj.content_type.model == 'post':
-                payload = PostSerializer(Post.objects.get(id=obj.object_id), context={'request': request}).data
-            elif obj.content_type and obj.content_type.model == 'comment':
-                payload = CommentSerializer(Comment.objects.get(id=obj.object_id), context={'request': request}).data
-            elif obj.content_type and obj.content_type.model == 'follow':
-                payload = FollowSerializer(Follow.objects.get(id=obj.object_id), context={'request': request}).data
-            elif obj.content_type and obj.content_type.model == 'chatmessage':
+            model = obj.content_type.model if obj.content_type else ""
+            if model == "post":
+                post = Post.objects.select_related("user").only(
+                    "id", "content", "user_id", "created_at"
+                ).get(id=obj.object_id)
+                payload = {
+                    "id": post.id,
+                    "content": _clip(post.content),
+                    "user": _notice_actor_dict(post.user),
+                }
+            elif model == "comment":
+                comment = Comment.objects.select_related("user", "post").only(
+                    "id", "content", "user_id", "post_id", "created_at"
+                ).get(id=obj.object_id)
+                payload = {
+                    "id": comment.id,
+                    "content": _clip(comment.content),
+                    "post": comment.post_id,
+                    "user": _notice_actor_dict(comment.user),
+                }
+            elif model == "follow":
+                follow = Follow.objects.select_related("follower", "following").get(
+                    id=obj.object_id
+                )
+                payload = {
+                    "id": follow.id,
+                    "follower": _notice_actor_dict(follow.follower),
+                    "following": _notice_actor_dict(follow.following),
+                }
+            elif model == "chatmessage":
                 msg = ChatMessage.objects.select_related("sender").get(id=obj.object_id)
-                sender = msg.sender
-                preview = (msg.body or "").strip()
-                if len(preview) > 120:
-                    preview = f"{preview[:117]}..."
-                profile = getattr(sender, "profile_picture", None) if sender else None
-                try:
-                    profile_url = profile.url if profile and hasattr(profile, "url") else profile
-                except Exception:
-                    profile_url = None
                 payload = {
                     "conversation_id": msg.conversation_id,
                     "message_id": msg.id,
-                    "content": preview,
-                    "actor": {
-                        "id": sender.id if sender else None,
-                        "username": getattr(sender, "username", "") if sender else "",
-                        "first_name": getattr(sender, "first_name", "") if sender else "",
-                        "last_name": getattr(sender, "last_name", "") if sender else "",
-                        "profile_picture": profile_url,
-                    },
+                    "content": _clip(msg.body, 120),
+                    "actor": _notice_actor_dict(msg.sender),
                 }
         except Exception:
             payload = None

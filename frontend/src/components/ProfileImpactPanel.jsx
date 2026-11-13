@@ -73,6 +73,7 @@ function clampPct(n) {
  */
 const ProfileImpactPanel = ({ profile, feed = {}, className = "" }) => {
   const reportRef = useRef(null);
+  const aiForProfileRef = useRef(null);
   const { isDark } = useTheme();
   const live = useLiveDisasters();
   const disasters = Array.isArray(live.data) ? live.data : [];
@@ -102,7 +103,10 @@ const ProfileImpactPanel = ({ profile, feed = {}, className = "" }) => {
     };
   }, [profile?.id]);
 
-  const enrichWithAi = async (base) => {
+  const enrichWithAi = async (base, profileId) => {
+    // One AI call per profile visit — feed/disaster refreshes were spamming Render.
+    if (!profileId || aiForProfileRef.current === profileId) return;
+    aiForProfileRef.current = profileId;
     setAiLoading(true);
     try {
       const res = await client.run(
@@ -129,7 +133,7 @@ const ProfileImpactPanel = ({ profile, feed = {}, className = "" }) => {
     setAiBrief(base?.narrative || "");
   };
 
-  const load = async () => {
+  useEffect(() => {
     setLoading(true);
     setError("");
     const local = buildProfileImpactAnalytics({
@@ -139,13 +143,9 @@ const ProfileImpactPanel = ({ profile, feed = {}, className = "" }) => {
       trees,
     });
     setReport(local);
-    setAiBrief(local.narrative || "");
+    setAiBrief((prev) => prev || local.narrative || "");
     setLoading(false);
-    enrichWithAi(local);
-  };
-
-  useEffect(() => {
-    load();
+    enrichWithAi(local, profile?.id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     profile?.id,

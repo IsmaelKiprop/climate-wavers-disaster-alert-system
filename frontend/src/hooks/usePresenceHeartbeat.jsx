@@ -3,7 +3,7 @@ import { client } from "../api";
 import { endpoints } from "../utils/endpoints";
 import { getAuthToken } from "../utils/factory";
 
-const INTERVAL_MS = 30000;
+const INTERVAL_MS = 60000;
 
 /**
  * Keeps the authenticated user marked online while the app is open.

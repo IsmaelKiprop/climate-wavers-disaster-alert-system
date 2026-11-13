@@ -82,7 +82,12 @@ export const NotificationProvider = ({ children }) => {
     }
     setIsLoading(true);
     try {
-      const res = await client.run("get", endpoints.notifications, {}, true);
+      const res = await client.run(
+        "get",
+        `${endpoints.notifications}?page_size=40`,
+        {},
+        true
+      );
       mergeNotices(unwrapList(res), { replace: true });
     } catch {
       // Keep any notices already in memory.
@@ -102,7 +107,7 @@ export const NotificationProvider = ({ children }) => {
     if (pollRef.current) return;
     pollRef.current = setInterval(() => {
       loadNotifications();
-    }, 30000);
+    }, 60000);
   }, [loadNotifications]);
 
   const connectSocket = useCallback(() => {
