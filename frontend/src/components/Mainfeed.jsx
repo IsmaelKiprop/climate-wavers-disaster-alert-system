@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { getAuthToken, setUser, getUser } from "../utils/factory";
 import ModernPostCreator from "./ModernPostCreator";
 import DisasterForecastPanel from "./DisasterForecastPanel";
+import WeatherForecastPanel from "./WeatherForecastPanel";
 import { getLocation } from "../utils/location";
 import { useEffect } from "react";
 import { Link } from "react-router-dom";
@@ -42,9 +43,10 @@ const Mainfeed = () => {
 
   return (
     <div className="space-y-4">
+      <WeatherForecastPanel compact />
       <DisasterForecastPanel events={disasters} compact />
       <p className="text-sm text-muted px-1">
-        Full charts and hotspot table on{" "}
+        Full weather and disaster charts on{" "}
         <Link to="/disasters" className="text-primary hover:underline">
           Disaster alerts
         </Link>

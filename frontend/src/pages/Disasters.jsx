@@ -5,6 +5,7 @@ import DashboardSidebar from "../components/DashboardSidebar";
 import Footer from "../components/FooterBar";
 import Pagination from "../components/Pagination";
 import DisasterForecastPanel from "../components/DisasterForecastPanel";
+import WeatherForecastPanel from "../components/WeatherForecastPanel";
 import { useMemo, useState } from "react";
 import { DisastersPageSEO } from "../components/SEOComponents";
 import { usePagination } from "../hooks/usePagination";
@@ -61,6 +62,8 @@ const DisasterPage = () => {
                   Disaster alerts
                 </h1>
               </div>
+
+              <WeatherForecastPanel className="mb-6" />
 
               <DisasterForecastPanel
                 events={allDisasters}
