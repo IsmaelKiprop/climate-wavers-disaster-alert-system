@@ -15,6 +15,8 @@ import ImageLightbox from "./ImageLightbox";
 import LinkifiedText from "./LinkifiedText";
 import PostMediaViewer from "./PostMediaViewer";
 import { postFontStyle } from "../utils/postFonts";
+import UserAvatar from "./UserAvatar";
+import ClimateVerifiedBadge from "./ClimateVerifiedBadge";
 
 const Posts = ({
   type,
@@ -167,22 +169,40 @@ const Posts = ({
     }
   };
 
+  const isComments = type === "comments";
+
   if (isLoading && localPosts.length === 0) {
     return (
-      <div className="space-y-4 max-w-4xl mx-auto" aria-busy="true" aria-live="polite">
-        <p className="sr-only">Loading posts</p>
+      <div
+        className={`max-w-4xl mx-auto ${isComments ? "space-y-3 px-1" : "space-y-4"}`}
+        aria-busy="true"
+        aria-live="polite"
+      >
+        <p className="sr-only">{isComments ? "Loading comments" : "Loading posts"}</p>
         {[0, 1, 2].map((item) => (
-          <div key={item} className="border border-border bg-surface p-4">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="h-10 w-10 shrink-0 bg-background" />
-              <div className="flex-1 space-y-2">
-                <div className="h-3 w-36 bg-background" />
-                <div className="h-3 w-24 bg-background" />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <div className="h-3 w-full bg-background" />
-              <div className="h-3 w-4/5 bg-background" />
+          <div
+            key={item}
+            className={
+              isComments
+                ? "flex items-start gap-2.5"
+                : "border border-border bg-surface p-4"
+            }
+          >
+            <div className={`shrink-0 bg-surface-muted ${isComments ? "h-8 w-8 rounded-full" : "h-10 w-10"}`} />
+            <div className={`flex-1 space-y-2 ${isComments ? "" : ""}`}>
+              <div
+                className={`bg-surface-muted ${isComments ? "h-14 w-3/4" : "h-3 w-36"}`}
+                style={isComments ? { borderRadius: 18 } : undefined}
+              />
+              {!isComments ? <div className="h-3 w-24 bg-background" /> : null}
+              {!isComments ? (
+                <div className="space-y-2 pt-2">
+                  <div className="h-3 w-full bg-background" />
+                  <div className="h-3 w-4/5 bg-background" />
+                </div>
+              ) : (
+                <div className="h-3 w-24 bg-surface-muted" style={{ borderRadius: 5 }} />
+              )}
             </div>
           </div>
         ))}
@@ -192,14 +212,17 @@ const Posts = ({
 
   if (isError && localPosts.length === 0) {
     return (
-      <div className="max-w-4xl mx-auto border border-border bg-surface p-8 text-center">
-        <p className="text-foreground font-medium">We could not load posts</p>
+      <div className={`max-w-4xl mx-auto ${isComments ? "px-2 py-6" : "border border-border bg-surface p-8"} text-center`}>
+        <p className="text-foreground font-medium">
+          {isComments ? "We could not load comments" : "We could not load posts"}
+        </p>
         <p className="mt-2 text-sm text-muted">Check your connection and try again.</p>
         {onRetry ? (
           <button
             type="button"
             onClick={onRetry}
             className="mt-4 inline-flex min-h-11 items-center justify-center px-4 bg-primary text-primary-foreground text-sm font-medium hover:bg-primary-dark"
+            style={{ borderRadius: 5 }}
           >
             Try again
           </button>
@@ -210,30 +233,181 @@ const Posts = ({
 
   if (!isLoading && localPosts.length === 0) {
     return (
-      <div className="max-w-4xl mx-auto border border-border bg-surface p-8 text-center">
-        <p className="text-foreground font-medium">
-          {type === "comments" ? "No comments yet" : "No posts yet"}
+      <div className={`max-w-4xl mx-auto ${isComments ? "px-2 py-8" : "border border-border bg-surface p-8"} text-center`}>
+        <p className={`text-foreground ${isComments ? "text-sm font-semibold" : "font-medium"}`}>
+          {isComments ? "No comments yet" : "No posts yet"}
         </p>
-        <p className="mt-2 text-sm text-muted">
-          {type === "comments"
-            ? "Be the first to share a comment on this post."
+        <p className="mt-1.5 text-sm text-muted">
+          {isComments
+            ? "Be the first to comment."
             : "Share a climate action update to start the feed."}
         </p>
       </div>
     );
   }
 
+  const sortedPosts = Array.isArray(localPosts)
+    ? localPosts
+        .filter((post) => post && post.id)
+        .sort((a, b) => {
+          const dateA = new Date(a.created_at || a.date_created || 0);
+          const dateB = new Date(b.created_at || b.date_created || 0);
+          return dateB - dateA;
+        })
+    : [];
+
+  if (isComments) {
+    return (
+      <div className="max-w-4xl mx-auto space-y-3">
+        {sortedPosts.map((post) => {
+          const displayName =
+            [post?.user?.first_name, post?.user?.last_name].filter(Boolean).join(" ") ||
+            post?.user?.username ||
+            "User";
+          const profileId = post?.user?.id || post?.user?.userId || post?.user?.pk;
+          const createdAt = post?.created_at || post?.date_created;
+          const timeLabel = createdAt
+            ? formatDistanceToNow(new Date(createdAt), { addSuffix: true })
+            : "";
+
+          return (
+            <div
+              key={`${post?.user?.id || "unknown"}_${post?.id || "unknown"}`}
+              className="group flex items-start gap-2.5"
+            >
+              <Link
+                to={profileId ? `/app/${profileId}/profile` : "#"}
+                className="shrink-0 mt-0.5"
+                aria-label={`Open ${displayName} profile`}
+              >
+                <UserAvatar
+                  user={post?.user}
+                  className="h-8 w-8"
+                  textClassName="text-[10px]"
+                  alt={displayName}
+                />
+              </Link>
+
+              <div className="min-w-0 flex-1">
+                {editingId === post.id ? (
+                  <div className="border border-border bg-surface p-3" style={{ borderRadius: 5 }}>
+                    <PostEditPanel
+                      item={post}
+                      itemType="comments"
+                      onCancel={cancelEdit}
+                      onSaved={(updated) => handleEditSaved(post.id, updated)}
+                    />
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex items-start gap-1 max-w-full">
+                    <div
+                      className="min-w-0 max-w-[calc(100%-2rem)] bg-surface-muted px-3 py-2 text-left"
+                      style={{ borderRadius: 18 }}
+                    >
+                      <div className="mb-0.5 flex items-center gap-1 min-w-0">
+                        <Link
+                          to={profileId ? `/app/${profileId}/profile` : "#"}
+                          className="truncate text-[13px] font-semibold text-foreground hover:underline"
+                        >
+                          {displayName}
+                        </Link>
+                        {post?.user?.is_verified ? <ClimateVerifiedBadge size="sm" /> : null}
+                      </div>
+                      {post?.content ? (
+                        <p
+                          className="text-sm text-foreground leading-snug whitespace-pre-wrap break-words"
+                          style={postFontStyle(post?.font_family)}
+                        >
+                          <LinkifiedText
+                            text={post.content}
+                            linkClassName="text-primary font-medium underline underline-offset-2 break-all hover:text-primary-dark"
+                            hashtagClassName="text-primary font-medium hover:text-primary-dark"
+                          />
+                        </p>
+                      ) : null}
+                      {post?.location ? (
+                        <p className="mt-1 text-xs text-muted truncate">📍 {post.location}</p>
+                      ) : null}
+                    </div>
+                    <div className="shrink-0 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+                      <PostOwnerMenu
+                        item={post}
+                        itemType="comments"
+                        onViewDetails={viewPostDetails}
+                        onViewComments={commentPage}
+                        onEdit={startEdit}
+                        onDeleted={handleDeleted}
+                      />
+                    </div>
+                    </div>
+
+                    {(post?.image || post?.video) && (
+                      <div className="mt-1.5 max-w-sm overflow-hidden" style={{ borderRadius: 5 }}>
+                        <PostMediaViewer
+                          image={post.image}
+                          video={post.video}
+                          onPreview={setMediaPreview}
+                        />
+                      </div>
+                    )}
+                  </>
+                )}
+
+                <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 px-1 text-xs font-semibold text-muted">
+                  <button
+                    type="button"
+                    onClick={() => handleLike(post)}
+                    className={`hover:underline ${post?.is_reacted ? "text-destructive" : "hover:text-foreground"}`}
+                  >
+                    {post?.is_reacted ? "Liked" : "Like"}
+                    {post?.total_reactions > 0 ? ` · ${post.total_reactions}` : ""}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCommentId(post.id);
+                      setIsCommentModalOpen(true);
+                    }}
+                    className="hover:text-foreground hover:underline"
+                  >
+                    Reply
+                    {post?.total_comments > 0 ? ` · ${post.total_comments}` : ""}
+                  </button>
+                  {timeLabel ? <span className="font-normal">{timeLabel}</span> : null}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+
+        {isCommentModalOpen && (
+          <Modal closeFn={() => setIsCommentModalOpen(false)}>
+            <Createpost
+              parentId={commentId}
+              postId={postId}
+              type="comments"
+              closeModal={() => setIsCommentModalOpen(false)}
+            />
+          </Modal>
+        )}
+
+        {mediaPreview?.src ? (
+          <ImageLightbox
+            src={mediaPreview.src}
+            alt={mediaPreview.alt}
+            type={mediaPreview.type || "image"}
+            onClose={() => setMediaPreview(null)}
+          />
+        ) : null}
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
-      {Array.isArray(localPosts) && localPosts.length > 0 ? (
-        localPosts
-          .filter(post => post && post.id)
-          .sort((a, b) => {
-            const dateA = new Date(a.created_at || a.date_created || 0);
-            const dateB = new Date(b.created_at || b.date_created || 0);
-            return dateB - dateA; // Newest first
-          })
-          .map((post) => (
+      {sortedPosts.length > 0 ? (
+        sortedPosts.map((post) => (
           <div
             key={`${post?.user?.id || 'unknown'}_${post?.id || 'unknown'}`}
             className="bg-surface shadow-lg border border-border hover:shadow-xl transition-shadow duration-300 hover:border-primary/40 group"

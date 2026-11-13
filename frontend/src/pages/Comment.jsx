@@ -3,18 +3,33 @@ import PropTypes from "prop-types";
 import { useParams } from "react-router-dom";
 import CommentPost from "../components/CommentPost";
 import Createcomment from "../components/Createcomment";
+import { useQueryClient } from "@tanstack/react-query";
 
 const Comment = ({ type }) => {
   const { postId, commentId } = useParams();
+  const queryClient = useQueryClient();
+
+  const handleCommentSuccess = () => {
+    queryClient.invalidateQueries({ queryKey: ["posts"] });
+    queryClient.invalidateQueries({ queryKey: ["post"] });
+  };
 
   return (
-    <div className="text-2xl text-center pt-1 md:pt-5 ">
+    <div className="mx-auto w-full max-w-4xl text-left">
       <CommentPost type={type} postId={commentId ? commentId : postId} />
-      <div className=" md:border-2 max-sm:border-b-2 border-t-0 rounded-lg shadow-xl shadow-white md:h-40 max-sm:py-2 mt-[-10px] ">
-        <Createcomment type={"comments"} postId={postId} parentId={commentId}/>
+
+      <div className="border-t border-border bg-surface px-3 py-3 md:px-4">
+        <Createcomment
+          type="comments"
+          postId={postId}
+          parentId={commentId}
+          button="Post"
+          onSuccess={handleCommentSuccess}
+        />
       </div>
-      <div className="md:ml-8 ml-2">
-        <Postcomponent type={"comments"} postId={postId} comment={commentId} />
+
+      <div className="border-t border-border bg-surface px-2 py-3 md:px-3 md:py-4">
+        <Postcomponent type="comments" postId={postId} comment={commentId} />
       </div>
     </div>
   );

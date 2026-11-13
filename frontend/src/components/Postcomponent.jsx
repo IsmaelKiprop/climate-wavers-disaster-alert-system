@@ -42,8 +42,10 @@ const Postcomponent = ({ type, postId, comment, itemsPerPage = 10 }) => {
     }
   }, [currentPage, totalPages]);
 
+  const isComments = type === "comments";
+
   return (
-    <div className="space-y-6">
+    <div className={isComments ? "space-y-3" : "space-y-6"}>
       <Posts
         posts={posts}
         type={type}
@@ -60,7 +62,7 @@ const Postcomponent = ({ type, postId, comment, itemsPerPage = 10 }) => {
       />
 
       {totalPages > 1 && (
-        <div className="mt-8">
+        <div className={isComments ? "mt-4" : "mt-8"}>
           <Pagination
             currentPage={currentPage}
             totalPages={totalPages}
