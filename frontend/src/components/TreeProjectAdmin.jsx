@@ -4,7 +4,34 @@ import { FaTree, FaMapMarkerAlt, FaUsers, FaDollarSign, FaCheckCircle, FaTimesCi
 import { endpoints } from '../utils/endpoints';
 import { getAuthToken } from '../utils/factory';
 import { apiUrl, mediaUrl } from '../config/env';
+import { uploadFiles } from '../services/upload.service';
 import TreeAnalyticsPanel from './TreeAnalyticsPanel';
+
+/** Keep only usable public image URLs (Cloudinary / https). Drop API-root stubs. */
+function isUsableMediaUrl(value) {
+  const url = String(value || "").trim();
+  if (!url) return false;
+  if (url === "/" || /onrender\.com\/?$/i.test(url)) return false;
+  if (url.startsWith("blob:") || url.startsWith("data:")) return true;
+  if (/^https?:\/\//i.test(url)) {
+    try {
+      const parsed = new URL(url);
+      const path = parsed.pathname || "";
+      // Bare host with no real media path (e.g. https://api…/) is not an image.
+      if (!path || path === "/") return false;
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  // Relative media path
+  return url.startsWith("/") && url.length > 2;
+}
+
+function sanitizeGallery(list) {
+  if (!Array.isArray(list)) return [];
+  return list.map((item) => String(item || "").trim()).filter(isUsableMediaUrl);
+}
 
 const fieldClass =
   'w-full h-11 px-3 border border-border bg-surface text-foreground placeholder:text-muted focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20';
@@ -65,6 +92,8 @@ const TreeProjectAdmin = () => {
     twitter_url: '',
     instagram_url: '',
     linkedin_url: '',
+    organization_logo: '',
+    cover_image: '',
     gallery: []
   });
 
@@ -72,12 +101,6 @@ const TreeProjectAdmin = () => {
     organization_logo: false,
     cover_image: false,
     gallery: false
-  });
-
-  const [uploadedUrls, setUploadedUrls] = useState({
-    organization_logo: null,
-    cover_image: null,
-    gallery: []
   });
 
   const [isAdmin, setIsAdmin] = useState(false);
@@ -302,22 +325,41 @@ const TreeProjectAdmin = () => {
         return;
       }
 
-      // Prepare data for JSON submission (no file uploads)
+      const cover = isUsableMediaUrl(formData.cover_image)
+        ? String(formData.cover_image).trim()
+        : "";
+      const logo = isUsableMediaUrl(formData.organization_logo)
+        ? String(formData.organization_logo).trim()
+        : "";
+      const gallery = sanitizeGallery(formData.gallery);
+
+      // Drop broken media stubs so validation / preview never block save.
       const dataToSend = {
         ...formData,
+        organization_logo: logo || null,
+        cover_image: cover || null,
         tree_species: Array.isArray(formData.tree_species) ? formData.tree_species : [],
-        gallery: Array.isArray(formData.gallery) ? formData.gallery : [],
-        // Convert string numbers to actual numbers
-        target_trees: parseInt(formData.target_trees) || 0,
+        gallery,
+        target_trees: parseInt(formData.target_trees, 10) || 0,
         tree_price: parseFloat(formData.tree_price) || 0,
         total_budget: parseFloat(formData.total_budget) || 0,
         funding_goal: parseFloat(formData.funding_goal) || 0,
-        trees_planted: parseInt(formData.trees_planted) || 0,
+        trees_planted: parseInt(formData.trees_planted, 10) || 0,
         funds_raised: parseFloat(formData.funds_raised) || 0,
-        co2_absorption_per_tree: parseFloat(formData.co2_absorption_per_tree) || 22.0
+        co2_absorption_per_tree: parseFloat(formData.co2_absorption_per_tree) || 22.0,
+        latitude: formData.latitude === "" ? null : formData.latitude,
+        longitude: formData.longitude === "" ? null : formData.longitude,
       };
 
-      
+      // Empty optional URL fields → null (URLField rejects "").
+      ["organization_website", "facebook_url", "twitter_url", "instagram_url", "linkedin_url"].forEach(
+        (key) => {
+          if (dataToSend[key] === "" || dataToSend[key] == null) {
+            dataToSend[key] = null;
+          }
+        }
+      );
+
       const token = getAuthToken();
       if (!token) {
         toast.error('Please log in to access this page');
@@ -325,8 +367,6 @@ const TreeProjectAdmin = () => {
         return;
       }
 
-      console.log('Sending data:', dataToSend);
-      
       const response = await fetch(url, {
         method,
         headers: {
@@ -335,12 +375,6 @@ const TreeProjectAdmin = () => {
         },
         body: JSON.stringify(dataToSend)
       });
-      
-      console.log('Response status:', response.status);
-      if (!response.ok) {
-        const errorData = await response.text();
-        console.error('Error response:', errorData);
-      }
 
       if (response.ok) {
         toast.success(editingProject ? 'Project updated successfully!' : 'Project created successfully!');
@@ -349,8 +383,23 @@ const TreeProjectAdmin = () => {
         resetForm();
         fetchProjects();
       } else {
-        const error = await response.json();
-        toast.error(error.detail || 'Failed to save project');
+        let message = 'Failed to save project';
+        try {
+          const error = await response.json();
+          if (typeof error?.detail === 'string') {
+            message = error.detail;
+          } else if (error && typeof error === 'object') {
+            const first = Object.entries(error)[0];
+            if (first) {
+              const [field, msgs] = first;
+              const text = Array.isArray(msgs) ? msgs[0] : String(msgs);
+              message = `${field}: ${text}`;
+            }
+          }
+        } catch {
+          // keep default
+        }
+        toast.error(message);
       }
     } catch (error) {
       toast.error('Failed to save project');
@@ -484,69 +533,39 @@ Thank you for your understanding! 🌱
       twitter_url: '',
       instagram_url: '',
       linkedin_url: '',
+      organization_logo: '',
+      cover_image: '',
       gallery: []
     });
-    // Reset upload states
     setUploading({
       organization_logo: false,
       cover_image: false,
       gallery: false
-    });
-    setUploadedUrls({
-      organization_logo: null,
-      cover_image: null,
-      gallery: []
     });
   };
 
   const handleFileUpload = async (field, file) => {
     if (!file) return;
 
-    setUploading(prev => ({ ...prev, [field]: true }));
+    setUploading((prev) => ({ ...prev, [field]: true }));
 
     try {
-      // Create FormData for file upload
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('folder', 'tree-projects');
+      // Cloudinary (same as posts/groups) — Render /media/ is not publicly durable.
+      const urls = await uploadFiles(file);
+      const fileUrl = urls?.[0];
+      if (!fileUrl) throw new Error("Upload returned no URL");
 
-      // Upload to your media service
-      const response = await fetch(apiUrl('/api/v1/upload/'), {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${getAuthToken()}`
-        },
-        body: formData
-      });
+      setFormData((prev) => ({
+        ...prev,
+        [field]: field === "gallery" ? [...(prev.gallery || []), fileUrl] : fileUrl,
+      }));
 
-      if (response.ok) {
-        const result = await response.json();
-        const fileUrl = result.url || result.secure_url;
-        
-        // Convert relative URL to absolute URL for preview
-        const absoluteUrl = mediaUrl(fileUrl);
-        
-        // Update form data with the uploaded URL
-        setFormData(prev => ({
-          ...prev,
-          [field]: field === 'gallery' ? [...prev[field], fileUrl] : fileUrl
-        }));
-
-        // Update uploaded URLs state
-        setUploadedUrls(prev => ({
-          ...prev,
-          [field]: field === 'gallery' ? [...prev[field], absoluteUrl] : absoluteUrl
-        }));
-
-        toast.success(`${field.replace('_', ' ')} uploaded successfully!`);
-      } else {
-        throw new Error('Upload failed');
-      }
+      toast.success(`${field.replace(/_/g, " ")} uploaded`);
     } catch (error) {
-      console.error('Upload error:', error);
-      toast.error(`Failed to upload ${field.replace('_', ' ')}. Please try again.`);
+      console.error("Upload error:", error);
+      toast.error(`Failed to upload ${field.replace(/_/g, " ")}. Try again.`);
     } finally {
-      setUploading(prev => ({ ...prev, [field]: false }));
+      setUploading((prev) => ({ ...prev, [field]: false }));
     }
   };
 
@@ -559,50 +578,31 @@ Thank you for your understanding! 🌱
   const handleMultipleFileUpload = async (files) => {
     if (!files || files.length === 0) return;
 
-    setUploading(prev => ({ ...prev, gallery: true }));
+    setUploading((prev) => ({ ...prev, gallery: true }));
 
     try {
-      const uploadPromises = Array.from(files).map(file => {
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('folder', 'tree-projects/gallery');
+      const urls = await uploadFiles(Array.from(files));
+      if (!urls.length) throw new Error("Upload returned no URLs");
 
-        return fetch(apiUrl('/api/v1/upload/'), {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${getAuthToken()}`
-          },
-          body: formData
-        }).then(response => {
-          if (response.ok) {
-            return response.json();
-          }
-          throw new Error('Upload failed');
-        });
-      });
-
-      const results = await Promise.all(uploadPromises);
-      const urls = results.map(result => result.url || result.secure_url);
-      const absoluteUrls = urls.map(url => mediaUrl(url));
-
-      // Update form data with all uploaded URLs
-      setFormData(prev => ({
+      setFormData((prev) => ({
         ...prev,
-        gallery: [...prev.gallery, ...urls]
+        gallery: [...(prev.gallery || []), ...urls],
       }));
 
-      setUploadedUrls(prev => ({
-        ...prev,
-        gallery: [...prev.gallery, ...absoluteUrls]
-      }));
-
-      toast.success(`${urls.length} images uploaded successfully!`);
+      toast.success(`${urls.length} image${urls.length === 1 ? "" : "s"} uploaded`);
     } catch (error) {
-      console.error('Gallery upload error:', error);
-      toast.error('Failed to upload gallery images. Please try again.');
+      console.error("Gallery upload error:", error);
+      toast.error("Failed to upload gallery images. Try again.");
     } finally {
-      setUploading(prev => ({ ...prev, gallery: false }));
+      setUploading((prev) => ({ ...prev, gallery: false }));
     }
+  };
+
+  const removeGalleryItem = (index) => {
+    setFormData((prev) => ({
+      ...prev,
+      gallery: (prev.gallery || []).filter((_, i) => i !== index),
+    }));
   };
 
   const handleInputChange = (e) => {
@@ -878,25 +878,23 @@ Thank you for your understanding! 🌱
                            )}
                          </div>
                        </div>
-                       {formData.organization_logo && (
+                       {isUsableMediaUrl(formData.organization_logo) ? (
                          <div className="mt-2">
                            <p className="text-sm text-muted mb-1">Preview:</p>
-                           <div className="relative inline-block">
-                             <img 
-                               src={mediaUrl(formData.organization_logo)} 
-                               alt="Organization Logo Preview" 
-                               className="w-20 h-20 object-cover rounded-md border border-border"
-                               onError={(e) => {
-                                 e.target.style.display = 'none';
-                                 e.target.nextSibling.style.display = 'block';
-                               }}
-                             />
-                             <div className="absolute inset-0 bg-red-100 border border-red-300 rounded-md flex items-center justify-center text-red-600 text-xs hidden">
-                               Invalid URL
-                             </div>
-                           </div>
+                           <img
+                             src={mediaUrl(formData.organization_logo)}
+                             alt="Organization logo"
+                             className="w-20 h-20 object-cover border border-border bg-background"
+                             onError={(e) => {
+                               e.currentTarget.src = "/avatar.png";
+                             }}
+                           />
                          </div>
-                       )}
+                       ) : formData.organization_logo ? (
+                         <p className="mt-2 text-xs text-muted">
+                           Paste a full image URL (https://…) or upload a file.
+                         </p>
+                       ) : null}
                      </div>
                   </div>
 
@@ -1034,25 +1032,23 @@ Thank you for your understanding! 🌱
                            )}
                          </div>
                        </div>
-                       {formData.cover_image && (
+                       {isUsableMediaUrl(formData.cover_image) ? (
                          <div className="mt-2">
                            <p className="text-sm text-muted mb-1">Preview:</p>
-                           <div className="relative inline-block">
-                             <img 
-                               src={mediaUrl(formData.cover_image)} 
-                               alt="Cover Image Preview" 
-                               className="w-32 h-20 object-cover rounded-md border border-border"
-                               onError={(e) => {
-                                 e.target.style.display = 'none';
-                                 e.target.nextSibling.style.display = 'block';
-                               }}
-                             />
-                             <div className="absolute inset-0 bg-red-100 border border-red-300 rounded-md flex items-center justify-center text-red-600 text-xs hidden">
-                               Invalid URL
-                             </div>
-                           </div>
+                           <img
+                             src={mediaUrl(formData.cover_image)}
+                             alt="Cover"
+                             className="w-40 h-24 object-cover border border-border bg-background"
+                             onError={(e) => {
+                               e.currentTarget.src = "/environment.jpg";
+                             }}
+                           />
                          </div>
-                       )}
+                       ) : formData.cover_image ? (
+                         <p className="mt-2 text-xs text-muted">
+                           Paste a full image URL (https://…) or upload a file — bare API links won’t work.
+                         </p>
+                       ) : null}
                      </div>
                   </div>
 
@@ -1069,18 +1065,21 @@ Thank you for your understanding! 🌱
                           name="gallery"
                           value={Array.isArray(formData.gallery) ? formData.gallery.join('\n') : ''}
                           onChange={(e) => {
-                            const urls = e.target.value.split('\n').filter(url => url.trim());
-                            setFormData(prev => ({
+                            const urls = e.target.value
+                              .split('\n')
+                              .map((url) => url.trim())
+                              .filter(Boolean);
+                            setFormData((prev) => ({
                               ...prev,
-                              gallery: urls
+                              gallery: urls,
                             }));
                           }}
-                          placeholder="Enter image/video URLs, one per line:&#10;https://example.com/image1.jpg&#10;https://example.com/video1.mp4"
+                          placeholder={"One https image URL per line\nhttps://res.cloudinary.com/.../image.jpg"}
                           rows="4"
                           className={fieldClass}
                         />
                         <p className="text-sm text-muted mt-1">
-                          Enter image/video URLs, one per line
+                          Prefer Upload files below — pasted links must be full https URLs.
                         </p>
                       </div>
 
@@ -1105,52 +1104,42 @@ Thank you for your understanding! 🌱
                             </div>
                           )}
                         </div>
-                        <p className="text-sm text-muted mt-1">
-                          Select multiple images or videos to upload
-                        </p>
                       </div>
-                      {formData.gallery && formData.gallery.length > 0 && (
+                      {sanitizeGallery(formData.gallery).length > 0 && (
                         <div className="mt-3">
-                          <p className="text-sm text-muted mb-2">Gallery Preview ({formData.gallery.length} items):</p>
+                          <p className="text-sm text-muted mb-2">
+                            Gallery ({sanitizeGallery(formData.gallery).length})
+                          </p>
                           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
                             {formData.gallery.map((url, index) => {
-                              const isVideo = url.match(/\.(mp4|webm|ogg|avi|mov)$/i);
+                              if (!isUsableMediaUrl(url)) return null;
+                              const isVideo = /\.(mp4|webm|ogg|mov)(\?|$)/i.test(url);
                               const displayUrl = mediaUrl(url);
                               return (
-                                <div key={index} className="relative group">
+                                <div key={`${url}-${index}`} className="relative border border-border bg-background">
                                   {isVideo ? (
-                                    <video 
-                                      src={displayUrl} 
-                                      className="w-full h-24 object-cover rounded-md border border-border hover:shadow-md transition-shadow"
-                                      onError={(e) => {
-                                        e.target.style.display = 'none';
-                                        e.target.nextSibling.style.display = 'flex';
-                                      }}
+                                    <video
+                                      src={displayUrl}
+                                      className="w-full h-24 object-cover"
                                       controls
                                     />
                                   ) : (
-                                    <img 
-                                      src={displayUrl} 
+                                    <img
+                                      src={displayUrl}
                                       alt={`Gallery ${index + 1}`}
-                                      className="w-full h-24 object-cover rounded-md border border-border hover:shadow-md transition-shadow"
+                                      className="w-full h-24 object-cover"
                                       onError={(e) => {
-                                        e.target.style.display = 'none';
-                                        e.target.nextSibling.style.display = 'flex';
+                                        e.currentTarget.src = "/environment.jpg";
                                       }}
                                     />
                                   )}
-                                  <div className="absolute inset-0 bg-red-50 border border-red-200 rounded-md flex items-center justify-center text-red-500 text-xs hidden">
-                                    <div className="text-center">
-                                      <div className="text-red-400 mb-1">⚠️</div>
-                                      <div>Invalid URL</div>
-                                    </div>
-                                  </div>
-                                  <div className="absolute top-1 right-1 bg-black bg-opacity-50 text-white text-xs px-1 py-0.5 rounded text-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                    {index + 1}
-                                  </div>
-                                  <div className="absolute top-1 left-1 bg-blue-500 text-white text-xs px-1 py-0.5 rounded text-center">
-                                    {isVideo ? '🎥' : '🖼️'}
-                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => removeGalleryItem(index)}
+                                    className="absolute top-1 right-1 h-7 px-2 text-xs bg-surface border border-border text-foreground"
+                                  >
+                                    Remove
+                                  </button>
                                 </div>
                               );
                             })}
