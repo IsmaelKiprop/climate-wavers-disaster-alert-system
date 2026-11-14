@@ -100,6 +100,98 @@ def active_tree_admin_org_for(user):
     return None
 
 
+@transaction.atomic
+def approve_user_as_tree_admin(user, *, org_name: str = "", plan: str = "pilot"):
+    """
+    Create a Tree Admin org (if needed), approve it, start pilot, grant staff.
+    Used by Django admin actions and the management command.
+    """
+    from django.utils import timezone
+
+    from .tree_pricing import start_tree_pilot
+
+    if not user:
+        raise ValueError("user is required")
+
+    membership = (
+        TreeAdminMembership.objects.filter(user=user)
+        .select_related("org")
+        .order_by("-created_at")
+        .first()
+    )
+
+    created = False
+    if membership:
+        org = membership.org
+    else:
+        name = (org_name or "").strip()
+        if not name:
+            name = (
+                f"{(user.first_name or '').strip()} {(user.last_name or '').strip()}".strip()
+                or user.username
+                or (user.email or "Tree Admin").split("@")[0]
+            )
+        org = TreeAdminOrganization.objects.create(
+            name=name[:200],
+            org_type="cbo",
+            country=(getattr(user, "country", None) or "Kenya")[:100] or "Kenya",
+            city=(getattr(user, "state", None) or getattr(user, "location", None) or "")[
+                :100
+            ]
+            or None,
+            contact_email=user.email,
+            contact_phone=(getattr(user, "phone", None) or None),
+            plan=normalize_plan(plan),
+            plan_status="pending",
+            verification_status="pending",
+            created_by=user,
+        )
+        membership = TreeAdminMembership.objects.create(
+            org=org, user=user, role="owner"
+        )
+        created = True
+
+    org.verification_status = "approved"
+    org.verified_at = timezone.now()
+    start_tree_pilot(org, plan=plan or org.plan)
+    org.save()
+
+    user.is_staff = True
+    user.is_verified = True
+    user.is_active = True
+    user.save(update_fields=["is_staff", "is_verified", "is_active"])
+
+    return org, membership, created
+
+
+@transaction.atomic
+def approve_tree_admin_org(org):
+    """Approve an existing Tree Admin org + grant owner staff."""
+    from django.utils import timezone
+
+    from .tree_pricing import start_tree_pilot
+
+    if not org:
+        raise ValueError("org is required")
+
+    org.verification_status = "approved"
+    org.verified_at = timezone.now()
+    start_tree_pilot(org)
+    org.save()
+
+    owners = org.memberships.filter(role="owner").select_related("user")
+    for membership in owners:
+        user = membership.user
+        if not user:
+            continue
+        user.is_staff = True
+        user.is_verified = True
+        user.is_active = True
+        user.save(update_fields=["is_staff", "is_verified", "is_active"])
+
+    return org
+
+
 class TreeAdminOrgSerializer(serializers.ModelSerializer):
     has_tree_admin_access = serializers.SerializerMethodField()
     plan_label = serializers.SerializerMethodField()

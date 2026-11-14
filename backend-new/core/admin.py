@@ -284,22 +284,29 @@ class TreeAdminOrganizationAdmin(ModelAdmin):
 
     @admin.action(description="Approve + start 90-day Tree Admin pilot + grant staff")
     def approve_tree_admins(self, request, queryset):
-        from .tree_pricing import start_tree_pilot
+        from .tree_admin import approve_tree_admin_org
 
         for org in queryset:
-            org.verification_status = "approved"
-            org.verified_at = timezone.now()
-            start_tree_pilot(org)
-            org.save()
-            owners = org.memberships.filter(role="owner").select_related("user")
-            for membership in owners:
-                user = membership.user
-                if not user:
-                    continue
-                user.is_staff = True
-                user.is_verified = True
-                user.is_active = True
-                user.save(update_fields=["is_staff", "is_verified", "is_active"])
+            approve_tree_admin_org(org)
+
+    def save_model(self, request, obj, form, change):
+        """
+        If an admin sets verification_status=approved in the form, run the full
+        approve path (pilot + owner staff) so CLI is not required.
+        """
+        from .tree_admin import approve_tree_admin_org
+
+        was_approved = False
+        if change and obj.pk:
+            was_approved = (
+                TreeAdminOrganization.objects.filter(pk=obj.pk)
+                .values_list("verification_status", flat=True)
+                .first()
+                == "approved"
+            )
+        super().save_model(request, obj, form, change)
+        if obj.verification_status == "approved" and not was_approved:
+            approve_tree_admin_org(obj)
 
     @admin.action(description="Reject selected Tree Admin organizations")
     def reject_tree_admins(self, request, queryset):
