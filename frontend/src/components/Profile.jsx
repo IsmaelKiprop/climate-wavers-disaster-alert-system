@@ -21,7 +21,7 @@ import {
 } from "../utils/factory";
 import { useFollow } from "../context/FollowContext";
 import ProfileShareModal from "./ProfileShareModal";
-import BuyMeATreeQrModal from "./BuyMeATreeQrModal";
+import BuyMeATreeShareModal from "./BuyMeATreeShareModal";
 import ImageLightbox from "./ImageLightbox";
 import {
   getProfileCompleteness,
@@ -631,11 +631,15 @@ const Profile = () => {
             setShowShareModal(false);
             setShowGiftQrModal(true);
           }}
+          onOpenBuyMeTree={() => {
+            setShowShareModal(false);
+            setShowGiftQrModal(true);
+          }}
         />
       ) : null}
 
       {showGiftQrModal ? (
-        <BuyMeATreeQrModal
+        <BuyMeATreeShareModal
           user={profile}
           onClose={() => setShowGiftQrModal(false)}
         />

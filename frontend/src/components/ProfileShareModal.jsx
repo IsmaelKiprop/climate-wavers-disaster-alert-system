@@ -42,7 +42,13 @@ const shareChannels = [
   },
 ];
 
-const ProfileShareModal = ({ user, treesTotal = 0, onClose, onOpenGiftQr }) => {
+const ProfileShareModal = ({
+  user,
+  treesTotal = 0,
+  onClose,
+  onOpenGiftQr,
+  onOpenBuyMeTree,
+}) => {
   const [copied, setCopied] = useState(false);
   const displayName =
     [user?.first_name, user?.last_name].filter(Boolean).join(" ") ||
@@ -226,19 +232,19 @@ const ProfileShareModal = ({ user, treesTotal = 0, onClose, onOpenGiftQr }) => {
           className="shrink-0 border-t border-border p-4 grid grid-cols-2 gap-2"
           style={{ background: "var(--cw-surface-elevated)" }}
         >
+          <button
+            type="button"
+            onClick={() => (onOpenBuyMeTree || onOpenGiftQr)?.()}
+            className="h-11 bg-primary text-primary-foreground text-sm font-medium inline-flex items-center justify-center hover:opacity-95"
+          >
+            Buy me a tree
+          </button>
           <a
             href={giftTreesPath(user?.id, displayName)}
-            className="h-11 bg-primary text-primary-foreground text-sm font-medium inline-flex items-center justify-center hover:opacity-95"
+            className="h-11 border border-border text-sm font-medium inline-flex items-center justify-center hover:bg-[var(--cw-overlay-soft)]"
           >
             Gift link
           </a>
-          <button
-            type="button"
-            onClick={() => onOpenGiftQr?.()}
-            className="h-11 border border-border text-sm font-medium hover:bg-[var(--cw-overlay-soft)]"
-          >
-            Tree QR
-          </button>
         </footer>
       </div>
     </div>,

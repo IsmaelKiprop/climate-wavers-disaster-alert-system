@@ -101,14 +101,107 @@ export function projectOgShareUrl(projectId) {
   return `${siteOrigin()}/p/${projectId}?v=og1`;
 }
 
-export function giftTreesPath(userId, displayName = "") {
+/**
+ * @param {string|number} userId
+ * @param {string} [displayName]
+ * @param {{ projectId?: string|number, species?: string }} [opts]
+ */
+export function giftTreesPath(userId, displayName = "", opts = {}) {
   const params = new URLSearchParams();
   if (displayName) params.set("name", displayName);
+  if (opts?.projectId) params.set("project", String(opts.projectId));
+  if (opts?.species) params.set("species", String(opts.species));
   const query = params.toString();
   return `/gift/${userId}${query ? `?${query}` : ""}`;
 }
 
 /** Absolute gift link for QR codes and external sharing. */
-export function giftTreesUrl(userId, displayName = "") {
-  return `${siteOrigin()}${giftTreesPath(userId, displayName)}`;
+export function giftTreesUrl(userId, displayName = "", opts = {}) {
+  return `${siteOrigin()}${giftTreesPath(userId, displayName, opts)}`;
+}
+
+/** "Mangrove Tree" → "mangrove" */
+export function speciesShareLabel(species) {
+  const raw = String(species || "")
+    .trim()
+    .replace(/\s*trees?\s*$/i, "")
+    .trim();
+  return raw || "tree";
+}
+
+function indefiniteArticle(word) {
+  return /^[aeiou]/i.test(String(word || "").trim()) ? "an" : "a";
+}
+
+/**
+ * e.g. "Buy me a mangrove tree on Climate Wavers!"
+ */
+export function buyMeTreeShareText(species, displayName = "") {
+  const label = speciesShareLabel(species);
+  const isGeneric = !species || label.toLowerCase() === "tree";
+  const phrase = isGeneric
+    ? "Buy me a tree"
+    : `Buy me ${indefiniteArticle(label)} ${label.toLowerCase()} tree`;
+  if (displayName) {
+    return `${phrase} for ${displayName} on Climate Wavers! 🌱`;
+  }
+  return `${phrase} on Climate Wavers! 🌱`;
+}
+
+/**
+ * Unique species options from verified planting projects.
+ * @returns {{ key: string, species: string, label: string, projectId: number, projectName: string, cover?: string, country?: string }[]}
+ */
+export function collectSpeciesOptions(projects = []) {
+  const map = new Map();
+  for (const project of projects || []) {
+    const list = Array.isArray(project?.tree_species)
+      ? project.tree_species
+      : [];
+    const cover =
+      project?.cover_image_url || project?.cover_image || project?.image_url || "";
+    for (const raw of list) {
+      const species = String(raw || "").trim();
+      if (!species) continue;
+      const key = species.toLowerCase();
+      if (map.has(key)) continue;
+      map.set(key, {
+        key,
+        species,
+        label: species,
+        projectId: project.id,
+        projectName: project.name || "",
+        cover,
+        country: project.country || "",
+      });
+    }
+    if (!list.length && project?.id) {
+      const key = `project-${project.id}`;
+      if (!map.has(key)) {
+        map.set(key, {
+          key,
+          species: "",
+          label: project.name || "Tree project",
+          projectId: project.id,
+          projectName: project.name || "",
+          cover,
+          country: project.country || "",
+          projectOnly: true,
+        });
+      }
+    }
+  }
+  return Array.from(map.values()).sort((a, b) =>
+    String(a.label).localeCompare(String(b.label))
+  );
+}
+
+export const CHAT_SHARE_DRAFT_KEY = "cw_chat_share_draft";
+
+export function stashChatShareDraft(message) {
+  try {
+    sessionStorage.setItem(CHAT_SHARE_DRAFT_KEY, String(message || ""));
+  } catch {
+    /* ignore */
+  }
 }

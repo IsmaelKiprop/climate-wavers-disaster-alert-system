@@ -23,6 +23,8 @@ const PlantTree = () => {
   const [searchParams] = useSearchParams();
   const giftUserId = giftUserIdParam || searchParams.get("for") || "";
   const giftName = searchParams.get("name") || "";
+  const giftProjectId = searchParams.get("project") || "";
+  const giftSpecies = searchParams.get("species") || "";
   const [giftProfile, setGiftProfile] = useState(null);
   const [selectedTree, setSelectedTree] = useState(null);
   const [showCertificate, setShowCertificate] = useState(false);
@@ -124,29 +126,19 @@ const PlantTree = () => {
     };
 
     fetchUserTrees();
-    
-    // Handle URL parameters for shared project links
-    const urlParams = new URLSearchParams(window.location.search);
-    const projectId = urlParams.get('project');
-    
-    if (projectId && africanProjects.length > 0) {
-      const project = africanProjects.find(p => p.id === parseInt(projectId));
-      if (project) {
-        setSelectedProject(project);
-        setShowProjectDetails(true);
-        // Scroll to project details
-        setTimeout(() => {
-          const modal = document.querySelector('[data-project-modal]');
-          if (modal) {
-            modal.scrollIntoView({ behavior: 'smooth' });
-          }
-        }, 100);
-      }
-    }
-    
-    // Fetch African projects
     fetchAfricanProjects();
   }, []);
+
+  // Deep-link: /gift/:id?project=&species= opens the matching project
+  useEffect(() => {
+    if (!giftProjectId || !africanProjects.length) return;
+    const project = africanProjects.find(
+      (p) => String(p.id) === String(giftProjectId)
+    );
+    if (!project) return;
+    setSelectedProject(project);
+    setShowProjectDetails(true);
+  }, [giftProjectId, africanProjects]);
 
   const fetchAfricanProjects = async () => {
     try {
@@ -366,6 +358,7 @@ const PlantTree = () => {
         ) : selectedTree ? (
           <TreePayment 
             treeData={selectedTree}
+            initialSpecies={giftSpecies}
             giftForUser={
               giftUserId
                 ? {

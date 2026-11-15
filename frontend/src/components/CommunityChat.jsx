@@ -33,7 +33,10 @@ import ChatTreeGiftSheet from "./ChatTreeGiftSheet";
 import LinkifiedText from "./LinkifiedText";
 import ImageLightbox from "./ImageLightbox";
 import { profilePath } from "../utils/linkify";
-import { giftTreesPath } from "../utils/profileCompleteness";
+import {
+  CHAT_SHARE_DRAFT_KEY,
+  giftTreesPath,
+} from "../utils/profileCompleteness";
 
 function displayName(person) {
   if (!person) return "Member";
@@ -395,7 +398,17 @@ const CommunityChat = () => {
     setGroupInfoOpen(false);
     setGroupInfoData(null);
     setGiftSheetOpen(false);
-    setDraft("");
+    let nextDraft = "";
+    try {
+      const pending = sessionStorage.getItem(CHAT_SHARE_DRAFT_KEY);
+      if (pending) {
+        nextDraft = pending;
+        sessionStorage.removeItem(CHAT_SHARE_DRAFT_KEY);
+      }
+    } catch {
+      nextDraft = "";
+    }
+    setDraft(nextDraft);
   }, [activeId]);
 
   useEffect(() => {

@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { FaTree } from "react-icons/fa";
 import { FiMapPin } from "react-icons/fi";
 import SEO from "../components/SEO";
-import BuyMeATreeQrModal from "../components/BuyMeATreeQrModal";
+import BuyMeATreeShareModal from "../components/BuyMeATreeShareModal";
 import ImageLightbox from "../components/ImageLightbox";
 import { client } from "../api";
 import { endpoints } from "../utils/endpoints";
@@ -190,7 +190,7 @@ const SharedProfilePage = () => {
                       onClick={() => setShowGiftQr(true)}
                       className="h-11 px-4 border border-border text-sm font-medium"
                     >
-                      Buy me a tree QR
+                      Buy me a tree
                     </button>
                   ) : null}
                   {loggedIn && String(me?.id) !== String(userId) ? (
@@ -270,7 +270,10 @@ const SharedProfilePage = () => {
       </main>
 
       {showGiftQr && profile ? (
-        <BuyMeATreeQrModal user={profile} onClose={() => setShowGiftQr(false)} />
+        <BuyMeATreeShareModal
+          user={profile}
+          onClose={() => setShowGiftQr(false)}
+        />
       ) : null}
 
       {lightbox?.src ? (

@@ -9,7 +9,13 @@ import { endpoints } from '../utils/endpoints';
 import { fetchUsdToKesRate } from '../utils/exchangeRate';
 import { getAuthToken, getUser } from '../utils/factory';
 
-const TreePayment = ({ treeData, onSuccess, onBack, giftForUser = null }) => {
+const TreePayment = ({
+  treeData,
+  onSuccess,
+  onBack,
+  giftForUser = null,
+  initialSpecies = "",
+}) => {
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [redeeming, setRedeeming] = useState(false);
@@ -23,7 +29,14 @@ const TreePayment = ({ treeData, onSuccess, onBack, giftForUser = null }) => {
   const [downloadedCertificates, setDownloadedCertificates] = useState(new Set());
   const [showPaymentSuccess, setShowPaymentSuccess] = useState(false);
   const [paymentSuccessData, setPaymentSuccessData] = useState(null);
-  const [selectedSpecies, setSelectedSpecies] = useState({});
+  const [selectedSpecies, setSelectedSpecies] = useState(() => {
+    const wanted = String(initialSpecies || "").trim().toLowerCase();
+    if (!wanted) return {};
+    const match = (treeData?.tree_species || []).find(
+      (s) => String(s).trim().toLowerCase() === wanted
+    );
+    return match ? { [match]: 1 } : {};
+  });
   const [totalQuantity, setTotalQuantity] = useState(0);
   const [totalAmount, setTotalAmount] = useState(0);
   const [pointsBalance, setPointsBalance] = useState(0);

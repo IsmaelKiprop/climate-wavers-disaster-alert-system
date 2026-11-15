@@ -31,7 +31,13 @@ const TreeMark = () => (
   </div>
 );
 
-const BuyMeATreeQrModal = ({ user, onClose }) => {
+const BuyMeATreeQrModal = ({
+  user,
+  onClose,
+  species = "",
+  projectId = null,
+  shareHeadline = "",
+}) => {
   const [copied, setCopied] = useState(false);
   const [saving, setSaving] = useState(false);
   const qrFrameRef = useRef(null);
@@ -41,14 +47,23 @@ const BuyMeATreeQrModal = ({ user, onClose }) => {
     user?.username ||
     "Climate Wavers member";
   const giftUrl = useMemo(
-    () => giftTreesUrl(user?.id, displayName),
-    [user?.id, displayName]
+    () =>
+      giftTreesUrl(user?.id, displayName, {
+        projectId: projectId || undefined,
+        species: species || undefined,
+      }),
+    [user?.id, displayName, projectId, species]
   );
   const qrUrl = useMemo(() => qrImageUrl(giftUrl), [giftUrl]);
   const photo = secureMediaUrl(
     user?.profile_picture || user?.profile_pic || user?.picture,
     "/avatar.png"
   );
+  const headline =
+    shareHeadline ||
+    (species
+      ? `Buy me a ${String(species).replace(/\s*trees?\s*$/i, "").trim().toLowerCase()} tree`
+      : "Buy me a tree");
 
   const copyLink = async () => {
     try {
@@ -124,7 +139,7 @@ const BuyMeATreeQrModal = ({ user, onClose }) => {
   };
 
   return (
-    <div className="fixed inset-0 z-[80] bg-black/50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[110] bg-black/50 flex items-center justify-center p-4">
       <style>{`
         .cw-qr-frame {
           position: relative;
@@ -200,8 +215,10 @@ const BuyMeATreeQrModal = ({ user, onClose }) => {
               <FaTree />
             </div>
             <div>
-              <h3 className="font-semibold text-foreground">Buy me a tree</h3>
-              <p className="text-sm text-muted">QR code for your gift link</p>
+              <h3 className="font-semibold text-foreground">Buy me a tree QR</h3>
+              <p className="text-sm text-muted truncate max-w-[14rem]">
+                {headline.replace(/\s*🌱\s*$/, "")}
+              </p>
             </div>
           </div>
           <button
@@ -227,7 +244,8 @@ const BuyMeATreeQrModal = ({ user, onClose }) => {
             <div className="min-w-0">
               <p className="font-semibold text-foreground truncate">{displayName}</p>
               <p className="text-sm text-muted truncate">
-                Scan to plant a tree for {displayName.split(" ")[0]}
+                Scan to gift {displayName.split(" ")[0]}
+                {species ? ` a ${String(species).toLowerCase()}` : " a tree"}
               </p>
             </div>
           </div>
@@ -267,7 +285,7 @@ const BuyMeATreeQrModal = ({ user, onClose }) => {
               onClick={() =>
                 window.open(
                   `https://wa.me/?text=${encodeURIComponent(
-                    `Buy ${displayName} a tree on Climate Wavers: ${giftUrl}`
+                    `${headline.replace(/\s*🌱\s*$/, "")} — ${giftUrl}`
                   )}`,
                   "_blank",
                   "noopener,noreferrer"
