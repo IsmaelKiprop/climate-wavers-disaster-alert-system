@@ -59,6 +59,10 @@ app.conf.beat_schedule = {
         'task': 'core.tasks.waverx_tweet_recent_alerts',
         'schedule': 2700.0,  # Every 45 minutes
     },
+    'climate-event-reminders': {
+        'task': 'core.tasks.send_climate_event_reminders_task',
+        'schedule': 300.0,  # Every 5 minutes — T-60 / T-10 windows
+    },
 }
 
 app.conf.timezone = 'UTC'

@@ -62,4 +62,9 @@ export const endpoints = {
     "chatMessages": (id) => `/api/v1/chat/conversations/${id}/messages/`,
     "chatMembers": (id) => `/api/v1/chat/conversations/${id}/members/`,
     "chatRead": (id) => `/api/v1/chat/conversations/${id}/read/`,
+    "climateEvents": "/api/v1/climate-events/",
+    "climateEventsMine": "/api/v1/climate-events/mine/",
+    "climateEventFromDisaster": "/api/v1/climate-events/from-disaster/",
+    "climateEventFromProject": "/api/v1/climate-events/from-project/",
+    "climateEventFromChat": "/api/v1/climate-events/from-chat/",
 }

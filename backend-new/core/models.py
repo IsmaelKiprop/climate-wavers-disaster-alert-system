@@ -18,13 +18,14 @@ class Notification(models.Model):
         ("follow", "Follow"),
         ("disaster", "Disaster"),
         ("mention", "Mention"),
+        ("climate_event", "Climate Event"),
     ]
 
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="notifications"
     )
     notification_type = models.CharField(
-        max_length=20, choices=NOTIFICATION_TYPES)
+        max_length=32, choices=NOTIFICATION_TYPES)
     content_type = models.ForeignKey(
         ContentType, on_delete=models.CASCADE, null=True, blank=True
     )
@@ -2032,3 +2033,136 @@ class UserChatPresence(models.Model):
 
     def __str__(self):
         return f"presence {self.user_id} online={self.is_online}"
+
+
+class ClimateEvent(models.Model):
+    """Climate Action Calendar event with a Jitsi conference room."""
+
+    EVENT_TYPES = [
+        ("disaster_briefing", "Disaster Briefing"),
+        ("planting_day", "Planting Day"),
+        ("huddle", "Climate Huddle"),
+    ]
+    STATUS_CHOICES = [
+        ("scheduled", "Scheduled"),
+        ("live", "Live"),
+        ("ended", "Ended"),
+        ("cancelled", "Cancelled"),
+    ]
+    VISIBILITY_CHOICES = [
+        ("invitees", "Invitees only"),
+        ("org", "Organization"),
+        ("public", "Public"),
+    ]
+
+    title = models.CharField(max_length=200)
+    description = models.TextField(blank=True, default="")
+    event_type = models.CharField(max_length=32, choices=EVENT_TYPES, default="huddle")
+    starts_at = models.DateTimeField()
+    ends_at = models.DateTimeField(null=True, blank=True)
+    timezone = models.CharField(max_length=64, default="Africa/Nairobi")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="scheduled")
+    visibility = models.CharField(
+        max_length=20, choices=VISIBILITY_CHOICES, default="invitees"
+    )
+    host = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="hosted_climate_events",
+    )
+    disaster = models.ForeignKey(
+        "Disaster",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="climate_events",
+    )
+    tree_project = models.ForeignKey(
+        "TreeProject",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="climate_events",
+    )
+    tree_admin_org = models.ForeignKey(
+        "TreeAdminOrganization",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="climate_events",
+    )
+    responder_org = models.ForeignKey(
+        "ResponderOrganization",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="climate_events",
+    )
+    social_group = models.ForeignKey(
+        "SocialGroup",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="climate_events",
+    )
+    conversation = models.ForeignKey(
+        "Conversation",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="climate_events",
+    )
+    jitsi_room = models.CharField(max_length=80, unique=True, db_index=True)
+    reminder_60_sent = models.BooleanField(default=False)
+    reminder_10_sent = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["starts_at"]
+        indexes = [
+            models.Index(fields=["starts_at", "status"]),
+            models.Index(fields=["event_type", "starts_at"]),
+            models.Index(fields=["host", "starts_at"]),
+        ]
+
+    def __str__(self):
+        return f"{self.title} ({self.event_type})"
+
+
+class ClimateEventInvite(models.Model):
+    ROLE_CHOICES = [
+        ("host", "Host"),
+        ("cohost", "Co-host"),
+        ("attendee", "Attendee"),
+    ]
+    RSVP_CHOICES = [
+        ("pending", "Pending"),
+        ("yes", "Yes"),
+        ("no", "No"),
+        ("maybe", "Maybe"),
+    ]
+
+    event = models.ForeignKey(
+        ClimateEvent,
+        on_delete=models.CASCADE,
+        related_name="invites",
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="climate_event_invites",
+    )
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES, default="attendee")
+    rsvp = models.CharField(max_length=20, choices=RSVP_CHOICES, default="pending")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ("event", "user")
+        indexes = [
+            models.Index(fields=["user", "rsvp"]),
+        ]
+
+    def __str__(self):
+        return f"{self.user_id} @ event {self.event_id} ({self.rsvp})"

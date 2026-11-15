@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { FaTree, FaMapMarkerAlt, FaUsers, FaDollarSign, FaCheckCircle, FaTimesCircle, FaEdit, FaTrash, FaPlus } from 'react-icons/fa';
 import { endpoints } from '../utils/endpoints';
@@ -7,6 +7,7 @@ import { getAuthToken } from '../utils/factory';
 import { apiUrl, mediaUrl } from '../config/env';
 import { uploadFiles } from '../services/upload.service';
 import TreeAnalyticsPanel from './TreeAnalyticsPanel';
+import ScheduleClimateEventModal from './ScheduleClimateEventModal';
 
 /** Keep only usable public image URLs (Cloudinary / https). Drop API-root stubs. */
 function isUsableMediaUrl(value) {
@@ -48,12 +49,14 @@ const getCookie = (name) => {
 };
 
 const TreeProjectAdmin = () => {
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [editingProject, setEditingProject] = useState(null);
   const [applying, setApplying] = useState(false);
+  const [plantingDayProject, setPlantingDayProject] = useState(null);
   const [stats, setStats] = useState({
     total_projects: 0,
     active_projects: 0,
@@ -1422,6 +1425,14 @@ Thank you for your understanding! 🌱
                       <div className="flex items-center gap-1">
                         <button
                           type="button"
+                          onClick={() => setPlantingDayProject(project)}
+                          className="h-9 px-2 text-xs font-medium text-primary hover:bg-background border border-transparent hover:border-border"
+                          title="Schedule planting day"
+                        >
+                          Planting day
+                        </button>
+                        <button
+                          type="button"
                           onClick={() => handleEdit(project)}
                           className="h-9 w-9 inline-flex items-center justify-center text-muted hover:text-foreground hover:bg-background border border-transparent hover:border-border"
                           title="Edit"
@@ -1470,6 +1481,30 @@ Thank you for your understanding! 🌱
           </div>
         </div>
       </div>
+
+      <ScheduleClimateEventModal
+        open={Boolean(plantingDayProject)}
+        onClose={() => setPlantingDayProject(null)}
+        mode="project"
+        projectId={plantingDayProject?.id}
+        treeAdminOrgId={
+          plantingDayProject?.tree_admin_org ||
+          treeAdminMe?.memberships?.[0]?.org?.id ||
+          null
+        }
+        defaultTitle={
+          plantingDayProject ? `Planting day: ${plantingDayProject.name}` : ""
+        }
+        defaultDescription={
+          plantingDayProject?.short_description ||
+          plantingDayProject?.description ||
+          ""
+        }
+        onCreated={(ev) => {
+          setPlantingDayProject(null);
+          navigate(`/app/calendar/events/${ev.id}`);
+        }}
+      />
     </div>
   );
 };

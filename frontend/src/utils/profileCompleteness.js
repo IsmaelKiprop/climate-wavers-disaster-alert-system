@@ -106,18 +106,36 @@ export function projectOgShareUrl(projectId) {
  * @param {string} [displayName]
  * @param {{ projectId?: string|number, species?: string }} [opts]
  */
-export function giftTreesPath(userId, displayName = "", opts = {}) {
+function giftQuery(displayName = "", opts = {}) {
   const params = new URLSearchParams();
   if (displayName) params.set("name", displayName);
   if (opts?.projectId) params.set("project", String(opts.projectId));
   if (opts?.species) params.set("species", String(opts.species));
+  return params;
+}
+
+/** In-app gift page path (SPA). */
+export function giftTreesPath(userId, displayName = "", opts = {}) {
+  const params = giftQuery(displayName, opts);
   const query = params.toString();
   return `/gift/${userId}${query ? `?${query}` : ""}`;
 }
 
-/** Absolute gift link for QR codes and external sharing. */
+/**
+ * External / WhatsApp share URL.
+ * Uses /share/gift so crawlers get project cover + Climate Wavers logo OG.
+ */
+export function giftOgSharePath(userId, displayName = "", opts = {}) {
+  const params = giftQuery(displayName, opts);
+  // Cache-buster so WhatsApp re-scrapes after OG / logo-blend updates.
+  params.set("v", "gift1");
+  const query = params.toString();
+  return `/share/gift/${userId}${query ? `?${query}` : ""}`;
+}
+
+/** Absolute gift link for QR codes and external sharing (OG-ready). */
 export function giftTreesUrl(userId, displayName = "", opts = {}) {
-  return `${siteOrigin()}${giftTreesPath(userId, displayName, opts)}`;
+  return `${siteOrigin()}${giftOgSharePath(userId, displayName, opts)}`;
 }
 
 /** "Mangrove Tree" → "mangrove" */

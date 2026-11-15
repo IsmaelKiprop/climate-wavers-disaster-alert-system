@@ -20,6 +20,8 @@ import {
   IoChatbubbles,
   IoPeopleCircleOutline,
   IoPeopleCircle,
+  IoCalendarOutline,
+  IoCalendar,
 } from "react-icons/io5";
 import { MdOutlineCampaign, MdCampaign } from "react-icons/md";
 import { RiAlarmWarningLine, RiAlarmWarningFill } from "react-icons/ri";
@@ -102,6 +104,12 @@ const AppNav = ({ onNavigate, compact = false }) => {
           label: "Chats",
           Icon: IoChatbubblesOutline,
           ActiveIcon: IoChatbubbles,
+        },
+        {
+          to: "/app/calendar",
+          label: "Calendar",
+          Icon: IoCalendarOutline,
+          ActiveIcon: IoCalendar,
         },
         {
           to: user?.id ? `/app/${user.id}/profile` : "/login",

@@ -29,6 +29,9 @@ export const env = {
         ? window.location.origin
         : "https://alerts.flowops.africa")
   ),
+  jitsiDomain: String(
+    import.meta.env.VITE_JITSI_DOMAIN || "meet.jit.si"
+  ).replace(/^https?:\/\//i, "").replace(/\/+$/, ""),
 };
 
 export function apiUrl(path = "") {

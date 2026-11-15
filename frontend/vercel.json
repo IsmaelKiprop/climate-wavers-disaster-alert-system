@@ -61,6 +61,14 @@
       "destination": "/api/share-project?id=:id"
     },
     {
+      "source": "/share/gift/:id",
+      "destination": "/api/share-gift?id=:id"
+    },
+    {
+      "source": "/share/gift/:id/",
+      "destination": "/api/share-gift?id=:id"
+    },
+    {
       "source": "/u/:id",
       "has": [
         {
@@ -82,6 +90,18 @@
       ],
       "destination": "/api/share-project?id=:id"
     },
+    {
+      "source": "/gift/:id",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": "(?i).*(whatsapp|facebookexternalhit|facebot|twitterbot|linkedinbot|slackbot|discordbot|telegrambot|embedly|pinterest|quora|bot|crawler|spider|preview).*"
+        }
+      ],
+      "destination": "/api/share-gift?id=:id"
+    },
+
     {
       "source": "/((?!assets/|api/).*)",
       "destination": "/index.html"

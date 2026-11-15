@@ -34,6 +34,8 @@ from .models import (
     ConversationMember,
     ChatMessage,
     UserChatPresence,
+    ClimateEvent,
+    ClimateEventInvite,
 )
 from .pricing import verification_priority
 from unfold.admin import ModelAdmin
@@ -461,5 +463,28 @@ class ChatMessageAdmin(ModelAdmin):
 class UserChatPresenceAdmin(ModelAdmin):
     list_display = ("user", "is_online", "last_seen", "connection_count")
     list_filter = ("is_online",)
+
+
+@admin.register(ClimateEvent)
+class ClimateEventAdmin(ModelAdmin):
+    list_display = (
+        "title",
+        "event_type",
+        "status",
+        "starts_at",
+        "host",
+        "jitsi_room",
+        "visibility",
+    )
+    list_filter = ("event_type", "status", "visibility")
+    search_fields = ("title", "jitsi_room", "host__email", "host__username")
+    readonly_fields = ("jitsi_room", "created_at", "updated_at")
+
+
+@admin.register(ClimateEventInvite)
+class ClimateEventInviteAdmin(ModelAdmin):
+    list_display = ("event", "user", "role", "rsvp", "created_at")
+    list_filter = ("role", "rsvp")
+    search_fields = ("user__email", "user__username", "event__title")
 
 

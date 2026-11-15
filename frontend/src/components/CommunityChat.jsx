@@ -8,6 +8,7 @@ import {
   IoCheckmarkDone,
   IoChevronForward,
   IoClose,
+  IoCallOutline,
   IoGiftOutline,
   IoHappyOutline,
   IoLeafOutline,
@@ -16,6 +17,9 @@ import {
   IoSend,
   IoShieldCheckmarkOutline,
 } from "react-icons/io5";
+import { toast } from "react-toastify";
+import JitsiMeetEmbed from "./JitsiMeetEmbed";
+import { env } from "../config/env";
 import { client } from "../api";
 import { endpoints } from "../utils/endpoints";
 import { avatarUrl, getUser, secureMediaUrl } from "../utils/factory";
@@ -194,6 +198,8 @@ const CommunityChat = () => {
   const [mediaPreview, setMediaPreview] = useState(null);
   const [giftSheetOpen, setGiftSheetOpen] = useState(false);
   const [giftNudgeOpen, setGiftNudgeOpen] = useState(false);
+  const [climateCall, setClimateCall] = useState(null);
+  const [startingCall, setStartingCall] = useState(false);
 
   const bottomRef = useRef(null);
   const draftRef = useRef(null);
@@ -1284,6 +1290,46 @@ const CommunityChat = () => {
               </button>
               <button
                 type="button"
+                disabled={startingCall}
+                onClick={async () => {
+                  if (!activeConversation?.id || startingCall) return;
+                  setStartingCall(true);
+                  try {
+                    const event = await client.run(
+                      "post",
+                      endpoints.climateEventFromChat,
+                      { conversation_id: activeConversation.id },
+                      true
+                    );
+                    const join = await client.run(
+                      "post",
+                      `${endpoints.climateEvents}${event.id}/join/`,
+                      {},
+                      true
+                    );
+                    setClimateCall({
+                      roomName: join.roomName,
+                      displayName: join.displayName,
+                      subject: event.title,
+                      domain: join.domain || env.jitsiDomain,
+                    });
+                    loadMessages(activeConversation.id);
+                  } catch (err) {
+                    toast.error(
+                      err?.response?.data?.detail || "Could not start Climate Call"
+                    );
+                  } finally {
+                    setStartingCall(false);
+                  }
+                }}
+                className="min-h-10 min-w-10 flex items-center justify-center text-primary hover:bg-primary/10 disabled:opacity-50"
+                aria-label="Start Climate Call"
+                title="Start Climate Call"
+              >
+                <IoCallOutline size={20} />
+              </button>
+              <button
+                type="button"
                 onClick={() => setGiftSheetOpen(true)}
                 className="min-h-10 min-w-10 flex items-center justify-center text-primary hover:bg-primary/10"
                 aria-label="Gift a tree"
@@ -1659,6 +1705,16 @@ const CommunityChat = () => {
         conversationType={activeConversation?.conversation_type}
         onSendInvite={sendGiftInviteMessage}
       />
+
+      {climateCall ? (
+        <JitsiMeetEmbed
+          roomName={climateCall.roomName}
+          displayName={climateCall.displayName}
+          subject={climateCall.subject}
+          domain={climateCall.domain}
+          onClose={() => setClimateCall(null)}
+        />
+      ) : null}
 
       <style>{`
         @keyframes fadeIn {

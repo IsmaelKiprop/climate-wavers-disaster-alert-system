@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import { client } from "../api";
 import { endpoints } from "../utils/endpoints";
 import { PLAN_OPTIONS, RAPIDBRIEF_PLANS } from "../config/pricing";
+import ScheduleClimateEventModal from "./ScheduleClimateEventModal";
 
 const PLAN_LIMITS = Object.fromEntries(
   RAPIDBRIEF_PLANS.filter((p) => p.maxSeats != null).map((p) => [
@@ -61,8 +62,11 @@ const emptyApply = {
 
 const ResponderDesk = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const forceApply = location.pathname.includes("/apply");
   const [loading, setLoading] = useState(true);
+  const [briefingOpen, setBriefingOpen] = useState(false);
+  const [briefingDisasterId, setBriefingDisasterId] = useState(null);
   const [me, setMe] = useState(null);
   const [dispatches, setDispatches] = useState([]);
   const [org, setOrg] = useState(null);
@@ -728,6 +732,10 @@ const ResponderDesk = () => {
             <Link to="/app/chat" className="text-primary">
               team chat
             </Link>
+            {" · "}
+            <Link to="/app/calendar" className="text-primary">
+              calendar
+            </Link>
           </p>
           <p className="mt-1 text-xs text-muted">
             Plan: {org?.plan_label || org?.plan || "—"} · {org?.plan_status || "—"}
@@ -743,19 +751,36 @@ const ResponderDesk = () => {
             </Link>
           </p>
         </div>
-        <select
-          className="h-10 px-3 border border-border bg-background text-sm"
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-        >
-          <option value="">All statuses</option>
-          {STATUS_ACTIONS.map((s) => (
-            <option key={s.value} value={s.value}>
-              {s.label}
-            </option>
-          ))}
-          <option value="new">New</option>
-        </select>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setBriefingDisasterId(
+                selected?.disaster_id ||
+                  selected?.disaster ||
+                  selected?.event_id ||
+                  null
+              );
+              setBriefingOpen(true);
+            }}
+            className="h-10 px-3 border border-border bg-background text-sm font-medium hover:bg-[var(--cw-overlay-soft)]"
+          >
+            Schedule briefing
+          </button>
+          <select
+            className="h-10 px-3 border border-border bg-background text-sm"
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+          >
+            <option value="">All statuses</option>
+            {STATUS_ACTIONS.map((s) => (
+              <option key={s.value} value={s.value}>
+                {s.label}
+              </option>
+            ))}
+            <option value="new">New</option>
+          </select>
+        </div>
       </div>
 
       {isOwner ? (
@@ -952,6 +977,27 @@ const ResponderDesk = () => {
           )}
         </div>
       </div>
+
+      <ScheduleClimateEventModal
+        open={briefingOpen}
+        onClose={() => setBriefingOpen(false)}
+        mode={briefingDisasterId ? "disaster" : "manual"}
+        eventType="disaster_briefing"
+        disasterId={briefingDisasterId}
+        responderOrgId={org?.id || me?.memberships?.[0]?.org?.id || null}
+        defaultTitle={
+          selected?.title || selected?.place
+            ? `Disaster briefing: ${selected?.title || selected?.place}`
+            : "Responder climate briefing"
+        }
+        defaultDescription={
+          selected?.ai_brief || selected?.ai_summary || selected?.brief || ""
+        }
+        onCreated={(ev) => {
+          setBriefingOpen(false);
+          navigate(`/app/calendar/events/${ev.id}`);
+        }}
+      />
     </div>
   );
 };

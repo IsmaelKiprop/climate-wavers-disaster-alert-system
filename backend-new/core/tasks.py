@@ -182,6 +182,20 @@ def waverx_tweet_climate_tip():
 
 
 @shared_task
+def send_climate_event_reminders_task():
+    """T-60 / T-10 Climate Action Calendar reminders."""
+    try:
+        from .climate_events import send_climate_event_reminders
+
+        result = send_climate_event_reminders()
+        logger.info("Climate event reminders: %s", result)
+        return result
+    except Exception as e:
+        logger.error("Climate event reminders error: %s", e)
+        return f"Error: {str(e)}"
+
+
+@shared_task
 def waverx_tweet_recent_alerts():
     """Backfill WaverX feed posts for recent official alerts not yet published."""
     try:

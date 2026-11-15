@@ -1,4 +1,4 @@
-import { Link, useLocation, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { Helmet } from "react-helmet-async";
 import PublicPage from "../components/PublicPage";
@@ -6,6 +6,7 @@ import Topbar from "../components/Topbar";
 import DashboardSidebar from "../components/DashboardSidebar";
 import Menu from "../components/Menu";
 import Footer from "../components/FooterBar";
+import ScheduleClimateEventModal from "../components/ScheduleClimateEventModal";
 import {
   disasterTypeFallback,
   fetchDisaster,
@@ -19,6 +20,7 @@ import { SITE } from "../config/site";
 const DisasterPage = () => {
   const { disasterId } = useParams();
   const location = useLocation();
+  const navigate = useNavigate();
   const decodedId = decodeURIComponent(disasterId || "");
   const signedIn = Boolean(getAuthToken());
   const seeded =
@@ -28,6 +30,7 @@ const DisasterPage = () => {
   const [disaster, setDisaster] = useState(seeded);
   const [loading, setLoading] = useState(!seeded);
   const [error, setError] = useState("");
+  const [briefingOpen, setBriefingOpen] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -151,16 +154,27 @@ const DisasterPage = () => {
           <p className="mt-2 text-sm sm:text-base whitespace-pre-wrap">
             {disaster?.details || disaster?.description || "No description has been published for this report yet."}
           </p>
-          {officialSourceUrl ? (
-            <a
-              href={officialSourceUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-4 inline-flex h-11 items-center px-4 bg-primary text-primary-foreground"
-            >
-              Official source
-            </a>
-          ) : null}
+          <div className="mt-4 flex flex-wrap gap-2">
+            {officialSourceUrl ? (
+              <a
+                href={officialSourceUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex h-11 items-center px-4 bg-primary text-primary-foreground"
+              >
+                Official source
+              </a>
+            ) : null}
+            {signedIn ? (
+              <button
+                type="button"
+                onClick={() => setBriefingOpen(true)}
+                className="inline-flex h-11 items-center px-4 border border-border bg-surface text-foreground text-sm font-medium"
+              >
+                Host climate briefing
+              </button>
+            ) : null}
+          </div>
           {!signedIn ? (
             <p className="mt-6 text-sm text-muted">
               <Link to="/login" className="text-primary">Sign in</Link> to open the full alerts list and community tools.
@@ -170,6 +184,24 @@ const DisasterPage = () => {
       )}
     </>
   );
+
+  const briefingModal = signedIn ? (
+    <ScheduleClimateEventModal
+      open={briefingOpen}
+      onClose={() => setBriefingOpen(false)}
+      mode={Number.isFinite(Number(disaster?.id)) ? "disaster" : "manual"}
+      eventType="disaster_briefing"
+      disasterId={Number.isFinite(Number(disaster?.id)) ? disaster.id : null}
+      defaultTitle={`Disaster briefing: ${title}`}
+      defaultDescription={
+        disaster?.details || disaster?.description || disaster?.ai_summary || ""
+      }
+      onCreated={(ev) => {
+        setBriefingOpen(false);
+        navigate(`/app/calendar/events/${ev.id}`);
+      }}
+    />
+  ) : null;
 
   if (signedIn) {
     return (
@@ -191,6 +223,7 @@ const DisasterPage = () => {
         <div className="md:hidden shrink-0">
           <Footer />
         </div>
+        {briefingModal}
       </div>
     );
   }
@@ -242,6 +275,7 @@ const DisasterPage = () => {
       }
     >
       {report}
+      {briefingModal}
     </PublicPage>
   );
 };
