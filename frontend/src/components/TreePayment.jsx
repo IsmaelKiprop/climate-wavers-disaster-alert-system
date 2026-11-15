@@ -8,6 +8,7 @@ import { client } from '../api';
 import { endpoints } from '../utils/endpoints';
 import { fetchUsdToKesRate } from '../utils/exchangeRate';
 import { getAuthToken, getUser } from '../utils/factory';
+import { normalizeTreeSpecies, speciesNames } from '../utils/treeSpecies';
 
 const TreePayment = ({
   treeData,
@@ -32,10 +33,10 @@ const TreePayment = ({
   const [selectedSpecies, setSelectedSpecies] = useState(() => {
     const wanted = String(initialSpecies || "").trim().toLowerCase();
     if (!wanted) return {};
-    const match = (treeData?.tree_species || []).find(
-      (s) => String(s).trim().toLowerCase() === wanted
+    const match = normalizeTreeSpecies(treeData?.tree_species).find(
+      (s) => s.name.toLowerCase() === wanted
     );
-    return match ? { [match]: 1 } : {};
+    return match ? { [match.name]: 1 } : {};
   });
   const [totalQuantity, setTotalQuantity] = useState(0);
   const [totalAmount, setTotalAmount] = useState(0);
@@ -78,8 +79,9 @@ const TreePayment = ({
     }));
   };
 
-  // Get available tree species from project data
-  const availableSpecies = treeData.tree_species || [];
+  // Species names + planned seedling targets from the project
+  const speciesCatalog = normalizeTreeSpecies(treeData.tree_species);
+  const availableSpecies = speciesNames(treeData.tree_species);
 
   // Fetch exchange rate
   const fetchExchangeRate = async () => {
@@ -545,11 +547,16 @@ const TreePayment = ({
                   Select Tree Species & Quantities
                 </label>
                 <div className="space-y-3">
-                  {availableSpecies.map((species, index) => (
+                  {availableSpecies.map((species, index) => {
+                    const planned = speciesCatalog.find((s) => s.name === species)?.target || 0;
+                    return (
                     <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                       <div className="flex-1">
                         <h4 className="font-medium text-gray-900">{species}</h4>
-                        <p className="text-sm text-gray-600">${treeData.price} per tree</p>
+                        <p className="text-sm text-gray-600">
+                          ${treeData.price} per tree
+                          {planned > 0 ? ` · ${planned.toLocaleString()} planned` : ""}
+                        </p>
                       </div>
                       <div className="flex items-center space-x-2">
                         <button
@@ -576,7 +583,8 @@ const TreePayment = ({
                         </button>
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
                 
                 {/* Total Summary */}

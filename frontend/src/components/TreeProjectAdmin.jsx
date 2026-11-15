@@ -8,6 +8,12 @@ import { apiUrl, mediaUrl } from '../config/env';
 import { uploadFiles } from '../services/upload.service';
 import TreeAnalyticsPanel from './TreeAnalyticsPanel';
 import ScheduleClimateEventModal from './ScheduleClimateEventModal';
+import {
+  formatSpeciesList,
+  normalizeTreeSpecies,
+  serializeTreeSpecies,
+  speciesTargetSum,
+} from '../utils/treeSpecies';
 
 /** Keep only usable public image URLs (Cloudinary / https). Drop API-root stubs. */
 function isUsableMediaUrl(value) {
@@ -58,6 +64,7 @@ const TreeProjectAdmin = () => {
   const [applying, setApplying] = useState(false);
   const [plantingDayProject, setPlantingDayProject] = useState(null);
   const [speciesDraft, setSpeciesDraft] = useState('');
+  const [speciesQtyDraft, setSpeciesQtyDraft] = useState('');
   const [stats, setStats] = useState({
     total_projects: 0,
     active_projects: 0,
@@ -388,17 +395,25 @@ const TreeProjectAdmin = () => {
         return;
       }
 
-      if (!formData.target_trees || parseInt(formData.target_trees) <= 0) {
-        toast.error('Please enter a valid number of target trees');
+      const speciesList = serializeTreeSpecies(formData.tree_species);
+      if (speciesList.length === 0) {
+        toast.error('Add at least one tree species supporters can gift');
+        setLoading(false);
+        return;
+      }
+      if (speciesList.some((s) => !s.target || s.target <= 0)) {
+        toast.error('Set a seedling quantity for each species');
         setLoading(false);
         return;
       }
 
-      const speciesList = (Array.isArray(formData.tree_species) ? formData.tree_species : [])
-        .map((s) => String(s || '').trim())
-        .filter(Boolean);
-      if (speciesList.length === 0) {
-        toast.error('Add at least one tree species supporters can gift');
+      const speciesSum = speciesTargetSum(speciesList);
+      const targetTrees = Math.max(
+        parseInt(formData.target_trees, 10) || 0,
+        speciesSum
+      );
+      if (!targetTrees || targetTrees <= 0) {
+        toast.error('Please enter a valid number of target trees');
         setLoading(false);
         return;
       }
@@ -418,7 +433,7 @@ const TreeProjectAdmin = () => {
         cover_image: cover || null,
         tree_species: speciesList,
         gallery,
-        target_trees: parseInt(formData.target_trees, 10) || 0,
+        target_trees: targetTrees,
         tree_price: parseFloat(formData.tree_price) || 0,
         total_budget: parseFloat(formData.total_budget) || 0,
         funding_goal: parseFloat(formData.funding_goal) || 0,
@@ -488,37 +503,68 @@ const TreeProjectAdmin = () => {
 
   const addTreeSpecies = () => {
     const name = String(speciesDraft || '').trim();
+    const target = parseInt(String(speciesQtyDraft || '').replace(/,/g, ''), 10);
     if (!name) {
       toast.error('Enter a species name');
       return;
     }
-    const existing = Array.isArray(formData.tree_species) ? formData.tree_species : [];
-    if (existing.some((s) => String(s).toLowerCase() === name.toLowerCase())) {
+    if (!target || target <= 0) {
+      toast.error('Enter how many seedlings for this species');
+      return;
+    }
+    const existing = normalizeTreeSpecies(formData.tree_species);
+    if (existing.some((s) => s.name.toLowerCase() === name.toLowerCase())) {
       toast.error('That species is already on this project');
       return;
     }
+    const next = [...existing, { name, target }];
+    const sum = speciesTargetSum(next);
     setFormData((prev) => ({
       ...prev,
-      tree_species: [...(Array.isArray(prev.tree_species) ? prev.tree_species : []), name],
+      tree_species: next,
+      target_trees: Math.max(parseInt(prev.target_trees, 10) || 0, sum),
     }));
     setSpeciesDraft('');
+    setSpeciesQtyDraft('');
+  };
+
+  const updateSpeciesTarget = (index, value) => {
+    const target = Math.max(0, parseInt(String(value || '').replace(/,/g, ''), 10) || 0);
+    setFormData((prev) => {
+      const next = normalizeTreeSpecies(prev.tree_species).map((s, i) =>
+        i === index ? { ...s, target } : s
+      );
+      const sum = speciesTargetSum(next);
+      return {
+        ...prev,
+        tree_species: next,
+        target_trees: Math.max(parseInt(prev.target_trees, 10) || 0, sum),
+      };
+    });
   };
 
   const removeTreeSpecies = (index) => {
-    setFormData((prev) => ({
-      ...prev,
-      tree_species: (Array.isArray(prev.tree_species) ? prev.tree_species : []).filter(
-        (_, i) => i !== index
-      ),
-    }));
+    setFormData((prev) => {
+      const next = normalizeTreeSpecies(prev.tree_species).filter((_, i) => i !== index);
+      const sum = speciesTargetSum(next);
+      return {
+        ...prev,
+        tree_species: next,
+        target_trees: sum > 0 ? sum : prev.target_trees,
+      };
+    });
   };
 
   const handleEdit = (project) => {
     setEditingProject(project);
     setSpeciesDraft('');
+    setSpeciesQtyDraft('');
+    const species = normalizeTreeSpecies(project.tree_species);
+    const sum = speciesTargetSum(species);
     setFormData({
       ...project,
-      tree_species: project.tree_species || [],
+      tree_species: species,
+      target_trees: Math.max(parseInt(project.target_trees, 10) || 0, sum) || project.target_trees,
       gallery: project.gallery || []
     });
     setShowCreateForm(true);
@@ -644,6 +690,7 @@ Thank you for your understanding! 🌱
       gallery: []
     });
     setSpeciesDraft('');
+    setSpeciesQtyDraft('');
     setUploading({
       organization_logo: false,
       cover_image: false,
@@ -1111,11 +1158,12 @@ Thank you for your understanding! 🌱
 
                     <div className="mt-6">
                       <label className={labelClass}>
-                        Tree species *
+                        Tree species & seedling targets *
                       </label>
                       <p className="text-xs text-muted mb-2">
-                        Supporters pick from these when gifting a tree (e.g. Grevillea
-                        robusta, Mango, Neem).
+                        One project can include multiple species with different
+                        quantities — e.g. Rhizophora 20,000 and Bruguiera 30,000.
+                        Target trees follows the sum.
                       </p>
                       <div className="flex flex-col sm:flex-row gap-2">
                         <input
@@ -1128,8 +1176,22 @@ Thank you for your understanding! 🌱
                               addTreeSpecies();
                             }
                           }}
-                          placeholder="Species name"
+                          placeholder="Species name (e.g. Rhizophora)"
                           className={`${fieldClass} sm:flex-1`}
+                        />
+                        <input
+                          type="number"
+                          min="1"
+                          value={speciesQtyDraft}
+                          onChange={(e) => setSpeciesQtyDraft(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              addTreeSpecies();
+                            }
+                          }}
+                          placeholder="Seedlings"
+                          className={`${fieldClass} sm:w-36`}
                         />
                         <button
                           type="button"
@@ -1140,30 +1202,48 @@ Thank you for your understanding! 🌱
                           Add species
                         </button>
                       </div>
-                      {(Array.isArray(formData.tree_species) ? formData.tree_species : []).length > 0 ? (
-                        <ul className="mt-3 flex flex-wrap gap-2">
-                          {formData.tree_species.map((species, index) => (
+                      {normalizeTreeSpecies(formData.tree_species).length > 0 ? (
+                        <ul className="mt-3 space-y-2">
+                          {normalizeTreeSpecies(formData.tree_species).map((species, index) => (
                             <li
-                              key={`${species}-${index}`}
-                              className="h-9 px-2.5 border border-border bg-background text-sm text-foreground inline-flex items-center gap-2"
+                              key={`${species.name}-${index}`}
+                              className="border border-border bg-background p-3 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3"
                             >
-                              <span>{species}</span>
-                              <button
-                                type="button"
-                                onClick={() => removeTreeSpecies(index)}
-                                className="text-muted hover:text-foreground"
-                                aria-label={`Remove ${species}`}
-                              >
-                                <FaTimesCircle />
-                              </button>
+                              <span className="text-sm font-medium text-foreground flex-1 min-w-0 truncate">
+                                {species.name}
+                              </span>
+                              <div className="flex items-center gap-2">
+                                <label className="text-xs text-muted shrink-0">Seedlings</label>
+                                <input
+                                  type="number"
+                                  min="1"
+                                  value={species.target || ''}
+                                  onChange={(e) => updateSpeciesTarget(index, e.target.value)}
+                                  className="h-9 w-28 px-2 border border-border bg-surface text-sm text-foreground"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => removeTreeSpecies(index)}
+                                  className="h-9 w-9 inline-flex items-center justify-center text-muted hover:text-foreground border border-border"
+                                  aria-label={`Remove ${species.name}`}
+                                >
+                                  <FaTimesCircle />
+                                </button>
+                              </div>
                             </li>
                           ))}
                         </ul>
                       ) : (
                         <p className="mt-2 text-xs text-amber-700 dark:text-amber-400">
-                          No species yet — add at least one before saving.
+                          No species yet — add at least one with a seedling count.
                         </p>
                       )}
+                      {speciesTargetSum(formData.tree_species) > 0 ? (
+                        <p className="mt-2 text-xs text-muted">
+                          Species total:{' '}
+                          {speciesTargetSum(formData.tree_species).toLocaleString()} seedlings
+                        </p>
+                      ) : null}
                     </div>
                     
                      <div className="mt-4">
@@ -1460,9 +1540,12 @@ Thank you for your understanding! 🌱
                               ${Number(project.tree_price).toLocaleString()} / tree
                             </div>
                           ) : null}
-                          {Array.isArray(project.tree_species) && project.tree_species.length > 0 ? (
-                            <div className="text-xs text-muted mt-0.5 max-w-[220px] truncate" title={project.tree_species.join(', ')}>
-                              {project.tree_species.join(', ')}
+                          {normalizeTreeSpecies(project.tree_species).length > 0 ? (
+                            <div
+                              className="text-xs text-muted mt-0.5 max-w-[240px] truncate"
+                              title={formatSpeciesList(project.tree_species)}
+                            >
+                              {formatSpeciesList(project.tree_species)}
                             </div>
                           ) : (
                             <div className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">

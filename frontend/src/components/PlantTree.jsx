@@ -16,6 +16,7 @@ import TreeAnalyticsPanel from './TreeAnalyticsPanel';
 import { client } from '../api';
 import { apiUrl } from '../config/env';
 import { unwrapList } from '../utils/apiData';
+import { formatSpeciesList } from '../utils/treeSpecies';
 
 const PlantTree = () => {
   const navigate = useNavigate();
@@ -704,7 +705,7 @@ const PlantTree = () => {
                        </div>
                         <div className="flex justify-between">
                           <span>Tree Species:</span>
-                          <span>{selectedProject.tree_species?.join(', ') || 'Various'}</span>
+                          <span>{formatSpeciesList(selectedProject.tree_species) || 'Various'}</span>
                         </div>
                         <div className="flex justify-between">
                           <span>Project Type:</span>

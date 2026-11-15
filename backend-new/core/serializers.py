@@ -683,6 +683,36 @@ class TreeProjectDonationSerializer(serializers.ModelSerializer):
         )
 
 
+def normalize_tree_species(raw):
+    """Accept legacy string names or {name, target} objects."""
+    if not isinstance(raw, list):
+        return []
+    out = []
+    for item in raw:
+        if item is None:
+            continue
+        if isinstance(item, str):
+            name = item.strip()
+            if name:
+                out.append({"name": name, "target": 0})
+            continue
+        if isinstance(item, dict):
+            name = str(
+                item.get("name")
+                or item.get("species")
+                or item.get("label")
+                or ""
+            ).strip()
+            if not name:
+                continue
+            try:
+                target = int(item.get("target") or item.get("quantity") or item.get("count") or 0)
+            except (TypeError, ValueError):
+                target = 0
+            out.append({"name": name, "target": max(0, target)})
+    return out
+
+
 class TreeProjectSerializer(serializers.ModelSerializer):
     progress_percentage = serializers.ReadOnlyField()
     funding_percentage = serializers.ReadOnlyField()
@@ -692,6 +722,7 @@ class TreeProjectSerializer(serializers.ModelSerializer):
     cover_image_url = serializers.SerializerMethodField()
     organization_logo_url = serializers.SerializerMethodField()
     gallery_urls = serializers.SerializerMethodField()
+    tree_species = serializers.SerializerMethodField()
     
     class Meta:
         model = TreeProject
@@ -710,6 +741,9 @@ class TreeProjectSerializer(serializers.ModelSerializer):
             'updates', 'donations', 'created_at', 'updated_at'
         ]
         read_only_fields = ['trees_planted', 'funds_raised', 'is_verified', 'verification_date', 'tree_admin_org', 'created_at', 'updated_at']
+
+    def get_tree_species(self, obj):
+        return normalize_tree_species(obj.tree_species)
     
     def get_cover_image_url(self, obj):
         if not obj.cover_image:
@@ -772,6 +806,27 @@ class TreeProjectCreateSerializer(serializers.ModelSerializer):
             'expected_completion', 'total_budget', 'funding_goal', 'contact_person', 'contact_email',
             'contact_phone', 'facebook_url', 'twitter_url', 'instagram_url', 'linkedin_url'
         ]
+
+    def validate_tree_species(self, value):
+        return normalize_tree_species(value)
+
+    def validate(self, attrs):
+        species = attrs.get("tree_species")
+        if species is None and self.instance is not None:
+            species = normalize_tree_species(self.instance.tree_species)
+        species = normalize_tree_species(species or [])
+        species_sum = sum(int(s.get("target") or 0) for s in species)
+        target = attrs.get("target_trees")
+        if target is None and self.instance is not None:
+            target = self.instance.target_trees
+        try:
+            target = int(target or 0)
+        except (TypeError, ValueError):
+            target = 0
+        if species_sum > 0 and target < species_sum:
+            attrs["target_trees"] = species_sum
+        attrs["tree_species"] = species
+        return attrs
     
     def create(self, validated_data):
         # Set the organization to the current user

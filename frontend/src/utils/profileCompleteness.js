@@ -179,7 +179,10 @@ export function collectSpeciesOptions(projects = []) {
     const cover =
       project?.cover_image_url || project?.cover_image || project?.image_url || "";
     for (const raw of list) {
-      const species = String(raw || "").trim();
+      const species =
+        typeof raw === "string"
+          ? String(raw || "").trim()
+          : String(raw?.name || raw?.species || raw?.label || "").trim();
       if (!species) continue;
       const key = species.toLowerCase();
       if (map.has(key)) continue;

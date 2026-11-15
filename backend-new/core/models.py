@@ -501,7 +501,8 @@ class TreeProject(models.Model):
     # Tree Information
     target_trees = models.PositiveIntegerField()
     trees_planted = models.PositiveIntegerField(default=0)
-    tree_species = models.JSONField(default=list, blank=True)  # List of tree species
+    # List of species: legacy ["Mango"] or [{"name": "Rhizophora", "target": 20000}, ...]
+    tree_species = models.JSONField(default=list, blank=True)
     tree_price = models.DecimalField(max_digits=10, decimal_places=2, help_text="Price in USD")
     
     # Environmental Impact
