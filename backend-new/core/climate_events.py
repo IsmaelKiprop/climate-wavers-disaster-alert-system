@@ -157,6 +157,63 @@ def _event_join_url(event: ClimateEvent) -> str:
     return f"{base}/app/calendar/events/{event.id}"
 
 
+def _send_climate_event_mail(
+    *,
+    to_email: str,
+    subject: str,
+    body: str,
+    event: ClimateEvent,
+    kind: str = "invite",
+):
+    """Deliver climate-event mail via Resend (SMTP is blocked on Render)."""
+    email = str(to_email or "").strip()
+    if not email or "@" not in email or email.endswith("@example.com"):
+        return False
+    payload = {
+        "email": email,
+        "data": {"subject": subject, "content": body},
+    }
+    try:
+        from api.tasks import _send_resend
+
+        _send_resend("custom_mail", payload)
+        logger.info(
+            "Climate %s email sent via Resend to %s event=%s",
+            kind,
+            email,
+            event.id,
+        )
+        return True
+    except Exception as exc:
+        logger.warning(
+            "Climate %s Resend failed to %s event=%s: %s",
+            kind,
+            email,
+            event.id,
+            exc,
+        )
+    try:
+        from api.tasks import _post_notification
+
+        _post_notification({"type": "custom_mail", **payload})
+        logger.info(
+            "Climate %s email sent via notification service to %s event=%s",
+            kind,
+            email,
+            event.id,
+        )
+        return True
+    except Exception as exc:
+        logger.warning(
+            "Climate %s email failed to %s event=%s: %s",
+            kind,
+            email,
+            event.id,
+            exc,
+        )
+        return False
+
+
 def send_climate_invite_email(event: ClimateEvent, to_email: str, invitee_name: str = ""):
     """Send invite via Resend (SMTP is blocked on Render)."""
     email = str(to_email or "").strip()
@@ -178,37 +235,88 @@ def send_climate_invite_email(event: ClimateEvent, to_email: str, invitee_name: 
         f"When: {when or 'See calendar'}\n\n"
         f"{(event.description or '').strip()[:500]}\n\n"
         f"Open / RSVP / join the Climate room:\n{join_url}\n\n"
+        f"Accept the invite on the calendar to receive reminders before it starts.\n\n"
         f"— Climate Wavers\n"
     )
-    payload = {
-        "email": email,
-        "data": {"subject": subject, "content": body},
-    }
-    try:
-        from api.tasks import _send_resend
+    return _send_climate_event_mail(
+        to_email=email,
+        subject=subject,
+        body=body,
+        event=event,
+        kind="invite",
+    )
 
-        _send_resend("custom_mail", payload)
-        logger.info("Climate invite email sent via Resend to %s event=%s", email, event.id)
-        return True
-    except Exception as exc:
-        logger.warning(
-            "Climate invite Resend failed to %s event=%s: %s", email, event.id, exc
-        )
-    try:
-        from api.tasks import _post_notification
 
-        _post_notification({"type": "custom_mail", **payload})
-        logger.info(
-            "Climate invite email sent via notification service to %s event=%s",
-            email,
-            event.id,
-        )
-        return True
-    except Exception as exc:
-        logger.warning(
-            "Climate invite email failed to %s event=%s: %s", email, event.id, exc
-        )
+def send_climate_reminder_email(
+    event: ClimateEvent,
+    to_email: str,
+    invitee_name: str = "",
+    *,
+    when_label: str = "soon",
+):
+    """Remind an accepted invitee (or host) before the event starts."""
+    email = str(to_email or "").strip()
+    if not email or "@" not in email or email.endswith("@example.com"):
         return False
+
+    when = ""
+    if event.starts_at:
+        when = event.starts_at.strftime("%a %d %b %Y, %H:%M UTC")
+    join_url = _event_join_url(event)
+    who = invitee_name or email
+    subject = f"Reminder: {event.title} — {when_label}"
+    body = (
+        f"Hi {who},\n\n"
+        f"Reminder: your Climate Wavers event is {when_label}.\n\n"
+        f"Event: {event.title}\n"
+        f"Type: {event.get_event_type_display()}\n"
+        f"When: {when or 'See calendar'}\n\n"
+        f"Join the Climate room:\n{join_url}\n\n"
+        f"— Climate Wavers\n"
+    )
+    return _send_climate_event_mail(
+        to_email=email,
+        subject=subject,
+        body=body,
+        event=event,
+        kind="reminder",
+    )
+
+
+def invite_receives_reminders(invite: ClimateEventInvite) -> bool:
+    """Hosts and accepted (yes) invitees get reminders; pending/maybe/no do not."""
+    if invite.role == "host":
+        return True
+    return invite.rsvp == "yes"
+
+
+def _invite_email_address(invite: ClimateEventInvite) -> str:
+    if invite.user_id and (invite.user.email or "").strip():
+        return (invite.user.email or "").strip()
+    return (invite.email or "").strip()
+
+
+def deliver_event_reminder(
+    invite: ClimateEventInvite,
+    event: ClimateEvent,
+    message: str,
+    *,
+    when_label: str,
+):
+    """In-app + email reminder for one invitee, respecting notify flags."""
+    delivered = False
+    if invite.notify_in_app and invite.user_id:
+        notify_climate_event(invite.user, event, message)
+        delivered = True
+    if invite.notify_email:
+        to_email = _invite_email_address(invite)
+        if to_email:
+            name = display_name_for(invite.user) if invite.user_id else ""
+            if send_climate_reminder_email(
+                event, to_email, name, when_label=when_label
+            ):
+                delivered = True
+    return delivered
 
 
 def _deliver_invite_notice(
@@ -747,7 +855,7 @@ class ClimateEventViewSet(viewsets.ModelViewSet):
             for invite in event.invites.select_related("user").exclude(
                 user_id=event.host_id
             ):
-                if invite.user_id:
+                if invite.user_id and invite_receives_reminders(invite):
                     notify_climate_event(invite.user, event, f"Live now: {event.title}")
         out = ClimateEventSerializer(event, context={"request": request})
         return Response(out.data)
@@ -1123,6 +1231,10 @@ class ClimateEventViewSet(viewsets.ModelViewSet):
 
 
 def send_climate_event_reminders():
+    """
+    T-60 and T-10 reminders for hosts + accepted (rsvp=yes) invitees only.
+    Delivers in-app notifications and Resend email when prefs allow.
+    """
     now = timezone.now()
     sent_60 = 0
     sent_10 = 0
@@ -1136,14 +1248,15 @@ def send_climate_event_reminders():
 
     for event in window_60:
         for invite in event.invites.all():
-            if invite.rsvp == "no":
+            if not invite_receives_reminders(invite):
                 continue
-            notify_climate_event(
-                invite.user,
+            if deliver_event_reminder(
+                invite,
                 event,
                 f"In about 1 hour: {event.title}",
-            )
-            sent_60 += 1
+                when_label="in about 1 hour",
+            ):
+                sent_60 += 1
         event.reminder_60_sent = True
         event.save(update_fields=["reminder_60_sent", "updated_at"])
 
@@ -1156,14 +1269,15 @@ def send_climate_event_reminders():
 
     for event in window_10:
         for invite in event.invites.all():
-            if invite.rsvp == "no":
+            if not invite_receives_reminders(invite):
                 continue
-            notify_climate_event(
-                invite.user,
+            if deliver_event_reminder(
+                invite,
                 event,
                 f"Starting soon: {event.title} — join the Climate room",
-            )
-            sent_10 += 1
+                when_label="starting soon",
+            ):
+                sent_10 += 1
         event.reminder_10_sent = True
         event.save(update_fields=["reminder_10_sent", "updated_at"])
 

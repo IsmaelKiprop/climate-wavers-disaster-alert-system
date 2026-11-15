@@ -328,7 +328,13 @@ const ClimateCalendar = () => {
       setEvents((list) =>
         list.map((e) => (e.id === selected.id ? { ...e, my_rsvp: choice } : e))
       );
-      toast.success(`RSVP: ${choice}`);
+      if (choice === "yes") {
+        toast.success("Accepted — we'll remind you before it starts");
+      } else if (choice === "no") {
+        toast.success("Declined — you won't get reminders");
+      } else {
+        toast.success("RSVP: maybe");
+      }
     } catch {
       toast.error("Could not update RSVP");
     }
@@ -783,10 +789,19 @@ const ClimateCalendar = () => {
                                   : "border-border text-foreground hover:bg-[var(--cw-overlay-soft)]"
                               }`}
                             >
-                              {choice}
+                              {choice === "yes" ? "Accept" : choice}
                             </button>
                           ))}
                         </div>
+                        {selected.my_rsvp === "yes" ? (
+                          <p className="text-xs text-muted mt-2">
+                            Reminders on — about 1 hour before and again when it starts soon.
+                          </p>
+                        ) : (
+                          <p className="text-xs text-muted mt-2">
+                            Accept to get in-app and email reminders before this event.
+                          </p>
+                        )}
                       </div>
                     </>
                   )}
