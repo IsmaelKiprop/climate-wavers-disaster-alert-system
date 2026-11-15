@@ -67,4 +67,5 @@ export const endpoints = {
     "climateEventFromDisaster": "/api/v1/climate-events/from-disaster/",
     "climateEventFromProject": "/api/v1/climate-events/from-project/",
     "climateEventFromChat": "/api/v1/climate-events/from-chat/",
+    "calendarObservances": "/api/v1/calendar-observances/",
 }

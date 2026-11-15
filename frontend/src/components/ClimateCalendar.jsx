@@ -20,6 +20,7 @@ import {
   IoChevronBack,
   IoChevronForward,
   IoCreateOutline,
+  IoEarthOutline,
   IoLeafOutline,
   IoRadioButtonOn,
   IoWarningOutline,
@@ -37,6 +38,10 @@ const TYPE_LABEL = {
   disaster_briefing: "Disaster briefing",
   planting_day: "Planting day",
   huddle: "Climate huddle",
+  observance: "Official day",
+  international: "International day",
+  government: "Government day",
+  regional: "Regional day",
 };
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -73,6 +78,9 @@ function formatTime(iso, timezone) {
 function EventTypeIcon({ type }) {
   if (type === "disaster_briefing") return <IoWarningOutline className="text-amber-600" />;
   if (type === "planting_day") return <IoLeafOutline className="text-primary" />;
+  if (type === "observance" || type === "international" || type === "government" || type === "regional") {
+    return <IoEarthOutline className="text-emerald-700" />;
+  }
   return <IoCallOutline className="text-primary" />;
 }
 
@@ -80,7 +88,25 @@ function eventDotClass(type, isLive) {
   if (isLive) return "bg-red-500";
   if (type === "disaster_briefing") return "bg-amber-500";
   if (type === "planting_day") return "bg-primary";
+  if (type === "observance" || type === "international" || type === "government" || type === "regional") {
+    return "bg-emerald-700";
+  }
   return "bg-sky-500";
+}
+
+function normalizeObservance(row) {
+  if (!row) return null;
+  const occurs = row.occurs_on || (row.starts_at || "").slice(0, 10);
+  return {
+    ...row,
+    id: row.id != null ? `obs-${row.slug || row.id}-${occurs}` : `obs-${occurs}`,
+    is_observance: true,
+    event_type: "observance",
+    category: row.category,
+    status: "scheduled",
+    can_join: false,
+    allow_tree_gifts: true,
+  };
 }
 
 const ClimateCalendar = () => {
@@ -92,6 +118,7 @@ const ClimateCalendar = () => {
     Boolean(eventId && window.location.pathname.endsWith("/join"));
 
   const [events, setEvents] = useState([]);
+  const [observances, setObservances] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(null);
   const [filter, setFilter] = useState("all");
@@ -117,9 +144,31 @@ const ClimateCalendar = () => {
     }
   }, []);
 
+  const loadObservances = useCallback(async () => {
+    const y = cursorMonth.getFullYear();
+    try {
+      const data = await client.run(
+        "get",
+        `${endpoints.calendarObservances}?year=${y}`,
+        {},
+        false
+      );
+      const list = (Array.isArray(data) ? data : unwrapList(data))
+        .map(normalizeObservance)
+        .filter(Boolean);
+      setObservances(list);
+    } catch {
+      setObservances([]);
+    }
+  }, [cursorMonth]);
+
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    loadObservances();
+  }, [loadObservances]);
 
   useEffect(() => {
     if (!eventId || !events.length) return;
@@ -135,6 +184,7 @@ const ClimateCalendar = () => {
   }, [eventId, events]);
 
   const filtered = useMemo(() => {
+    if (filter === "official") return [];
     if (filter === "all") return events;
     if (filter === "mine") {
       return events.filter((e) => e.my_role === "host" || e.my_rsvp === "yes");
@@ -147,23 +197,36 @@ const ClimateCalendar = () => {
     [filtered]
   );
 
+  const visibleObservances = useMemo(() => {
+    if (filter === "mine") return [];
+    if (filter === "official" || filter === "all") return observances;
+    return [];
+  }, [observances, filter]);
+
   const eventsByDayKey = useMemo(() => {
     const map = new Map();
-    for (const event of visibleEvents) {
-      const d = new Date(event.starts_at);
-      if (Number.isNaN(d.getTime())) continue;
+    const push = (item) => {
+      const d = new Date(item.starts_at || item.occurs_on);
+      if (Number.isNaN(d.getTime())) return;
       const key = format(d, "yyyy-MM-dd");
       if (!map.has(key)) map.set(key, []);
-      map.get(key).push(event);
-    }
+      map.get(key).push(item);
+    };
+    for (const event of visibleEvents) push(event);
+    for (const obs of visibleObservances) push(obs);
     for (const list of map.values()) {
-      list.sort(
-        (a, b) =>
-          new Date(a.starts_at) - new Date(b.starts_at) || a.id - b.id
-      );
+      list.sort((a, b) => {
+        const aObs = a.is_observance ? 1 : 0;
+        const bObs = b.is_observance ? 1 : 0;
+        if (aObs !== bObs) return aObs - bObs;
+        return (
+          new Date(a.starts_at) - new Date(b.starts_at) ||
+          String(a.id).localeCompare(String(b.id))
+        );
+      });
     }
     return map;
-  }, [visibleEvents]);
+  }, [visibleEvents, visibleObservances]);
 
   const monthDays = useMemo(() => {
     const start = startOfWeek(startOfMonth(cursorMonth));
@@ -196,7 +259,24 @@ const ClimateCalendar = () => {
 
   const selectEvent = (event) => {
     setSelected(event);
+    if (event?.is_observance) {
+      navigate("/app/calendar", { replace: true });
+      return;
+    }
     navigate(`/app/calendar/events/${event.id}`, { replace: true });
+  };
+
+  const giftForEvent = (event) => {
+    if (!event || event.is_observance) {
+      navigate("/app/plant-tree");
+      return;
+    }
+    const path =
+      event.gift_path ||
+      `/app/plant-tree?event=${event.id}${
+        event.tree_project ? `&project=${event.tree_project}` : ""
+      }${event.host ? `&for=${event.host}` : ""}`;
+    navigate(path);
   };
 
   const openScheduleForDay = (day) => {
@@ -207,7 +287,7 @@ const ClimateCalendar = () => {
   };
 
   const joinEvent = async (event) => {
-    if (!event?.id || joining) return;
+    if (!event?.id || event.is_observance || joining) return;
     setJoining(true);
     try {
       const data = await client.run(
@@ -275,8 +355,9 @@ const ClimateCalendar = () => {
               Briefings & planting days
             </h1>
             <p className="text-sm text-muted mt-1.5 max-w-lg">
-              Month view for visibility — pick a day to schedule, RSVP, or join
-              the Climate Wavers room.
+              Month view with Climate Wavers events plus synced international and
+              government environment days. Gift trees for any day&apos;s activities
+              — invited or not.
             </p>
             {liveCount > 0 ? (
               <p className="mt-2 text-xs font-medium text-red-600 inline-flex items-center gap-1.5">
@@ -306,6 +387,7 @@ const ClimateCalendar = () => {
           {[
             { key: "all", label: "All" },
             { key: "mine", label: "My calendar" },
+            { key: "official", label: "Official days" },
             { key: "disaster_briefing", label: "Briefings" },
             { key: "planting_day", label: "Planting" },
             { key: "huddle", label: "Huddles" },
@@ -374,6 +456,9 @@ const ClimateCalendar = () => {
               </span>
               <span className="inline-flex items-center gap-1">
                 <span className="h-1.5 w-1.5 rounded-full bg-red-500" /> Live
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-700" /> Official
               </span>
             </div>
           </div>
@@ -572,8 +657,14 @@ const ClimateCalendar = () => {
                               ) : null}
                             </div>
                             <p className="text-xs text-muted mt-0.5">
-                              {TYPE_LABEL[event.event_type] || event.event_type} ·{" "}
-                              {formatTime(event.starts_at, event.timezone)}
+                              {event.is_observance
+                                ? TYPE_LABEL[event.category] || "Official day"
+                                : TYPE_LABEL[event.event_type] || event.event_type}
+                              {!event.is_observance
+                                ? ` · ${formatTime(event.starts_at, event.timezone)}`
+                                : event.authority
+                                  ? ` · ${event.authority}`
+                                  : ""}
                             </p>
                           </div>
                           {isLive ? (
@@ -603,7 +694,9 @@ const ClimateCalendar = () => {
                 <div className="px-4 py-4 border-b border-border flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <p className="text-[11px] uppercase tracking-wide text-muted">
-                      {TYPE_LABEL[selected.event_type]}
+                      {selected.is_observance
+                        ? TYPE_LABEL[selected.category] || "Official day"
+                        : TYPE_LABEL[selected.event_type]}
                       {selected.status === "live" ? " · Live" : ""}
                     </p>
                     <h3 className="text-lg font-semibold text-foreground leading-snug mt-0.5">
@@ -622,58 +715,91 @@ const ClimateCalendar = () => {
                 <div className="p-4 space-y-4 flex-1">
                   <p className="text-sm text-muted">
                     {formatWhen(selected.starts_at, selected.timezone)}
-                    {selected.host_name ? ` · Host ${selected.host_name}` : ""}
+                    {selected.host_name
+                      ? ` · ${selected.is_observance ? selected.host_name : `Host ${selected.host_name}`}`
+                      : ""}
                   </p>
                   {selected.description ? (
                     <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">
                       {selected.description}
                     </p>
                   ) : null}
-                  <div className="flex flex-wrap gap-2 text-xs">
-                    {selected.tree_project ? (
-                      <Link
-                        to={`/p/${selected.tree_project}`}
-                        className="border border-border px-2.5 py-1 text-muted hover:text-foreground"
-                      >
-                        Tree project
-                      </Link>
-                    ) : null}
-                    {selected.disaster ? (
-                      <Link
-                        to={`/disasters/${selected.disaster}`}
-                        className="border border-border px-2.5 py-1 text-muted hover:text-foreground"
-                      >
-                        Disaster
-                      </Link>
-                    ) : null}
-                    <span className="border border-border px-2.5 py-1 text-muted capitalize">
-                      {selected.visibility}
-                    </span>
-                  </div>
-                  <div>
-                    <p className="text-[11px] uppercase tracking-wide text-muted mb-2">
-                      Your RSVP
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      {["yes", "maybe", "no"].map((choice) => (
-                        <button
-                          key={choice}
-                          type="button"
-                          onClick={() => rsvp(choice)}
-                          className={`h-9 px-3 text-xs font-medium border capitalize ${
-                            selected.my_rsvp === choice
-                              ? "border-primary bg-primary text-primary-foreground"
-                              : "border-border text-foreground hover:bg-[var(--cw-overlay-soft)]"
-                          }`}
+                  {selected.is_observance ? (
+                    <div className="flex flex-wrap gap-2 text-xs">
+                      <span className="border border-border px-2.5 py-1 text-muted capitalize">
+                        {selected.category || "official"}
+                      </span>
+                      {selected.authority ? (
+                        <span className="border border-border px-2.5 py-1 text-muted">
+                          {selected.authority}
+                        </span>
+                      ) : null}
+                      {selected.source_url ? (
+                        <a
+                          href={selected.source_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="border border-border px-2.5 py-1 text-muted hover:text-foreground"
                         >
-                          {choice}
-                        </button>
-                      ))}
+                          Source
+                        </a>
+                      ) : null}
                     </div>
-                  </div>
+                  ) : (
+                    <>
+                      <div className="flex flex-wrap gap-2 text-xs">
+                        {selected.tree_project ? (
+                          <Link
+                            to={`/p/${selected.tree_project}`}
+                            className="border border-border px-2.5 py-1 text-muted hover:text-foreground"
+                          >
+                            Tree project
+                          </Link>
+                        ) : null}
+                        {selected.disaster ? (
+                          <Link
+                            to={`/disasters/${selected.disaster}`}
+                            className="border border-border px-2.5 py-1 text-muted hover:text-foreground"
+                          >
+                            Disaster
+                          </Link>
+                        ) : null}
+                        <span className="border border-border px-2.5 py-1 text-muted capitalize">
+                          {selected.visibility}
+                        </span>
+                        {selected.allow_tree_gifts !== false ? (
+                          <span className="border border-border px-2.5 py-1 text-muted">
+                            {selected.trees_gifted || 0} trees gifted
+                          </span>
+                        ) : null}
+                      </div>
+                      <div>
+                        <p className="text-[11px] uppercase tracking-wide text-muted mb-2">
+                          Your RSVP
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          {["yes", "maybe", "no"].map((choice) => (
+                            <button
+                              key={choice}
+                              type="button"
+                              onClick={() => rsvp(choice)}
+                              className={`h-9 px-3 text-xs font-medium border capitalize ${
+                                selected.my_rsvp === choice
+                                  ? "border-primary bg-primary text-primary-foreground"
+                                  : "border-border text-foreground hover:bg-[var(--cw-overlay-soft)]"
+                              }`}
+                            >
+                              {choice}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </div>
                 <div className="p-4 border-t border-border space-y-2">
-                  {me?.id &&
+                  {!selected.is_observance &&
+                  me?.id &&
                   (String(selected.host) === String(me.id) ||
                     selected.my_role === "host") ? (
                     <button
@@ -697,25 +823,44 @@ const ClimateCalendar = () => {
                       Edit & invite
                     </button>
                   ) : null}
-                  <button
-                    type="button"
-                    disabled={joining || selected.status === "cancelled"}
-                    onClick={() => joinEvent(selected)}
-                    className="w-full h-12 bg-primary text-primary-foreground text-sm font-semibold inline-flex items-center justify-center gap-2 disabled:opacity-60"
-                  >
-                    <IoCallOutline size={18} />
-                    {joining
-                      ? "Opening room…"
-                      : selected.status === "live"
-                        ? "Join live room"
-                        : "Enter Climate room"}
-                  </button>
-                  {(selected.invite_count > 0 || selected.invites?.length > 0) ? (
+                  {selected.allow_tree_gifts !== false ? (
+                    <button
+                      type="button"
+                      onClick={() => giftForEvent(selected)}
+                      className="w-full h-11 border border-border text-sm font-medium inline-flex items-center justify-center gap-2 hover:bg-[var(--cw-overlay-soft)]"
+                    >
+                      <IoLeafOutline size={16} />
+                      {selected.is_observance
+                        ? "Plant trees for this day"
+                        : "Gift trees for this day"}
+                    </button>
+                  ) : null}
+                  {!selected.is_observance ? (
+                    <button
+                      type="button"
+                      disabled={joining || selected.status === "cancelled"}
+                      onClick={() => joinEvent(selected)}
+                      className="w-full h-12 bg-primary text-primary-foreground text-sm font-semibold inline-flex items-center justify-center gap-2 disabled:opacity-60"
+                    >
+                      <IoCallOutline size={18} />
+                      {joining
+                        ? "Opening room…"
+                        : selected.status === "live"
+                          ? "Join live room"
+                          : "Enter Climate room"}
+                    </button>
+                  ) : null}
+                  {!selected.is_observance &&
+                  (selected.invite_count > 0 || selected.invites?.length > 0) ? (
                     <p className="text-[11px] text-muted text-center">
                       {selected.invite_count || selected.invites?.length || 0} invitee
                       {(selected.invite_count || selected.invites?.length || 0) === 1
                         ? ""
                         : "s"}
+                    </p>
+                  ) : selected.is_observance ? (
+                    <p className="text-[11px] text-muted text-center">
+                      Synced official environment day — contribute trees anytime
                     </p>
                   ) : (
                     <p className="text-[11px] text-muted text-center">

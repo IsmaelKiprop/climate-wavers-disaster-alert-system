@@ -125,6 +125,29 @@ def _resolve_gifted_to(metadata, client_data):
         return None
 
 
+def _resolve_climate_event(metadata, client_data):
+    raw = (
+        _metadata_value(metadata, "climate_event_id")
+        or _metadata_value(metadata, "event_id")
+        or (client_data or {}).get("climate_event_id")
+        or (client_data or {}).get("event_id")
+        or (client_data or {}).get("event")
+    )
+    if raw in (None, ""):
+        return None
+    try:
+        from .models import ClimateEvent
+
+        event = ClimateEvent.objects.filter(id=int(raw)).first()
+    except (TypeError, ValueError):
+        return None
+    if event is None:
+        return None
+    if not event.allow_tree_gifts:
+        return None
+    return event
+
+
 def _verify_with_paystack(reference):
     secret = os.getenv("PAYSTACK_SECRET_KEY", "").strip()
     if not secret:
@@ -198,6 +221,7 @@ def record_tree_payment(reference, request_user=None, client_data=None):
 
     supports_gifted_to = _gifted_to_column_ready()
     gifted_to = _resolve_gifted_to(metadata, client_data) if supports_gifted_to else None
+    climate_event = _resolve_climate_event(metadata, client_data)
 
     existing = TreeProjectDonation.objects.filter(payment_reference=reference).select_related("project", "donor").first()
     if existing:
@@ -212,6 +236,12 @@ def record_tree_payment(reference, request_user=None, client_data=None):
         ):
             existing.gifted_to = gifted_to
             updates.append("gifted_to")
+        if (
+            climate_event is not None
+            and getattr(existing, "climate_event_id", None) is None
+        ):
+            existing.climate_event = climate_event
+            updates.append("climate_event")
         if not existing.payer_email and payer_email:
             existing.payer_email = payer_email
             updates.append("payer_email")
@@ -267,7 +297,11 @@ def record_tree_payment(reference, request_user=None, client_data=None):
             or gifted_to.username
         )
         dedication = f"{dedication}\n\nGifted to: {gift_label}".strip()
-    elif not supports_gifted_to:
+    if climate_event is not None:
+        dedication = (
+            f"{dedication}\n\nFor Climate day: {climate_event.title}"
+        ).strip()
+    if not supports_gifted_to:
         # Keep gift intent in the dedication until migration 0036 is applied.
         raw_gift = (
             _metadata_value(metadata, "gifted_to")
@@ -299,6 +333,8 @@ def record_tree_payment(reference, request_user=None, client_data=None):
     }
     if supports_gifted_to and gifted_to is not None:
         create_kwargs["gifted_to"] = gifted_to
+    if climate_event is not None:
+        create_kwargs["climate_event"] = climate_event
 
     try:
         with transaction.atomic():
@@ -329,6 +365,7 @@ def record_tree_payment(reference, request_user=None, client_data=None):
         # Migration lag: retry without gifted_to / fee / selected_species fields.
         logger.exception("Donation create failed; retrying lean create: %s", exc)
         create_kwargs.pop("gifted_to", None)
+        create_kwargs.pop("climate_event", None)
         for optional in ("platform_fee", "admin_share", "fee_rate", "selected_species"):
             create_kwargs.pop(optional, None)
         with transaction.atomic():

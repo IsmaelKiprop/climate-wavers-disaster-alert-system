@@ -673,6 +673,14 @@ class TreeProjectDonation(models.Model):
         blank=True,
         help_text='Species quantities purchased, e.g. {"Rhizophora": 2}',
     )
+    climate_event = models.ForeignKey(
+        "ClimateEvent",
+        on_delete=models.SET_NULL,
+        related_name="tree_gifts",
+        null=True,
+        blank=True,
+        help_text="When set, this gift supports that Climate calendar day's activities",
+    )
     is_anonymous = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     
@@ -2120,6 +2128,10 @@ class ClimateEvent(models.Model):
         related_name="climate_events",
     )
     jitsi_room = models.CharField(max_length=80, unique=True, db_index=True)
+    allow_tree_gifts = models.BooleanField(
+        default=True,
+        help_text="Anyone can contribute / gift trees for this day's activities (invited or not)",
+    )
     reminder_60_sent = models.BooleanField(default=False)
     reminder_10_sent = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -2135,6 +2147,57 @@ class ClimateEvent(models.Model):
 
     def __str__(self):
         return f"{self.title} ({self.event_type})"
+
+
+class CalendarObservance(models.Model):
+    """
+    Recurring international / government climate & environment days
+    shown on the Climate Action Calendar (synced yearly from a curated catalog).
+    """
+
+    CATEGORY_CHOICES = [
+        ("international", "International / UN"),
+        ("government", "Government"),
+        ("regional", "Regional / AU"),
+        ("campaign", "Campaign day"),
+    ]
+
+    slug = models.SlugField(max_length=80, unique=True)
+    title = models.CharField(max_length=200)
+    description = models.TextField(blank=True, default="")
+    month = models.PositiveSmallIntegerField()
+    day = models.PositiveSmallIntegerField()
+    category = models.CharField(
+        max_length=20, choices=CATEGORY_CHOICES, default="international"
+    )
+    authority = models.CharField(
+        max_length=120,
+        blank=True,
+        default="",
+        help_text="e.g. United Nations, African Union, Kenya",
+    )
+    source_url = models.URLField(blank=True, default="")
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["month", "day", "title"]
+        indexes = [
+            models.Index(fields=["month", "day"]),
+            models.Index(fields=["category", "is_active"]),
+        ]
+
+    def __str__(self):
+        return f"{self.title} ({self.month:02d}-{self.day:02d})"
+
+    def occurs_on(self, year: int):
+        from datetime import date
+
+        try:
+            return date(year, self.month, self.day)
+        except ValueError:
+            return None
 
 
 class ClimateEventInvite(models.Model):

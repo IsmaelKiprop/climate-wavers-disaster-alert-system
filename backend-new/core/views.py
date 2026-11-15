@@ -1921,6 +1921,11 @@ def wavers_points_redeem(request):
     dedication = request.data.get("dedication_message", "")
     selected_species = request.data.get("selected_species") or {}
     gifted_to_id = request.data.get("gifted_to") or request.data.get("gift_for_user_id")
+    climate_event_id = (
+        request.data.get("climate_event_id")
+        or request.data.get("event_id")
+        or request.data.get("event")
+    )
 
     if not project_id:
         return Response({"detail": "project_id is required."}, status=status.HTTP_400_BAD_REQUEST)
@@ -1935,6 +1940,19 @@ def wavers_points_redeem(request):
         if gifted_to is None:
             return Response({"detail": "Gift recipient not found."}, status=status.HTTP_404_NOT_FOUND)
 
+    climate_event = None
+    if climate_event_id not in (None, ""):
+        from .models import ClimateEvent
+
+        climate_event = ClimateEvent.objects.filter(id=climate_event_id).first()
+        if climate_event is None:
+            return Response({"detail": "Climate event not found."}, status=status.HTTP_404_NOT_FOUND)
+        if not climate_event.allow_tree_gifts:
+            return Response(
+                {"detail": "Tree gifts are disabled for this event."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
     try:
         result = redeem_trees_with_points(
             user=request.user,
@@ -1943,6 +1961,7 @@ def wavers_points_redeem(request):
             dedication_message=dedication,
             gifted_to=gifted_to,
             selected_species=selected_species,
+            climate_event=climate_event,
         )
     except ValueError as exc:
         return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)

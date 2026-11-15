@@ -59,6 +59,7 @@ from .chat import (
     ChatDirectoryView,
 )
 from .climate_events import ClimateEventViewSet
+from .calendar_observances import CalendarObservanceViewSet
 
 
 # Initialize the default router
@@ -81,6 +82,11 @@ router.register(r'tree-project-updates', TreeProjectUpdateViewSet)
 router.register(r'tree-project-donations', TreeProjectDonationViewSet)
 router.register(r'upload', FileUploadViewSet, basename='upload')
 router.register(r'climate-events', ClimateEventViewSet, basename='climate-events')
+router.register(
+    r'calendar-observances',
+    CalendarObservanceViewSet,
+    basename='calendar-observances',
+)
 
 # Define urlpatterns with included router URLs and additional custom paths
 urlpatterns = [

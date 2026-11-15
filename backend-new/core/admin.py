@@ -36,6 +36,7 @@ from .models import (
     UserChatPresence,
     ClimateEvent,
     ClimateEventInvite,
+    CalendarObservance,
 )
 from .pricing import verification_priority
 from unfold.admin import ModelAdmin
@@ -483,8 +484,23 @@ class ClimateEventAdmin(ModelAdmin):
 
 @admin.register(ClimateEventInvite)
 class ClimateEventInviteAdmin(ModelAdmin):
-    list_display = ("event", "user", "role", "rsvp", "created_at")
+    list_display = ("event", "user", "email", "role", "rsvp", "created_at")
     list_filter = ("role", "rsvp")
-    search_fields = ("user__email", "user__username", "event__title")
+    search_fields = ("user__email", "user__username", "event__title", "email")
+
+
+@admin.register(CalendarObservance)
+class CalendarObservanceAdmin(ModelAdmin):
+    list_display = (
+        "title",
+        "month",
+        "day",
+        "category",
+        "authority",
+        "is_active",
+    )
+    list_filter = ("category", "is_active", "month")
+    search_fields = ("title", "slug", "authority")
+    prepopulated_fields = {"slug": ("title",)}
 
 

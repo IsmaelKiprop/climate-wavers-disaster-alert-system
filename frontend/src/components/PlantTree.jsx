@@ -26,6 +26,8 @@ const PlantTree = () => {
   const giftName = searchParams.get("name") || "";
   const giftProjectId = searchParams.get("project") || "";
   const giftSpecies = searchParams.get("species") || "";
+  const climateEventId = searchParams.get("event") || "";
+  const [climateEventTitle, setClimateEventTitle] = useState("");
   const [giftProfile, setGiftProfile] = useState(null);
   const [selectedTree, setSelectedTree] = useState(null);
   const [showCertificate, setShowCertificate] = useState(false);
@@ -74,6 +76,25 @@ const PlantTree = () => {
       alive = false;
     };
   }, [giftUserId, giftName]);
+
+  useEffect(() => {
+    if (!climateEventId) {
+      setClimateEventTitle("");
+      return;
+    }
+    let alive = true;
+    client
+      .run("get", `${endpoints.climateEvents}${climateEventId}/`, {}, true)
+      .then((data) => {
+        if (alive) setClimateEventTitle(data?.title || "Climate day");
+      })
+      .catch(() => {
+        if (alive) setClimateEventTitle("Climate day");
+      });
+    return () => {
+      alive = false;
+    };
+  }, [climateEventId]);
 
   // Load user's tree data from database
   useEffect(() => {
@@ -267,12 +288,18 @@ const PlantTree = () => {
             <FaTree className="text-4xl sm:text-6xl text-green-600 mb-2 sm:mb-0 sm:mr-4" />
             <div>
               <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-foreground mb-2">
-                {giftUserId ? "Gift a Tree" : "Plant a Tree"}
+                {climateEventId
+                  ? "Gift trees for this Climate day"
+                  : giftUserId
+                    ? "Gift a Tree"
+                    : "Plant a Tree"}
               </h1>
               <p className="text-lg sm:text-xl text-muted px-4 sm:px-0">
-                {giftUserId
-                  ? `Plant trees for ${giftProfile?.display_name || giftName || "this Climate Wavers member"}`
-                  : "Make a lasting impact on our planet, one tree at a time"}
+                {climateEventId
+                  ? `Contribute trees toward ${climateEventTitle || "today's activities"} — invited or not, anyone can gift`
+                  : giftUserId
+                    ? `Plant trees for ${giftProfile?.display_name || giftName || "this Climate Wavers member"}`
+                    : "Make a lasting impact on our planet, one tree at a time"}
               </p>
             </div>
           </div>
@@ -377,6 +404,8 @@ const PlantTree = () => {
           <TreePayment 
             treeData={selectedTree}
             initialSpecies={giftSpecies}
+            climateEventId={climateEventId ? Number(climateEventId) : null}
+            climateEventTitle={climateEventTitle}
             giftForUser={
               giftUserId
                 ? {

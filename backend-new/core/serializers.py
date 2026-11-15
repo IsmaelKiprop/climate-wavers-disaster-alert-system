@@ -682,7 +682,7 @@ class TreeProjectDonationSerializer(serializers.ModelSerializer):
         fields = ['id', 'amount', 'platform_fee', 'admin_share', 'fee_rate',
                  'trees_purchased', 'payment_reference', 'payment_status', 
                  'dedication_message', 'selected_species', 'is_anonymous', 'created_at', 'donor_name',
-                 'gifted_to', 'gifted_to_name',
+                 'gifted_to', 'gifted_to_name', 'climate_event',
                  'project_name', 'project_city', 'project_country', 'co2_absorption_per_tree']
         read_only_fields = ['payment_reference', 'platform_fee', 'admin_share', 'fee_rate', 'created_at']
     

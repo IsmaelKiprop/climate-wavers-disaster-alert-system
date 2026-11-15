@@ -453,6 +453,10 @@ class ClimateEventSerializer(serializers.ModelSerializer):
     )
     disaster_title = serializers.SerializerMethodField()
     join_path = serializers.SerializerMethodField()
+    trees_gifted = serializers.SerializerMethodField()
+    gift_count = serializers.SerializerMethodField()
+    gift_path = serializers.SerializerMethodField()
+    is_observance = serializers.SerializerMethodField()
 
     class Meta:
         model = ClimateEvent
@@ -477,6 +481,11 @@ class ClimateEventSerializer(serializers.ModelSerializer):
             "social_group",
             "conversation",
             "jitsi_room",
+            "allow_tree_gifts",
+            "trees_gifted",
+            "gift_count",
+            "gift_path",
+            "is_observance",
             "my_rsvp",
             "my_role",
             "can_join",
@@ -503,6 +512,37 @@ class ClimateEventSerializer(serializers.ModelSerializer):
 
     def get_join_path(self, obj):
         return f"/app/calendar/events/{obj.id}/join"
+
+    def get_is_observance(self, obj):
+        return False
+
+    def get_trees_gifted(self, obj):
+        if hasattr(obj, "_trees_gifted"):
+            return obj._trees_gifted or 0
+        from django.db.models import Sum
+
+        total = obj.tree_gifts.filter(payment_status="completed").aggregate(
+            t=Sum("trees_purchased")
+        )["t"]
+        return int(total or 0)
+
+    def get_gift_count(self, obj):
+        if hasattr(obj, "_gift_count"):
+            return obj._gift_count or 0
+        return obj.tree_gifts.filter(payment_status="completed").count()
+
+    def get_gift_path(self, obj):
+        if not obj.allow_tree_gifts:
+            return None
+        from urllib.parse import urlencode
+
+        params = {"event": obj.id}
+        if obj.tree_project_id:
+            params["project"] = obj.tree_project_id
+        if obj.host_id:
+            params["for"] = obj.host_id
+            params["name"] = display_name_for(obj.host)
+        return f"/app/plant-tree?{urlencode(params)}"
 
     def _my_invite(self, obj):
         request = self.context.get("request")
@@ -588,6 +628,7 @@ class ClimateEventCreateSerializer(serializers.ModelSerializer):
             "invite_emails",
             "notify_in_app",
             "notify_email",
+            "allow_tree_gifts",
         )
 
     def create(self, validated_data):
@@ -649,7 +690,18 @@ class ClimateEventViewSet(viewsets.ModelViewSet):
                 "conversation",
             )
             .prefetch_related("invites__user")
-            .annotate(_invite_count=models.Count("invites", distinct=True))
+            .annotate(
+                _invite_count=models.Count("invites", distinct=True),
+                _gift_count=models.Count(
+                    "tree_gifts",
+                    filter=Q(tree_gifts__payment_status="completed"),
+                    distinct=True,
+                ),
+                _trees_gifted=models.Sum(
+                    "tree_gifts__trees_purchased",
+                    filter=Q(tree_gifts__payment_status="completed"),
+                ),
+            )
         )
 
     def get_serializer_class(self):
@@ -821,6 +873,35 @@ class ClimateEventViewSet(viewsets.ModelViewSet):
             {
                 "invited": ClimateEventInviteSerializer(created, many=True).data,
                 "count": len(created),
+            }
+        )
+
+    @action(detail=True, methods=["get"])
+    def gifts(self, request, pk=None):
+        """List completed tree gifts contributed to this calendar day's activities."""
+        from .models import TreeProjectDonation
+        from .serializers import TreeProjectDonationSerializer
+
+        event = self.get_object()
+        if not user_can_access_event(request.user, event) and event.visibility != "public":
+            return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
+        qs = (
+            TreeProjectDonation.objects.filter(
+                climate_event=event, payment_status="completed"
+            )
+            .select_related("donor", "gifted_to", "project")
+            .order_by("-created_at")[:50]
+        )
+        return Response(
+            {
+                "event_id": event.id,
+                "allow_tree_gifts": event.allow_tree_gifts,
+                "trees_gifted": sum(d.trees_purchased for d in qs),
+                "gift_count": len(qs),
+                "gift_path": ClimateEventSerializer(
+                    event, context={"request": request}
+                ).data.get("gift_path"),
+                "results": TreeProjectDonationSerializer(qs, many=True).data,
             }
         )
 

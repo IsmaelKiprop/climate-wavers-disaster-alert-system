@@ -20,6 +20,8 @@ const TreePayment = ({
   onBack,
   giftForUser = null,
   initialSpecies = "",
+  climateEventId = null,
+  climateEventTitle = "",
 }) => {
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
@@ -215,6 +217,7 @@ const TreePayment = ({
         dedication_message: dedicationMessage,
         selected_species: selectedSpecies,
         ...(giftForUser?.id ? { gifted_to: Number(giftForUser.id) } : {}),
+        ...(climateEventId ? { climate_event_id: Number(climateEventId) } : {}),
       };
       
       // Send payment verification to backend
@@ -315,6 +318,7 @@ const TreePayment = ({
           dedication_message: dedicationMessage,
           selected_species: selectedSpecies,
           ...(giftForUser?.id ? { gifted_to: Number(giftForUser.id) } : {}),
+          ...(climateEventId ? { climate_event_id: Number(climateEventId) } : {}),
         },
         true
       );
@@ -411,6 +415,7 @@ const TreePayment = ({
       dedication_message: dedicationMessage,
       selected_species: selectedSpecies,
       ...(giftForUser?.id ? { gifted_to: Number(giftForUser.id) } : {}),
+      ...(climateEventId ? { climate_event_id: Number(climateEventId) } : {}),
     };
     sessionStorage.setItem(`cw-pay-${config.reference}`, JSON.stringify(checkout));
 
@@ -433,6 +438,12 @@ const TreePayment = ({
               gift_for_user_id: String(giftForUser.id),
             }
           : {}),
+        ...(climateEventId
+          ? {
+              climate_event_id: String(climateEventId),
+              event_id: String(climateEventId),
+            }
+          : {}),
         custom_fields: [
           ...config.metadata.custom_fields,
           ...(giftForUser?.id
@@ -441,6 +452,15 @@ const TreePayment = ({
                   display_name: "Gifted To User Id",
                   variable_name: "gifted_to",
                   value: String(giftForUser.id),
+                },
+              ]
+            : []),
+          ...(climateEventId
+            ? [
+                {
+                  display_name: "Climate Event Id",
+                  variable_name: "climate_event_id",
+                  value: String(climateEventId),
                 },
               ]
             : []),
@@ -505,6 +525,17 @@ const TreePayment = ({
               <p className="text-sm text-muted">Planting on behalf of</p>
               <p className="font-semibold text-foreground">
                 {giftForUser.name || `User #${giftForUser.id}`}
+              </p>
+            </div>
+          ) : null}
+          {climateEventId ? (
+            <div className="mb-6 border border-border bg-background p-4">
+              <p className="text-sm text-muted">Supporting Climate day activities</p>
+              <p className="font-semibold text-foreground">
+                {climateEventTitle || `Event #${climateEventId}`}
+              </p>
+              <p className="text-xs text-muted mt-1">
+                Invited or not — your trees count toward this day.
               </p>
             </div>
           ) : null}

@@ -152,6 +152,7 @@ def redeem_trees_with_points(
     dedication_message: str = "",
     gifted_to=None,
     selected_species=None,
+    climate_event=None,
 ):
     from .tree_inventory import apply_species_purchase, validate_species_purchase
 
@@ -192,23 +193,28 @@ def redeem_trees_with_points(
     if gifted_to is not None:
         label = f"{gifted_to.first_name} {gifted_to.last_name}".strip() or gifted_to.username
         note = f"{note}\n\nGifted to: {label}".strip()
+    if climate_event is not None:
+        note = f"{note}\n\nFor Climate day: {climate_event.title}".strip()
     note = f"{note}\n\nRedeemed with {cost} Wavers Points".strip()
 
     apply_species_purchase(locked, cleaned_species, save=False)
 
-    donation = TreeProjectDonation.objects.create(
-        project=locked,
-        donor=user,
-        gifted_to=gifted_to,
-        payer_email=getattr(user, "email", "") or "",
-        amount=Decimal("0.00"),
-        trees_purchased=trees,
-        payment_reference=reference,
-        payment_status="completed",
-        dedication_message=note,
-        selected_species=cleaned_species or {},
-        is_anonymous=False,
-    )
+    create_kwargs = {
+        "project": locked,
+        "donor": user,
+        "gifted_to": gifted_to,
+        "payer_email": getattr(user, "email", "") or "",
+        "amount": Decimal("0.00"),
+        "trees_purchased": trees,
+        "payment_reference": reference,
+        "payment_status": "completed",
+        "dedication_message": note,
+        "selected_species": cleaned_species or {},
+        "is_anonymous": False,
+    }
+    if climate_event is not None and getattr(climate_event, "allow_tree_gifts", True):
+        create_kwargs["climate_event"] = climate_event
+    donation = TreeProjectDonation.objects.create(**create_kwargs)
     locked.trees_planted = F("trees_planted") + trees
     locked.save(update_fields=["trees_planted", "tree_species"])
     locked.refresh_from_db()
