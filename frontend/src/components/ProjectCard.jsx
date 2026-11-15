@@ -1,6 +1,7 @@
 import { FaMapMarkerAlt, FaUsers, FaShare } from 'react-icons/fa';
 import { useExchangeRate } from '../hooks/useExchangeRate';
 import { projectCoverImage } from '../utils/apiData';
+import { formatSpeciesList, normalizeTreeSpecies } from '../utils/treeSpecies';
 
 const ProjectCard = ({ 
   project, 
@@ -46,6 +47,15 @@ const ProjectCard = ({
         <p className="text-gray-600 mb-3 sm:mb-4 text-xs sm:text-sm line-clamp-2">
           {project.short_description || project.description.substring(0, 80) + '...'}
         </p>
+
+        {normalizeTreeSpecies(project.tree_species).length > 0 ? (
+          <p
+            className="text-xs text-gray-500 mb-3 line-clamp-2"
+            title={formatSpeciesList(project.tree_species)}
+          >
+            Species: {formatSpeciesList(project.tree_species)}
+          </p>
+        ) : null}
         
         <div className="mb-3 sm:mb-4">
           <div className="flex justify-between text-xs sm:text-sm text-gray-600 mb-1">

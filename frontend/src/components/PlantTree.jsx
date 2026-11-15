@@ -16,7 +16,7 @@ import TreeAnalyticsPanel from './TreeAnalyticsPanel';
 import { client } from '../api';
 import { apiUrl } from '../config/env';
 import { unwrapList } from '../utils/apiData';
-import { formatSpeciesList } from '../utils/treeSpecies';
+import { normalizeTreeSpecies } from '../utils/treeSpecies';
 
 const PlantTree = () => {
   const navigate = useNavigate();
@@ -130,16 +130,33 @@ const PlantTree = () => {
     fetchAfricanProjects();
   }, []);
 
-  // Deep-link: /gift/:id?project=&species= opens the matching project
+  // Deep-link: /gift/:id?project=&species= → checkout listing all species
   useEffect(() => {
     if (!giftProjectId || !africanProjects.length) return;
     const project = africanProjects.find(
       (p) => String(p.id) === String(giftProjectId)
     );
     if (!project) return;
+    if (giftUserId) {
+      setSelectedTree({
+        ...project,
+        name: `${project.name} Tree`,
+        description: project.description,
+        price: project.tree_price,
+        co2Absorption: project.co2_absorption_per_tree,
+        tree_species: project.tree_species || [],
+        benefits: [
+          "Environmental impact",
+          "Community benefit",
+          "Verified project",
+        ],
+        plantingLocation: `${project.city}, ${project.country}`,
+      });
+      return;
+    }
     setSelectedProject(project);
     setShowProjectDetails(true);
-  }, [giftProjectId, africanProjects]);
+  }, [giftProjectId, africanProjects, giftUserId]);
 
   const fetchAfricanProjects = async () => {
     try {
@@ -461,6 +478,7 @@ const PlantTree = () => {
                               description: project.description,
                               price: project.tree_price,
                               co2Absorption: project.co2_absorption_per_tree,
+                              tree_species: project.tree_species || [],
                               benefits: ['Environmental impact', 'Community benefit', 'Verified project'],
                               plantingLocation: `${project.city}, ${project.country}`
                           });
@@ -703,9 +721,24 @@ const PlantTree = () => {
                          <span>Price per Tree:</span>
                          <span className="font-semibold">${selectedProject.tree_price.toLocaleString()}</span>
                        </div>
-                        <div className="flex justify-between">
-                          <span>Tree Species:</span>
-                          <span>{formatSpeciesList(selectedProject.tree_species) || 'Various'}</span>
+                        <div>
+                          <span className="block mb-1">Tree species:</span>
+                          {normalizeTreeSpecies(selectedProject.tree_species).length > 0 ? (
+                            <ul className="space-y-1">
+                              {normalizeTreeSpecies(selectedProject.tree_species).map((s) => (
+                                <li key={s.name} className="flex justify-between gap-2">
+                                  <span>{s.name}</span>
+                                  {s.target > 0 ? (
+                                    <span className="text-gray-500">
+                                      {s.target.toLocaleString()} seedlings
+                                    </span>
+                                  ) : null}
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <span>Various</span>
+                          )}
                         </div>
                         <div className="flex justify-between">
                           <span>Project Type:</span>
@@ -737,6 +770,7 @@ const PlantTree = () => {
                         description: selectedProject.description,
                         price: selectedProject.tree_price,
                         co2Absorption: selectedProject.co2_absorption_per_tree,
+                        tree_species: selectedProject.tree_species || [],
                         benefits: ['Environmental impact', 'Community benefit', 'Verified project'],
                         plantingLocation: `${selectedProject.city}, ${selectedProject.country}`
                       });

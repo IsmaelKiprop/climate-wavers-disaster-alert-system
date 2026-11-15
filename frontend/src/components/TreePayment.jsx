@@ -540,62 +540,114 @@ const TreePayment = ({
               />
             </div>
 
-            {/* Tree Species Selection */}
-            {availableSpecies.length > 0 && (
+            {/* All project species — pick any mix */}
+            {availableSpecies.length > 0 ? (
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-3">
-                  Select Tree Species & Quantities
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {giftForUser
+                    ? "Choose species to gift"
+                    : "Choose species & quantities"}
                 </label>
+                <p className="text-xs text-gray-500 mb-3">
+                  This project has {availableSpecies.length} species
+                  {availableSpecies.length > 1
+                    ? " — pick one or combine several."
+                    : "."}
+                  {initialSpecies
+                    ? ` Shared ask starts on ${String(initialSpecies)}; you can change it.`
+                    : ""}
+                </p>
                 <div className="space-y-3">
                   {availableSpecies.map((species, index) => {
-                    const planned = speciesCatalog.find((s) => s.name === species)?.target || 0;
+                    const planned =
+                      speciesCatalog.find((s) => s.name === species)?.target || 0;
+                    const isSuggested =
+                      String(initialSpecies || "")
+                        .trim()
+                        .toLowerCase() === species.toLowerCase();
+                    const qty = selectedSpecies[species] || 0;
                     return (
-                    <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                      <div className="flex-1">
-                        <h4 className="font-medium text-gray-900">{species}</h4>
-                        <p className="text-sm text-gray-600">
-                          ${treeData.price} per tree
-                          {planned > 0 ? ` · ${planned.toLocaleString()} planned` : ""}
-                        </p>
+                      <div
+                        key={`${species}-${index}`}
+                        className={`flex items-center justify-between gap-3 p-3 rounded-lg border ${
+                          qty > 0
+                            ? "border-green-500 bg-green-50"
+                            : isSuggested
+                              ? "border-green-300 bg-green-50/60"
+                              : "border-gray-200 bg-gray-50"
+                        }`}
+                      >
+                        <div className="flex-1 min-w-0">
+                          <h4 className="font-medium text-gray-900 truncate">
+                            {species}
+                            {isSuggested ? (
+                              <span className="ml-2 text-[10px] uppercase tracking-wide text-green-700">
+                                Shared ask
+                              </span>
+                            ) : null}
+                          </h4>
+                          <p className="text-sm text-gray-600">
+                            ${treeData.price} per tree
+                            {planned > 0
+                              ? ` · ${planned.toLocaleString()} seedlings planned`
+                              : ""}
+                          </p>
+                        </div>
+                        <div className="flex items-center space-x-2 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleSpeciesQuantityChange(species, qty - 1)
+                            }
+                            className="w-8 h-8 rounded-full bg-gray-200 hover:bg-gray-300 flex items-center justify-center text-gray-600"
+                            disabled={qty <= 0}
+                            aria-label={`Fewer ${species}`}
+                          >
+                            −
+                          </button>
+                          <input
+                            type="number"
+                            min="0"
+                            value={qty}
+                            onChange={(e) =>
+                              handleSpeciesQuantityChange(species, e.target.value)
+                            }
+                            className="w-16 text-center border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                            aria-label={`${species} quantity`}
+                          />
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleSpeciesQuantityChange(species, qty + 1)
+                            }
+                            className="w-8 h-8 rounded-full bg-green-200 hover:bg-green-300 flex items-center justify-center text-green-600"
+                            aria-label={`More ${species}`}
+                          >
+                            +
+                          </button>
+                        </div>
                       </div>
-                      <div className="flex items-center space-x-2">
-                        <button
-                          type="button"
-                          onClick={() => handleSpeciesQuantityChange(species, (selectedSpecies[species] || 0) - 1)}
-                          className="w-8 h-8 rounded-full bg-gray-200 hover:bg-gray-300 flex items-center justify-center text-gray-600"
-                          disabled={!selectedSpecies[species] || selectedSpecies[species] <= 0}
-                        >
-                          −
-                        </button>
-                        <input
-                          type="number"
-                          min="0"
-                          value={selectedSpecies[species] || 0}
-                          onChange={(e) => handleSpeciesQuantityChange(species, e.target.value)}
-                          className="w-16 text-center border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => handleSpeciesQuantityChange(species, (selectedSpecies[species] || 0) + 1)}
-                          className="w-8 h-8 rounded-full bg-green-200 hover:bg-green-300 flex items-center justify-center text-green-600"
-                        >
-                          +
-                        </button>
-                      </div>
-                    </div>
                     );
                   })}
                 </div>
-                
-                {/* Total Summary */}
+
                 {totalQuantity > 0 && (
                   <div className="mt-4 p-3 bg-green-50 rounded-lg">
                     <div className="flex justify-between items-center">
-                      <span className="font-medium text-green-800">Total Trees Selected:</span>
-                      <span className="font-bold text-green-800">{totalQuantity}</span>
+                      <span className="font-medium text-green-800">
+                        Total trees selected:
+                      </span>
+                      <span className="font-bold text-green-800">
+                        {totalQuantity}
+                      </span>
                     </div>
                   </div>
                 )}
+              </div>
+            ) : (
+              <div className="p-3 border border-amber-200 bg-amber-50 text-sm text-amber-900">
+                This project has no species listed yet. Ask the tree admin to add
+                species (e.g. Rhizophora, Bruguiera) so gifters can choose.
               </div>
             )}
 
