@@ -876,6 +876,19 @@ class TreeProjectCreateSerializer(serializers.ModelSerializer):
             attrs["target_trees"] = species_sum
         if "tree_species" in attrs or self.instance is None:
             attrs["tree_species"] = species
+
+        # Approved projects: Tree Admins cannot change pricing
+        if (
+            self.instance is not None
+            and getattr(self.instance, "is_verified", False)
+            and "tree_price" in attrs
+        ):
+            from .tree_admin import user_can_verify_tree_projects
+
+            request = self.context.get("request")
+            user = getattr(request, "user", None) if request else None
+            if not user_can_verify_tree_projects(user):
+                attrs.pop("tree_price", None)
         return attrs
 
     def to_representation(self, instance):

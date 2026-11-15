@@ -429,6 +429,7 @@ const TreeProjectAdmin = () => {
       const gallery = sanitizeGallery(formData.gallery);
 
       // Writable project fields only (avoid nested/read-only noise from edit hydrate).
+      // tree_price is sent for PUT shape; backend ignores changes on verified projects for Tree Admins.
       const dataToSend = {
         name: formData.name,
         description: formData.description,
@@ -1159,9 +1160,29 @@ Thank you for your understanding! 🌱
                           name="tree_price"
                           value={formData.tree_price}
                           onChange={handleInputChange}
-                          className={fieldClass}
-                          required
+                          className={`${fieldClass} ${
+                            editingProject?.is_verified && !canVerifyProjects
+                              ? "opacity-70 cursor-not-allowed"
+                              : ""
+                          }`}
+                          required={
+                            !(editingProject?.is_verified && !canVerifyProjects)
+                          }
+                          disabled={
+                            Boolean(editingProject?.is_verified) &&
+                            !canVerifyProjects
+                          }
+                          readOnly={
+                            Boolean(editingProject?.is_verified) &&
+                            !canVerifyProjects
+                          }
                         />
+                        {editingProject?.is_verified && !canVerifyProjects ? (
+                          <p className="text-xs text-muted mt-1.5">
+                            Pricing is locked after project approval. Contact
+                            Climate Wavers to change the tree price.
+                          </p>
+                        ) : null}
                       </div>
                       <div>
                         <label className={labelClass}>
