@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { FaTree, FaLeaf, FaSeedling, FaGlobe, FaHeart, FaMapMarkerAlt, FaUsers, FaShare, FaArrowLeft } from 'react-icons/fa';
+import { FaTree, FaLeaf, FaSeedling, FaGlobe, FaHeart, FaMapMarkerAlt, FaUsers, FaShare, FaArrowLeft, FaExpand, FaChevronLeft, FaChevronRight } from 'react-icons/fa';
 import { endpoints } from '../utils/endpoints';
 import SocialShare from './SocialShare';
 import ProjectSEO from './ProjectSEO';
@@ -15,6 +15,7 @@ const PublicProjectView = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showSocialShare, setShowSocialShare] = useState(false);
+  const [galleryIndex, setGalleryIndex] = useState(null);
   const hasFetched = useRef(false);
   
   // Support /p/:projectId and legacy /project?project=
@@ -215,27 +216,41 @@ const PublicProjectView = () => {
                 {/* Gallery */}
                 {project.gallery_urls && project.gallery_urls.length > 0 && (
                   <div className="mb-8">
-                    <h3 className="text-xl font-semibold text-gray-900 mb-4">Project Gallery</h3>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                    <div className="flex items-center justify-between gap-2 mb-4">
+                      <h3 className="text-xl font-semibold text-gray-900">Project Gallery</h3>
+                      <p className="text-xs text-gray-500">Tap to enlarge</p>
+                    </div>
+                    <div className="flex sm:grid sm:grid-cols-3 gap-3 overflow-x-auto pb-1 snap-x snap-mandatory -mx-1 px-1">
                       {project.gallery_urls.map((mediaUrl, index) => {
-                        const isVideo = mediaUrl.toLowerCase().match(/\.(mp4|avi|mov|wmv|flv|webm)$/);
+                        const isVideo = /\.(mp4|avi|mov|wmv|flv|webm)(\?|$)/i.test(mediaUrl);
                         return (
-                          <div key={index} className="relative group">
+                          <button
+                            key={index}
+                            type="button"
+                            onClick={() => setGalleryIndex(index)}
+                            className="relative group shrink-0 w-[70%] sm:w-auto snap-center overflow-hidden rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-green-600"
+                            aria-label={`Open gallery item ${index + 1}`}
+                          >
                             {isVideo ? (
                               <video
                                 src={mediaUrl}
-                                className="w-full h-32 object-cover rounded-lg shadow-md"
-                                controls
+                                className="w-full h-40 sm:h-32 object-cover pointer-events-none"
+                                muted
+                                playsInline
                                 preload="metadata"
                               />
                             ) : (
                               <img
                                 src={mediaUrl}
                                 alt={`Project gallery ${index + 1}`}
-                                className="w-full h-32 object-cover rounded-lg shadow-md"
+                                className="w-full h-40 sm:h-32 object-cover"
+                                loading="lazy"
                               />
                             )}
-                          </div>
+                            <span className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors inline-flex items-center justify-center">
+                              <FaExpand className="text-white opacity-0 group-hover:opacity-100" />
+                            </span>
+                          </button>
                         );
                       })}
                     </div>
@@ -345,6 +360,78 @@ const PublicProjectView = () => {
           </div>
         </div>
       </div>
+
+      {galleryIndex != null &&
+      project?.gallery_urls?.[galleryIndex] ? (
+        <div
+          className="fixed inset-0 z-[60] flex flex-col bg-black/92"
+          onClick={() => setGalleryIndex(null)}
+          role="presentation"
+        >
+          <div className="flex items-center justify-between px-4 py-3 text-white">
+            <p className="text-sm tabular-nums">
+              {galleryIndex + 1} / {project.gallery_urls.length}
+            </p>
+            <button
+              type="button"
+              className="h-10 w-10"
+              onClick={() => setGalleryIndex(null)}
+              aria-label="Close"
+            >
+              ✕
+            </button>
+          </div>
+          <div
+            className="flex-1 flex items-center justify-center px-3 sm:px-12 pb-6 relative"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {project.gallery_urls.length > 1 ? (
+              <button
+                type="button"
+                className="absolute left-2 sm:left-4 h-11 w-11 bg-white/10 text-white"
+                onClick={() =>
+                  setGalleryIndex(
+                    (i) =>
+                      (i - 1 + project.gallery_urls.length) %
+                      project.gallery_urls.length
+                  )
+                }
+                aria-label="Previous"
+              >
+                <FaChevronLeft className="mx-auto" />
+              </button>
+            ) : null}
+            {/\.(mp4|avi|mov|wmv|flv|webm)(\?|$)/i.test(
+              project.gallery_urls[galleryIndex]
+            ) ? (
+              <video
+                src={project.gallery_urls[galleryIndex]}
+                className="max-h-[78dvh] max-w-full"
+                controls
+                autoPlay
+              />
+            ) : (
+              <img
+                src={project.gallery_urls[galleryIndex]}
+                alt=""
+                className="max-h-[78dvh] max-w-full object-contain"
+              />
+            )}
+            {project.gallery_urls.length > 1 ? (
+              <button
+                type="button"
+                className="absolute right-2 sm:right-4 h-11 w-11 bg-white/10 text-white"
+                onClick={() =>
+                  setGalleryIndex((i) => (i + 1) % project.gallery_urls.length)
+                }
+                aria-label="Next"
+              >
+                <FaChevronRight className="mx-auto" />
+              </button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
 
       {/* Social Share Modal */}
       {showSocialShare && (

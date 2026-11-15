@@ -7,7 +7,7 @@ import SocialShare from './SocialShare';
 import ProjectSEO from './ProjectSEO';
 import WaversPointsCard from './WaversPointsCard';
 import GiftRecipientPicker from './GiftRecipientPicker';
-import { FaTree, FaLeaf, FaSeedling, FaGlobe, FaHeart, FaMapMarkerAlt, FaUsers, FaFilter, FaShare } from 'react-icons/fa';
+import { FaTree, FaLeaf, FaSeedling, FaGlobe, FaHeart, FaMapMarkerAlt, FaUsers, FaFilter, FaShare, FaExpand, FaChevronLeft, FaChevronRight } from 'react-icons/fa';
 import { endpoints } from '../utils/endpoints';
 import { getAuthToken, getUser } from '../utils/factory';
 import { useExchangeRate } from '../hooks/useExchangeRate';
@@ -45,6 +45,7 @@ const PlantTree = () => {
   const [selectedProject, setSelectedProject] = useState(null);
   const [showProjectDetails, setShowProjectDetails] = useState(false);
   const [showSocialShare, setShowSocialShare] = useState(false);
+  const [galleryIndex, setGalleryIndex] = useState(null);
   const [filters, setFilters] = useState({
     country: '',
     project_type: '',
@@ -95,6 +96,24 @@ const PlantTree = () => {
       alive = false;
     };
   }, [climateEventId]);
+
+  useEffect(() => {
+    if (galleryIndex == null || !selectedProject) return undefined;
+    const gallery = Array.isArray(selectedProject.gallery_urls)
+      ? selectedProject.gallery_urls.filter(Boolean)
+      : [];
+    const onKey = (e) => {
+      if (e.key === "Escape") setGalleryIndex(null);
+      if (e.key === "ArrowLeft" && gallery.length) {
+        setGalleryIndex((i) => (i - 1 + gallery.length) % gallery.length);
+      }
+      if (e.key === "ArrowRight" && gallery.length) {
+        setGalleryIndex((i) => (i + 1) % gallery.length);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [galleryIndex, selectedProject]);
 
   // Load user's tree data from database
   useEffect(() => {
@@ -552,206 +571,299 @@ const PlantTree = () => {
         )}
 
         {/* Project Details Modal */}
-        {showProjectDetails && selectedProject && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4" data-project-modal>
-            <div className="bg-white rounded-lg max-w-4xl w-full max-h-[95vh] sm:max-h-[90vh] overflow-y-auto">
-              <div className="p-4 sm:p-6">
-                <div className="flex items-center justify-between mb-4 sm:mb-6">
-                  <h2 className="text-lg sm:text-xl md:text-2xl font-bold text-gray-900 pr-4">
-                    {selectedProject.name}
-                  </h2>
-                  <div className="flex items-center space-x-2">
-                    {/* Share Button */}
-                    <button
-                      onClick={() => setShowSocialShare(true)}
-                      className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
-                    >
-                      <FaShare className="w-4 h-4" />
-                      <span className="hidden sm:inline">Share Project</span>
-                    </button>
-                    <button
-                      onClick={() => {
-                        setShowProjectDetails(false);
-                        setSelectedProject(null);
-                      }}
-                      className="text-gray-400 hover:text-gray-600 text-xl sm:text-2xl flex-shrink-0"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                </div>
+        {showProjectDetails && selectedProject && (() => {
+          const gallery = Array.isArray(selectedProject.gallery_urls)
+            ? selectedProject.gallery_urls.filter(Boolean)
+            : [];
+          const isVideoUrl = (url) =>
+            /\.(mp4|avi|mov|wmv|flv|webm)(\?|$)/i.test(String(url || ""));
+          const closeDetails = () => {
+            setGalleryIndex(null);
+            setShowProjectDetails(false);
+            setSelectedProject(null);
+          };
+          const openLightbox = (index) => setGalleryIndex(index);
+          const stepLightbox = (delta) => {
+            if (!gallery.length) return;
+            setGalleryIndex((prev) => {
+              const next = ((prev ?? 0) + delta + gallery.length) % gallery.length;
+              return next;
+            });
+          };
+          const progressPct = Number(selectedProject.progress_percentage) || 0;
+          const fundingPct = Number(selectedProject.funding_percentage) || 0;
 
-                {/* Gallery Media Section */}
-                {(selectedProject.gallery_urls && selectedProject.gallery_urls.length > 0) && (
+          return (
+          <div
+            className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
+            style={{ background: "rgba(0,0,0,0.72)" }}
+            data-project-modal
+            onClick={closeDetails}
+            role="presentation"
+          >
+            <div
+              className="w-full sm:max-w-4xl max-h-[92dvh] sm:max-h-[90vh] overflow-y-auto border border-border bg-surface sm:mx-4"
+              style={{
+                borderTopLeftRadius: 12,
+                borderTopRightRadius: 12,
+              }}
+              onClick={(e) => e.stopPropagation()}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="project-details-title"
+            >
+              <div className="sticky top-0 z-10 border-b border-border bg-surface px-4 sm:px-6 py-3 sm:py-4 flex items-start sm:items-center justify-between gap-3">
+                <h2
+                  id="project-details-title"
+                  className="text-lg sm:text-xl md:text-2xl font-semibold text-foreground leading-snug min-w-0 pr-1"
+                >
+                  {selectedProject.name}
+                </h2>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setShowSocialShare(true)}
+                    className="h-10 px-3 sm:px-4 bg-primary text-primary-foreground text-sm font-medium inline-flex items-center gap-2"
+                  >
+                    <FaShare className="w-3.5 h-3.5" />
+                    <span className="hidden xs:inline sm:inline">Share</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={closeDetails}
+                    className="h-10 w-10 inline-flex items-center justify-center text-muted hover:text-foreground border border-border"
+                    aria-label="Close project details"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+
+              <div className="p-4 sm:p-6">
+                {gallery.length > 0 ? (
                   <div className="mb-6 sm:mb-8">
-                    <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-3 sm:mb-4">Project Gallery</h3>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-4">
-                      {selectedProject.gallery_urls.map((mediaUrl, index) => {
-                        const isVideo = mediaUrl.toLowerCase().match(/\.(mp4|avi|mov|wmv|flv|webm)$/);
+                    <div className="flex items-center justify-between gap-2 mb-3">
+                      <h3 className="text-sm sm:text-base font-semibold text-foreground">
+                        Project Gallery
+                      </h3>
+                      <p className="text-[11px] text-muted">
+                        Tap a photo to enlarge · {gallery.length}
+                      </p>
+                    </div>
+                    <div className="flex sm:grid sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-3 overflow-x-auto pb-1 -mx-4 px-4 sm:mx-0 sm:px-0 snap-x snap-mandatory">
+                      {gallery.map((mediaUrl, index) => {
+                        const isVideo = isVideoUrl(mediaUrl);
                         return (
-                          <div key={index} className="relative group">
+                          <button
+                            key={`${mediaUrl}-${index}`}
+                            type="button"
+                            onClick={() => openLightbox(index)}
+                            className="relative group shrink-0 w-[72%] max-w-[280px] sm:w-auto sm:max-w-none snap-center border border-border overflow-hidden bg-background focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                            aria-label={`Open gallery item ${index + 1}`}
+                          >
                             {isVideo ? (
                               <video
                                 src={mediaUrl}
-                                className="w-full h-24 sm:h-32 object-cover rounded-lg shadow-md hover:shadow-lg transition-shadow"
-                                controls
+                                className="w-full h-40 sm:h-32 object-cover pointer-events-none"
+                                muted
+                                playsInline
                                 preload="metadata"
                               />
                             ) : (
                               <img
                                 src={mediaUrl}
-                                alt={`Project gallery ${index + 1}`}
-                                className="w-full h-24 sm:h-32 object-cover rounded-lg shadow-md hover:shadow-lg transition-shadow"
-                                onError={(e) => {
-                                  e.target.style.display = 'none';
-                                  e.target.nextSibling.style.display = 'flex';
-                                }}
+                                alt={`${selectedProject.name} gallery ${index + 1}`}
+                                className="w-full h-40 sm:h-32 object-cover"
+                                loading="lazy"
                               />
                             )}
-                            <div className="hidden absolute inset-0 bg-black bg-opacity-50 rounded-lg items-center justify-center">
-                              <span className="text-white text-xs sm:text-sm font-semibold">
-                                {isVideo ? '📹 Video' : '🖼️ Image'}
+                            <span className="absolute inset-0 bg-black/0 group-hover:bg-black/35 transition-colors inline-flex items-center justify-center">
+                              <FaExpand className="text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow" />
+                            </span>
+                            {isVideo ? (
+                              <span className="absolute bottom-2 left-2 text-[10px] uppercase tracking-wide px-1.5 py-0.5 bg-black/70 text-white">
+                                Video
                               </span>
-                            </div>
-                          </div>
+                            ) : null}
+                          </button>
                         );
                       })}
                     </div>
                   </div>
-                )}
+                ) : null}
 
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8">
-                  {/* Project Info */}
-                  <div>
-                    <div className="mb-4 sm:mb-6">
-                      <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-2">Project Description</h3>
-                      <p className="text-sm sm:text-base text-gray-700">{selectedProject.description}</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-8">
+                  <div className="space-y-5">
+                    <div>
+                      <h3 className="text-sm sm:text-base font-semibold text-foreground mb-2">
+                        Project Description
+                      </h3>
+                      <p className="text-sm text-muted leading-relaxed whitespace-pre-wrap">
+                        {selectedProject.description}
+                      </p>
                     </div>
 
-                    <div className="mb-4 sm:mb-6">
-                      <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-2">Organization</h3>
-                      <div className="flex items-center space-x-3 sm:space-x-4">
-                        {selectedProject.organization_logo_url && (
-                          <img 
-                            src={selectedProject.organization_logo_url} 
-                            alt="Organization Logo" 
-                            className="w-10 h-10 sm:w-12 sm:h-12 rounded-full object-cover flex-shrink-0"
+                    <div>
+                      <h3 className="text-sm sm:text-base font-semibold text-foreground mb-2">
+                        Organization
+                      </h3>
+                      <div className="flex items-center gap-3">
+                        {selectedProject.organization_logo_url ? (
+                          <img
+                            src={selectedProject.organization_logo_url}
+                            alt=""
+                            className="w-11 h-11 object-cover shrink-0 border border-border"
                           />
-                        )}
+                        ) : null}
                         <div className="min-w-0 flex-1">
-                          <p className="font-semibold text-gray-900 text-sm sm:text-base truncate">{selectedProject.organization_name}</p>
-                          {selectedProject.organization_website && (
-                            <a 
-                              href={selectedProject.organization_website} 
-                              target="_blank" 
+                          <p className="font-medium text-foreground text-sm truncate">
+                            {selectedProject.organization_name}
+                          </p>
+                          {selectedProject.organization_website ? (
+                            <a
+                              href={selectedProject.organization_website}
+                              target="_blank"
                               rel="noopener noreferrer"
-                              className="text-blue-600 hover:text-blue-800 text-xs sm:text-sm break-all"
+                              className="text-primary text-xs break-all hover:underline"
                             >
-                              Visit Website
+                              Visit website
                             </a>
-                          )}
+                          ) : null}
                         </div>
                       </div>
                     </div>
 
-                    <div className="mb-6">
-                      <h3 className="text-lg font-semibold text-gray-900 mb-2">Location</h3>
-                      <div className="flex items-center text-gray-700">
-                        <FaMapMarkerAlt className="mr-2 text-green-600" />
-                        <span>{selectedProject.address || `${selectedProject.city}, ${selectedProject.region}, ${selectedProject.country}`}</span>
+                    <div>
+                      <h3 className="text-sm sm:text-base font-semibold text-foreground mb-2">
+                        Location
+                      </h3>
+                      <div className="flex items-start gap-2 text-sm text-muted">
+                        <FaMapMarkerAlt className="mt-0.5 text-primary shrink-0" />
+                        <span>
+                          {selectedProject.address ||
+                            `${selectedProject.city}, ${selectedProject.region}, ${selectedProject.country}`}
+                        </span>
                       </div>
                     </div>
 
-                    <div className="mb-6">
-                      <h3 className="text-lg font-semibold text-gray-900 mb-2">Environmental Impact</h3>
-                      <div className="space-y-2 text-sm text-gray-700">
-                        <div className="flex items-center">
-                          <FaLeaf className="mr-2 text-green-600" />
-                          <span>CO₂ Absorption: {selectedProject.co2_absorption_per_tree}kg per tree per year</span>
+                    <div>
+                      <h3 className="text-sm sm:text-base font-semibold text-foreground mb-2">
+                        Environmental impact
+                      </h3>
+                      <div className="space-y-2 text-sm text-muted">
+                        <div className="flex items-center gap-2">
+                          <FaLeaf className="text-primary shrink-0" />
+                          <span>
+                            CO₂ absorption: {selectedProject.co2_absorption_per_tree}kg
+                            per tree per year
+                          </span>
                         </div>
-                        {selectedProject.biodiversity_impact && (
-                          <p><strong>Biodiversity:</strong> {selectedProject.biodiversity_impact}</p>
-                        )}
-                        {selectedProject.soil_improvement && (
-                          <p><strong>Soil Improvement:</strong> {selectedProject.soil_improvement}</p>
-                        )}
-                        {selectedProject.water_conservation && (
-                          <p><strong>Water Conservation:</strong> {selectedProject.water_conservation}</p>
-                        )}
+                        {selectedProject.biodiversity_impact ? (
+                          <p>
+                            <span className="text-foreground font-medium">Biodiversity: </span>
+                            {selectedProject.biodiversity_impact}
+                          </p>
+                        ) : null}
+                        {selectedProject.soil_improvement ? (
+                          <p>
+                            <span className="text-foreground font-medium">Soil: </span>
+                            {selectedProject.soil_improvement}
+                          </p>
+                        ) : null}
+                        {selectedProject.water_conservation ? (
+                          <p>
+                            <span className="text-foreground font-medium">Water: </span>
+                            {selectedProject.water_conservation}
+                          </p>
+                        ) : null}
                       </div>
                     </div>
                   </div>
 
-                  {/* Project Stats */}
-                  <div>
-                    <div className="bg-green-50 rounded-lg p-6 mb-6">
-                      <h3 className="text-lg font-semibold text-gray-900 mb-4">Project Progress</h3>
+                  <div className="space-y-4">
+                    <div className="border border-border bg-background p-4 sm:p-5">
+                      <h3 className="text-sm sm:text-base font-semibold text-foreground mb-4">
+                        Project Progress
+                      </h3>
                       <div className="space-y-4">
                         <div>
-                          <div className="flex justify-between text-sm text-gray-600 mb-1">
-                            <span>Trees Planted</span>
-                            <span>{selectedProject.trees_planted} / {selectedProject.target_trees}</span>
+                          <div className="flex justify-between text-xs sm:text-sm text-muted mb-1.5">
+                            <span>Trees planted</span>
+                            <span className="tabular-nums text-foreground">
+                              {selectedProject.trees_planted} / {selectedProject.target_trees}
+                            </span>
                           </div>
-                          <div className="w-full bg-gray-200 rounded-full h-3">
+                          <div className="w-full h-2 bg-[var(--cw-overlay-soft)] border border-border overflow-hidden">
                             <div
-                              className="bg-green-600 h-3 rounded-full"
-                              style={{ width: `${selectedProject.progress_percentage}%` }}
-                            ></div>
+                              className="h-full bg-primary"
+                              style={{ width: `${Math.min(100, progressPct)}%` }}
+                            />
                           </div>
-                          <p className="text-sm text-gray-600 mt-1">
-                            {selectedProject.progress_percentage.toFixed(1)}% Complete
+                          <p className="text-xs text-muted mt-1.5 tabular-nums">
+                            {progressPct.toFixed(1)}% complete
                           </p>
                         </div>
 
-                        {selectedProject.funding_goal && (
+                        {selectedProject.funding_goal ? (
                           <div>
-                       <div className="flex justify-between text-sm text-gray-600 mb-1">
-                         <span>Funding</span>
-                         <span>${selectedProject.funds_raised.toLocaleString()} / ${selectedProject.funding_goal.toLocaleString()}</span>
-                       </div>
-                            <div className="w-full bg-gray-200 rounded-full h-3">
-                              <div
-                                className="bg-blue-600 h-3 rounded-full"
-                                style={{ width: `${selectedProject.funding_percentage}%` }}
-                              ></div>
+                            <div className="flex justify-between text-xs sm:text-sm text-muted mb-1.5">
+                              <span>Funding</span>
+                              <span className="tabular-nums text-foreground">
+                                ${Number(selectedProject.funds_raised || 0).toLocaleString()} / $
+                                {Number(selectedProject.funding_goal).toLocaleString()}
+                              </span>
                             </div>
-                            <p className="text-sm text-gray-600 mt-1">
-                              {selectedProject.funding_percentage.toFixed(1)}% Funded
+                            <div className="w-full h-2 bg-[var(--cw-overlay-soft)] border border-border overflow-hidden">
+                              <div
+                                className="h-full bg-sky-600"
+                                style={{ width: `${Math.min(100, fundingPct)}%` }}
+                              />
+                            </div>
+                            <p className="text-xs text-muted mt-1.5 tabular-nums">
+                              {fundingPct.toFixed(1)}% funded
                             </p>
                           </div>
-                        )}
+                        ) : null}
                       </div>
                     </div>
 
-                    <div className="bg-blue-50 rounded-lg p-6 mb-6">
-                      <h3 className="text-lg font-semibold text-gray-900 mb-4">Project Timeline</h3>
-                      <div className="space-y-2 text-sm text-gray-700">
-                        <div className="flex justify-between">
-                          <span>Start Date:</span>
-                          <span>{new Date(selectedProject.start_date).toLocaleDateString()}</span>
+                    <div className="border border-border bg-background p-4 sm:p-5">
+                      <h3 className="text-sm sm:text-base font-semibold text-foreground mb-3">
+                        Timeline
+                      </h3>
+                      <div className="space-y-2 text-sm text-muted">
+                        <div className="flex justify-between gap-3">
+                          <span>Start</span>
+                          <span className="text-foreground tabular-nums">
+                            {selectedProject.start_date
+                              ? new Date(selectedProject.start_date).toLocaleDateString()
+                              : "—"}
+                          </span>
                         </div>
-                        <div className="flex justify-between">
-                          <span>Expected Completion:</span>
-                          <span>{new Date(selectedProject.expected_completion).toLocaleDateString()}</span>
+                        <div className="flex justify-between gap-3">
+                          <span>Expected completion</span>
+                          <span className="text-foreground tabular-nums">
+                            {selectedProject.expected_completion
+                              ? new Date(selectedProject.expected_completion).toLocaleDateString()
+                              : "—"}
+                          </span>
                         </div>
-                        {selectedProject.actual_completion && (
-                          <div className="flex justify-between">
-                            <span>Actual Completion:</span>
-                            <span>{new Date(selectedProject.actual_completion).toLocaleDateString()}</span>
-                          </div>
-                        )}
                       </div>
                     </div>
 
-                    <div className="bg-gray-50 rounded-lg p-6">
-                      <h3 className="text-lg font-semibold text-gray-900 mb-4">Tree Information</h3>
-                      <div className="space-y-2 text-sm text-gray-700">
-                       <div className="flex justify-between">
-                         <span>Price per Tree:</span>
-                         <span className="font-semibold">${selectedProject.tree_price.toLocaleString()}</span>
-                       </div>
+                    <div className="border border-border bg-background p-4 sm:p-5">
+                      <h3 className="text-sm sm:text-base font-semibold text-foreground mb-3">
+                        Tree information
+                      </h3>
+                      <div className="space-y-2 text-sm text-muted">
+                        <div className="flex justify-between gap-3">
+                          <span>Price per tree</span>
+                          <span className="font-medium text-foreground tabular-nums">
+                            ${Number(selectedProject.tree_price || 0).toLocaleString()}
+                          </span>
+                        </div>
                         <div>
-                          <span className="block mb-1">Tree species:</span>
+                          <span className="block mb-1 text-foreground">Species</span>
                           {normalizeTreeSpecies(selectedProject.tree_species).length > 0 ? (
                             <ul className="space-y-1">
                               {normalizeTreeSpecies(selectedProject.tree_species).map((s) => {
@@ -762,18 +874,16 @@ const PlantTree = () => {
                                       ? Math.max(0, s.target - (s.planted || 0))
                                       : null;
                                 return (
-                                <li key={s.name} className="flex justify-between gap-2">
-                                  <span>{s.name}</span>
-                                  {s.target > 0 ? (
-                                    <span className="text-gray-500">
-                                      {(s.planted || 0).toLocaleString()}/
-                                      {s.target.toLocaleString()}
-                                      {rem != null
-                                        ? ` · ${rem.toLocaleString()} left`
-                                        : ""}
-                                    </span>
-                                  ) : null}
-                                </li>
+                                  <li key={s.name} className="flex justify-between gap-2">
+                                    <span>{s.name}</span>
+                                    {s.target > 0 ? (
+                                      <span className="tabular-nums shrink-0">
+                                        {(s.planted || 0).toLocaleString()}/
+                                        {s.target.toLocaleString()}
+                                        {rem != null ? ` · ${rem.toLocaleString()} left` : ""}
+                                      </span>
+                                    ) : null}
+                                  </li>
                                 );
                               })}
                             </ul>
@@ -781,30 +891,31 @@ const PlantTree = () => {
                             <span>Various</span>
                           )}
                         </div>
-                        <div className="flex justify-between">
-                          <span>Project Type:</span>
-                          <span className="capitalize">{selectedProject.project_type.replace('_', ' ')}</span>
-                        </div>
+                        {selectedProject.project_type ? (
+                          <div className="flex justify-between gap-3">
+                            <span>Type</span>
+                            <span className="capitalize text-foreground">
+                              {String(selectedProject.project_type).replace(/_/g, " ")}
+                            </span>
+                          </div>
+                        ) : null}
                       </div>
                     </div>
                   </div>
                 </div>
 
-                {/* Action Buttons */}
-                <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 mt-6 sm:mt-8 pt-4 sm:pt-6 border-t">
+                <div className="sticky bottom-0 -mx-4 sm:-mx-6 mt-6 sm:mt-8 px-4 sm:px-6 py-3 sm:py-4 border-t border-border bg-surface flex flex-col-reverse sm:flex-row gap-2 sm:gap-3">
                   <button
-                    onClick={() => {
-                      setShowProjectDetails(false);
-                      setSelectedProject(null);
-                    }}
-                    className="flex-1 bg-gray-200 text-gray-800 py-2 sm:py-3 px-4 rounded-md hover:bg-gray-300 transition-colors font-semibold text-sm sm:text-base"
+                    type="button"
+                    onClick={closeDetails}
+                    className="flex-1 h-11 border border-border text-foreground text-sm font-medium hover:bg-[var(--cw-overlay-soft)]"
                   >
                     Close
                   </button>
                   <button
+                    type="button"
                     onClick={() => {
-                      setShowProjectDetails(false);
-                      setSelectedProject(null);
+                      closeDetails();
                       handleTreePurchase({
                         ...selectedProject,
                         name: `${selectedProject.name} Tree`,
@@ -812,19 +923,85 @@ const PlantTree = () => {
                         price: selectedProject.tree_price,
                         co2Absorption: selectedProject.co2_absorption_per_tree,
                         tree_species: selectedProject.tree_species || [],
-                        benefits: ['Environmental impact', 'Community benefit', 'Verified project'],
-                        plantingLocation: `${selectedProject.city}, ${selectedProject.country}`
+                        benefits: [
+                          "Environmental impact",
+                          "Community benefit",
+                          "Verified project",
+                        ],
+                        plantingLocation: `${selectedProject.city}, ${selectedProject.country}`,
                       });
                     }}
-                    className="flex-1 bg-green-600 text-white py-2 sm:py-3 px-4 rounded-md hover:bg-green-700 transition-colors font-semibold text-sm sm:text-base"
+                    className="flex-1 h-11 bg-primary text-primary-foreground text-sm font-semibold"
                   >
-                    Plant Tree in This Project
+                    Plant tree in this project
                   </button>
                 </div>
               </div>
             </div>
+
+            {galleryIndex != null && gallery[galleryIndex] ? (
+              <div
+                className="fixed inset-0 z-[60] flex flex-col bg-black/92"
+                onClick={() => setGalleryIndex(null)}
+                role="presentation"
+              >
+                <div className="flex items-center justify-between px-3 sm:px-4 py-3 text-white">
+                  <p className="text-sm tabular-nums">
+                    {galleryIndex + 1} / {gallery.length}
+                  </p>
+                  <button
+                    type="button"
+                    className="h-10 w-10 inline-flex items-center justify-center text-lg"
+                    onClick={() => setGalleryIndex(null)}
+                    aria-label="Close gallery"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <div
+                  className="flex-1 flex items-center justify-center px-2 sm:px-12 pb-6 relative min-h-0"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {gallery.length > 1 ? (
+                    <button
+                      type="button"
+                      className="absolute left-2 sm:left-4 h-11 w-11 inline-flex items-center justify-center bg-white/10 text-white hover:bg-white/20"
+                      onClick={() => stepLightbox(-1)}
+                      aria-label="Previous"
+                    >
+                      <FaChevronLeft />
+                    </button>
+                  ) : null}
+                  {isVideoUrl(gallery[galleryIndex]) ? (
+                    <video
+                      src={gallery[galleryIndex]}
+                      className="max-h-[78dvh] max-w-full object-contain"
+                      controls
+                      autoPlay
+                    />
+                  ) : (
+                    <img
+                      src={gallery[galleryIndex]}
+                      alt={`${selectedProject.name} ${galleryIndex + 1}`}
+                      className="max-h-[78dvh] max-w-full object-contain"
+                    />
+                  )}
+                  {gallery.length > 1 ? (
+                    <button
+                      type="button"
+                      className="absolute right-2 sm:right-4 h-11 w-11 inline-flex items-center justify-center bg-white/10 text-white hover:bg-white/20"
+                      onClick={() => stepLightbox(1)}
+                      aria-label="Next"
+                    >
+                      <FaChevronRight />
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
           </div>
-        )}
+          );
+        })()}
 
         {/* Social Share Modal */}
         {showSocialShare && selectedProject && (
