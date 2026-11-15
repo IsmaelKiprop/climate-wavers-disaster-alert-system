@@ -2,19 +2,42 @@ from datetime import date, timedelta
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Group
 from django.core.management.base import BaseCommand
 
 from core.models import TreeProject
 
 User = get_user_model()
 
+OFFICIAL_CONTACT = "hello@flowops.africa"
+SEED_APPLIED_GROUP = "cw_tree_seed_applied"
+
 
 class Command(BaseCommand):
-    help = "Seed official Climate Wavers / FlowOps Africa tree campaigns"
+    help = (
+        "Seed official Climate Wavers / FlowOps Africa tree campaigns. "
+        "Safe by default: does not recreate campaigns you deleted, "
+        "and does not overwrite existing projects on each deploy."
+    )
+
+    def add_arguments(self, parser):
+        parser.add_argument(
+            "--recreate-missing",
+            action="store_true",
+            help="Recreate seed campaigns that were deleted (off by default).",
+        )
+        parser.add_argument(
+            "--update-existing",
+            action="store_true",
+            help="Overwrite fields on seed campaigns that still exist.",
+        )
 
     def handle(self, *args, **options):
+        recreate_missing = bool(options["recreate_missing"])
+        update_existing = bool(options["update_existing"])
+
         org_user, created = User.objects.get_or_create(
-            email="hello@flowops.africa",
+            email=OFFICIAL_CONTACT,
             defaults={
                 "username": "climatewavers",
                 "first_name": "Ismael",
@@ -69,7 +92,7 @@ class Command(BaseCommand):
                 "funds_raised": Decimal("0.00"),
                 "funding_goal": Decimal("12500.00"),
                 "contact_person": "Ismael Kiprop",
-                "contact_email": "hello@flowops.africa",
+                "contact_email": OFFICIAL_CONTACT,
                 "status": "active",
                 "is_verified": True,
             },
@@ -108,24 +131,61 @@ class Command(BaseCommand):
                 "funds_raised": Decimal("0.00"),
                 "funding_goal": Decimal("4800.00"),
                 "contact_person": "Ismael Kiprop",
-                "contact_email": "hello@flowops.africa",
+                "contact_email": OFFICIAL_CONTACT,
                 "status": "active",
                 "is_verified": True,
             },
         ]
 
-        for project_data in campaigns:
-            project, created_project = TreeProject.objects.get_or_create(
-                name=project_data["name"],
-                defaults={**project_data, "organization": org_user},
-            )
-            if created_project:
-                self.stdout.write(self.style.SUCCESS(f"Created campaign: {project.name}"))
-            else:
-                for key, value in project_data.items():
-                    setattr(project, key, value)
-                project.organization = org_user
-                project.save()
-                self.stdout.write(self.style.SUCCESS(f"Updated campaign: {project.name}"))
+        seed_group, _ = Group.objects.get_or_create(name=SEED_APPLIED_GROUP)
+        seed_already_applied = seed_group.user_set.filter(pk=org_user.pk).exists()
 
-        self.stdout.write(self.style.SUCCESS("Official tree campaigns are ready."))
+        # Snapshot before this run: if seed ran before (or org already has
+        # projects), missing seed names were intentionally deleted.
+        already_managed = (
+            seed_already_applied
+            or TreeProject.objects.filter(organization=org_user).exists()
+            or TreeProject.objects.filter(contact_email__iexact=OFFICIAL_CONTACT).exists()
+        )
+
+        created_n = 0
+        updated_n = 0
+        skipped_n = 0
+
+        for project_data in campaigns:
+            existing = TreeProject.objects.filter(name=project_data["name"]).first()
+            if existing:
+                if update_existing:
+                    for key, value in project_data.items():
+                        setattr(existing, key, value)
+                    existing.organization = org_user
+                    existing.save()
+                    updated_n += 1
+                    self.stdout.write(self.style.SUCCESS(f"Updated campaign: {existing.name}"))
+                else:
+                    skipped_n += 1
+                    self.stdout.write(f"Keep existing campaign: {existing.name}")
+                continue
+
+            if already_managed and not recreate_missing:
+                skipped_n += 1
+                self.stdout.write(
+                    self.style.WARNING(
+                        f"Skip recreating deleted campaign: {project_data['name']} "
+                        "(pass --recreate-missing to force)"
+                    )
+                )
+                continue
+
+            TreeProject.objects.create(**project_data, organization=org_user)
+            created_n += 1
+            self.stdout.write(self.style.SUCCESS(f"Created campaign: {project_data['name']}"))
+
+        if created_n or already_managed or seed_already_applied:
+            org_user.groups.add(seed_group)
+
+        self.stdout.write(
+            self.style.SUCCESS(
+                f"Tree seed done — created={created_n}, updated={updated_n}, skipped={skipped_n}."
+            )
+        )
