@@ -12,6 +12,14 @@ const defaultStartsLocal = () => {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 };
 
+const toLocalInput = (value) => {
+  if (!value) return defaultStartsLocal();
+  const d = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(d.getTime())) return defaultStartsLocal();
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+
 const ScheduleClimateEventModal = ({
   open,
   onClose,
@@ -23,11 +31,12 @@ const ScheduleClimateEventModal = ({
   treeAdminOrgId = null,
   defaultTitle = "",
   defaultDescription = "",
+  defaultStartsAt = null,
   onCreated,
 }) => {
   const [title, setTitle] = useState(defaultTitle);
   const [description, setDescription] = useState(defaultDescription);
-  const [startsAt, setStartsAt] = useState(defaultStartsLocal);
+  const [startsAt, setStartsAt] = useState(() => toLocalInput(defaultStartsAt));
   const [visibility, setVisibility] = useState(
     mode === "project" ? "public" : mode === "disaster" ? "org" : "invitees"
   );
@@ -37,8 +46,8 @@ const ScheduleClimateEventModal = ({
     if (!open) return;
     setTitle(defaultTitle || "");
     setDescription(defaultDescription || "");
-    setStartsAt(defaultStartsLocal());
-  }, [open, defaultTitle, defaultDescription]);
+    setStartsAt(toLocalInput(defaultStartsAt));
+  }, [open, defaultTitle, defaultDescription, defaultStartsAt]);
 
   const heading = useMemo(() => {
     if (mode === "disaster") return "Schedule disaster briefing";

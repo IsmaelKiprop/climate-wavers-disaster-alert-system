@@ -1,10 +1,24 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
+  addMonths,
+  eachDayOfInterval,
+  endOfMonth,
+  endOfWeek,
+  format,
+  isSameDay,
+  isSameMonth,
+  isToday,
+  startOfMonth,
+  startOfWeek,
+  subMonths,
+} from "date-fns";
+import {
   IoAdd,
   IoCalendarOutline,
   IoCallOutline,
   IoChevronBack,
+  IoChevronForward,
   IoLeafOutline,
   IoRadioButtonOn,
   IoWarningOutline,
@@ -23,6 +37,8 @@ const TYPE_LABEL = {
   huddle: "Climate huddle",
 };
 
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
 function formatWhen(iso, timezone) {
   if (!iso) return "";
   try {
@@ -39,25 +55,50 @@ function formatWhen(iso, timezone) {
   }
 }
 
+function formatTime(iso, timezone) {
+  if (!iso) return "";
+  try {
+    return new Intl.DateTimeFormat(undefined, {
+      hour: "numeric",
+      minute: "2-digit",
+      timeZone: timezone || undefined,
+    }).format(new Date(iso));
+  } catch {
+    return "";
+  }
+}
+
 function EventTypeIcon({ type }) {
   if (type === "disaster_briefing") return <IoWarningOutline className="text-amber-600" />;
   if (type === "planting_day") return <IoLeafOutline className="text-primary" />;
   return <IoCallOutline className="text-primary" />;
 }
 
+function eventDotClass(type, isLive) {
+  if (isLive) return "bg-red-500";
+  if (type === "disaster_briefing") return "bg-amber-500";
+  if (type === "planting_day") return "bg-primary";
+  return "bg-sky-500";
+}
+
 const ClimateCalendar = () => {
   const navigate = useNavigate();
   const { eventId } = useParams();
   const [searchParams] = useSearchParams();
-  const autoJoin = searchParams.get("join") === "1" || Boolean(eventId && window.location.pathname.endsWith("/join"));
+  const autoJoin =
+    searchParams.get("join") === "1" ||
+    Boolean(eventId && window.location.pathname.endsWith("/join"));
 
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(null);
   const [filter, setFilter] = useState("all");
   const [showCreate, setShowCreate] = useState(false);
+  const [scheduleDefaultStarts, setScheduleDefaultStarts] = useState(null);
   const [callSession, setCallSession] = useState(null);
   const [joining, setJoining] = useState(false);
+  const [cursorMonth, setCursorMonth] = useState(() => startOfMonth(new Date()));
+  const [selectedDay, setSelectedDay] = useState(() => new Date());
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -79,7 +120,14 @@ const ClimateCalendar = () => {
   useEffect(() => {
     if (!eventId || !events.length) return;
     const found = events.find((e) => String(e.id) === String(eventId));
-    if (found) setSelected(found);
+    if (found) {
+      setSelected(found);
+      const when = new Date(found.starts_at);
+      if (!Number.isNaN(when.getTime())) {
+        setSelectedDay(when);
+        setCursorMonth(startOfMonth(when));
+      }
+    }
   }, [eventId, events]);
 
   const filtered = useMemo(() => {
@@ -90,13 +138,69 @@ const ClimateCalendar = () => {
     return events.filter((e) => e.event_type === filter);
   }, [events, filter]);
 
+  const visibleEvents = useMemo(
+    () => filtered.filter((e) => e.status !== "cancelled"),
+    [filtered]
+  );
+
+  const eventsByDayKey = useMemo(() => {
+    const map = new Map();
+    for (const event of visibleEvents) {
+      const d = new Date(event.starts_at);
+      if (Number.isNaN(d.getTime())) continue;
+      const key = format(d, "yyyy-MM-dd");
+      if (!map.has(key)) map.set(key, []);
+      map.get(key).push(event);
+    }
+    for (const list of map.values()) {
+      list.sort(
+        (a, b) =>
+          new Date(a.starts_at) - new Date(b.starts_at) || a.id - b.id
+      );
+    }
+    return map;
+  }, [visibleEvents]);
+
+  const monthDays = useMemo(() => {
+    const start = startOfWeek(startOfMonth(cursorMonth));
+    const end = endOfWeek(endOfMonth(cursorMonth));
+    return eachDayOfInterval({ start, end });
+  }, [cursorMonth]);
+
+  const dayEvents = useMemo(() => {
+    const key = format(selectedDay, "yyyy-MM-dd");
+    return eventsByDayKey.get(key) || [];
+  }, [eventsByDayKey, selectedDay]);
+
   const upcoming = useMemo(() => {
     const now = Date.now();
-    return [...filtered].sort((a, b) => {
-      const liveBoost = (x) => (x.status === "live" ? -1 : 0);
-      return liveBoost(a) - liveBoost(b) || new Date(a.starts_at) - new Date(b.starts_at) || a.id - b.id;
-    }).filter((e) => e.status !== "cancelled" && (e.status === "live" || new Date(e.starts_at).getTime() > now - 6 * 3600 * 1000));
-  }, [filtered]);
+    return [...visibleEvents]
+      .sort((a, b) => {
+        const liveBoost = (x) => (x.status === "live" ? -1 : 0);
+        return (
+          liveBoost(a) - liveBoost(b) ||
+          new Date(a.starts_at) - new Date(b.starts_at) ||
+          a.id - b.id
+        );
+      })
+      .filter(
+        (e) =>
+          e.status === "live" ||
+          new Date(e.starts_at).getTime() > now - 6 * 3600 * 1000
+      );
+  }, [visibleEvents]);
+
+  const selectEvent = (event) => {
+    setSelected(event);
+    navigate(`/app/calendar/events/${event.id}`, { replace: true });
+  };
+
+  const openScheduleForDay = (day) => {
+    const starts = new Date(day);
+    starts.setHours(10, 0, 0, 0);
+    setScheduleDefaultStarts(starts);
+    setShowCreate(true);
+  };
 
   const joinEvent = async (event) => {
     if (!event?.id || joining) return;
@@ -116,7 +220,9 @@ const ClimateCalendar = () => {
         eventId: event.id,
       });
       setSelected((prev) =>
-        prev && prev.id === event.id ? { ...prev, status: data.status || prev.status } : prev
+        prev && prev.id === event.id
+          ? { ...prev, status: data.status || prev.status }
+          : prev
       );
     } catch (err) {
       toast.error(err?.response?.data?.detail || "Could not join Climate room");
@@ -154,7 +260,7 @@ const ClimateCalendar = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="max-w-5xl mx-auto px-3 sm:px-6 py-4 sm:py-6 space-y-5">
+      <div className="max-w-6xl mx-auto px-3 sm:px-6 py-4 sm:py-6 space-y-5">
         <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 pb-1">
           <div className="min-w-0">
             <p className="text-xs uppercase tracking-wide text-muted inline-flex items-center gap-1.5">
@@ -165,8 +271,8 @@ const ClimateCalendar = () => {
               Briefings & planting days
             </h1>
             <p className="text-sm text-muted mt-1.5 max-w-lg">
-              Plan disaster briefings, planting days, and huddles — then join the
-              Climate Wavers room when it’s time.
+              Month view for visibility — pick a day to schedule, RSVP, or join
+              the Climate Wavers room.
             </p>
             {liveCount > 0 ? (
               <p className="mt-2 text-xs font-medium text-red-600 inline-flex items-center gap-1.5">
@@ -177,7 +283,10 @@ const ClimateCalendar = () => {
           </div>
           <button
             type="button"
-            onClick={() => setShowCreate(true)}
+            onClick={() => {
+              setScheduleDefaultStarts(null);
+              setShowCreate(true);
+            }}
             className="h-11 px-4 bg-primary text-primary-foreground text-sm font-medium inline-flex items-center justify-center gap-2 shrink-0"
           >
             <IoAdd size={18} />
@@ -214,54 +323,225 @@ const ClimateCalendar = () => {
           ))}
         </div>
 
+        {/* Month calendar */}
+        <section className="border border-border bg-surface overflow-hidden">
+          <div className="px-3 sm:px-4 py-3 border-b border-border flex items-center justify-between gap-3">
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setCursorMonth((m) => subMonths(m, 1))}
+                className="h-9 w-9 inline-flex items-center justify-center border border-border text-foreground hover:bg-[var(--cw-overlay-soft)]"
+                aria-label="Previous month"
+              >
+                <IoChevronBack size={18} />
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const now = new Date();
+                  setCursorMonth(startOfMonth(now));
+                  setSelectedDay(now);
+                }}
+                className="h-9 px-3 text-xs font-medium border border-border text-foreground hover:bg-[var(--cw-overlay-soft)]"
+              >
+                Today
+              </button>
+              <button
+                type="button"
+                onClick={() => setCursorMonth((m) => addMonths(m, 1))}
+                className="h-9 w-9 inline-flex items-center justify-center border border-border text-foreground hover:bg-[var(--cw-overlay-soft)]"
+                aria-label="Next month"
+              >
+                <IoChevronForward size={18} />
+              </button>
+            </div>
+            <h2 className="text-base sm:text-lg font-semibold text-foreground tabular-nums">
+              {format(cursorMonth, "MMMM yyyy")}
+            </h2>
+            <div className="hidden sm:flex items-center gap-3 text-[10px] uppercase tracking-wide text-muted">
+              <span className="inline-flex items-center gap-1">
+                <span className="h-1.5 w-1.5 rounded-full bg-amber-500" /> Briefing
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <span className="h-1.5 w-1.5 rounded-full bg-primary" /> Planting
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <span className="h-1.5 w-1.5 rounded-full bg-sky-500" /> Huddle
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <span className="h-1.5 w-1.5 rounded-full bg-red-500" /> Live
+              </span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-7 border-b border-border bg-background">
+            {WEEKDAYS.map((d) => (
+              <div
+                key={d}
+                className="px-1 py-2 text-center text-[10px] sm:text-xs font-medium text-muted uppercase tracking-wide"
+              >
+                {d}
+              </div>
+            ))}
+          </div>
+
+          {loading ? (
+            <div className="p-8 grid grid-cols-7 gap-px bg-border">
+              {Array.from({ length: 35 }).map((_, i) => (
+                <div key={i} className="min-h-[72px] bg-surface animate-pulse" />
+              ))}
+            </div>
+          ) : (
+            <div className="grid grid-cols-7 gap-px bg-border">
+              {monthDays.map((day) => {
+                const key = format(day, "yyyy-MM-dd");
+                const dayList = eventsByDayKey.get(key) || [];
+                const inMonth = isSameMonth(day, cursorMonth);
+                const isDaySelected = isSameDay(day, selectedDay);
+                const today = isToday(day);
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setSelectedDay(day)}
+                    onDoubleClick={() => openScheduleForDay(day)}
+                    className={`min-h-[72px] sm:min-h-[96px] p-1.5 sm:p-2 text-left transition-colors bg-surface ${
+                      !inMonth ? "opacity-40" : ""
+                    } ${
+                      isDaySelected
+                        ? "ring-2 ring-inset ring-primary bg-[var(--cw-overlay-soft)]"
+                        : "hover:bg-[var(--cw-overlay-soft)]"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-1 mb-1">
+                      <span
+                        className={`inline-flex h-6 w-6 items-center justify-center text-xs font-medium tabular-nums ${
+                          today
+                            ? "bg-primary text-primary-foreground"
+                            : "text-foreground"
+                        }`}
+                      >
+                        {format(day, "d")}
+                      </span>
+                      {dayList.length > 0 ? (
+                        <span className="text-[10px] text-muted tabular-nums">
+                          {dayList.length}
+                        </span>
+                      ) : null}
+                    </div>
+                    <div className="space-y-0.5 hidden sm:block">
+                      {dayList.slice(0, 3).map((ev) => (
+                        <div
+                          key={ev.id}
+                          className="truncate text-[10px] leading-tight px-1 py-0.5 border border-border bg-background text-foreground"
+                          title={ev.title}
+                        >
+                          <span
+                            className={`inline-block h-1.5 w-1.5 rounded-full mr-1 align-middle ${eventDotClass(
+                              ev.event_type,
+                              ev.status === "live"
+                            )}`}
+                          />
+                          {formatTime(ev.starts_at, ev.timezone)} {ev.title}
+                        </div>
+                      ))}
+                      {dayList.length > 3 ? (
+                        <p className="text-[10px] text-muted px-1">
+                          +{dayList.length - 3} more
+                        </p>
+                      ) : null}
+                    </div>
+                    <div className="flex flex-wrap gap-0.5 sm:hidden mt-1">
+                      {dayList.slice(0, 4).map((ev) => (
+                        <span
+                          key={ev.id}
+                          className={`h-1.5 w-1.5 rounded-full ${eventDotClass(
+                            ev.event_type,
+                            ev.status === "live"
+                          )}`}
+                        />
+                      ))}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          <div className="px-3 sm:px-4 py-2 border-t border-border text-[11px] text-muted flex flex-wrap items-center justify-between gap-2">
+            <span>Double-click a day to schedule · click an event below for details</span>
+            <button
+              type="button"
+              onClick={() => openScheduleForDay(selectedDay)}
+              className="h-8 px-2.5 border border-border text-foreground inline-flex items-center gap-1 hover:bg-[var(--cw-overlay-soft)]"
+            >
+              <IoAdd size={14} />
+              Schedule on {format(selectedDay, "MMM d")}
+            </button>
+          </div>
+        </section>
+
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-0 lg:gap-5 lg:items-start">
           <section className="lg:col-span-3 border border-border bg-surface overflow-hidden">
             <div className="px-4 py-3 border-b border-border flex items-center justify-between gap-2">
-              <h2 className="text-sm font-semibold text-foreground">Agenda</h2>
+              <h2 className="text-sm font-semibold text-foreground">
+                {format(selectedDay, "EEEE, MMM d")}
+              </h2>
               <span className="text-xs text-muted">
-                {loading ? "…" : `${upcoming.length} upcoming`}
+                {dayEvents.length} event{dayEvents.length === 1 ? "" : "s"}
               </span>
             </div>
-            {loading ? (
-              <div className="p-8 space-y-3">
-                {[0, 1, 2].map((i) => (
-                  <div key={i} className="h-14 border border-border bg-background animate-pulse" />
-                ))}
-              </div>
-            ) : upcoming.length === 0 ? (
-              <div className="p-10 text-center space-y-3">
-                <div className="mx-auto h-12 w-12 border border-border bg-background inline-flex items-center justify-center text-primary">
-                  <IoCalendarOutline size={22} />
-                </div>
-                <p className="text-sm font-medium text-foreground">
-                  No upcoming Climate events
-                </p>
-                <p className="text-xs text-muted max-w-xs mx-auto">
-                  Schedule a planting day or disaster briefing to open a shared
-                  Climate room.
-                </p>
+            {dayEvents.length === 0 ? (
+              <div className="p-8 text-center space-y-3">
+                <p className="text-sm text-muted">No events on this day.</p>
                 <button
                   type="button"
-                  onClick={() => setShowCreate(true)}
+                  onClick={() => openScheduleForDay(selectedDay)}
                   className="h-10 px-4 bg-primary text-primary-foreground text-sm font-medium inline-flex items-center gap-2 mx-auto"
                 >
                   <IoAdd size={16} />
-                  Schedule the first one
+                  Schedule for this day
                 </button>
+                {upcoming.length > 0 ? (
+                  <div className="pt-4 border-t border-border text-left">
+                    <p className="text-[11px] uppercase tracking-wide text-muted mb-2 px-1">
+                      Upcoming
+                    </p>
+                    <ul className="divide-y divide-border">
+                      {upcoming.slice(0, 4).map((event) => (
+                        <li key={event.id}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const when = new Date(event.starts_at);
+                              setSelectedDay(when);
+                              setCursorMonth(startOfMonth(when));
+                              selectEvent(event);
+                            }}
+                            className="w-full text-left px-1 py-2.5 hover:bg-[var(--cw-overlay-soft)]"
+                          >
+                            <p className="text-sm font-medium text-foreground truncate">
+                              {event.title}
+                            </p>
+                            <p className="text-xs text-muted">
+                              {formatWhen(event.starts_at, event.timezone)}
+                            </p>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
               </div>
             ) : (
               <ul className="divide-y divide-border">
-                {upcoming.map((event) => {
+                {dayEvents.map((event) => {
                   const isSelected = selected?.id === event.id;
                   const isLive = event.status === "live";
                   return (
                     <li key={event.id}>
                       <button
                         type="button"
-                        onClick={() => {
-                          setSelected(event);
-                          navigate(`/app/calendar/events/${event.id}`, { replace: true });
-                        }}
+                        onClick={() => selectEvent(event)}
                         className={`w-full text-left px-4 py-3.5 transition-colors ${
                           isSelected
                             ? "bg-[var(--cw-overlay-soft)] border-l-2 border-l-primary"
@@ -289,13 +569,8 @@ const ClimateCalendar = () => {
                             </div>
                             <p className="text-xs text-muted mt-0.5">
                               {TYPE_LABEL[event.event_type] || event.event_type} ·{" "}
-                              {formatWhen(event.starts_at, event.timezone)}
+                              {formatTime(event.starts_at, event.timezone)}
                             </p>
-                            {event.tree_project_name || event.disaster_title ? (
-                              <p className="text-xs text-muted mt-0.5 truncate">
-                                {event.tree_project_name || event.disaster_title}
-                              </p>
-                            ) : null}
                           </div>
                           {isLive ? (
                             <span className="shrink-0 text-[11px] font-medium text-primary self-center">
@@ -314,9 +589,9 @@ const ClimateCalendar = () => {
           <aside className="lg:col-span-2 border border-t-0 lg:border-t border-border bg-surface min-h-[300px] lg:sticky lg:top-4">
             {!selected ? (
               <div className="p-8 flex flex-col items-center justify-center text-center gap-2 min-h-[280px]">
-                <IoCallOutline className="text-muted" size={28} />
+                <IoCalendarOutline className="text-muted" size={28} />
                 <p className="text-sm text-muted max-w-[14rem]">
-                  Select an event to RSVP or open the Climate room.
+                  Select a day on the calendar, then an event to RSVP or join.
                 </p>
               </div>
             ) : (
@@ -419,11 +694,20 @@ const ClimateCalendar = () => {
 
       <ScheduleClimateEventModal
         open={showCreate}
-        onClose={() => setShowCreate(false)}
+        onClose={() => {
+          setShowCreate(false);
+          setScheduleDefaultStarts(null);
+        }}
         mode="manual"
+        defaultStartsAt={scheduleDefaultStarts}
         onCreated={(ev) => {
           setEvents((prev) => [ev, ...prev]);
           setSelected(ev);
+          const when = new Date(ev.starts_at);
+          if (!Number.isNaN(when.getTime())) {
+            setSelectedDay(when);
+            setCursorMonth(startOfMonth(when));
+          }
           navigate(`/app/calendar/events/${ev.id}`);
         }}
       />

@@ -268,6 +268,56 @@ const TreeAnalyticsPanel = ({
     [charts.my_activity_7d, accent, isDark]
   );
 
+  const co2ByProjectData = useMemo(
+    () => ({
+      labels: charts.co2_by_project?.labels || [],
+      datasets: [
+        {
+          label: "kg CO₂/year",
+          data: charts.co2_by_project?.values || [],
+          backgroundColor: isDark ? "#34d399" : "#059669",
+          borderRadius: 4,
+        },
+      ],
+    }),
+    [charts.co2_by_project, isDark]
+  );
+
+  const co2ByCountryData = useMemo(
+    () => ({
+      labels: charts.co2_by_country?.labels || [],
+      datasets: [
+        {
+          label: "kg CO₂/year",
+          data: charts.co2_by_country?.values || [],
+          backgroundColor: isDark ? "#2bb8bf" : "#0D9488",
+          borderRadius: 4,
+        },
+      ],
+    }),
+    [charts.co2_by_country, isDark]
+  );
+
+  const co2ActivityData = useMemo(
+    () => ({
+      labels: charts.my_co2_7d?.labels || [],
+      datasets: [
+        {
+          label: "kg CO₂/year added",
+          data: charts.my_co2_7d?.values || [],
+          borderColor: isDark ? "#34d399" : "#059669",
+          backgroundColor: isDark
+            ? "rgba(52, 211, 153, 0.18)"
+            : "rgba(5, 150, 105, 0.12)",
+          fill: true,
+          tension: 0.35,
+          pointRadius: 2,
+        },
+      ],
+    }),
+    [charts.my_co2_7d, isDark]
+  );
+
   const downloadPdf = async () => {
     if (!reportRef.current || downloading) return;
     setDownloading(true);
@@ -308,8 +358,8 @@ const TreeAnalyticsPanel = ({
           </h2>
           <p className="text-sm text-muted mt-1">
             {isAdmin
-              ? "Charts for trees, USD raised, project mix, and progress — plus a downloadable report."
-              : "Visualize verified projects, then download a shareable impact report."}
+              ? "Trees, CO₂ offset potential, funding, and progress — plus a downloadable report."
+              : "Trees, CO₂ charts, and a shareable impact report."}
           </p>
         </div>
         <div className="flex flex-wrap gap-2 shrink-0">
@@ -341,17 +391,27 @@ const TreeAnalyticsPanel = ({
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3">
           {[
             { label: "Network trees", value: (summary.total_trees_planted ?? 0).toLocaleString?.() ?? summary.total_trees_planted },
+            {
+              label: "Network CO₂",
+              value: `${Math.round(summary.network_co2_kg || 0).toLocaleString()} kg/yr`,
+            },
             { label: "Active projects", value: summary.active_projects ?? 0 },
-            { label: "Verified", value: summary.verified_projects ?? 0 },
             {
               label: "Funds raised (USD)",
               value: `$${Math.round(summary.total_funds_raised || 0).toLocaleString()}`,
             },
             {
-              label: isAdmin ? "Listed projects" : "Your trees",
-              value: isAdmin ? projects.length : summary.my_trees ?? 0,
+              label: isAdmin ? "Listed projects" : "Your CO₂",
+              value: isAdmin
+                ? projects.length
+                : `${Math.round(summary.my_co2 || 0).toLocaleString()} kg/yr`,
             },
-            { label: "Top country", value: summary.top_country || "—" },
+            {
+              label: isAdmin ? "Top CO₂ project" : "Your trees",
+              value: isAdmin
+                ? summary.top_co2_project || "—"
+                : summary.my_trees ?? 0,
+            },
           ].map((stat) => (
             <div
               key={stat.label}
@@ -378,6 +438,63 @@ const TreeAnalyticsPanel = ({
           {report?.disclaimer ? (
             <p className="text-xs text-muted mt-3">{report.disclaimer}</p>
           ) : null}
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="border border-border p-3" style={{ borderRadius: 5, breakInside: "avoid" }}>
+            <h3 className="text-sm font-medium mb-2">CO₂ by project (kg/year)</h3>
+            <div className="h-48">
+              {(charts.co2_by_project?.labels || []).length ? (
+                <Bar
+                  data={co2ByProjectData}
+                  options={{
+                    ...baseOptions,
+                    indexAxis: "y",
+                    scales: {
+                      ...baseOptions.scales,
+                      x: {
+                        ...baseOptions.scales.y,
+                        grid: { color: chartTheme(isDark).grid },
+                        ticks: {
+                          ...baseOptions.scales.y.ticks,
+                          callback: (v) => `${v}`,
+                        },
+                      },
+                      y: { ...baseOptions.scales.x, grid: { display: false } },
+                    },
+                  }}
+                />
+              ) : (
+                <p className="text-sm text-muted">No CO₂ project data yet.</p>
+              )}
+            </div>
+          </div>
+          <div className="border border-border p-3" style={{ borderRadius: 5 }}>
+            <h3 className="text-sm font-medium mb-2">CO₂ by country (kg/year)</h3>
+            <div className="h-48">
+              {(charts.co2_by_country?.labels || []).length ? (
+                <Bar data={co2ByCountryData} options={baseOptions} />
+              ) : (
+                <p className="text-sm text-muted">No CO₂ country data yet.</p>
+              )}
+            </div>
+          </div>
+          <div className="border border-border p-3" style={{ borderRadius: 5 }}>
+            <h3 className="text-sm font-medium mb-2">
+              {isAdmin ? "Your 7-day CO₂ added" : "Your 7-day CO₂ (kg/year)"}
+            </h3>
+            <div className="h-48">
+              <Line data={co2ActivityData} options={baseOptions} />
+            </div>
+          </div>
+          <div className="border border-border p-3" style={{ borderRadius: 5 }}>
+            <h3 className="text-sm font-medium mb-2">
+              {isAdmin ? "Network 7-day plantings" : "Your 7-day plantings"}
+            </h3>
+            <div className="h-48">
+              <Line data={activityData} options={baseOptions} />
+            </div>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -423,25 +540,46 @@ const TreeAnalyticsPanel = ({
             </div>
           </div>
           <div className="border border-border p-3" style={{ borderRadius: 5 }}>
-            <h3 className="text-sm font-medium mb-2">
-              {isAdmin ? "Network 7-day activity" : "Your 7-day plantings"}
-            </h3>
-            <div className="h-48">
-              <Line data={activityData} options={baseOptions} />
-            </div>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="border border-border p-3" style={{ borderRadius: 5, breakInside: "avoid" }}>
             <h3 className="text-sm font-medium mb-2">Trees by organization</h3>
-            <div className="h-44">
+            <div className="h-48">
               {(charts.by_org?.labels || []).length ? (
                 <Doughnut data={orgData} options={doughnutOptions} />
               ) : (
                 <p className="text-sm text-muted">No organization mix yet.</p>
               )}
             </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="border border-border p-3 overflow-x-auto" style={{ borderRadius: 5 }}>
+            <h3 className="text-sm font-medium mb-2">CO₂ leaders (kg/year)</h3>
+            {(report?.co2_table || []).length ? (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-muted border-b border-border">
+                    <th className="py-2 pr-2 font-medium">Project</th>
+                    <th className="py-2 pr-2 font-medium">Trees</th>
+                    <th className="py-2 font-medium">CO₂</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {report.co2_table.map((row) => (
+                    <tr key={`co2-${row.label}`} className="border-b border-border/60">
+                      <td className="py-2 pr-2 text-foreground">{row.label}</td>
+                      <td className="py-2 pr-2 tabular-nums text-muted">
+                        {row.trees?.toLocaleString?.() ?? row.trees}
+                      </td>
+                      <td className="py-2 tabular-nums text-foreground">
+                        {Number(row.value || 0).toLocaleString()}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <p className="text-sm text-muted">No CO₂ rows yet.</p>
+            )}
           </div>
           <div className="border border-border p-3 overflow-x-auto" style={{ borderRadius: 5 }}>
             <h3 className="text-sm font-medium mb-2">Progress table</h3>

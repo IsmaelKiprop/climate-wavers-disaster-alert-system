@@ -44,6 +44,41 @@ function dailyUserTrees(userTrees, n = 7) {
   return buckets;
 }
 
+function projectCo2Kg(project) {
+  const rate = num(
+    project?.co2_absorption_per_tree ?? project?.co2Absorption ?? 22
+  );
+  const trees = num(project?.trees_planted);
+  const explicit = num(project?.total_co2_offset);
+  if (explicit > 0) return explicit;
+  return trees * rate;
+}
+
+function treeCo2Kg(tree) {
+  const rate = num(tree?.co2Absorption ?? tree?.co2_absorption_per_tree ?? 22);
+  const qty = Math.max(1, num(tree?.trees_purchased || tree?.quantity || 1));
+  return rate * qty;
+}
+
+function dailyUserCo2(userTrees, n = 7) {
+  const buckets = Array.from({ length: n }, () => 0);
+  const now = new Date();
+  const start = new Date(now);
+  start.setHours(0, 0, 0, 0);
+  start.setDate(start.getDate() - (n - 1));
+
+  for (const tree of userTrees) {
+    const stamp = tree?.date || tree?.purchaseDate || tree?.created_at;
+    const t = stamp ? new Date(stamp).getTime() : NaN;
+    if (!Number.isFinite(t)) continue;
+    const day = new Date(t);
+    day.setHours(0, 0, 0, 0);
+    const idx = Math.round((day.getTime() - start.getTime()) / 86400000);
+    if (idx >= 0 && idx < n) buckets[idx] += treeCo2Kg(tree);
+  }
+  return buckets.map((v) => Math.round(v * 10) / 10);
+}
+
 function buildNarrative({ projects, stats, userStats, byCountry, byType }) {
   const totalTrees = num(stats?.total_trees_planted);
   const funds = num(stats?.total_funds_raised);
@@ -53,6 +88,7 @@ function buildNarrative({ projects, stats, userStats, byCountry, byType }) {
   const topType = byType[0]?.label || "community reforestation";
   const myTrees = num(userStats?.treesPlanted);
   const myCo2 = num(userStats?.co2Offset);
+  const networkCo2 = num(userStats?.networkCo2);
 
   const openers = [
     "The canopy ledger is open: every verified project here is a quiet bet on cooler air and stronger local livelihoods.",
@@ -65,6 +101,9 @@ function buildNarrative({ projects, stats, userStats, byCountry, byType }) {
     `${active} active project${active === 1 ? "" : "s"}` +
     (verified ? ` (${verified} verified)` : "") +
     ` have logged about ${totalTrees.toLocaleString()} trees` +
+    (networkCo2 > 0
+      ? ` (~${Math.round(networkCo2).toLocaleString()} kg CO₂/year absorption potential)`
+      : "") +
     (funds > 0 ? ` and ~$${Math.round(funds).toLocaleString()} raised` : "") +
     ".";
 
@@ -132,6 +171,30 @@ export function buildTreeAnalytics({
 
   const dayLabels = lastNDaysLabels(7);
   const dayValues = dailyUserTrees(trees, 7);
+  const dayCo2Values = dailyUserCo2(trees, 7);
+
+  const co2ByProject = [...list]
+    .map((p) => ({
+      label: String(p?.name || "Project").slice(0, 28),
+      value: Math.round(projectCo2Kg(p) * 10) / 10,
+      trees: num(p?.trees_planted),
+      rate: num(p?.co2_absorption_per_tree ?? 22),
+      country: p?.country || "",
+    }))
+    .filter((r) => r.value > 0)
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 8);
+
+  const co2ByCountry = countBy(
+    list,
+    (p) => String(p?.country || "").trim() || "Unknown",
+    (p) => projectCo2Kg(p)
+  )
+    .map((r) => ({ ...r, value: Math.round(r.value * 10) / 10 }))
+    .slice(0, 8);
+
+  const networkCo2 = list.reduce((sum, p) => sum + projectCo2Kg(p), 0);
+  const myCo2FromTrees = trees.reduce((sum, t) => sum + treeCo2Kg(t), 0);
 
   const derivedStats = {
     total_projects: num(stats?.total_projects) || list.length,
@@ -143,21 +206,27 @@ export function buildTreeAnalytics({
     total_funds_raised:
       num(stats?.total_funds_raised) ||
       list.reduce((sum, p) => sum + num(p?.funds_raised), 0),
+    network_co2_kg: Math.round(networkCo2),
   };
 
   const summary = {
     ...derivedStats,
     my_trees: num(userStats?.treesPlanted) || trees.length,
-    my_co2: Math.round(num(userStats?.co2Offset)),
+    my_co2: Math.round(num(userStats?.co2Offset) || myCo2FromTrees),
     impact_score: num(userStats?.impactScore),
     top_country: byCountry[0]?.label || "—",
     countries: byCountry.length,
+    top_co2_project: co2ByProject[0]?.label || "—",
   };
 
   const narrative = buildNarrative({
     projects: list,
     stats: derivedStats,
-    userStats,
+    userStats: {
+      ...userStats,
+      networkCo2,
+      co2Offset: num(userStats?.co2Offset) || myCo2FromTrees,
+    },
     byCountry,
     byType,
   });
@@ -186,11 +255,27 @@ export function buildTreeAnalytics({
         labels: dayLabels,
         values: dayValues,
       },
+      co2_by_project: {
+        labels: co2ByProject.map((r) => r.label),
+        values: co2ByProject.map((r) => r.value),
+        unit: "kg CO₂/year",
+      },
+      co2_by_country: {
+        labels: co2ByCountry.map((r) => r.label),
+        values: co2ByCountry.map((r) => r.value),
+        unit: "kg CO₂/year",
+      },
+      my_co2_7d: {
+        labels: dayLabels,
+        values: dayCo2Values,
+        unit: "kg CO₂/year",
+      },
     },
     progress_table: progressLeaders,
+    co2_table: co2ByProject,
     narrative,
     disclaimer:
-      "AI-assisted analysis of Climate Wavers tree projects and your planting history. Verify project details before gifting.",
+      "AI-assisted analysis of Climate Wavers tree projects and your planting history. CO₂ figures are absorption potential (kg/year) from project rates × trees planted. Verify project details before gifting.",
   };
 }
 
@@ -198,8 +283,9 @@ export function treeAnalyticsPrompt(report) {
   const s = report?.summary || {};
   return (
     `Write a short, vivid Climate Wavers reforestation briefing (max 120 words) for someone on the Plant a Tree page. ` +
-    `Network trees planted: ${s.total_trees_planted || 0}. Active projects: ${s.active_projects || 0}. ` +
-    `Funds raised: $${Math.round(s.total_funds_raised || 0)}. Top country: ${s.top_country || "n/a"}. ` +
-    `Their trees: ${s.my_trees || 0}. Tone: hopeful, concrete, gift-friendly. No greenwashing.`
+    `Network trees planted: ${s.total_trees_planted || 0}. Network CO₂ potential: ~${s.network_co2_kg || 0} kg/year. ` +
+    `Active projects: ${s.active_projects || 0}. Funds raised: $${Math.round(s.total_funds_raised || 0)}. ` +
+    `Top country: ${s.top_country || "n/a"}. Their trees: ${s.my_trees || 0}. Their CO₂: ~${s.my_co2 || 0} kg/year. ` +
+    `Tone: hopeful, concrete, gift-friendly. No greenwashing.`
   );
 }
