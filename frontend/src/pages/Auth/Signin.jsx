@@ -39,7 +39,13 @@ const Signin = () => {
       if (detail.toLowerCase().includes("email is not verified")) {
         const email = String(data?.email || "").trim().toLowerCase();
         if (email) Cookies.set("email", email);
-        navigate("/verifymail");
+        if (typeof sessionStorage !== "undefined") {
+          sessionStorage.setItem("authRedirect", redirectTo);
+        }
+        navigate(
+          `/verifymail?redirect=${encodeURIComponent(redirectTo)}`,
+          { replace: true }
+        );
         return;
       }
       console.log("Login failed:", error);

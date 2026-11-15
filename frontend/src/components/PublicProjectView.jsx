@@ -5,6 +5,7 @@ import { endpoints } from '../utils/endpoints';
 import SocialShare from './SocialShare';
 import ProjectSEO from './ProjectSEO';
 import { apiUrl } from '../config/env';
+import { getAuthToken, getUser } from '../utils/factory';
 
 // Global cache to prevent multiple API calls across the entire app
 const globalProjectCache = new Map();
@@ -17,6 +18,7 @@ const PublicProjectView = () => {
   const [showSocialShare, setShowSocialShare] = useState(false);
   const [galleryIndex, setGalleryIndex] = useState(null);
   const hasFetched = useRef(false);
+  const isSignedIn = Boolean(getAuthToken() || getUser()?.id);
   
   // Support /p/:projectId and legacy /project?project=
   const projectId = useMemo(() => {
@@ -24,6 +26,17 @@ const PublicProjectView = () => {
     const urlParams = new URLSearchParams(window.location.search);
     return urlParams.get('project');
   }, [pathProjectId]);
+
+  // After sign-in / sign-up, land on plant checkout for this project
+  const plantReturnPath = useMemo(() => {
+    if (!projectId) return "/app/plant-tree";
+    return `/app/plant-tree?project=${projectId}`;
+  }, [projectId]);
+
+  const authRedirectQuery = useMemo(
+    () => `redirect=${encodeURIComponent(plantReturnPath)}`,
+    [plantReturnPath]
+  );
 
   useEffect(() => {
     // Don't fetch if we already have project data or if we've already fetched
@@ -113,7 +126,7 @@ const PublicProjectView = () => {
           <div className="space-y-3">
             {isAuthError && (
               <Link 
-                to="/login"
+                to={`/login?${authRedirectQuery}`}
                 className="inline-flex items-center space-x-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
               >
                 <span>Sign In to View Project</span>
@@ -156,12 +169,21 @@ const PublicProjectView = () => {
                 <FaShare className="w-4 h-4" />
                 <span>Share Project</span>
               </button>
-              <Link
-                to="/login"
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-              >
-                Sign In to Plant Trees
-              </Link>
+              {isSignedIn ? (
+                <Link
+                  to={plantReturnPath}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  Plant Trees
+                </Link>
+              ) : (
+                <Link
+                  to={`/login?${authRedirectQuery}`}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  Sign In to Plant Trees
+                </Link>
+              )}
             </div>
           </div>
         </div>
@@ -313,23 +335,38 @@ const PublicProjectView = () => {
                 {/* Call to Action */}
                 <div className="bg-blue-50 rounded-lg p-6 text-center">
                   <FaTree className="text-4xl text-green-600 mx-auto mb-4" />
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Join This Project</h3>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                    {isSignedIn ? "Plant in this project" : "Join This Project"}
+                  </h3>
                   <p className="text-gray-600 mb-4">
-                    Sign in to Climate Wavers to plant trees in this project and make a real environmental impact.
+                    {isSignedIn
+                      ? "Continue to choose species and plant trees in this project."
+                      : "Sign in to Climate Wavers to plant trees in this project and make a real environmental impact."}
                   </p>
                   <div className="space-y-3">
-                    <Link
-                      to="/login"
-                      className="block w-full bg-green-600 text-white py-3 px-4 rounded-lg hover:bg-green-700 transition-colors font-semibold"
-                    >
-                      Sign In to Plant Trees
-                    </Link>
-                    <Link
-                      to="/signup"
-                      className="block w-full bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 transition-colors font-semibold"
-                    >
-                      Create Account
-                    </Link>
+                    {isSignedIn ? (
+                      <Link
+                        to={plantReturnPath}
+                        className="block w-full bg-green-600 text-white py-3 px-4 rounded-lg hover:bg-green-700 transition-colors font-semibold"
+                      >
+                        Plant Trees Now
+                      </Link>
+                    ) : (
+                      <>
+                        <Link
+                          to={`/login?${authRedirectQuery}`}
+                          className="block w-full bg-green-600 text-white py-3 px-4 rounded-lg hover:bg-green-700 transition-colors font-semibold"
+                        >
+                          Sign In to Plant Trees
+                        </Link>
+                        <Link
+                          to={`/signup?${authRedirectQuery}`}
+                          className="block w-full bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 transition-colors font-semibold"
+                        >
+                          Create Account
+                        </Link>
+                      </>
+                    )}
                   </div>
                 </div>
 

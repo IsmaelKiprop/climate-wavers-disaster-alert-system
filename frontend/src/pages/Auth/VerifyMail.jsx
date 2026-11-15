@@ -3,10 +3,20 @@ import { Link, useNavigate } from "react-router-dom";
 import Cookies from "js-cookie";
 import { client } from "../../api";
 import { endpoints } from "../../utils/endpoints";
+import { safeRedirectPath } from "../../utils/factory";
 import AuthLayout, { AuthField, authButtonClass, fieldInputClass } from "../../components/AuthLayout";
 
 const VerifyMail = () => {
   const navigate = useNavigate();
+  const params = new URLSearchParams(window.location.search);
+  const storedRedirect =
+    typeof sessionStorage !== "undefined"
+      ? sessionStorage.getItem("authRedirect")
+      : null;
+  const redirectTo = safeRedirectPath(
+    params.get("redirect") || storedRedirect,
+    "/onboarding"
+  );
   const [email, setEmail] = useState(Cookies.get("email") || "");
   const [isDisabled, setIsDisabled] = useState(false);
   const [statusMessage, setStatusMessage] = useState("");
@@ -29,9 +39,12 @@ const VerifyMail = () => {
         true
       );
       Cookies.set("email", value);
+      if (typeof sessionStorage !== "undefined") {
+        sessionStorage.setItem("authRedirect", redirectTo);
+      }
       setStatusKind("success");
       setStatusMessage(result?.message || "Check your inbox and spam folder for a 6-digit code.");
-      navigate("/emailcode");
+      navigate(`/emailcode?redirect=${encodeURIComponent(redirectTo)}`);
     } catch (error) {
       const apiMessage = error?.response?.data?.message;
       setStatusKind("error");
