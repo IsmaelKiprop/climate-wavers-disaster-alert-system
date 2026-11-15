@@ -167,54 +167,81 @@ export function buyMeTreeShareText(species, displayName = "") {
 }
 
 /**
- * Unique species options from verified planting projects.
- * @returns {{ key: string, species: string, label: string, projectId: number, projectName: string, cover?: string, country?: string }[]}
+ * Species options grouped by project (for Buy me a tree picker).
+ * @returns {{
+ *   projectId: number,
+ *   projectName: string,
+ *   cover?: string,
+ *   country?: string,
+ *   species: { key: string, species: string, label: string, projectId: number, projectName: string, cover?: string, country?: string, projectOnly?: boolean }[]
+ * }[]}
  */
-export function collectSpeciesOptions(projects = []) {
-  const map = new Map();
+export function collectSpeciesByProject(projects = []) {
+  const groups = [];
   for (const project of projects || []) {
+    if (!project?.id) continue;
     const list = Array.isArray(project?.tree_species)
       ? project.tree_species
       : [];
     const cover =
       project?.cover_image_url || project?.cover_image || project?.image_url || "";
+    const projectName = project.name || "";
+    const country = project.country || "";
+    const species = [];
+    const seen = new Set();
+
     for (const raw of list) {
-      const species =
+      const name =
         typeof raw === "string"
           ? String(raw || "").trim()
           : String(raw?.name || raw?.species || raw?.label || "").trim();
-      if (!species) continue;
-      const key = species.toLowerCase();
-      if (map.has(key)) continue;
-      map.set(key, {
-        key,
-        species,
-        label: species,
+      if (!name) continue;
+      const speciesKey = name.toLowerCase();
+      if (seen.has(speciesKey)) continue;
+      seen.add(speciesKey);
+      species.push({
+        key: `p${project.id}-${speciesKey}`,
+        species: name,
+        label: name,
         projectId: project.id,
-        projectName: project.name || "",
+        projectName,
         cover,
-        country: project.country || "",
+        country,
       });
     }
-    if (!list.length && project?.id) {
-      const key = `project-${project.id}`;
-      if (!map.has(key)) {
-        map.set(key, {
-          key,
-          species: "",
-          label: project.name || "Tree project",
-          projectId: project.id,
-          projectName: project.name || "",
-          cover,
-          country: project.country || "",
-          projectOnly: true,
-        });
-      }
+
+    if (!species.length) {
+      species.push({
+        key: `project-${project.id}`,
+        species: "",
+        label: projectName || "Tree project",
+        projectId: project.id,
+        projectName,
+        cover,
+        country,
+        projectOnly: true,
+      });
     }
+
+    groups.push({
+      projectId: project.id,
+      projectName,
+      cover,
+      country,
+      species,
+    });
   }
-  return Array.from(map.values()).sort((a, b) =>
-    String(a.label).localeCompare(String(b.label))
+
+  return groups.sort((a, b) =>
+    String(a.projectName).localeCompare(String(b.projectName))
   );
+}
+
+/**
+ * Flat unique species options (project-scoped keys). Prefer collectSpeciesByProject for UI.
+ */
+export function collectSpeciesOptions(projects = []) {
+  return collectSpeciesByProject(projects).flatMap((g) => g.species);
 }
 
 export const CHAT_SHARE_DRAFT_KEY = "cw_chat_share_draft";

@@ -17,7 +17,7 @@ import {
 } from "react-icons/io5";
 import {
   buyMeTreeShareText,
-  collectSpeciesOptions,
+  collectSpeciesByProject,
   giftTreesPath,
   giftTreesUrl,
   profileOgPreviewImage,
@@ -65,7 +65,7 @@ const BuyMeATreeShareModal = ({ user, onClose }) => {
   const navigate = useNavigate();
   const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [options, setOptions] = useState([]);
+  const [projectGroups, setProjectGroups] = useState([]);
   const [selectedKey, setSelectedKey] = useState("");
   const [showQr, setShowQr] = useState(false);
 
@@ -93,13 +93,13 @@ const BuyMeATreeShareModal = ({ user, onClose }) => {
           headers: { Accept: "application/json" },
         });
         const data = response.ok ? await response.json() : [];
-        const list = collectSpeciesOptions(unwrapList(data));
+        const groups = collectSpeciesByProject(unwrapList(data));
         if (!alive) return;
-        setOptions(list);
-        setSelectedKey(list[0]?.key || "");
+        setProjectGroups(groups);
+        setSelectedKey(groups[0]?.species?.[0]?.key || "");
       } catch {
         if (alive) {
-          setOptions([]);
+          setProjectGroups([]);
           setSelectedKey("");
         }
       } finally {
@@ -124,10 +124,13 @@ const BuyMeATreeShareModal = ({ user, onClose }) => {
     };
   }, [onClose, showQr]);
 
-  const selected = useMemo(
-    () => options.find((o) => o.key === selectedKey) || null,
-    [options, selectedKey]
-  );
+  const selected = useMemo(() => {
+    for (const group of projectGroups) {
+      const hit = group.species.find((o) => o.key === selectedKey);
+      if (hit) return hit;
+    }
+    return null;
+  }, [projectGroups, selectedKey]);
 
   const giftOpts = useMemo(() => {
     if (!selected) return {};
@@ -209,7 +212,7 @@ const BuyMeATreeShareModal = ({ user, onClose }) => {
               Buy me a tree
             </h3>
             <p className="text-xs text-muted">
-              Pick a species from live projects, then share
+              Pick a project, then a species to share
             </p>
           </div>
           <button
@@ -262,37 +265,52 @@ const BuyMeATreeShareModal = ({ user, onClose }) => {
           <div className="p-4 space-y-4">
             <div>
               <p className="text-xs font-medium text-muted mb-2">
-                Tree species
+                Projects & species
               </p>
               {loading ? (
                 <p className="text-sm text-muted">Loading projects…</p>
-              ) : options.length === 0 ? (
+              ) : projectGroups.length === 0 ? (
                 <p className="text-sm text-muted">
                   No verified planting projects yet. You can still share a general
                   gift link.
                 </p>
               ) : (
-                <div className="flex flex-wrap gap-2 max-h-36 overflow-y-auto">
-                  {options.map((opt) => {
-                    const active = opt.key === selectedKey;
-                    return (
-                      <button
-                        key={opt.key}
-                        type="button"
-                        onClick={() => setSelectedKey(opt.key)}
-                        className={`h-9 px-3 text-xs font-medium border inline-flex items-center gap-1.5 ${
-                          active
-                            ? "border-primary bg-primary text-primary-foreground"
-                            : "border-border text-foreground hover:bg-[var(--cw-overlay-soft)]"
-                        }`}
-                      >
-                        <IoLeafOutline size={14} />
-                        {opt.projectOnly
-                          ? opt.label
-                          : opt.species}
-                      </button>
-                    );
-                  })}
+                <div className="space-y-3 max-h-56 overflow-y-auto">
+                  {projectGroups.map((group) => (
+                    <div
+                      key={group.projectId}
+                      className="border border-border bg-background p-3 space-y-2"
+                    >
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-foreground truncate">
+                          {group.projectName || "Tree project"}
+                        </p>
+                        {group.country ? (
+                          <p className="text-[11px] text-muted">{group.country}</p>
+                        ) : null}
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {group.species.map((opt) => {
+                          const active = opt.key === selectedKey;
+                          return (
+                            <button
+                              key={opt.key}
+                              type="button"
+                              onClick={() => setSelectedKey(opt.key)}
+                              className={`h-9 px-3 text-xs font-medium border inline-flex items-center gap-1.5 ${
+                                active
+                                  ? "border-primary bg-primary text-primary-foreground"
+                                  : "border-border text-foreground hover:bg-[var(--cw-overlay-soft)]"
+                              }`}
+                            >
+                              <IoLeafOutline size={14} />
+                              {opt.projectOnly ? "Any tree" : opt.species}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
