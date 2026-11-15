@@ -1285,7 +1285,8 @@ class TreeProjectViewSet(viewsets.ModelViewSet):
         return [IsAuthenticated()]
     
     def get_serializer_class(self):
-        if self.action == 'create':
+        # Create/update share writable fields + tree_species normalization
+        if self.action in ('create', 'update', 'partial_update'):
             return TreeProjectCreateSerializer
         return TreeProjectSerializer
 

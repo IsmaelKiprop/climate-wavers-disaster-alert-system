@@ -722,7 +722,6 @@ class TreeProjectSerializer(serializers.ModelSerializer):
     cover_image_url = serializers.SerializerMethodField()
     organization_logo_url = serializers.SerializerMethodField()
     gallery_urls = serializers.SerializerMethodField()
-    tree_species = serializers.SerializerMethodField()
     
     class Meta:
         model = TreeProject
@@ -742,8 +741,33 @@ class TreeProjectSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['trees_planted', 'funds_raised', 'is_verified', 'verification_date', 'tree_admin_org', 'created_at', 'updated_at']
 
-    def get_tree_species(self, obj):
-        return normalize_tree_species(obj.tree_species)
+    def validate_tree_species(self, value):
+        return normalize_tree_species(value)
+
+    def validate(self, attrs):
+        species = attrs.get("tree_species")
+        if species is None and self.instance is not None:
+            species = normalize_tree_species(self.instance.tree_species)
+        else:
+            species = normalize_tree_species(species or [])
+        species_sum = sum(int(s.get("target") or 0) for s in species)
+        target = attrs.get("target_trees")
+        if target is None and self.instance is not None:
+            target = self.instance.target_trees
+        try:
+            target = int(target or 0)
+        except (TypeError, ValueError):
+            target = 0
+        if species_sum > 0 and target < species_sum:
+            attrs["target_trees"] = species_sum
+        if "tree_species" in attrs or species:
+            attrs["tree_species"] = species
+        return attrs
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        data["tree_species"] = normalize_tree_species(data.get("tree_species"))
+        return data
     
     def get_cover_image_url(self, obj):
         if not obj.cover_image:
@@ -814,7 +838,8 @@ class TreeProjectCreateSerializer(serializers.ModelSerializer):
         species = attrs.get("tree_species")
         if species is None and self.instance is not None:
             species = normalize_tree_species(self.instance.tree_species)
-        species = normalize_tree_species(species or [])
+        else:
+            species = normalize_tree_species(species or [])
         species_sum = sum(int(s.get("target") or 0) for s in species)
         target = attrs.get("target_trees")
         if target is None and self.instance is not None:
@@ -825,8 +850,14 @@ class TreeProjectCreateSerializer(serializers.ModelSerializer):
             target = 0
         if species_sum > 0 and target < species_sum:
             attrs["target_trees"] = species_sum
-        attrs["tree_species"] = species
+        if "tree_species" in attrs or self.instance is None:
+            attrs["tree_species"] = species
         return attrs
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        data["tree_species"] = normalize_tree_species(data.get("tree_species"))
+        return data
     
     def create(self, validated_data):
         # Set the organization to the current user
