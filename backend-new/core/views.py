@@ -1304,6 +1304,34 @@ class TreeProjectViewSet(viewsets.ModelViewSet):
             )
         return None
 
+    def _require_project_owner(self, request, project):
+        from .tree_admin import user_can_manage_tree_project
+
+        if not user_can_manage_tree_project(request.user, project):
+            return Response(
+                {"detail": "You can only manage projects belonging to your organization."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        return None
+
+    def _scoped_projects_qs(self, request, queryset=None):
+        """
+        Tree Admins see only their org's projects when mine=true (admin desk).
+        Platform admins see all. Public list stays unscoped unless mine=true.
+        """
+        from django.db.models import Q
+        from .tree_admin import tree_admin_org_ids_for, user_can_verify_tree_projects
+
+        qs = queryset if queryset is not None else TreeProject.objects.all()
+        mine = (request.query_params.get("mine") or "").lower() in ("1", "true", "yes")
+        if not mine or not request.user.is_authenticated:
+            return qs
+        # Climate Wavers platform admins reviewing/verifying see everything
+        if user_can_verify_tree_projects(request.user):
+            return qs
+        org_ids = tree_admin_org_ids_for(request.user)
+        return qs.filter(Q(organization=request.user) | Q(tree_admin_org_id__in=org_ids))
+
     def create(self, request, *args, **kwargs):
         from .tree_admin import active_tree_admin_org_for
         from .tree_pricing import max_active_projects
@@ -1347,18 +1375,27 @@ class TreeProjectViewSet(viewsets.ModelViewSet):
         denied = self._require_tree_admin_write(request)
         if denied:
             return denied
+        owned = self._require_project_owner(request, self.get_object())
+        if owned:
+            return owned
         return super().update(request, *args, **kwargs)
 
     def partial_update(self, request, *args, **kwargs):
         denied = self._require_tree_admin_write(request)
         if denied:
             return denied
+        owned = self._require_project_owner(request, self.get_object())
+        if owned:
+            return owned
         return super().partial_update(request, *args, **kwargs)
 
     def destroy(self, request, *args, **kwargs):
         denied = self._require_tree_admin_write(request)
         if denied:
             return denied
+        owned = self._require_project_owner(request, self.get_object())
+        if owned:
+            return owned
         return super().destroy(request, *args, **kwargs)
     
     def get_queryset(self):
@@ -1375,9 +1412,9 @@ class TreeProjectViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(project_type=project_type)
         
         # Filter by status
-        status = self.request.query_params.get('status', None)
-        if status:
-            queryset = queryset.filter(status=status)
+        status_param = self.request.query_params.get('status', None)
+        if status_param:
+            queryset = queryset.filter(status=status_param)
         
         # Filter verified projects only
         verified_only = self.request.query_params.get('verified_only', None)
@@ -1388,6 +1425,8 @@ class TreeProjectViewSet(viewsets.ModelViewSet):
         organization = self.request.query_params.get('organization', None)
         if organization:
             queryset = queryset.filter(organization_id=organization)
+
+        queryset = self._scoped_projects_qs(self.request, queryset)
         
         return queryset.order_by('-created_at')
     
@@ -1470,43 +1509,73 @@ class TreeProjectViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def verify(self, request, pk=None):
         """
-        Verify a tree project (admin only)
+        Verify a tree project — Climate Wavers platform admins only.
+        Tree Admins cannot verify (including their own) projects.
         """
-        project = self.get_object()
-        from .tree_admin import user_has_tree_admin_access
+        from .models import TreeAdminMembership
+        from .tree_admin import user_can_verify_tree_projects
 
-        # Staff or approved Tree Admin can verify
-        if not (request.user.is_staff or user_has_tree_admin_access(request.user)):
+        # Bypass mine-scoping so platform admins can load any project id
+        try:
+            project = TreeProject.objects.get(pk=pk)
+        except TreeProject.DoesNotExist:
+            return Response({"error": "Not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        if not user_can_verify_tree_projects(request.user):
             return Response(
-                {"error": "Only administrators can verify projects"}, 
-                status=status.HTTP_403_FORBIDDEN
+                {
+                    "error": (
+                        "Only Climate Wavers administrators can verify projects. "
+                        "Tree Admins cannot approve their own projects."
+                    )
+                },
+                status=status.HTTP_403_FORBIDDEN,
             )
-        
+
+        # Extra guard: never self-verify even if historically granted is_staff
+        if project.organization_id == request.user.id and not request.user.is_superuser:
+            return Response(
+                {"error": "You cannot verify your own projects."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        if (
+            project.tree_admin_org_id
+            and TreeAdminMembership.objects.filter(
+                user=request.user, org_id=project.tree_admin_org_id
+            ).exists()
+            and not request.user.is_superuser
+        ):
+            return Response(
+                {"error": "You cannot verify your own organization's projects."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         project.is_verified = True
-        project.status = 'active'  # Change status to active when verified
+        project.status = "active"
         project.verified_by = request.user
         project.verification_date = timezone.now()
         project.save()
-        
+
         return Response({"message": "Project verified successfully"})
     
     @action(detail=False, methods=['get'], permission_classes=[AllowAny])
     def stats(self, request):
         """
-        Get global tree project statistics
+        Tree project statistics. With mine=true, scoped to the caller's org.
         """
-        total_projects = TreeProject.objects.count()
-        active_projects = TreeProject.objects.filter(status='active').count()
-        verified_projects = TreeProject.objects.filter(is_verified=True).count()
-        total_trees_planted = TreeProject.objects.aggregate(
+        base = self._scoped_projects_qs(request, TreeProject.objects.all())
+        total_projects = base.count()
+        active_projects = base.filter(status='active').count()
+        verified_projects = base.filter(is_verified=True).count()
+        total_trees_planted = base.aggregate(
             total=models.Sum('trees_planted')
         )['total'] or 0
-        total_funds_raised = TreeProject.objects.aggregate(
+        total_funds_raised = base.aggregate(
             total=models.Sum('funds_raised')
         )['total'] or 0
         
         # Country breakdown
-        country_stats = TreeProject.objects.values('country').annotate(
+        country_stats = base.values('country').annotate(
             project_count=models.Count('id'),
             trees_planted=models.Sum('trees_planted')
         ).order_by('-project_count')

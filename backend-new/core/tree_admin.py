@@ -60,6 +60,66 @@ def _create_pending_org(user, fields):
     return org, membership
 
 
+def _default_apply_fields_for_user(user, data=None):
+    """Build pending-org fields from a signed-in user (+ optional form overrides)."""
+    data = data or {}
+    name = (
+        (data.get("name") or "").strip()
+        or f"{(user.first_name or '').strip()} {(user.last_name or '').strip()}".strip()
+        or (user.username or "").strip()
+        or (user.email or "Tree Admin").split("@")[0]
+    )
+    org_type = (data.get("org_type") or "cbo").strip()
+    if org_type not in ORG_TYPES:
+        org_type = "cbo"
+    return {
+        "name": name[:200],
+        "org_type": org_type,
+        "website": (data.get("website") or "").strip() or None,
+        "country": (
+            (data.get("country") or getattr(user, "country", None) or "Kenya")
+        ).strip()[:100]
+        or "Kenya",
+        "city": (
+            (data.get("city") or getattr(user, "state", None) or getattr(user, "location", None) or "")
+        ).strip()[:100]
+        or None,
+        "contact_email": (
+            (data.get("contact_email") or data.get("email") or user.email or "")
+            .strip()
+            .lower()
+            or None
+        ),
+        "contact_phone": (
+            (data.get("contact_phone") or getattr(user, "phone", None) or "")
+            .strip()
+            or None
+        ),
+        "planting_sites_note": (data.get("planting_sites_note") or "").strip() or None,
+        "plan": normalize_plan(data.get("plan") or data.get("requested_plan")),
+        "plan_status": "pending",
+    }
+
+
+@transaction.atomic
+def ensure_pending_tree_admin_application(user, data=None):
+    """
+    Idempotent: every signed-in applicant gets a pending org that appears in
+    Django admin for one-click approve. No CLI needed for future users.
+    """
+    existing = (
+        TreeAdminMembership.objects.filter(user=user)
+        .select_related("org")
+        .order_by("-created_at")
+        .first()
+    )
+    if existing:
+        return existing.org, existing, False
+    fields = _default_apply_fields_for_user(user, data)
+    org, membership = _create_pending_org(user, fields)
+    return org, membership, True
+
+
 def _memberships_for(user):
     return (
         TreeAdminMembership.objects.filter(user=user)
@@ -87,8 +147,47 @@ def user_has_tree_admin_access(user) -> bool:
     for m in _memberships_for(user):
         if m.org.has_tree_admin_access and m.role in ("owner", "manager"):
             return True
-    # Legacy staff tree admins (pre-org model)
-    if user.is_staff:
+    # Legacy: Climate Wavers platform staff (not Tree Admin org operators)
+    if user.is_staff and not TreeAdminMembership.objects.filter(user=user).exists():
+        return True
+    return False
+
+
+def tree_admin_org_ids_for(user):
+    """Org IDs the user belongs to (any verification status)."""
+    if not user or not user.is_authenticated:
+        return []
+    return list(_memberships_for(user).values_list("org_id", flat=True))
+
+
+def user_can_manage_tree_project(user, project) -> bool:
+    """Tree Admins manage only their org's projects; platform staff manage all."""
+    if not user or not user.is_authenticated or project is None:
+        return False
+    if user.is_superuser:
+        return True
+    # Platform Climate Wavers staff (no Tree Admin membership) can manage all
+    if user.is_staff and not TreeAdminMembership.objects.filter(user=user).exists():
+        return True
+    org_ids = tree_admin_org_ids_for(user)
+    if project.tree_admin_org_id and project.tree_admin_org_id in org_ids:
+        return user_has_tree_admin_access(user)
+    if project.organization_id == user.id and user_has_tree_admin_access(user):
+        return True
+    return False
+
+
+def user_can_verify_tree_projects(user) -> bool:
+    """
+    Only Climate Wavers platform admins verify projects.
+    Tree Admins (org members) never verify — including if they were
+    historically granted is_staff during approval.
+    """
+    if not user or not user.is_authenticated:
+        return False
+    if user.is_superuser:
+        return True
+    if user.is_staff and not TreeAdminMembership.objects.filter(user=user).exists():
         return True
     return False
 
@@ -103,8 +202,9 @@ def active_tree_admin_org_for(user):
 @transaction.atomic
 def approve_user_as_tree_admin(user, *, org_name: str = "", plan: str = "pilot"):
     """
-    Create a Tree Admin org (if needed), approve it, start pilot, grant staff.
-    Used by Django admin actions and the management command.
+    Create a Tree Admin org (if needed), approve it, start pilot.
+    Does NOT grant Django is_staff — Tree Admins must not self-verify
+    or access ClimateWavers Portal as platform admins.
     """
     from django.utils import timezone
 
@@ -156,17 +256,17 @@ def approve_user_as_tree_admin(user, *, org_name: str = "", plan: str = "pilot")
     start_tree_pilot(org, plan=plan or org.plan)
     org.save()
 
-    user.is_staff = True
+    # Activate account for publishing — never grant platform is_staff
     user.is_verified = True
     user.is_active = True
-    user.save(update_fields=["is_staff", "is_verified", "is_active"])
+    user.save(update_fields=["is_verified", "is_active"])
 
     return org, membership, created
 
 
 @transaction.atomic
 def approve_tree_admin_org(org):
-    """Approve an existing Tree Admin org + grant owner staff."""
+    """Approve an existing Tree Admin org (no Django is_staff for owners)."""
     from django.utils import timezone
 
     from .tree_pricing import start_tree_pilot
@@ -184,10 +284,9 @@ def approve_tree_admin_org(org):
         user = membership.user
         if not user:
             continue
-        user.is_staff = True
         user.is_verified = True
         user.is_active = True
-        user.save(update_fields=["is_staff", "is_verified", "is_active"])
+        user.save(update_fields=["is_verified", "is_active"])
 
     return org
 
@@ -281,9 +380,9 @@ class TreeAdminPublicApplyView(APIView):
                 {
                     "detail": (
                         "An account with this email already exists. "
-                        "Sign in, then open Tree Admin in the app."
+                        "Sign in — we'll queue your Tree Admin application for approval."
                     ),
-                    "login_path": "/login?redirect=/app/admin/tree-projects",
+                    "login_path": "/login?redirect=/app/admin/tree-projects?apply=1",
                 },
                 status=400,
             )
@@ -345,32 +444,74 @@ class TreeAdminApplyView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        fields, error = _parse_apply_fields(request.data or {})
-        if error:
-            return error
-        fields["contact_email"] = (
-            fields["contact_email"] or request.user.email or ""
-        ).strip().lower() or None
-
-        existing = TreeAdminMembership.objects.filter(user=request.user).first()
-        if existing:
-            return Response(
-                {
-                    "detail": "You already have a Tree Admin organization.",
-                    "membership": TreeAdminMembershipSerializer(existing).data,
-                },
-                status=400,
+        data = request.data or {}
+        # Allow minimal payload (ensure from Tree Admin desk) — fill from profile.
+        if (data.get("name") or "").strip():
+            fields, error = _parse_apply_fields(data)
+            if error:
+                return error
+            fields["contact_email"] = (
+                fields["contact_email"] or request.user.email or ""
+            ).strip().lower() or None
+            existing = TreeAdminMembership.objects.filter(user=request.user).first()
+            if existing:
+                return Response(
+                    {
+                        "detail": "You already have a Tree Admin organization.",
+                        "membership": TreeAdminMembershipSerializer(existing).data,
+                        "created": False,
+                    },
+                    status=200,
+                )
+            with transaction.atomic():
+                _org, membership = _create_pending_org(request.user, fields)
+            created = True
+        else:
+            _org, membership, created = ensure_pending_tree_admin_application(
+                request.user, data
             )
-
-        with transaction.atomic():
-            _org, membership = _create_pending_org(request.user, fields)
 
         return Response(
             {
                 "membership": TreeAdminMembershipSerializer(membership).data,
-                "message": "Application submitted. An admin will verify your organization.",
+                "created": created,
+                "message": (
+                    "Application submitted. An admin will verify your organization "
+                    "in ClimateWavers Portal → Tree admin organizations."
+                    if created
+                    else "You already have a Tree Admin application on file."
+                ),
             },
-            status=201,
+            status=201 if created else 200,
+        )
+
+
+class TreeAdminEnsureView(APIView):
+    """
+    One-tap for signed-in users: queue a pending Tree Admin org for admin approval.
+    Idempotent — safe to call when opening Tree Admin.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        org, membership, created = ensure_pending_tree_admin_application(
+            request.user, request.data or {}
+        )
+        return Response(
+            {
+                "membership": TreeAdminMembershipSerializer(membership).data,
+                "created": created,
+                "has_pending": org.verification_status == "pending",
+                "has_tree_admin_access": bool(org.has_tree_admin_access)
+                or bool(request.user.is_staff),
+                "message": (
+                    "Tree Admin application queued for verification."
+                    if created
+                    else "Tree Admin application already on file."
+                ),
+            },
+            status=201 if created else 200,
         )
 
 
@@ -382,7 +523,8 @@ class TreeAdminMeView(APIView):
         approved = [
             m for m in memberships if m.org.verification_status == "approved"
         ]
-        access = [m for m in approved if m.org.has_tree_admin_access]
+        has_access = user_has_tree_admin_access(request.user)
+        can_verify = user_can_verify_tree_projects(request.user)
         return Response(
             {
                 "memberships": TreeAdminMembershipSerializer(memberships, many=True).data,
@@ -390,7 +532,9 @@ class TreeAdminMeView(APIView):
                 "has_pending": any(
                     m.org.verification_status == "pending" for m in memberships
                 ),
-                "has_tree_admin_access": bool(access) or bool(request.user.is_staff),
+                "has_tree_admin_access": has_access,
+                "can_verify_projects": can_verify,
+                "is_platform_admin": can_verify,
                 "is_legacy_staff": bool(request.user.is_staff or request.user.is_superuser),
                 "plans": {
                     key: {

@@ -53,6 +53,14 @@
       "destination": "/api/share-profile?id=:id"
     },
     {
+      "source": "/share/project/:id",
+      "destination": "/api/share-project?id=:id"
+    },
+    {
+      "source": "/share/project/:id/",
+      "destination": "/api/share-project?id=:id"
+    },
+    {
       "source": "/u/:id",
       "has": [
         {
@@ -62,6 +70,17 @@
         }
       ],
       "destination": "/api/share-profile?id=:id"
+    },
+    {
+      "source": "/p/:id",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": "(?i).*(whatsapp|facebookexternalhit|facebot|twitterbot|linkedinbot|slackbot|discordbot|telegrambot|embedly|pinterest|quora|bot|crawler|spider|preview).*"
+        }
+      ],
+      "destination": "/api/share-project?id=:id"
     },
     {
       "source": "/((?!assets/|api/).*)",

@@ -49,6 +49,7 @@ export const endpoints = {
     "groups": "/api/v1/groups/",
     "treeAdminApply": "/api/v1/tree-admin/apply/",
     "treeAdminApplyPublic": "/api/v1/tree-admin/apply-public/",
+    "treeAdminEnsure": "/api/v1/tree-admin/ensure/",
     "treeAdminMe": "/api/v1/tree-admin/me/",
     "pointsRates": "/api/v1/points/rates/",
     "pointsBalance": "/api/v1/points/balance/",

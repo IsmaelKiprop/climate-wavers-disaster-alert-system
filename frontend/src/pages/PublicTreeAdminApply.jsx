@@ -104,10 +104,10 @@ const PublicTreeAdminApply = () => {
       toast.success(data?.message || "Application submitted.");
       Cookies.set("email", form.contact_email, { path: "/" });
       if (typeof sessionStorage !== "undefined") {
-        sessionStorage.setItem("authRedirect", "/app/admin/tree-projects");
+        sessionStorage.setItem("authRedirect", "/app/admin/tree-projects?apply=1");
       }
       navigate(
-        `/emailcode?redirect=${encodeURIComponent("/app/admin/tree-projects")}`
+        `/emailcode?redirect=${encodeURIComponent("/app/admin/tree-projects?apply=1")}`
       );
     } catch (err) {
       const detail = err?.response?.data?.detail;
@@ -142,7 +142,7 @@ const PublicTreeAdminApply = () => {
           </>
         }
         links={[
-          { to: "/login?redirect=/app/admin/tree-projects", label: "Already have an account? Sign in" },
+          { to: "/login?redirect=/app/admin/tree-projects?apply=1", label: "Already have an account? Sign in" },
           { to: "/pricing", label: "Tree Admin pricing" },
           { to: "/app/plant-tree", label: "Plant a tree" },
           { to: "/responders/apply", label: "Apply as responder instead" },

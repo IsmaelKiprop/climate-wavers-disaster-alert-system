@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { FaTree, FaLeaf, FaSeedling, FaGlobe, FaHeart, FaMapMarkerAlt, FaUsers, FaShare, FaArrowLeft } from 'react-icons/fa';
 import { endpoints } from '../utils/endpoints';
 import SocialShare from './SocialShare';
@@ -10,17 +10,19 @@ import { apiUrl } from '../config/env';
 const globalProjectCache = new Map();
 
 const PublicProjectView = () => {
+  const { projectId: pathProjectId } = useParams();
   const [project, setProject] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showSocialShare, setShowSocialShare] = useState(false);
   const hasFetched = useRef(false);
   
-  // Extract projectId from URL parameters using useMemo to prevent re-extraction
+  // Support /p/:projectId and legacy /project?project=
   const projectId = useMemo(() => {
+    if (pathProjectId) return String(pathProjectId);
     const urlParams = new URLSearchParams(window.location.search);
     return urlParams.get('project');
-  }, []);
+  }, [pathProjectId]);
 
   useEffect(() => {
     // Don't fetch if we already have project data or if we've already fetched

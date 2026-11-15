@@ -177,6 +177,7 @@ function App() {
               <Route path="/responders/apply" element={<PublicResponderApply />} />
               <Route path="/tree-admins/apply" element={<PublicTreeAdminApply />} />
               <Route path="/project" element={<PublicProjectView />} />
+              <Route path="/p/:projectId" element={<PublicProjectView />} />
               <Route path="/u/:userId" element={<SharedProfilePage />} />
               <Route path="/gift/:userId" element={<PlantTree />} />
               <Route path="/app" element={<AuthSharedLayout />}>

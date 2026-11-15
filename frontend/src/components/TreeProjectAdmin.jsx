@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { FaTree, FaMapMarkerAlt, FaUsers, FaDollarSign, FaCheckCircle, FaTimesCircle, FaEdit, FaTrash, FaPlus } from 'react-icons/fa';
 import { endpoints } from '../utils/endpoints';
@@ -47,10 +48,12 @@ const getCookie = (name) => {
 };
 
 const TreeProjectAdmin = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [editingProject, setEditingProject] = useState(null);
+  const [applying, setApplying] = useState(false);
   const [stats, setStats] = useState({
     total_projects: 0,
     active_projects: 0,
@@ -104,6 +107,8 @@ const TreeProjectAdmin = () => {
   });
 
   const [isAdmin, setIsAdmin] = useState(false);
+  /** Climate Wavers platform admin — only they can verify projects */
+  const [canVerifyProjects, setCanVerifyProjects] = useState(false);
   const [treeAdminMe, setTreeAdminMe] = useState(null);
 
   // Debug admin status
@@ -143,12 +148,73 @@ const TreeProjectAdmin = () => {
     checkAdminStatus();
   }, []);
 
+  const refreshTreeAdminMe = async (token) => {
+    const meRes = await fetch(apiUrl(endpoints.treeAdminMe), {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!meRes.ok) return null;
+    const me = await meRes.json();
+    setTreeAdminMe(me);
+    setCanVerifyProjects(Boolean(me.can_verify_projects || me.is_platform_admin));
+    const { setTreeAdminAccess } = await import('../utils/factory');
+    setTreeAdminAccess(Boolean(me.has_tree_admin_access));
+    return me;
+  };
+
+  /** Admin desk always loads only this org's projects (platform admins see all). */
+  const deskProjectsUrl = () =>
+    apiUrl(`${endpoints.tree_projects}?mine=true`);
+  const deskStatsUrl = () =>
+    apiUrl(`${endpoints.tree_projects_stats}?mine=true`);
+
+  /** Queue pending org for Climate Wavers admin approval (idempotent). */
+  const ensureTreeAdminApplication = async ({ silent = false } = {}) => {
+    const token = getAuthToken();
+    if (!token) {
+      toast.error('Please log in first');
+      return null;
+    }
+    setApplying(true);
+    try {
+      const res = await fetch(apiUrl(endpoints.treeAdminEnsure), {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({}),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(data?.detail || 'Could not submit Tree Admin application');
+        return null;
+      }
+      if (!silent) {
+        toast.success(
+          data?.created
+            ? 'Application submitted — waiting for Climate Wavers verification.'
+            : data?.message || 'Application already on file.'
+        );
+      }
+      const me = await refreshTreeAdminMe(token);
+      if (me) {
+        setIsAdmin(Boolean(me.has_tree_admin_access));
+      }
+      return data;
+    } catch (err) {
+      console.error(err);
+      toast.error('Could not submit Tree Admin application');
+      return null;
+    } finally {
+      setApplying(false);
+    }
+  };
+
   const checkAdminStatus = async () => {
     try {
       const token = getAuthToken();
       if (!token) return;
 
-      // Use the auth user endpoint to get current user data
       const response = await fetch(apiUrl(endpoints.user), {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -158,26 +224,25 @@ const TreeProjectAdmin = () => {
       let staff = false;
       if (response.ok) {
         const userData = await response.json();
-        console.log('User data from API:', userData);
-        console.log('is_staff:', userData.is_staff);
-        console.log('is_superuser:', userData.is_superuser);
         staff = Boolean(userData.is_staff || userData.is_superuser);
-      } else {
-        console.error('Failed to fetch user data:', response.status);
       }
 
       try {
-        const meRes = await fetch(apiUrl(endpoints.treeAdminMe), {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (meRes.ok) {
-          const me = await meRes.json();
-          setTreeAdminMe(me);
-          const { setTreeAdminAccess } = await import('../utils/factory');
-          setTreeAdminAccess(Boolean(me.has_tree_admin_access));
-          setIsAdmin(staff || Boolean(me.has_tree_admin_access));
-          return;
+        let me = await refreshTreeAdminMe(token);
+        // Returning users with an account but no org → queue them for approval once.
+        if (me && !me.has_tree_admin_access && !me.has_pending && !(me.memberships || []).length) {
+          await ensureTreeAdminApplication({ silent: true });
+          me = await refreshTreeAdminMe(token);
         }
+        if (searchParams.get('apply') === '1') {
+          await ensureTreeAdminApplication({ silent: false });
+          const next = new URLSearchParams(searchParams);
+          next.delete('apply');
+          setSearchParams(next, { replace: true });
+          me = await refreshTreeAdminMe(token);
+        }
+        setIsAdmin(staff || Boolean(me?.has_tree_admin_access));
+        return;
       } catch (meErr) {
         console.error('Tree admin me failed:', meErr);
       }
@@ -201,7 +266,7 @@ const TreeProjectAdmin = () => {
         if (localToken) {
           console.log('Admin Dashboard - Using localStorage token as fallback');
           // Use localStorage token as fallback
-          const response = await fetch(apiUrl(endpoints.tree_projects), {
+          const response = await fetch(deskProjectsUrl(), {
             headers: {
               'Authorization': `Bearer ${localToken}`,
               'Content-Type': 'application/json'
@@ -228,7 +293,7 @@ const TreeProjectAdmin = () => {
         return;
       }
 
-      const response = await fetch(apiUrl(endpoints.tree_projects), {
+      const response = await fetch(deskProjectsUrl(), {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -265,7 +330,7 @@ const TreeProjectAdmin = () => {
         const localToken = localStorage.getItem('token');
         if (localToken) {
           console.log('Admin Dashboard Stats - Using localStorage token as fallback');
-          const response = await fetch(apiUrl(endpoints.tree_projects_stats), {
+          const response = await fetch(deskStatsUrl(), {
             headers: {
               'Authorization': `Bearer ${localToken}`,
               'Content-Type': 'application/json'
@@ -281,7 +346,7 @@ const TreeProjectAdmin = () => {
         return;
       }
 
-      const response = await fetch(apiUrl(endpoints.tree_projects_stats), {
+      const response = await fetch(deskStatsUrl(), {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -635,7 +700,8 @@ Thank you for your understanding! 🌱
                 Tree Projects
               </h1>
               <p className="text-sm text-muted mt-1">
-                Manage planting initiatives, track funding in USD, and publish verified projects.
+                Manage your organization&apos;s projects and funding. Climate Wavers
+                verifies projects before they go public — you cannot self-approve.
               </p>
             </div>
             <button
@@ -670,20 +736,26 @@ Thank you for your understanding! 🌱
                 Platform fee on tree purchases: 18%. Project funds receive 82%.
               </p>
               {!treeAdminMe.has_tree_admin_access && treeAdminMe.has_pending ? (
-                <p className="mt-2 text-amber-600 dark:text-amber-400">
-                  Your application is pending verification. You can browse but publishing unlocks after approval.
+                <p className="mt-2 text-amber-700 dark:text-amber-400">
+                  Application pending. Climate Wavers will approve you in admin
+                  (Tree admin organizations). Publishing unlocks after approval.
                 </p>
               ) : null}
             </div>
           ) : !isAdmin ? (
-            <div className="mt-4 border border-border bg-background p-3 sm:p-4 text-sm">
+            <div className="mt-4 border border-border bg-background p-3 sm:p-4 text-sm space-y-3">
               <p className="text-muted">
-                No Tree Admin org yet.{" "}
-                <a href="/tree-admins/apply" className="text-primary font-medium underline">
-                  Apply to become a Tree Admin
-                </a>
-                .
+                You’re signed in but not a verified Tree Admin yet. Submit once —
+                your org appears in ClimateWavers Portal for approval.
               </p>
+              <button
+                type="button"
+                disabled={applying}
+                onClick={() => ensureTreeAdminApplication({ silent: false })}
+                className="h-10 px-4 bg-primary text-primary-foreground text-sm font-medium disabled:opacity-60"
+              >
+                {applying ? "Submitting…" : "Submit Tree Admin application"}
+              </button>
             </div>
           ) : null}
         </div>
@@ -1356,20 +1428,20 @@ Thank you for your understanding! 🌱
                         >
                           <FaEdit />
                         </button>
-                        {!project.is_verified && isAdmin && (
+                        {!project.is_verified && canVerifyProjects && (
                           <button
                             type="button"
                             onClick={() => handleVerify(project.id)}
                             className="h-9 w-9 inline-flex items-center justify-center text-primary hover:bg-background border border-transparent hover:border-border"
-                            title="Verify Project"
+                            title="Verify Project (Climate Wavers admin)"
                           >
                             <FaCheckCircle />
                           </button>
                         )}
-                        {!project.is_verified && !isAdmin && (
+                        {!project.is_verified && !canVerifyProjects && (
                           <span
                             className="h-9 w-9 inline-flex items-center justify-center text-muted/50 cursor-not-allowed"
-                            title="Only administrators can verify projects"
+                            title="Waiting for Climate Wavers to verify — you cannot approve your own projects"
                           >
                             <FaCheckCircle />
                           </span>

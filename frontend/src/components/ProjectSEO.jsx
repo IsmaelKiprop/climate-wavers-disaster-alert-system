@@ -1,21 +1,30 @@
 import SEO from "./SEO";
 import { SITE } from "../config/site";
+import {
+  brandedOgPreviewImage,
+  projectAppUrl,
+  projectOgShareUrl,
+} from "../utils/profileCompleteness";
 
 const ProjectSEO = ({ project }) => {
   if (!project) return null;
 
   const projectId = project.id;
-  const shareUrl = `${SITE.url}/project?project=${encodeURIComponent(projectId)}`;
+  const shareUrl = projectOgShareUrl(projectId);
+  const canonical = projectAppUrl(projectId);
   const place = project.country || project.location || "Africa";
-  const shareTitle = `Plant Trees: ${project.name}`;
+  const shareTitle = `${project.name} · Climate Wavers`;
   const shareDescription = (
+    project.short_description ||
     project.description ||
     `Join the ${project.name} tree planting project in ${place} on Climate Wavers.`
   ).slice(0, 160);
-  const shareImage =
-    project.cover_image_url ||
-    project.image_url ||
-    `${SITE.url}/og-image.jpg`;
+  const rawCover =
+    project.cover_image_url || project.cover_image || project.image_url || "";
+  const shareImage = brandedOgPreviewImage(
+    rawCover,
+    `${SITE.url}/og-image.jpg`
+  );
 
   return (
     <SEO
@@ -23,7 +32,7 @@ const ProjectSEO = ({ project }) => {
       description={shareDescription}
       keywords={`tree planting, ${place}, climate action, reforestation, ${project.organization_name || "Climate Wavers"}`}
       url={shareUrl}
-      canonical={shareUrl}
+      canonical={canonical}
       image={shareImage}
       type="article"
       structuredData={{
@@ -32,7 +41,7 @@ const ProjectSEO = ({ project }) => {
         headline: shareTitle,
         description: shareDescription,
         image: shareImage,
-        url: shareUrl,
+        url: canonical,
         author: {
           "@type": "Organization",
           name: project.organization_name || SITE.name,
@@ -48,7 +57,7 @@ const ProjectSEO = ({ project }) => {
         },
         mainEntityOfPage: {
           "@type": "WebPage",
-          "@id": shareUrl,
+          "@id": canonical,
         },
         about: {
           "@type": "Thing",

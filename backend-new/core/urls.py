@@ -38,6 +38,7 @@ from .responder import (
 from .tree_admin import (
     TreeAdminApplyView,
     TreeAdminPublicApplyView,
+    TreeAdminEnsureView,
     TreeAdminMeView,
 )
 from .groups import (
@@ -147,6 +148,11 @@ urlpatterns = [
         "tree-admin/apply-public/",
         TreeAdminPublicApplyView.as_view(),
         name="tree-admin-apply-public",
+    ),
+    path(
+        "tree-admin/ensure/",
+        TreeAdminEnsureView.as_view(),
+        name="tree-admin-ensure",
     ),
     path("tree-admin/me/", TreeAdminMeView.as_view(), name="tree-admin-me"),
     path("groups/", SocialGroupListCreateView.as_view(), name="social-groups"),

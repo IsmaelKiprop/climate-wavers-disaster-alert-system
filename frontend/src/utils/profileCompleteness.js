@@ -62,10 +62,10 @@ export function profileOgShareUrl(userId) {
 const CLOUDINARY_LOGO_LAYER = "disax:climate-wavers:brand-logo";
 
 /**
- * Same branded 1200×630 image crawlers use (photo + Climate Wavers logo).
- * Falls back to the raw photo when not on Cloudinary.
+ * Same branded 1200×630 image crawlers use (photo/cover + Climate Wavers logo).
+ * Falls back to the raw URL when not on Cloudinary.
  */
-export function profileOgPreviewImage(photoUrl, fallback = "/og-image.jpg") {
+export function brandedOgPreviewImage(photoUrl, fallback = "/og-image.jpg") {
   if (!photoUrl) return fallback;
   let url = String(photoUrl).trim();
   if (url.startsWith("http://")) url = `https://${url.slice(7)}`;
@@ -81,6 +81,24 @@ export function profileOgPreviewImage(photoUrl, fallback = "/og-image.jpg") {
     "fl_layer_apply,g_south_east,x_36,y_32",
   ].join("/");
   return `${match[1]}/${transforms}/${version[1]}`;
+}
+
+/** @deprecated prefer brandedOgPreviewImage */
+export function profileOgPreviewImage(photoUrl, fallback = "/og-image.jpg") {
+  return brandedOgPreviewImage(photoUrl, fallback);
+}
+
+/** Human-facing project page. */
+export function projectAppUrl(projectId) {
+  return `${siteOrigin()}/p/${projectId}`;
+}
+
+/**
+ * WhatsApp/Facebook share link for a tree project.
+ * Bots are rewritten on Vercel to /api/share-project (cover + logo OG).
+ */
+export function projectOgShareUrl(projectId) {
+  return `${siteOrigin()}/p/${projectId}?v=og1`;
 }
 
 export function giftTreesPath(userId, displayName = "") {
