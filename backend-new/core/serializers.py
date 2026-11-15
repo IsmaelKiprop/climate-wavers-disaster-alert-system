@@ -583,6 +583,7 @@ class NotificationSerializer(serializers.ModelSerializer):
             "notification_type",
             "is_read",
             "created_at",
+            "object_id",
             "content",
             "actor",
         )
@@ -628,6 +629,22 @@ class NotificationSerializer(serializers.ModelSerializer):
                     "message_id": msg.id,
                     "content": _clip(msg.body, 120),
                     "actor": _notice_actor_dict(msg.sender),
+                }
+            elif model == "climateevent":
+                from .models import ClimateEvent
+
+                event = ClimateEvent.objects.select_related("host").only(
+                    "id", "title", "event_type", "starts_at", "jitsi_room", "host_id"
+                ).get(id=obj.object_id)
+                payload = {
+                    "id": event.id,
+                    "event_id": event.id,
+                    "title": event.title,
+                    "event_type": event.event_type,
+                    "starts_at": event.starts_at.isoformat() if event.starts_at else None,
+                    "join_path": f"/app/calendar/events/{event.id}/join",
+                    "jitsi_room": event.jitsi_room,
+                    "user": _notice_actor_dict(event.host) if event.host_id else None,
                 }
         except Exception:
             payload = None

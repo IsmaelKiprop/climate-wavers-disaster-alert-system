@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import timedelta
 
@@ -27,6 +28,8 @@ from .models import (
     TreeProject,
 )
 from .signals import send_to_websocket
+
+logger = logging.getLogger(__name__)
 
 
 def new_jitsi_room() -> str:
@@ -155,36 +158,86 @@ def _event_join_url(event: ClimateEvent) -> str:
 
 
 def send_climate_invite_email(event: ClimateEvent, to_email: str, invitee_name: str = ""):
-    if not to_email:
-        return
-    try:
-        from django.conf import settings as dj_settings
-        from django.core.mail import send_mail
+    """Send invite via Resend (SMTP is blocked on Render)."""
+    email = str(to_email or "").strip()
+    if not email or "@" not in email or email.endswith("@example.com"):
+        return False
 
-        when = ""
-        if event.starts_at:
-            when = event.starts_at.strftime("%a %d %b %Y, %H:%M UTC")
-        join_url = _event_join_url(event)
-        who = invitee_name or to_email
-        host = display_name_for(event.host) if event.host_id else "Climate Wavers"
-        send_mail(
-            subject=f"You're invited: {event.title} — Climate Wavers",
-            message=(
-                f"Hi {who},\n\n"
-                f"{host} invited you to a Climate Wavers event.\n\n"
-                f"Event: {event.title}\n"
-                f"Type: {event.get_event_type_display()}\n"
-                f"When: {when or 'See calendar'}\n\n"
-                f"{(event.description or '').strip()[:500]}\n\n"
-                f"Open / RSVP / join the Climate room:\n{join_url}\n\n"
-                f"— Climate Wavers\n"
-            ),
-            from_email=getattr(dj_settings, "DEFAULT_FROM_EMAIL", None),
-            recipient_list=[to_email],
-            fail_silently=True,
+    when = ""
+    if event.starts_at:
+        when = event.starts_at.strftime("%a %d %b %Y, %H:%M UTC")
+    join_url = _event_join_url(event)
+    who = invitee_name or email
+    host = display_name_for(event.host) if event.host_id else "Climate Wavers"
+    subject = f"You're invited: {event.title} — Climate Wavers"
+    body = (
+        f"Hi {who},\n\n"
+        f"{host} invited you to a Climate Wavers event.\n\n"
+        f"Event: {event.title}\n"
+        f"Type: {event.get_event_type_display()}\n"
+        f"When: {when or 'See calendar'}\n\n"
+        f"{(event.description or '').strip()[:500]}\n\n"
+        f"Open / RSVP / join the Climate room:\n{join_url}\n\n"
+        f"— Climate Wavers\n"
+    )
+    payload = {
+        "email": email,
+        "data": {"subject": subject, "content": body},
+    }
+    try:
+        from api.tasks import _send_resend
+
+        _send_resend("custom_mail", payload)
+        logger.info("Climate invite email sent via Resend to %s event=%s", email, event.id)
+        return True
+    except Exception as exc:
+        logger.warning(
+            "Climate invite Resend failed to %s event=%s: %s", email, event.id, exc
         )
-    except Exception:
-        pass
+    try:
+        from api.tasks import _post_notification
+
+        _post_notification({"type": "custom_mail", **payload})
+        logger.info(
+            "Climate invite email sent via notification service to %s event=%s",
+            email,
+            event.id,
+        )
+        return True
+    except Exception as exc:
+        logger.warning(
+            "Climate invite email failed to %s event=%s: %s", email, event.id, exc
+        )
+        return False
+
+
+def _deliver_invite_notice(
+    event: ClimateEvent,
+    invite: ClimateEventInvite,
+    *,
+    notify: bool,
+    send_email: bool,
+):
+    """Always deliver in-app + email when requested (including re-invites)."""
+    user = invite.user
+    if notify and user is not None:
+        notify_climate_event(user, event, f"You're invited: {event.title}")
+        logger.info(
+            "Climate invite in-app notify user=%s event=%s",
+            getattr(user, "username", user.id),
+            event.id,
+        )
+    if not send_email:
+        return
+    to_email = ""
+    name = ""
+    if user is not None:
+        to_email = (user.email or "").strip()
+        name = display_name_for(user)
+    if not to_email:
+        to_email = (invite.email or "").strip()
+    if to_email:
+        send_climate_invite_email(event, to_email, name)
 
 
 def invite_users(
@@ -196,11 +249,15 @@ def invite_users(
 ):
     invited = []
     for uid in user_ids or []:
-        if not uid or int(uid) == event.host_id:
+        try:
+            uid_int = int(uid)
+        except (TypeError, ValueError):
+            continue
+        if not uid_int or uid_int == event.host_id:
             continue
         invite, created = ClimateEventInvite.objects.get_or_create(
             event=event,
-            user_id=int(uid),
+            user_id=uid_int,
             defaults={
                 "role": role,
                 "rsvp": "pending",
@@ -209,20 +266,32 @@ def invite_users(
                 "notify_email": send_email,
             },
         )
-        if created:
-            invited.append(invite)
-            if notify:
-                notify_climate_event(
-                    invite.user,
-                    event,
-                    f"You're invited: {event.title}",
-                )
-            if send_email and invite.user and invite.user.email:
-                send_climate_invite_email(
-                    event,
-                    invite.user.email,
-                    display_name_for(invite.user),
-                )
+        if not created:
+            dirty = []
+            if invite.notify_in_app != notify:
+                invite.notify_in_app = notify
+                dirty.append("notify_in_app")
+            if invite.notify_email != send_email:
+                invite.notify_email = send_email
+                dirty.append("notify_email")
+            if dirty:
+                invite.save(update_fields=[*dirty, "updated_at"])
+        if invite.user_id:
+            invite = (
+                ClimateEventInvite.objects.select_related("user").get(pk=invite.pk)
+            )
+        _deliver_invite_notice(
+            event, invite, notify=notify, send_email=send_email
+        )
+        invited.append(invite)
+        logger.info(
+            "Climate invite user event=%s user_id=%s created=%s notify=%s email=%s",
+            event.id,
+            uid_int,
+            created,
+            notify,
+            send_email,
+        )
     return invited
 
 
@@ -268,10 +337,20 @@ def invite_emails(
                 "notify_email": send_email,
             },
         )
-        if created:
-            invited.append(invite)
-            if send_email:
-                send_climate_invite_email(event, email)
+        if not created and invite.notify_email != send_email:
+            invite.notify_email = send_email
+            invite.save(update_fields=["notify_email", "updated_at"])
+        _deliver_invite_notice(
+            event, invite, notify=False, send_email=send_email
+        )
+        invited.append(invite)
+        logger.info(
+            "Climate invite email-only event=%s email=%s created=%s send_email=%s",
+            event.id,
+            email,
+            created,
+            send_email,
+        )
     return invited
 
 
@@ -283,15 +362,25 @@ def apply_invites(
     notify=True,
     send_email=True,
 ):
+    user_ids = list(user_ids or [])
+    emails = list(emails or [])
+    logger.info(
+        "apply_invites event=%s user_ids=%s emails=%s notify=%s send_email=%s",
+        event.id,
+        user_ids,
+        emails,
+        notify,
+        send_email,
+    )
     created = []
     created.extend(
         invite_users(
-            event, user_ids or [], notify=notify, send_email=send_email
+            event, user_ids, notify=notify, send_email=send_email
         )
     )
     created.extend(
         invite_emails(
-            event, emails or [], notify=notify, send_email=send_email
+            event, emails, notify=notify, send_email=send_email
         )
     )
     return created

@@ -191,16 +191,51 @@ const ScheduleClimateEventModal = ({
 
   if (!open || typeof document === "undefined") return null;
 
-  const invitePayload = () => {
-    const newOnes = invitees.filter((i) => !i.existing);
+  const buildInviteList = () => {
+    let list = [...invitees];
+    const draft = emailDraft.trim().toLowerCase();
+    if (
+      emailOk(draft) &&
+      !list.some((i) => i.key === `e-${draft}` || i.email?.toLowerCase() === draft)
+    ) {
+      list = [
+        ...list,
+        { key: `e-${draft}`, userId: null, email: draft, label: draft, existing: false },
+      ];
+    }
+    return list;
+  };
+
+  const invitePayloadFrom = (list) => {
+    const newOnes = list.filter((i) => !i.existing);
     return {
-      invite_user_ids: newOnes.filter((i) => i.userId).map((i) => Number(i.userId)),
+      invite_user_ids: newOnes
+        .filter((i) => i.userId != null && i.userId !== "")
+        .map((i) => Number(i.userId))
+        .filter((id) => Number.isFinite(id) && id > 0),
       invite_emails: newOnes
-        .filter((i) => !i.userId && i.email)
-        .map((i) => i.email),
+        .filter((i) => (i.userId == null || i.userId === "") && i.email)
+        .map((i) => String(i.email).trim().toLowerCase()),
       notify_in_app: notifyInApp,
       notify_email: notifyEmail,
     };
+  };
+
+  const pushInvites = async (eventId, invites) => {
+    const hasUsers = (invites.invite_user_ids || []).length > 0;
+    const hasEmails = (invites.invite_emails || []).length > 0;
+    if (!eventId || (!hasUsers && !hasEmails)) return null;
+    return client.run(
+      "post",
+      `${endpoints.climateEvents}${eventId}/invite/`,
+      {
+        invite_user_ids: invites.invite_user_ids,
+        invite_emails: invites.invite_emails,
+        notify_in_app: invites.notify_in_app,
+        notify_email: invites.notify_email,
+      },
+      true
+    );
   };
 
   const submit = async (e) => {
@@ -212,7 +247,10 @@ const ScheduleClimateEventModal = ({
     setSaving(true);
     try {
       const startsIso = new Date(startsAt).toISOString();
-      const invites = invitePayload();
+      const list = buildInviteList();
+      const invites = invitePayloadFrom(list);
+      const newCount =
+        (invites.invite_user_ids?.length || 0) + (invites.invite_emails?.length || 0);
       let data;
 
       if (isEdit && event?.id) {
@@ -224,11 +262,28 @@ const ScheduleClimateEventModal = ({
             description: description.trim(),
             starts_at: startsIso,
             visibility,
-            ...invites,
           },
           true
         );
-        toast.success("Event updated");
+        // Invites go through /invite/ so notify + email always run once
+        if (newCount > 0) {
+          await pushInvites(event.id, invites);
+          try {
+            data = await client.run(
+              "get",
+              `${endpoints.climateEvents}${event.id}/`,
+              {},
+              true
+            );
+          } catch {
+            /* keep patch payload */
+          }
+        }
+        toast.success(
+          newCount > 0
+            ? `Event updated · ${newCount} invite${newCount === 1 ? "" : "s"} sent`
+            : "Event updated"
+        );
         onUpdated?.(data);
       } else if (mode === "disaster" && disasterId) {
         data = await client.run(
@@ -245,7 +300,11 @@ const ScheduleClimateEventModal = ({
           },
           true
         );
-        toast.success("Climate event scheduled");
+        toast.success(
+          newCount > 0
+            ? `Scheduled · ${newCount} invite${newCount === 1 ? "" : "s"} sent`
+            : "Climate event scheduled"
+        );
         onCreated?.(data);
       } else if (mode === "project" && projectId) {
         data = await client.run(
@@ -262,7 +321,11 @@ const ScheduleClimateEventModal = ({
           },
           true
         );
-        toast.success("Climate event scheduled");
+        toast.success(
+          newCount > 0
+            ? `Scheduled · ${newCount} invite${newCount === 1 ? "" : "s"} sent`
+            : "Climate event scheduled"
+        );
         onCreated?.(data);
       } else {
         const resolvedType =
@@ -289,7 +352,11 @@ const ScheduleClimateEventModal = ({
           },
           true
         );
-        toast.success("Climate event scheduled");
+        toast.success(
+          newCount > 0
+            ? `Scheduled · ${newCount} invite${newCount === 1 ? "" : "s"} sent`
+            : "Climate event scheduled"
+        );
         onCreated?.(data);
       }
       onClose?.();

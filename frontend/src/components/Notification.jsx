@@ -6,6 +6,15 @@ import { formatTimeAgo } from "../utils/apiData";
 import { secureMediaUrl } from "../utils/factory";
 
 const noticeUrl = (notice) => {
+  if (notice?.notification_type === "climate_event") {
+    const eventId =
+      notice?.content?.event_id ||
+      notice?.content?.id ||
+      notice?.object_id;
+    return eventId
+      ? `/app/calendar/events/${eventId}`
+      : "/app/calendar";
+  }
   if (notice?.notification_type === "mention") {
     const conversationId =
       notice?.content?.conversation_id || notice?.content?.conversationId;
