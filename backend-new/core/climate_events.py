@@ -905,6 +905,70 @@ class ClimateEventViewSet(viewsets.ModelViewSet):
             }
         )
 
+    @action(detail=True, methods=["get"], url_path="gift-options")
+    def gift_options(self, request, pk=None):
+        """
+        Available trees/species for this calendar day's activities.
+        Prefers the event's linked project; otherwise returns plantable African projects.
+        """
+        from .models import TreeProject, TreeProjectDonation
+        from .serializers import TreeProjectSerializer
+        from .tree_inventory import with_remaining
+
+        event = self.get_object()
+        if not event.allow_tree_gifts:
+            return Response(
+                {"detail": "Tree gifts are disabled for this event."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if (
+            not user_can_access_event(request.user, event)
+            and event.visibility != "public"
+        ):
+            return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
+
+        gifted = TreeProjectDonation.objects.filter(
+            climate_event=event, payment_status="completed"
+        )
+        trees_gifted = sum(gifted.values_list("trees_purchased", flat=True))
+        gift_count = gifted.count()
+
+        def project_card(project: TreeProject):
+            data = TreeProjectSerializer(project, context={"request": request}).data
+            # Drop heavy nested lists for the gift picker
+            data.pop("updates", None)
+            data.pop("donations", None)
+            data["tree_species"] = with_remaining(data.get("tree_species"))
+            return data
+
+        linked = None
+        options = []
+        if event.tree_project_id:
+            linked = project_card(event.tree_project)
+            options = [linked]
+        else:
+            qs = (
+                TreeProject.objects.filter(status="active", is_verified=True)
+                .order_by("-trees_planted", "-created_at")[:24]
+            )
+            options = [project_card(p) for p in qs]
+
+        return Response(
+            {
+                "event_id": event.id,
+                "title": event.title,
+                "starts_at": event.starts_at.isoformat() if event.starts_at else None,
+                "allow_tree_gifts": event.allow_tree_gifts,
+                "trees_gifted": int(trees_gifted or 0),
+                "gift_count": gift_count,
+                "host_id": event.host_id,
+                "host_name": display_name_for(event.host) if event.host_id else "",
+                "linked_project_id": event.tree_project_id,
+                "linked_project": linked,
+                "projects": options,
+            }
+        )
+
     @action(detail=False, methods=["post"], url_path="from-disaster")
     def from_disaster(self, request):
         if not user_can_host_ops(request.user):
@@ -917,6 +981,13 @@ class ClimateEventViewSet(viewsets.ModelViewSet):
             f"Disaster briefing: {getattr(disaster, 'title', None) or getattr(disaster, 'name', None) or disaster.id}"
         )
         starts = request.data.get("starts_at") or timezone.now() + timedelta(minutes=10)
+        allow_gifts = request.data.get("allow_tree_gifts", True)
+        day_project_id = request.data.get("tree_project")
+        day_project = (
+            TreeProject.objects.filter(id=day_project_id).first()
+            if day_project_id not in (None, "")
+            else None
+        )
         with transaction.atomic():
             event = ClimateEvent.objects.create(
                 title=title[:200],
@@ -929,6 +1000,8 @@ class ClimateEventViewSet(viewsets.ModelViewSet):
                 visibility=request.data.get("visibility") or "org",
                 host=request.user,
                 disaster=disaster,
+                tree_project=day_project,
+                allow_tree_gifts=bool(allow_gifts),
                 responder_org_id=request.data.get("responder_org"),
                 conversation_id=request.data.get("conversation"),
                 jitsi_room=new_jitsi_room(),
@@ -961,6 +1034,7 @@ class ClimateEventViewSet(viewsets.ModelViewSet):
         )
         starts = request.data.get("starts_at") or timezone.now() + timedelta(days=1)
         tree_admin_org = project.tree_admin_org_id
+        allow_gifts = request.data.get("allow_tree_gifts", True)
         with transaction.atomic():
             event = ClimateEvent.objects.create(
                 title=title[:200],
@@ -973,6 +1047,7 @@ class ClimateEventViewSet(viewsets.ModelViewSet):
                 visibility=request.data.get("visibility") or "public",
                 host=request.user,
                 tree_project=project,
+                allow_tree_gifts=bool(allow_gifts),
                 tree_admin_org_id=tree_admin_org or request.data.get("tree_admin_org"),
                 conversation_id=request.data.get("conversation"),
                 jitsi_room=new_jitsi_room(),

@@ -56,6 +56,11 @@ const ScheduleClimateEventModal = ({
   const [searchResults, setSearchResults] = useState([]);
   const [searching, setSearching] = useState(false);
   const [emailDraft, setEmailDraft] = useState("");
+  const [treeProjectId, setTreeProjectId] = useState(
+    projectId ? String(projectId) : ""
+  );
+  const [projectOptions, setProjectOptions] = useState([]);
+  const [allowTreeGifts, setAllowTreeGifts] = useState(true);
 
   useEffect(() => {
     if (!open) return;
@@ -64,6 +69,10 @@ const ScheduleClimateEventModal = ({
       setDescription(event.description || "");
       setStartsAt(toLocalInput(event.starts_at));
       setVisibility(event.visibility || "invitees");
+      setTreeProjectId(
+        event.tree_project != null ? String(event.tree_project) : ""
+      );
+      setAllowTreeGifts(event.allow_tree_gifts !== false);
       const existing = (event.invites || [])
         .filter((inv) => inv.user !== me?.id && inv.role !== "host")
         .map((inv) => ({
@@ -81,6 +90,8 @@ const ScheduleClimateEventModal = ({
       setVisibility(
         mode === "project" ? "public" : mode === "disaster" ? "org" : "invitees"
       );
+      setTreeProjectId(projectId ? String(projectId) : "");
+      setAllowTreeGifts(true);
       setInvitees([]);
     }
     setNotifyInApp(true);
@@ -97,7 +108,30 @@ const ScheduleClimateEventModal = ({
     defaultStartsAt,
     mode,
     me?.id,
+    projectId,
   ]);
+
+  useEffect(() => {
+    if (!open) return;
+    let alive = true;
+    client
+      .run("get", endpoints.tree_projects_african, {}, false)
+      .then((data) => {
+        if (!alive) return;
+        const list = Array.isArray(data?.results)
+          ? data.results
+          : Array.isArray(data)
+            ? data
+            : [];
+        setProjectOptions(list);
+      })
+      .catch(() => {
+        if (alive) setProjectOptions([]);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -253,6 +287,11 @@ const ScheduleClimateEventModal = ({
         (invites.invite_user_ids?.length || 0) + (invites.invite_emails?.length || 0);
       let data;
 
+      const treeFields = {
+        allow_tree_gifts: allowTreeGifts,
+        tree_project: treeProjectId ? Number(treeProjectId) : null,
+      };
+
       if (isEdit && event?.id) {
         data = await client.run(
           "patch",
@@ -262,6 +301,7 @@ const ScheduleClimateEventModal = ({
             description: description.trim(),
             starts_at: startsIso,
             visibility,
+            ...treeFields,
           },
           true
         );
@@ -296,6 +336,7 @@ const ScheduleClimateEventModal = ({
             starts_at: startsIso,
             visibility,
             responder_org: responderOrgId || undefined,
+            ...treeFields,
             ...invites,
           },
           true
@@ -317,6 +358,7 @@ const ScheduleClimateEventModal = ({
             starts_at: startsIso,
             visibility,
             tree_admin_org: treeAdminOrgId || undefined,
+            ...treeFields,
             ...invites,
           },
           true
@@ -345,9 +387,12 @@ const ScheduleClimateEventModal = ({
             starts_at: startsIso,
             visibility,
             disaster: disasterId || undefined,
-            tree_project: projectId || undefined,
+            tree_project: treeProjectId
+              ? Number(treeProjectId)
+              : projectId || undefined,
             responder_org: responderOrgId || undefined,
             tree_admin_org: treeAdminOrgId || undefined,
+            allow_tree_gifts: allowTreeGifts,
             ...invites,
           },
           true
@@ -443,6 +488,42 @@ const ScheduleClimateEventModal = ({
               onChange={(e) => setDescription(e.target.value)}
             />
           </label>
+
+          <div className="border border-border bg-background p-3 space-y-3">
+            <div>
+              <p className="text-xs font-medium text-foreground">
+                Trees for this day’s activities
+              </p>
+              <p className="text-[11px] text-muted mt-0.5">
+                Attach a planting project so invitees and anyone can buy available
+                species for this day
+              </p>
+            </div>
+            <label className="block text-xs font-medium text-muted">
+              Day tree project
+              <select
+                className="mt-1 w-full h-11 px-3 border border-border bg-surface text-foreground text-sm"
+                value={treeProjectId}
+                onChange={(e) => setTreeProjectId(e.target.value)}
+              >
+                <option value="">Any verified Climate Wavers project</option>
+                {projectOptions.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                    {p.city ? ` · ${p.city}` : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="inline-flex items-center gap-2 text-xs text-foreground">
+              <input
+                type="checkbox"
+                checked={allowTreeGifts}
+                onChange={(e) => setAllowTreeGifts(e.target.checked)}
+              />
+              Allow buying / gifting trees for this day
+            </label>
+          </div>
 
           <div className="border border-border bg-background p-3 space-y-3">
             <div>

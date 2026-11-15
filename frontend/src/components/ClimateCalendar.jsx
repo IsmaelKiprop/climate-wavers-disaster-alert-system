@@ -32,6 +32,7 @@ import { unwrapList } from "../utils/apiData";
 import { getUser } from "../utils/factory";
 import JitsiMeetEmbed from "./JitsiMeetEmbed";
 import ScheduleClimateEventModal from "./ScheduleClimateEventModal";
+import DayActivityTreeGiftModal from "./DayActivityTreeGiftModal";
 import { env } from "../config/env";
 
 const TYPE_LABEL = {
@@ -124,6 +125,7 @@ const ClimateCalendar = () => {
   const [filter, setFilter] = useState("all");
   const [showCreate, setShowCreate] = useState(false);
   const [editingEvent, setEditingEvent] = useState(null);
+  const [giftEvent, setGiftEvent] = useState(null);
   const [scheduleDefaultStarts, setScheduleDefaultStarts] = useState(null);
   const [callSession, setCallSession] = useState(null);
   const [joining, setJoining] = useState(false);
@@ -267,16 +269,8 @@ const ClimateCalendar = () => {
   };
 
   const giftForEvent = (event) => {
-    if (!event || event.is_observance) {
-      navigate("/app/plant-tree");
-      return;
-    }
-    const path =
-      event.gift_path ||
-      `/app/plant-tree?event=${event.id}${
-        event.tree_project ? `&project=${event.tree_project}` : ""
-      }${event.host ? `&for=${event.host}` : ""}`;
-    navigate(path);
+    if (!event) return;
+    setGiftEvent(event);
   };
 
   const openScheduleForDay = (day) => {
@@ -907,6 +901,33 @@ const ClimateCalendar = () => {
             prev && String(prev.id) === String(ev.id) ? { ...prev, ...ev } : prev
           );
           setEditingEvent(null);
+        }}
+      />
+
+      <DayActivityTreeGiftModal
+        open={Boolean(giftEvent)}
+        event={giftEvent}
+        onClose={() => setGiftEvent(null)}
+        onGifted={() => {
+          load();
+          if (giftEvent && !giftEvent.is_observance) {
+            client
+              .run("get", `${endpoints.climateEvents}${giftEvent.id}/`, {}, true)
+              .then((fresh) => {
+                if (!fresh) return;
+                setSelected((prev) =>
+                  prev && String(prev.id) === String(fresh.id)
+                    ? { ...prev, ...fresh }
+                    : prev
+                );
+                setEvents((prev) =>
+                  prev.map((e) =>
+                    String(e.id) === String(fresh.id) ? { ...e, ...fresh } : e
+                  )
+                );
+              })
+              .catch(() => {});
+          }
         }}
       />
 
