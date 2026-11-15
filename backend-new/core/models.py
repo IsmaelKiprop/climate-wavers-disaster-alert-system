@@ -2159,17 +2159,39 @@ class ClimateEventInvite(models.Model):
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name="climate_event_invites",
+        null=True,
+        blank=True,
+    )
+    email = models.EmailField(
+        blank=True,
+        default="",
+        help_text="External invite email when the person is not a Climate Wavers user yet",
     )
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default="attendee")
     rsvp = models.CharField(max_length=20, choices=RSVP_CHOICES, default="pending")
+    notify_in_app = models.BooleanField(default=True)
+    notify_email = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        unique_together = ("event", "user")
         indexes = [
             models.Index(fields=["user", "rsvp"]),
+            models.Index(fields=["email"]),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["event", "user"],
+                condition=models.Q(user__isnull=False),
+                name="uniq_climate_event_invite_user",
+            ),
+            models.UniqueConstraint(
+                fields=["event", "email"],
+                condition=~models.Q(email=""),
+                name="uniq_climate_event_invite_email",
+            ),
         ]
 
     def __str__(self):
-        return f"{self.user_id} @ event {self.event_id} ({self.rsvp})"
+        who = self.user_id or self.email or "?"
+        return f"{who} @ event {self.event_id} ({self.rsvp})"

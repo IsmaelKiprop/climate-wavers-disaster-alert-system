@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { IoClose } from "react-icons/io5";
+import { IoClose, IoMailOutline, IoPersonAddOutline, IoTrashOutline } from "react-icons/io5";
 import { toast } from "react-toastify";
 import { client } from "../api";
 import { endpoints } from "../utils/endpoints";
+import { getUser } from "../utils/factory";
 
 const defaultStartsLocal = () => {
   const d = new Date(Date.now() + 60 * 60 * 1000);
@@ -20,10 +21,13 @@ const toLocalInput = (value) => {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 };
 
+const emailOk = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || "").trim());
+
 const ScheduleClimateEventModal = ({
   open,
   onClose,
-  mode = "manual", // manual | disaster | project
+  mode = "manual", // manual | disaster | project | edit
+  event = null,
   eventType = null,
   disasterId = null,
   projectId = null,
@@ -33,7 +37,11 @@ const ScheduleClimateEventModal = ({
   defaultDescription = "",
   defaultStartsAt = null,
   onCreated,
+  onUpdated,
 }) => {
+  const me = getUser();
+  const isEdit = mode === "edit" || Boolean(event?.id);
+
   const [title, setTitle] = useState(defaultTitle);
   const [description, setDescription] = useState(defaultDescription);
   const [startsAt, setStartsAt] = useState(() => toLocalInput(defaultStartsAt));
@@ -41,21 +49,159 @@ const ScheduleClimateEventModal = ({
     mode === "project" ? "public" : mode === "disaster" ? "org" : "invitees"
   );
   const [saving, setSaving] = useState(false);
+  const [notifyInApp, setNotifyInApp] = useState(true);
+  const [notifyEmail, setNotifyEmail] = useState(true);
+  const [invitees, setInvitees] = useState([]);
+  const [searchQ, setSearchQ] = useState("");
+  const [searchResults, setSearchResults] = useState([]);
+  const [searching, setSearching] = useState(false);
+  const [emailDraft, setEmailDraft] = useState("");
 
   useEffect(() => {
     if (!open) return;
-    setTitle(defaultTitle || "");
-    setDescription(defaultDescription || "");
-    setStartsAt(toLocalInput(defaultStartsAt));
-  }, [open, defaultTitle, defaultDescription, defaultStartsAt]);
+    if (isEdit && event) {
+      setTitle(event.title || "");
+      setDescription(event.description || "");
+      setStartsAt(toLocalInput(event.starts_at));
+      setVisibility(event.visibility || "invitees");
+      const existing = (event.invites || [])
+        .filter((inv) => inv.user !== me?.id && inv.role !== "host")
+        .map((inv) => ({
+          key: inv.user ? `u-${inv.user}` : `e-${inv.email}`,
+          userId: inv.user || null,
+          email: inv.email || "",
+          label: inv.user_name || inv.username || inv.email || "Invitee",
+          existing: true,
+        }));
+      setInvitees(existing);
+    } else {
+      setTitle(defaultTitle || "");
+      setDescription(defaultDescription || "");
+      setStartsAt(toLocalInput(defaultStartsAt));
+      setVisibility(
+        mode === "project" ? "public" : mode === "disaster" ? "org" : "invitees"
+      );
+      setInvitees([]);
+    }
+    setNotifyInApp(true);
+    setNotifyEmail(true);
+    setSearchQ("");
+    setSearchResults([]);
+    setEmailDraft("");
+  }, [
+    open,
+    isEdit,
+    event,
+    defaultTitle,
+    defaultDescription,
+    defaultStartsAt,
+    mode,
+    me?.id,
+  ]);
+
+  useEffect(() => {
+    if (!open) return;
+    const q = searchQ.trim();
+    if (q.length < 2) {
+      setSearchResults([]);
+      return undefined;
+    }
+    let alive = true;
+    const timer = window.setTimeout(async () => {
+      setSearching(true);
+      try {
+        const data = await client.run(
+          "get",
+          `${endpoints.searchUsers}?q=${encodeURIComponent(q)}`,
+          {},
+          true
+        );
+        const list = (Array.isArray(data?.results) ? data.results : Array.isArray(data) ? data : [])
+          .filter((u) => u?.id != null)
+          .filter((u) => !me?.id || String(u.id) !== String(me.id))
+          .slice(0, 8);
+        if (alive) setSearchResults(list);
+      } catch {
+        if (alive) setSearchResults([]);
+      } finally {
+        if (alive) setSearching(false);
+      }
+    }, 280);
+    return () => {
+      alive = false;
+      window.clearTimeout(timer);
+    };
+  }, [searchQ, open, me?.id]);
 
   const heading = useMemo(() => {
+    if (isEdit) return "Edit Climate event";
     if (mode === "disaster") return "Schedule disaster briefing";
     if (mode === "project") return "Schedule planting day";
     return "Schedule Climate event";
-  }, [mode]);
+  }, [mode, isEdit]);
+
+  const addUserInvitee = (user) => {
+    if (!user?.id) return;
+    const key = `u-${user.id}`;
+    if (invitees.some((i) => i.key === key)) {
+      toast.info("Already invited");
+      return;
+    }
+    const label =
+      [user.first_name, user.last_name].filter(Boolean).join(" ").trim() ||
+      user.display_name ||
+      user.username ||
+      user.email ||
+      `User ${user.id}`;
+    setInvitees((prev) => [
+      ...prev,
+      {
+        key,
+        userId: user.id,
+        email: user.email || "",
+        label,
+        existing: false,
+      },
+    ]);
+    setSearchQ("");
+    setSearchResults([]);
+  };
+
+  const addEmailInvitee = () => {
+    const email = emailDraft.trim().toLowerCase();
+    if (!emailOk(email)) {
+      toast.error("Enter a valid email");
+      return;
+    }
+    const key = `e-${email}`;
+    if (invitees.some((i) => i.key === key || i.email?.toLowerCase() === email)) {
+      toast.info("Already invited");
+      return;
+    }
+    setInvitees((prev) => [
+      ...prev,
+      { key, userId: null, email, label: email, existing: false },
+    ]);
+    setEmailDraft("");
+  };
+
+  const removeInvitee = (key) => {
+    setInvitees((prev) => prev.filter((i) => i.key !== key));
+  };
 
   if (!open || typeof document === "undefined") return null;
+
+  const invitePayload = () => {
+    const newOnes = invitees.filter((i) => !i.existing);
+    return {
+      invite_user_ids: newOnes.filter((i) => i.userId).map((i) => Number(i.userId)),
+      invite_emails: newOnes
+        .filter((i) => !i.userId && i.email)
+        .map((i) => i.email),
+      notify_in_app: notifyInApp,
+      notify_email: notifyEmail,
+    };
+  };
 
   const submit = async (e) => {
     e.preventDefault();
@@ -66,8 +212,25 @@ const ScheduleClimateEventModal = ({
     setSaving(true);
     try {
       const startsIso = new Date(startsAt).toISOString();
+      const invites = invitePayload();
       let data;
-      if (mode === "disaster" && disasterId) {
+
+      if (isEdit && event?.id) {
+        data = await client.run(
+          "patch",
+          `${endpoints.climateEvents}${event.id}/`,
+          {
+            title: title.trim(),
+            description: description.trim(),
+            starts_at: startsIso,
+            visibility,
+            ...invites,
+          },
+          true
+        );
+        toast.success("Event updated");
+        onUpdated?.(data);
+      } else if (mode === "disaster" && disasterId) {
         data = await client.run(
           "post",
           endpoints.climateEventFromDisaster,
@@ -78,9 +241,12 @@ const ScheduleClimateEventModal = ({
             starts_at: startsIso,
             visibility,
             responder_org: responderOrgId || undefined,
+            ...invites,
           },
           true
         );
+        toast.success("Climate event scheduled");
+        onCreated?.(data);
       } else if (mode === "project" && projectId) {
         data = await client.run(
           "post",
@@ -92,9 +258,12 @@ const ScheduleClimateEventModal = ({
             starts_at: startsIso,
             visibility,
             tree_admin_org: treeAdminOrgId || undefined,
+            ...invites,
           },
           true
         );
+        toast.success("Climate event scheduled");
+        onCreated?.(data);
       } else {
         const resolvedType =
           eventType ||
@@ -116,15 +285,19 @@ const ScheduleClimateEventModal = ({
             tree_project: projectId || undefined,
             responder_org: responderOrgId || undefined,
             tree_admin_org: treeAdminOrgId || undefined,
+            ...invites,
           },
           true
         );
+        toast.success("Climate event scheduled");
+        onCreated?.(data);
       }
-      toast.success("Climate event scheduled");
-      onCreated?.(data);
       onClose?.();
     } catch (err) {
-      toast.error(err?.response?.data?.detail || "Could not schedule event");
+      toast.error(
+        err?.response?.data?.detail ||
+          (isEdit ? "Could not update event" : "Could not schedule event")
+      );
     } finally {
       setSaving(false);
     }
@@ -150,7 +323,9 @@ const ScheduleClimateEventModal = ({
         <header className="flex items-center justify-between gap-3 px-4 py-3 border-b border-border">
           <div>
             <h3 className="text-base font-semibold text-foreground">{heading}</h3>
-            <p className="text-xs text-muted">Opens a Climate Wavers Jitsi room</p>
+            <p className="text-xs text-muted">
+              Invite by Climate Wavers profile or email
+            </p>
           </div>
           <button
             type="button"
@@ -196,11 +371,133 @@ const ScheduleClimateEventModal = ({
           <label className="block text-xs font-medium text-muted">
             Description
             <textarea
-              className="mt-1 w-full min-h-[88px] px-3 py-2 border border-border bg-background text-foreground text-sm"
+              className="mt-1 w-full min-h-[72px] px-3 py-2 border border-border bg-background text-foreground text-sm"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
             />
           </label>
+
+          <div className="border border-border bg-background p-3 space-y-3">
+            <div>
+              <p className="text-xs font-medium text-foreground inline-flex items-center gap-1.5">
+                <IoPersonAddOutline size={14} />
+                Invitees
+              </p>
+              <p className="text-[11px] text-muted mt-0.5">
+                Search Climate Wavers members or add an email
+              </p>
+            </div>
+
+            <div className="relative">
+              <input
+                className="w-full h-10 px-3 border border-border bg-surface text-foreground text-sm"
+                placeholder="Search people…"
+                value={searchQ}
+                onChange={(e) => setSearchQ(e.target.value)}
+              />
+              {searchQ.trim().length >= 2 ? (
+                <div className="absolute z-10 left-0 right-0 mt-1 border border-border bg-surface max-h-40 overflow-y-auto">
+                  {searching ? (
+                    <p className="px-3 py-2 text-xs text-muted">Searching…</p>
+                  ) : searchResults.length === 0 ? (
+                    <p className="px-3 py-2 text-xs text-muted">No members found</p>
+                  ) : (
+                    searchResults.map((u) => (
+                      <button
+                        key={u.id}
+                        type="button"
+                        onClick={() => addUserInvitee(u)}
+                        className="w-full text-left px-3 py-2 text-sm text-foreground hover:bg-[var(--cw-overlay-soft)] border-b border-border last:border-0"
+                      >
+                        {[u.first_name, u.last_name].filter(Boolean).join(" ") ||
+                          u.username}
+                        {u.email ? (
+                          <span className="block text-[11px] text-muted">{u.email}</span>
+                        ) : null}
+                      </button>
+                    ))
+                  )}
+                </div>
+              ) : null}
+            </div>
+
+            <div className="flex gap-2">
+              <input
+                type="email"
+                className="flex-1 h-10 px-3 border border-border bg-surface text-foreground text-sm"
+                placeholder="Invite by email"
+                value={emailDraft}
+                onChange={(e) => setEmailDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    addEmailInvitee();
+                  }
+                }}
+              />
+              <button
+                type="button"
+                onClick={addEmailInvitee}
+                className="h-10 px-3 border border-border text-sm text-foreground inline-flex items-center gap-1.5 hover:bg-[var(--cw-overlay-soft)]"
+              >
+                <IoMailOutline size={16} />
+                Add
+              </button>
+            </div>
+
+            {invitees.length > 0 ? (
+              <ul className="space-y-1.5">
+                {invitees.map((inv) => (
+                  <li
+                    key={inv.key}
+                    className="flex items-center gap-2 border border-border px-2.5 py-1.5 text-sm"
+                  >
+                    <span className="flex-1 min-w-0 truncate text-foreground">
+                      {inv.label}
+                      {inv.existing ? (
+                        <span className="text-[10px] text-muted ml-1">· invited</span>
+                      ) : inv.userId ? (
+                        <span className="text-[10px] text-muted ml-1">· in-app</span>
+                      ) : (
+                        <span className="text-[10px] text-muted ml-1">· email</span>
+                      )}
+                    </span>
+                    {!inv.existing ? (
+                      <button
+                        type="button"
+                        onClick={() => removeInvitee(inv.key)}
+                        className="text-muted hover:text-foreground"
+                        aria-label="Remove invitee"
+                      >
+                        <IoTrashOutline size={16} />
+                      </button>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-xs text-muted">No invitees yet</p>
+            )}
+
+            <div className="flex flex-col gap-2 pt-1">
+              <label className="inline-flex items-center gap-2 text-xs text-foreground">
+                <input
+                  type="checkbox"
+                  checked={notifyInApp}
+                  onChange={(e) => setNotifyInApp(e.target.checked)}
+                />
+                Send Climate Wavers in-app notification
+              </label>
+              <label className="inline-flex items-center gap-2 text-xs text-foreground">
+                <input
+                  type="checkbox"
+                  checked={notifyEmail}
+                  onChange={(e) => setNotifyEmail(e.target.checked)}
+                />
+                Send invite email
+              </label>
+            </div>
+          </div>
         </div>
         <footer className="p-4 border-t border-border grid grid-cols-2 gap-2">
           <button
@@ -215,7 +512,7 @@ const ScheduleClimateEventModal = ({
             disabled={saving}
             className="h-11 bg-primary text-primary-foreground text-sm font-medium disabled:opacity-60"
           >
-            {saving ? "Saving…" : "Schedule"}
+            {saving ? "Saving…" : isEdit ? "Save changes" : "Schedule"}
           </button>
         </footer>
       </form>

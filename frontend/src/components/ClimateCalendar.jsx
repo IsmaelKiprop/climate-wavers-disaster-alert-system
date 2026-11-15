@@ -19,6 +19,7 @@ import {
   IoCallOutline,
   IoChevronBack,
   IoChevronForward,
+  IoCreateOutline,
   IoLeafOutline,
   IoRadioButtonOn,
   IoWarningOutline,
@@ -27,6 +28,7 @@ import { toast } from "react-toastify";
 import { client } from "../api";
 import { endpoints } from "../utils/endpoints";
 import { unwrapList } from "../utils/apiData";
+import { getUser } from "../utils/factory";
 import JitsiMeetEmbed from "./JitsiMeetEmbed";
 import ScheduleClimateEventModal from "./ScheduleClimateEventModal";
 import { env } from "../config/env";
@@ -94,11 +96,13 @@ const ClimateCalendar = () => {
   const [selected, setSelected] = useState(null);
   const [filter, setFilter] = useState("all");
   const [showCreate, setShowCreate] = useState(false);
+  const [editingEvent, setEditingEvent] = useState(null);
   const [scheduleDefaultStarts, setScheduleDefaultStarts] = useState(null);
   const [callSession, setCallSession] = useState(null);
   const [joining, setJoining] = useState(false);
   const [cursorMonth, setCursorMonth] = useState(() => startOfMonth(new Date()));
   const [selectedDay, setSelectedDay] = useState(() => new Date());
+  const me = getUser();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -669,6 +673,30 @@ const ClimateCalendar = () => {
                   </div>
                 </div>
                 <div className="p-4 border-t border-border space-y-2">
+                  {me?.id &&
+                  (String(selected.host) === String(me.id) ||
+                    selected.my_role === "host") ? (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          const fresh = await client.run(
+                            "get",
+                            `${endpoints.climateEvents}${selected.id}/`,
+                            {},
+                            true
+                          );
+                          setEditingEvent(fresh || selected);
+                        } catch {
+                          setEditingEvent(selected);
+                        }
+                      }}
+                      className="w-full h-10 border border-border text-sm font-medium inline-flex items-center justify-center gap-2 hover:bg-[var(--cw-overlay-soft)]"
+                    >
+                      <IoCreateOutline size={16} />
+                      Edit & invite
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     disabled={joining || selected.status === "cancelled"}
@@ -682,9 +710,18 @@ const ClimateCalendar = () => {
                         ? "Join live room"
                         : "Enter Climate room"}
                   </button>
-                  <p className="text-[11px] text-muted text-center">
-                    Full-screen Climate Wavers conference
-                  </p>
+                  {(selected.invite_count > 0 || selected.invites?.length > 0) ? (
+                    <p className="text-[11px] text-muted text-center">
+                      {selected.invite_count || selected.invites?.length || 0} invitee
+                      {(selected.invite_count || selected.invites?.length || 0) === 1
+                        ? ""
+                        : "s"}
+                    </p>
+                  ) : (
+                    <p className="text-[11px] text-muted text-center">
+                      Full-screen Climate Wavers conference
+                    </p>
+                  )}
                 </div>
               </div>
             )}
@@ -709,6 +746,22 @@ const ClimateCalendar = () => {
             setCursorMonth(startOfMonth(when));
           }
           navigate(`/app/calendar/events/${ev.id}`);
+        }}
+      />
+
+      <ScheduleClimateEventModal
+        open={Boolean(editingEvent)}
+        onClose={() => setEditingEvent(null)}
+        mode="edit"
+        event={editingEvent}
+        onUpdated={(ev) => {
+          setEvents((prev) =>
+            prev.map((e) => (String(e.id) === String(ev.id) ? { ...e, ...ev } : e))
+          );
+          setSelected((prev) =>
+            prev && String(prev.id) === String(ev.id) ? { ...prev, ...ev } : prev
+          );
+          setEditingEvent(null);
         }}
       />
 

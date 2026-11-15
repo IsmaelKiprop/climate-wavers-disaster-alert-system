@@ -143,7 +143,57 @@ def notify_climate_event(user, event: ClimateEvent, message: str):
         pass
 
 
-def invite_users(event: ClimateEvent, user_ids, role="attendee", notify=True):
+def _event_join_url(event: ClimateEvent) -> str:
+    from django.conf import settings as dj_settings
+
+    base = (
+        getattr(dj_settings, "FRONTEND_URL", None)
+        or getattr(dj_settings, "SITE_URL", None)
+        or "https://alerts.flowops.africa"
+    ).rstrip("/")
+    return f"{base}/app/calendar/events/{event.id}"
+
+
+def send_climate_invite_email(event: ClimateEvent, to_email: str, invitee_name: str = ""):
+    if not to_email:
+        return
+    try:
+        from django.conf import settings as dj_settings
+        from django.core.mail import send_mail
+
+        when = ""
+        if event.starts_at:
+            when = event.starts_at.strftime("%a %d %b %Y, %H:%M UTC")
+        join_url = _event_join_url(event)
+        who = invitee_name or to_email
+        host = display_name_for(event.host) if event.host_id else "Climate Wavers"
+        send_mail(
+            subject=f"You're invited: {event.title} — Climate Wavers",
+            message=(
+                f"Hi {who},\n\n"
+                f"{host} invited you to a Climate Wavers event.\n\n"
+                f"Event: {event.title}\n"
+                f"Type: {event.get_event_type_display()}\n"
+                f"When: {when or 'See calendar'}\n\n"
+                f"{(event.description or '').strip()[:500]}\n\n"
+                f"Open / RSVP / join the Climate room:\n{join_url}\n\n"
+                f"— Climate Wavers\n"
+            ),
+            from_email=getattr(dj_settings, "DEFAULT_FROM_EMAIL", None),
+            recipient_list=[to_email],
+            fail_silently=True,
+        )
+    except Exception:
+        pass
+
+
+def invite_users(
+    event: ClimateEvent,
+    user_ids,
+    role="attendee",
+    notify=True,
+    send_email=True,
+):
     invited = []
     for uid in user_ids or []:
         if not uid or int(uid) == event.host_id:
@@ -151,7 +201,13 @@ def invite_users(event: ClimateEvent, user_ids, role="attendee", notify=True):
         invite, created = ClimateEventInvite.objects.get_or_create(
             event=event,
             user_id=int(uid),
-            defaults={"role": role, "rsvp": "pending"},
+            defaults={
+                "role": role,
+                "rsvp": "pending",
+                "email": "",
+                "notify_in_app": notify,
+                "notify_email": send_email,
+            },
         )
         if created:
             invited.append(invite)
@@ -161,7 +217,84 @@ def invite_users(event: ClimateEvent, user_ids, role="attendee", notify=True):
                     event,
                     f"You're invited: {event.title}",
                 )
+            if send_email and invite.user and invite.user.email:
+                send_climate_invite_email(
+                    event,
+                    invite.user.email,
+                    display_name_for(invite.user),
+                )
     return invited
+
+
+def invite_emails(
+    event: ClimateEvent,
+    emails,
+    role="attendee",
+    notify=True,
+    send_email=True,
+):
+    """Invite by email: match Climate Wavers users when possible, else email-only invite."""
+    from django.contrib.auth import get_user_model
+
+    User = get_user_model()
+    invited = []
+    seen = set()
+    for raw in emails or []:
+        email = str(raw or "").strip().lower()
+        if not email or "@" not in email or email in seen:
+            continue
+        seen.add(email)
+        user = User.objects.filter(email__iexact=email).first()
+        if user and user.id == event.host_id:
+            continue
+        if user:
+            created_list = invite_users(
+                event,
+                [user.id],
+                role=role,
+                notify=notify,
+                send_email=send_email,
+            )
+            invited.extend(created_list)
+            continue
+        invite, created = ClimateEventInvite.objects.get_or_create(
+            event=event,
+            email=email,
+            defaults={
+                "user": None,
+                "role": role,
+                "rsvp": "pending",
+                "notify_in_app": False,
+                "notify_email": send_email,
+            },
+        )
+        if created:
+            invited.append(invite)
+            if send_email:
+                send_climate_invite_email(event, email)
+    return invited
+
+
+def apply_invites(
+    event: ClimateEvent,
+    *,
+    user_ids=None,
+    emails=None,
+    notify=True,
+    send_email=True,
+):
+    created = []
+    created.extend(
+        invite_users(
+            event, user_ids or [], notify=notify, send_email=send_email
+        )
+    )
+    created.extend(
+        invite_emails(
+            event, emails or [], notify=notify, send_email=send_email
+        )
+    )
+    return created
 
 
 def post_event_chat_link(event: ClimateEvent, body: str | None = None):
@@ -189,7 +322,7 @@ def ensure_host_invite(event: ClimateEvent):
 
 class ClimateEventInviteSerializer(serializers.ModelSerializer):
     user_name = serializers.SerializerMethodField()
-    username = serializers.CharField(source="user.username", read_only=True)
+    username = serializers.SerializerMethodField()
 
     class Meta:
         model = ClimateEventInvite
@@ -198,15 +331,25 @@ class ClimateEventInviteSerializer(serializers.ModelSerializer):
             "user",
             "username",
             "user_name",
+            "email",
             "role",
             "rsvp",
+            "notify_in_app",
+            "notify_email",
             "created_at",
             "updated_at",
         )
         read_only_fields = ("created_at", "updated_at")
 
     def get_user_name(self, obj):
-        return display_name_for(obj.user)
+        if obj.user_id:
+            return display_name_for(obj.user)
+        return obj.email or "Invitee"
+
+    def get_username(self, obj):
+        if obj.user_id:
+            return obj.user.username
+        return ""
 
 
 class ClimateEventSerializer(serializers.ModelSerializer):
@@ -215,6 +358,7 @@ class ClimateEventSerializer(serializers.ModelSerializer):
     my_role = serializers.SerializerMethodField()
     can_join = serializers.SerializerMethodField()
     invite_count = serializers.SerializerMethodField()
+    invites = serializers.SerializerMethodField()
     tree_project_name = serializers.CharField(
         source="tree_project.name", read_only=True, default=None
     )
@@ -248,6 +392,7 @@ class ClimateEventSerializer(serializers.ModelSerializer):
             "my_role",
             "can_join",
             "invite_count",
+            "invites",
             "join_path",
             "created_at",
             "updated_at",
@@ -308,11 +453,30 @@ class ClimateEventSerializer(serializers.ModelSerializer):
             return obj._invite_count
         return obj.invites.count()
 
+    def get_invites(self, obj):
+        request = self.context.get("request")
+        if not request or not request.user.is_authenticated:
+            return []
+        if (
+            obj.host_id != request.user.id
+            and not request.user.is_staff
+            and not request.user.is_superuser
+        ):
+            return []
+        qs = obj.invites.all()
+        # Prefetch already loaded
+        return ClimateEventInviteSerializer(qs, many=True).data
+
 
 class ClimateEventCreateSerializer(serializers.ModelSerializer):
     invite_user_ids = serializers.ListField(
         child=serializers.IntegerField(), required=False, allow_empty=True
     )
+    invite_emails = serializers.ListField(
+        child=serializers.EmailField(), required=False, allow_empty=True
+    )
+    notify_in_app = serializers.BooleanField(required=False, default=True)
+    notify_email = serializers.BooleanField(required=False, default=True)
 
     class Meta:
         model = ClimateEvent
@@ -332,10 +496,16 @@ class ClimateEventCreateSerializer(serializers.ModelSerializer):
             "social_group",
             "conversation",
             "invite_user_ids",
+            "invite_emails",
+            "notify_in_app",
+            "notify_email",
         )
 
     def create(self, validated_data):
         invite_ids = validated_data.pop("invite_user_ids", []) or []
+        invite_emails_list = validated_data.pop("invite_emails", []) or []
+        notify_in_app = validated_data.pop("notify_in_app", True)
+        notify_email = validated_data.pop("notify_email", True)
         request = self.context["request"]
         event = ClimateEvent.objects.create(
             **validated_data,
@@ -343,10 +513,34 @@ class ClimateEventCreateSerializer(serializers.ModelSerializer):
             jitsi_room=new_jitsi_room(),
         )
         ensure_host_invite(event)
-        invite_users(event, invite_ids)
+        apply_invites(
+            event,
+            user_ids=invite_ids,
+            emails=invite_emails_list,
+            notify=bool(notify_in_app),
+            send_email=bool(notify_email),
+        )
         if event.conversation_id:
             post_event_chat_link(event)
         return event
+
+    def update(self, instance, validated_data):
+        invite_ids = validated_data.pop("invite_user_ids", None)
+        invite_emails_list = validated_data.pop("invite_emails", None)
+        notify_in_app = validated_data.pop("notify_in_app", True)
+        notify_email = validated_data.pop("notify_email", True)
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        if invite_ids is not None or invite_emails_list is not None:
+            apply_invites(
+                instance,
+                user_ids=invite_ids or [],
+                emails=invite_emails_list or [],
+                notify=bool(notify_in_app),
+                send_email=bool(notify_email),
+            )
+        return instance
 
 
 class ClimateEventViewSet(viewsets.ModelViewSet):
@@ -370,7 +564,7 @@ class ClimateEventViewSet(viewsets.ModelViewSet):
         )
 
     def get_serializer_class(self):
-        if self.action == "create":
+        if self.action in ("create", "update", "partial_update"):
             return ClimateEventCreateSerializer
         return ClimateEventSerializer
 
@@ -388,23 +582,38 @@ class ClimateEventViewSet(viewsets.ModelViewSet):
         out = ClimateEventSerializer(event, context={"request": request})
         return Response(out.data, status=status.HTTP_201_CREATED)
 
-    def perform_update(self, serializer):
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop("partial", False)
         event = self.get_object()
         if (
-            event.host_id != self.request.user.id
-            and not self.request.user.is_staff
-            and not self.request.user.is_superuser
+            event.host_id != request.user.id
+            and not request.user.is_staff
+            and not request.user.is_superuser
         ):
-            raise serializers.ValidationError("Only the host can update this event.")
+            return Response(
+                {"detail": "Only the host can update this event."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         prev_status = event.status
+        serializer = self.get_serializer(event, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
         event = serializer.save()
         if prev_status != "live" and event.status == "live":
             post_event_chat_link(
                 event,
                 f"🔴 Live now: {event.title}\nJoin: /app/calendar/events/{event.id}/join",
             )
-            for invite in event.invites.select_related("user").exclude(user_id=event.host_id):
-                notify_climate_event(invite.user, event, f"Live now: {event.title}")
+            for invite in event.invites.select_related("user").exclude(
+                user_id=event.host_id
+            ):
+                if invite.user_id:
+                    notify_climate_event(invite.user, event, f"Live now: {event.title}")
+        out = ClimateEventSerializer(event, context={"request": request})
+        return Response(out.data)
+
+    def partial_update(self, request, *args, **kwargs):
+        kwargs["partial"] = True
+        return self.update(request, *args, **kwargs)
 
     def perform_destroy(self, instance):
         if (
@@ -508,8 +717,17 @@ class ClimateEventViewSet(viewsets.ModelViewSet):
         event = self.get_object()
         if event.host_id != request.user.id and not request.user.is_staff:
             return Response({"detail": "Only the host can invite."}, status=403)
-        ids = request.data.get("user_ids") or []
-        created = invite_users(event, ids)
+        ids = request.data.get("user_ids") or request.data.get("invite_user_ids") or []
+        emails = request.data.get("emails") or request.data.get("invite_emails") or []
+        notify = request.data.get("notify_in_app", True)
+        send_email = request.data.get("notify_email", True)
+        created = apply_invites(
+            event,
+            user_ids=ids,
+            emails=emails,
+            notify=bool(notify),
+            send_email=bool(send_email),
+        )
         return Response(
             {
                 "invited": ClimateEventInviteSerializer(created, many=True).data,
@@ -546,7 +764,13 @@ class ClimateEventViewSet(viewsets.ModelViewSet):
                 jitsi_room=new_jitsi_room(),
             )
             ensure_host_invite(event)
-            invite_users(event, request.data.get("invite_user_ids") or [])
+            apply_invites(
+                event,
+                user_ids=request.data.get("invite_user_ids") or [],
+                emails=request.data.get("invite_emails") or [],
+                notify=bool(request.data.get("notify_in_app", True)),
+                send_email=bool(request.data.get("notify_email", True)),
+            )
             if event.conversation_id:
                 post_event_chat_link(event)
         return Response(
@@ -584,7 +808,13 @@ class ClimateEventViewSet(viewsets.ModelViewSet):
                 jitsi_room=new_jitsi_room(),
             )
             ensure_host_invite(event)
-            invite_users(event, request.data.get("invite_user_ids") or [])
+            apply_invites(
+                event,
+                user_ids=request.data.get("invite_user_ids") or [],
+                emails=request.data.get("invite_emails") or [],
+                notify=bool(request.data.get("notify_in_app", True)),
+                send_email=bool(request.data.get("notify_email", True)),
+            )
             if event.conversation_id:
                 post_event_chat_link(event)
         return Response(
