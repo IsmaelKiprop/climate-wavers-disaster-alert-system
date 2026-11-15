@@ -51,9 +51,10 @@ const ProjectCard = ({
         {normalizeTreeSpecies(project.tree_species).length > 0 ? (
           <p
             className="text-xs text-gray-500 mb-3 line-clamp-2"
-            title={formatSpeciesList(project.tree_species)}
+            title={formatSpeciesList(project.tree_species, { withRemaining: true })}
           >
-            Species: {formatSpeciesList(project.tree_species)}
+            Species:{" "}
+            {formatSpeciesList(project.tree_species, { withRemaining: true })}
           </p>
         ) : null}
         

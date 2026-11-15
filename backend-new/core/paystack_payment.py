@@ -245,6 +245,16 @@ def record_tree_payment(reference, request_user=None, client_data=None):
     selected_species = _as_dict(
         _metadata_value(metadata, "selected_species", {}) or client_data.get("selected_species")
     )
+    from .tree_inventory import apply_species_purchase, validate_species_purchase
+
+    try:
+        selected_species, species_total = validate_species_purchase(
+            project, selected_species
+        )
+    except ValueError as exc:
+        raise PaymentRecordError(str(exc), 400) from exc
+    if species_total > 0:
+        trees_purchased = species_total
     if selected_species:
         species_text = ", ".join(
             f"{species}: {qty}" for species, qty in selected_species.items() if _as_int(qty, 0) > 0
@@ -284,6 +294,7 @@ def record_tree_payment(reference, request_user=None, client_data=None):
         "payment_reference": reference,
         "payment_status": "completed",
         "dedication_message": dedication,
+        "selected_species": selected_species or {},
         "is_anonymous": donor is None,
     }
     if supports_gifted_to and gifted_to is not None:
@@ -291,28 +302,48 @@ def record_tree_payment(reference, request_user=None, client_data=None):
 
     try:
         with transaction.atomic():
+            locked = TreeProject.objects.select_for_update().get(pk=project.pk)
+            # Re-validate against locked inventory
+            selected_species, species_total = validate_species_purchase(
+                locked, selected_species
+            )
+            if species_total > 0:
+                trees_purchased = species_total
+                create_kwargs["trees_purchased"] = trees_purchased
+                create_kwargs["selected_species"] = selected_species
+            apply_species_purchase(locked, selected_species, save=False)
+            create_kwargs["project"] = locked
             donation = TreeProjectDonation.objects.create(**create_kwargs)
-            project.trees_planted += trees_purchased
+            locked.trees_planted += trees_purchased
             # Attribute only the Tree Admin share to project funds
-            project.funds_raised += admin_share
-            project.save(update_fields=["trees_planted", "funds_raised"])
+            locked.funds_raised += admin_share
+            locked.save(update_fields=["trees_planted", "funds_raised", "tree_species"])
+            project = locked
+    except ValueError as exc:
+        raise PaymentRecordError(str(exc), 400) from exc
     except IntegrityError:
         donation = TreeProjectDonation.objects.select_related("project", "donor").get(
             payment_reference=reference
         )
     except (ProgrammingError, OperationalError) as exc:
-        # Migration lag: retry without gifted_to / fee fields rather than failing a paid charge.
+        # Migration lag: retry without gifted_to / fee / selected_species fields.
         logger.exception("Donation create failed; retrying lean create: %s", exc)
         create_kwargs.pop("gifted_to", None)
-        for optional in ("platform_fee", "admin_share", "fee_rate"):
+        for optional in ("platform_fee", "admin_share", "fee_rate", "selected_species"):
             create_kwargs.pop(optional, None)
         with transaction.atomic():
+            locked = TreeProject.objects.select_for_update().get(pk=project.pk)
+            apply_species_purchase(locked, selected_species, save=False)
+            create_kwargs["project"] = locked
             donation = TreeProjectDonation.objects.create(**create_kwargs)
-            project.trees_planted += trees_purchased
-            project.funds_raised += admin_share
-            project.save(update_fields=["trees_planted", "funds_raised"])
+            locked.trees_planted += trees_purchased
+            locked.funds_raised += admin_share
+            locked.save(update_fields=["trees_planted", "funds_raised", "tree_species"])
+            project = locked
 
     payload = _donation_payload(donation, payer_email)
+    payload["selected_species"] = getattr(donation, "selected_species", None) or selected_species or {}
+    payload["tree_species"] = getattr(project, "tree_species", None)
     payload["platform_fee"] = float(getattr(donation, "platform_fee", platform_fee) or platform_fee)
     payload["admin_share"] = float(getattr(donation, "admin_share", admin_share) or admin_share)
     payload["fee_rate"] = float(getattr(donation, "fee_rate", fee_rate) or fee_rate)

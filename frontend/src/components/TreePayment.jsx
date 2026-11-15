@@ -8,7 +8,11 @@ import { client } from '../api';
 import { endpoints } from '../utils/endpoints';
 import { fetchUsdToKesRate } from '../utils/exchangeRate';
 import { getAuthToken, getUser } from '../utils/factory';
-import { normalizeTreeSpecies, speciesNames } from '../utils/treeSpecies';
+import {
+  normalizeTreeSpecies,
+  speciesNames,
+  speciesRemaining,
+} from '../utils/treeSpecies';
 
 const TreePayment = ({
   treeData,
@@ -71,11 +75,20 @@ const TreePayment = ({
     }
   }, [totalAmount, exchangeRate]);
 
-  // Handle species quantity change
+  // Handle species quantity change (capped by remaining inventory)
   const handleSpeciesQuantityChange = (species, quantity) => {
-    setSelectedSpecies(prev => ({
+    const entry = normalizeTreeSpecies(treeData.tree_species).find(
+      (s) => s.name === species
+    );
+    const rem = speciesRemaining(entry);
+    let next = Math.max(0, parseInt(quantity) || 0);
+    if (rem != null && next > rem) {
+      next = rem;
+      toast.info(`Only ${rem.toLocaleString()} ${species} left`);
+    }
+    setSelectedSpecies((prev) => ({
       ...prev,
-      [species]: Math.max(0, parseInt(quantity) || 0)
+      [species]: next,
     }));
   };
 
@@ -300,6 +313,7 @@ const TreePayment = ({
           project_id: treeData.id,
           trees: totalQuantity,
           dedication_message: dedicationMessage,
+          selected_species: selectedSpecies,
           ...(giftForUser?.id ? { gifted_to: Number(giftForUser.id) } : {}),
         },
         true
@@ -559,8 +573,12 @@ const TreePayment = ({
                 </p>
                 <div className="space-y-3">
                   {availableSpecies.map((species, index) => {
-                    const planned =
-                      speciesCatalog.find((s) => s.name === species)?.target || 0;
+                    const entry =
+                      speciesCatalog.find((s) => s.name === species) || {};
+                    const planned = entry.target || 0;
+                    const planted = entry.planted || 0;
+                    const rem = speciesRemaining(entry);
+                    const soldOut = rem === 0;
                     const isSuggested =
                       String(initialSpecies || "")
                         .trim()
@@ -570,11 +588,13 @@ const TreePayment = ({
                       <div
                         key={`${species}-${index}`}
                         className={`flex items-center justify-between gap-3 p-3 rounded-lg border ${
-                          qty > 0
-                            ? "border-green-500 bg-green-50"
-                            : isSuggested
-                              ? "border-green-300 bg-green-50/60"
-                              : "border-gray-200 bg-gray-50"
+                          soldOut
+                            ? "border-gray-200 bg-gray-100 opacity-70"
+                            : qty > 0
+                              ? "border-green-500 bg-green-50"
+                              : isSuggested
+                                ? "border-green-300 bg-green-50/60"
+                                : "border-gray-200 bg-gray-50"
                         }`}
                       >
                         <div className="flex-1 min-w-0">
@@ -585,11 +605,19 @@ const TreePayment = ({
                                 Shared ask
                               </span>
                             ) : null}
+                            {soldOut ? (
+                              <span className="ml-2 text-[10px] uppercase tracking-wide text-gray-500">
+                                Sold out
+                              </span>
+                            ) : null}
                           </h4>
                           <p className="text-sm text-gray-600">
                             ${treeData.price} per tree
                             {planned > 0
-                              ? ` · ${planned.toLocaleString()} seedlings planned`
+                              ? ` · ${planted.toLocaleString()}/${planned.toLocaleString()} planted`
+                              : ""}
+                            {rem != null && !soldOut
+                              ? ` · ${rem.toLocaleString()} left`
                               : ""}
                           </p>
                         </div>
@@ -600,7 +628,7 @@ const TreePayment = ({
                               handleSpeciesQuantityChange(species, qty - 1)
                             }
                             className="w-8 h-8 rounded-full bg-gray-200 hover:bg-gray-300 flex items-center justify-center text-gray-600"
-                            disabled={qty <= 0}
+                            disabled={qty <= 0 || soldOut}
                             aria-label={`Fewer ${species}`}
                           >
                             −
@@ -608,11 +636,13 @@ const TreePayment = ({
                           <input
                             type="number"
                             min="0"
+                            max={rem != null ? rem : undefined}
                             value={qty}
+                            disabled={soldOut}
                             onChange={(e) =>
                               handleSpeciesQuantityChange(species, e.target.value)
                             }
-                            className="w-16 text-center border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                            className="w-16 text-center border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 disabled:bg-gray-100"
                             aria-label={`${species} quantity`}
                           />
                           <button
@@ -620,7 +650,8 @@ const TreePayment = ({
                             onClick={() =>
                               handleSpeciesQuantityChange(species, qty + 1)
                             }
-                            className="w-8 h-8 rounded-full bg-green-200 hover:bg-green-300 flex items-center justify-center text-green-600"
+                            className="w-8 h-8 rounded-full bg-green-200 hover:bg-green-300 flex items-center justify-center text-green-600 disabled:opacity-40"
+                            disabled={soldOut || (rem != null && qty >= rem)}
                             aria-label={`More ${species}`}
                           >
                             +

@@ -1491,20 +1491,47 @@ class TreeProjectViewSet(viewsets.ModelViewSet):
         
         if serializer.is_valid():
             from .tree_pricing import split_tree_payment
+            from .tree_inventory import apply_species_purchase, validate_species_purchase
+            from django.db import transaction
 
-            donation = serializer.save()
-            platform_fee, admin_share, fee_rate = split_tree_payment(donation.amount)
-            donation.platform_fee = platform_fee
-            donation.admin_share = admin_share
-            donation.fee_rate = fee_rate
-            donation.save(update_fields=["platform_fee", "admin_share", "fee_rate"])
+            try:
+                with transaction.atomic():
+                    locked = TreeProject.objects.select_for_update().get(pk=project.pk)
+                    selected = serializer.validated_data.get("selected_species") or {}
+                    cleaned, species_total = validate_species_purchase(locked, selected)
+                    donation = serializer.save()
+                    if cleaned:
+                        donation.selected_species = cleaned
+                        if species_total > 0:
+                            donation.trees_purchased = species_total
+                        donation.save(
+                            update_fields=["selected_species", "trees_purchased"]
+                        )
+                    platform_fee, admin_share, fee_rate = split_tree_payment(
+                        donation.amount
+                    )
+                    donation.platform_fee = platform_fee
+                    donation.admin_share = admin_share
+                    donation.fee_rate = fee_rate
+                    donation.save(
+                        update_fields=["platform_fee", "admin_share", "fee_rate"]
+                    )
 
-            # Attribute Tree Admin share only
-            project.funds_raised += admin_share
-            project.trees_planted += donation.trees_purchased
-            project.save()
-            
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
+                    apply_species_purchase(locked, cleaned, save=False)
+                    locked.funds_raised += admin_share
+                    locked.trees_planted += donation.trees_purchased
+                    locked.save(
+                        update_fields=["funds_raised", "trees_planted", "tree_species"]
+                    )
+            except ValueError as exc:
+                return Response(
+                    {"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST
+                )
+
+            return Response(
+                TreeProjectDonationSerializer(donation).data,
+                status=status.HTTP_201_CREATED,
+            )
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
     @action(detail=True, methods=['post'])
@@ -1892,6 +1919,7 @@ def wavers_points_redeem(request):
     project_id = request.data.get("project_id")
     trees = request.data.get("trees", 1)
     dedication = request.data.get("dedication_message", "")
+    selected_species = request.data.get("selected_species") or {}
     gifted_to_id = request.data.get("gifted_to") or request.data.get("gift_for_user_id")
 
     if not project_id:
@@ -1914,6 +1942,7 @@ def wavers_points_redeem(request):
             trees=trees,
             dedication_message=dedication,
             gifted_to=gifted_to,
+            selected_species=selected_species,
         )
     except ValueError as exc:
         return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
@@ -1925,6 +1954,7 @@ def wavers_points_redeem(request):
             "points_spent": result["points_spent"],
             "points_balance": result["balance"],
             "redeemed_with_points": True,
+            "selected_species": result.get("selected_species") or {},
             "message": f"Redeemed {result['trees']} tree(s) with {result['points_spent']} points.",
         }
     )

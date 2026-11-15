@@ -151,12 +151,25 @@ def redeem_trees_with_points(
     trees: int = 1,
     dedication_message: str = "",
     gifted_to=None,
+    selected_species=None,
 ):
-    trees = max(int(trees or 1), 1)
+    from .tree_inventory import apply_species_purchase, validate_species_purchase
+
+    locked = TreeProject.objects.select_for_update().get(pk=project.pk)
+    cleaned_species, species_total = validate_species_purchase(
+        locked, selected_species or {}
+    )
+    trees = species_total if species_total > 0 else max(int(trees or 1), 1)
     if trees > 50:
         raise ValueError("You can redeem at most 50 trees at once.")
+    if cleaned_species:
+        # Re-check after trees resolved from species
+        cleaned_species, species_total = validate_species_purchase(
+            locked, cleaned_species
+        )
+        trees = species_total
 
-    cost = redeem_cost_points(project.tree_price, trees)
+    cost = redeem_cost_points(locked.tree_price, trees)
     account = get_or_create_account(user)
     if account.balance < cost:
         raise ValueError(
@@ -170,13 +183,21 @@ def redeem_trees_with_points(
 
     reference = f"POINTS-{uuid.uuid4().hex[:16].upper()}"
     note = (dedication_message or "").strip()
+    if cleaned_species:
+        species_text = ", ".join(
+            f"{name}: {qty}" for name, qty in cleaned_species.items() if int(qty or 0) > 0
+        )
+        if species_text:
+            note = f"{note}\n\nSelected Species: {species_text}".strip()
     if gifted_to is not None:
         label = f"{gifted_to.first_name} {gifted_to.last_name}".strip() or gifted_to.username
         note = f"{note}\n\nGifted to: {label}".strip()
     note = f"{note}\n\nRedeemed with {cost} Wavers Points".strip()
 
+    apply_species_purchase(locked, cleaned_species, save=False)
+
     donation = TreeProjectDonation.objects.create(
-        project=project,
+        project=locked,
         donor=user,
         gifted_to=gifted_to,
         payer_email=getattr(user, "email", "") or "",
@@ -185,18 +206,19 @@ def redeem_trees_with_points(
         payment_reference=reference,
         payment_status="completed",
         dedication_message=note,
+        selected_species=cleaned_species or {},
         is_anonymous=False,
     )
-    project.trees_planted = F("trees_planted") + trees
-    project.save(update_fields=["trees_planted"])
-    project.refresh_from_db()
+    locked.trees_planted = F("trees_planted") + trees
+    locked.save(update_fields=["trees_planted", "tree_species"])
+    locked.refresh_from_db()
 
     WaversPointsLedger.objects.create(
         user=user,
         delta=-cost,
         balance_after=account.balance,
         reason="redeem_tree",
-        note=f"Redeemed {trees} tree(s) on {project.name}",
+        note=f"Redeemed {trees} tree(s) on {locked.name}",
         donation=donation,
     )
 
@@ -205,4 +227,5 @@ def redeem_trees_with_points(
         "points_spent": cost,
         "balance": account.balance,
         "trees": trees,
+        "selected_species": cleaned_species or {},
     }

@@ -725,16 +725,28 @@ const PlantTree = () => {
                           <span className="block mb-1">Tree species:</span>
                           {normalizeTreeSpecies(selectedProject.tree_species).length > 0 ? (
                             <ul className="space-y-1">
-                              {normalizeTreeSpecies(selectedProject.tree_species).map((s) => (
+                              {normalizeTreeSpecies(selectedProject.tree_species).map((s) => {
+                                const rem =
+                                  s.remaining != null
+                                    ? s.remaining
+                                    : s.target > 0
+                                      ? Math.max(0, s.target - (s.planted || 0))
+                                      : null;
+                                return (
                                 <li key={s.name} className="flex justify-between gap-2">
                                   <span>{s.name}</span>
                                   {s.target > 0 ? (
                                     <span className="text-gray-500">
-                                      {s.target.toLocaleString()} seedlings
+                                      {(s.planted || 0).toLocaleString()}/
+                                      {s.target.toLocaleString()}
+                                      {rem != null
+                                        ? ` · ${rem.toLocaleString()} left`
+                                        : ""}
                                     </span>
                                   ) : null}
                                 </li>
-                              ))}
+                                );
+                              })}
                             </ul>
                           ) : (
                             <span>Various</span>

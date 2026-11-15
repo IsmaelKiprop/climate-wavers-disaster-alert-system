@@ -12,6 +12,8 @@ import {
   formatSpeciesList,
   normalizeTreeSpecies,
   serializeTreeSpecies,
+  speciesPlantedSum,
+  speciesRemaining,
   speciesTargetSum,
 } from '../utils/treeSpecies';
 
@@ -537,7 +539,7 @@ const TreeProjectAdmin = () => {
       toast.error('That species is already on this project');
       return;
     }
-    const next = [...existing, { name, target }];
+    const next = [...existing, { name, target, planted: 0 }];
     const sum = speciesTargetSum(next);
     setFormData((prev) => ({
       ...prev,
@@ -1182,8 +1184,8 @@ Thank you for your understanding! 🌱
                       </label>
                       <p className="text-xs text-muted mb-2">
                         One project can include multiple species with different
-                        quantities — e.g. Rhizophora 20,000 and Bruguiera 30,000.
-                        Target trees follows the sum.
+                        seedling targets — e.g. Rhizophora 20,000 and Bruguiera
+                        30,000. Gifts decrement remaining inventory automatically.
                       </p>
                       <div className="flex flex-col sm:flex-row gap-2">
                         <input
@@ -1224,16 +1226,26 @@ Thank you for your understanding! 🌱
                       </div>
                       {normalizeTreeSpecies(formData.tree_species).length > 0 ? (
                         <ul className="mt-3 space-y-2">
-                          {normalizeTreeSpecies(formData.tree_species).map((species, index) => (
+                          {normalizeTreeSpecies(formData.tree_species).map((species, index) => {
+                            const rem = speciesRemaining(species);
+                            return (
                             <li
                               key={`${species.name}-${index}`}
                               className="border border-border bg-background p-3 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3"
                             >
-                              <span className="text-sm font-medium text-foreground flex-1 min-w-0 truncate">
-                                {species.name}
-                              </span>
+                              <div className="flex-1 min-w-0">
+                                <span className="text-sm font-medium text-foreground truncate block">
+                                  {species.name}
+                                </span>
+                                <span className="text-xs text-muted">
+                                  {(species.planted || 0).toLocaleString()} planted
+                                  {rem != null
+                                    ? ` · ${rem.toLocaleString()} remaining`
+                                    : ''}
+                                </span>
+                              </div>
                               <div className="flex items-center gap-2">
-                                <label className="text-xs text-muted shrink-0">Seedlings</label>
+                                <label className="text-xs text-muted shrink-0">Target</label>
                                 <input
                                   type="number"
                                   min="1"
@@ -1246,12 +1258,19 @@ Thank you for your understanding! 🌱
                                   onClick={() => removeTreeSpecies(index)}
                                   className="h-9 w-9 inline-flex items-center justify-center text-muted hover:text-foreground border border-border"
                                   aria-label={`Remove ${species.name}`}
+                                  disabled={(species.planted || 0) > 0}
+                                  title={
+                                    (species.planted || 0) > 0
+                                      ? 'Cannot remove — seedlings already gifted'
+                                      : 'Remove species'
+                                  }
                                 >
                                   <FaTimesCircle />
                                 </button>
                               </div>
                             </li>
-                          ))}
+                            );
+                          })}
                         </ul>
                       ) : (
                         <p className="mt-2 text-xs text-amber-700 dark:text-amber-400">
@@ -1260,8 +1279,10 @@ Thank you for your understanding! 🌱
                       )}
                       {speciesTargetSum(formData.tree_species) > 0 ? (
                         <p className="mt-2 text-xs text-muted">
-                          Species total:{' '}
-                          {speciesTargetSum(formData.tree_species).toLocaleString()} seedlings
+                          Inventory:{' '}
+                          {speciesPlantedSum(formData.tree_species).toLocaleString()} /{' '}
+                          {speciesTargetSum(formData.tree_species).toLocaleString()}{' '}
+                          seedlings gifted
                         </p>
                       ) : null}
                     </div>
@@ -1562,10 +1583,14 @@ Thank you for your understanding! 🌱
                           ) : null}
                           {normalizeTreeSpecies(project.tree_species).length > 0 ? (
                             <div
-                              className="text-xs text-muted mt-0.5 max-w-[240px] truncate"
-                              title={formatSpeciesList(project.tree_species)}
+                              className="text-xs text-muted mt-0.5 max-w-[260px] truncate"
+                              title={formatSpeciesList(project.tree_species, {
+                                withRemaining: true,
+                              })}
                             >
-                              {formatSpeciesList(project.tree_species)}
+                              {formatSpeciesList(project.tree_species, {
+                                withRemaining: true,
+                              })}
                             </div>
                           ) : (
                             <div className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">

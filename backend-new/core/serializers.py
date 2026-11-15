@@ -664,7 +664,7 @@ class TreeProjectDonationSerializer(serializers.ModelSerializer):
         model = TreeProjectDonation
         fields = ['id', 'amount', 'platform_fee', 'admin_share', 'fee_rate',
                  'trees_purchased', 'payment_reference', 'payment_status', 
-                 'dedication_message', 'is_anonymous', 'created_at', 'donor_name',
+                 'dedication_message', 'selected_species', 'is_anonymous', 'created_at', 'donor_name',
                  'gifted_to', 'gifted_to_name',
                  'project_name', 'project_city', 'project_country', 'co2_absorption_per_tree']
         read_only_fields = ['payment_reference', 'platform_fee', 'admin_share', 'fee_rate', 'created_at']
@@ -683,34 +683,27 @@ class TreeProjectDonationSerializer(serializers.ModelSerializer):
         )
 
 
-def normalize_tree_species(raw):
-    """Accept legacy string names or {name, target} objects."""
-    if not isinstance(raw, list):
-        return []
-    out = []
-    for item in raw:
-        if item is None:
-            continue
-        if isinstance(item, str):
-            name = item.strip()
-            if name:
-                out.append({"name": name, "target": 0})
-            continue
-        if isinstance(item, dict):
-            name = str(
-                item.get("name")
-                or item.get("species")
-                or item.get("label")
-                or ""
-            ).strip()
-            if not name:
-                continue
-            try:
-                target = int(item.get("target") or item.get("quantity") or item.get("count") or 0)
-            except (TypeError, ValueError):
-                target = 0
-            out.append({"name": name, "target": max(0, target)})
-    return out
+from .tree_inventory import normalize_tree_species, with_remaining
+
+
+def _merge_species_keep_planted(incoming, existing_raw):
+    """Preserve planted counts when admins edit targets."""
+    incoming = normalize_tree_species(incoming)
+    existing = {
+        s["name"].lower(): s for s in normalize_tree_species(existing_raw)
+    }
+    for s in incoming:
+        prev = existing.get(s["name"].lower())
+        if prev:
+            planted = max(
+                int(s.get("planted") or 0),
+                int(prev.get("planted") or 0),
+            )
+            s["planted"] = planted
+            # Target cannot drop below already-gifted seedlings
+            if int(s.get("target") or 0) < planted:
+                s["target"] = planted
+    return incoming
 
 
 class TreeProjectSerializer(serializers.ModelSerializer):
@@ -742,7 +735,10 @@ class TreeProjectSerializer(serializers.ModelSerializer):
         read_only_fields = ['trees_planted', 'funds_raised', 'is_verified', 'verification_date', 'tree_admin_org', 'created_at', 'updated_at']
 
     def validate_tree_species(self, value):
-        return normalize_tree_species(value)
+        normalized = normalize_tree_species(value)
+        if self.instance is not None:
+            return _merge_species_keep_planted(normalized, self.instance.tree_species)
+        return normalized
 
     def validate(self, attrs):
         species = attrs.get("tree_species")
@@ -750,6 +746,10 @@ class TreeProjectSerializer(serializers.ModelSerializer):
             species = normalize_tree_species(self.instance.tree_species)
         else:
             species = normalize_tree_species(species or [])
+            if self.instance is not None:
+                species = _merge_species_keep_planted(
+                    species, self.instance.tree_species
+                )
         species_sum = sum(int(s.get("target") or 0) for s in species)
         target = attrs.get("target_trees")
         if target is None and self.instance is not None:
@@ -766,7 +766,7 @@ class TreeProjectSerializer(serializers.ModelSerializer):
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
-        data["tree_species"] = normalize_tree_species(data.get("tree_species"))
+        data["tree_species"] = with_remaining(data.get("tree_species"))
         return data
     
     def get_cover_image_url(self, obj):
@@ -832,7 +832,10 @@ class TreeProjectCreateSerializer(serializers.ModelSerializer):
         ]
 
     def validate_tree_species(self, value):
-        return normalize_tree_species(value)
+        normalized = normalize_tree_species(value)
+        if self.instance is not None:
+            return _merge_species_keep_planted(normalized, self.instance.tree_species)
+        return normalized
 
     def validate(self, attrs):
         species = attrs.get("tree_species")
@@ -840,6 +843,10 @@ class TreeProjectCreateSerializer(serializers.ModelSerializer):
             species = normalize_tree_species(self.instance.tree_species)
         else:
             species = normalize_tree_species(species or [])
+            if self.instance is not None:
+                species = _merge_species_keep_planted(
+                    species, self.instance.tree_species
+                )
         species_sum = sum(int(s.get("target") or 0) for s in species)
         target = attrs.get("target_trees")
         if target is None and self.instance is not None:
@@ -856,7 +863,7 @@ class TreeProjectCreateSerializer(serializers.ModelSerializer):
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
-        data["tree_species"] = normalize_tree_species(data.get("tree_species"))
+        data["tree_species"] = with_remaining(data.get("tree_species"))
         return data
     
     def create(self, validated_data):
@@ -884,7 +891,13 @@ class TreeProjectUpdateCreateSerializer(serializers.ModelSerializer):
 class TreeProjectDonationCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = TreeProjectDonation
-        fields = ['amount', 'trees_purchased', 'dedication_message', 'is_anonymous']
+        fields = [
+            'amount',
+            'trees_purchased',
+            'dedication_message',
+            'selected_species',
+            'is_anonymous',
+        ]
     
     def create(self, validated_data):
         validated_data['project'] = self.context['project']
