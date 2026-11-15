@@ -5,6 +5,7 @@ import { Link } from "react-router-dom";
 import { LandingPageSEO } from "../components/SEOComponents";
 import SiteFooter from "../components/SiteFooter";
 import BrandLogo from "../components/BrandLogo";
+import WelcomeHighlightsPopup from "../components/WelcomeHighlightsPopup";
 import { SITE } from "../config/site";
 import { fetchDisasters, fetchTreeStats, mapDisasterForMap, buildLiveCharts, formatTimeAgo } from "../utils/apiData";
 
@@ -193,6 +194,7 @@ const LandingPage = () => {
   return (
     <>
       <LandingPageSEO />
+      <WelcomeHighlightsPopup enabled={heroReady} />
       <main className="min-h-[100dvh] overflow-x-hidden">
       {/* Modern Navigation */}
       <nav className={`fixed top-0 w-full z-50 transition-all duration-300 ${
