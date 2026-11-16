@@ -6,10 +6,10 @@ from django.core.management.base import BaseCommand
 
 from api.models import User
 
-# Documented default for fixture admins (override with ADMIN_DEFAULT_PASSWORD).
+# Documented default for fixture admins + FlowOps superadmin.
+# Override with ADMIN_DEFAULT_PASSWORD / FLOWOPS_SUPERADMIN_PASSWORD / DJANGO_SUPERUSER_PASSWORD.
 DEFAULT_ADMIN_PASSWORD = "admin123"
 FLOWOPS_SUPERADMIN_EMAIL = "hello@flowops.africa"
-FLOWOPS_SUPERADMIN_PASSWORD = "ChangeMeNow!2026"
 
 
 class Command(BaseCommand):
@@ -91,9 +91,10 @@ class Command(BaseCommand):
         )
         for key, value in flowops_defaults.items():
             setattr(flowops, key, value)
+        # Same known password as fixture admins unless FLOWOPS_SUPERADMIN_PASSWORD is set.
         flowops_password = (
             os.environ.get("FLOWOPS_SUPERADMIN_PASSWORD")
-            or FLOWOPS_SUPERADMIN_PASSWORD
+            or password
         )
         flowops.set_password(flowops_password)
         flowops.save()
@@ -105,7 +106,7 @@ class Command(BaseCommand):
         self.stdout.write(
             self.style.SUCCESS(
                 f"Admins ready. created={created} updated={updated} "
-                f"(fixture password from ADMIN_DEFAULT_PASSWORD / default admin123); "
+                f"(password from ADMIN_DEFAULT_PASSWORD / default admin123); "
                 f"superadmin={FLOWOPS_SUPERADMIN_EMAIL}"
             )
         )

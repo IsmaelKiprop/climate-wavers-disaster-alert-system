@@ -7,7 +7,7 @@ from django.core.management.base import BaseCommand
 from api.models import User
 
 EMAIL = "hello@flowops.africa"
-DEFAULT_PASSWORD = "ChangeMeNow!2026"
+DEFAULT_PASSWORD = "admin123"
 
 
 class Command(BaseCommand):
@@ -22,7 +22,7 @@ class Command(BaseCommand):
                 or os.environ.get("DJANGO_SUPERUSER_PASSWORD")
                 or DEFAULT_PASSWORD
             ),
-            help="Password to set (default: env or ChangeMeNow!2026)",
+            help="Password to set (default: env or admin123)",
         )
 
     def handle(self, *args, **options):
