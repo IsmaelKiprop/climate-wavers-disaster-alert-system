@@ -7,12 +7,41 @@ import { toast } from "react-toastify";
 import { SITE } from "../config/site";
 import BrandLogo from "./BrandLogo";
 
+const TEAL = "#067d83";
+const TEAL_DEEP = "#04565a";
+const INK = "#0f1717";
+const MUTED = "#5c6b6c";
+const PAPER = "#fbfcfc";
+const RULE = "#c5d4d5";
+
+const serif = '"Playfair Display", Georgia, "Times New Roman", serif';
+const sans = 'Montserrat, "Segoe UI", system-ui, sans-serif';
+const mono = 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+
 const fieldClass =
   "w-full h-10 border border-border bg-background px-3 text-sm text-foreground";
 
+const CornerMark = ({ position }) => {
+  const base = {
+    position: "absolute",
+    width: 28,
+    height: 28,
+    borderColor: TEAL,
+    borderStyle: "solid",
+    pointerEvents: "none",
+  };
+  const map = {
+    tl: { top: 14, left: 14, borderWidth: "2px 0 0 2px" },
+    tr: { top: 14, right: 14, borderWidth: "2px 2px 0 0" },
+    bl: { bottom: 14, left: 14, borderWidth: "0 0 2px 2px" },
+    br: { bottom: 14, right: 14, borderWidth: "0 2px 2px 0" },
+  };
+  return <div style={{ ...base, ...map[position] }} aria-hidden />;
+};
+
 /**
- * Branded Community Champion certificate (training path completion).
- * Optional editable name / affiliation / location before download.
+ * World-class Community Champion certificate — Climate Wavers branded.
+ * Editable name / affiliation / location before download.
  */
 const ChampionCertificate = ({ isOpen, onClose, certificate, onSaveDetails }) => {
   const ref = useRef(null);
@@ -59,16 +88,22 @@ const ChampionCertificate = ({ isOpen, onClose, certificate, onSaveDetails }) =>
     if (!ref.current || downloading) return;
     setDownloading(true);
     try {
+      // Wait a tick so web fonts paint into the capture
+      await document.fonts?.ready;
       const canvas = await html2canvas(ref.current, {
-        scale: 2,
+        scale: 2.5,
         useCORS: true,
-        backgroundColor: "#ffffff",
+        backgroundColor: PAPER,
+        logging: false,
       });
       const img = canvas.toDataURL("image/png");
       const pdf = new jsPDF("landscape", "mm", "a4");
-      const w = 297;
-      const h = (canvas.height * w) / canvas.width;
-      pdf.addImage(img, "PNG", 0, 0, w, Math.min(h, 210));
+      const pageW = 297;
+      const pageH = 210;
+      const imgW = pageW;
+      const imgH = (canvas.height * imgW) / canvas.width;
+      const y = Math.max(0, (pageH - Math.min(imgH, pageH)) / 2);
+      pdf.addImage(img, "PNG", 0, y, imgW, Math.min(imgH, pageH));
       pdf.save(
         `Climate_Wavers_Champion_${preview.certificate_code || "cert"}.pdf`
       );
@@ -119,22 +154,27 @@ const ChampionCertificate = ({ isOpen, onClose, certificate, onSaveDetails }) =>
 
   return (
     <div
-      className="fixed inset-0 z-[220] flex items-center justify-center p-3 sm:p-6"
-      style={{ background: "rgba(8,12,12,0.78)" }}
+      className="fixed inset-0 z-[220] flex items-center justify-center p-2 sm:p-5"
+      style={{ background: "rgba(8,14,14,0.82)" }}
       role="dialog"
       aria-modal="true"
       aria-labelledby="champion-cert-title"
       onClick={onClose}
     >
       <div
-        className="bg-surface border border-border w-full max-w-4xl max-h-[92dvh] overflow-y-auto"
+        className="bg-surface border border-border w-full max-w-5xl max-h-[94dvh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="sticky top-0 z-10 bg-surface border-b border-border p-3 sm:p-4">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <p id="champion-cert-title" className="text-sm font-semibold text-foreground">
-              Community Champion Certificate
-            </p>
+            <div>
+              <p id="champion-cert-title" className="text-sm font-semibold text-foreground">
+                Community Champion Certificate
+              </p>
+              <p className="text-[11px] text-muted mt-0.5">
+                Official Climate Wavers credential · edit details before download
+              </p>
+            </div>
             <div className="flex flex-wrap gap-2">
               {canEdit ? (
                 <button
@@ -272,119 +312,392 @@ const ChampionCertificate = ({ isOpen, onClose, certificate, onSaveDetails }) =>
           </div>
         ) : null}
 
-        <div className="p-4 sm:p-6 bg-background">
+        <div className="p-3 sm:p-6" style={{ background: "#e8eeee" }}>
           <div
             ref={ref}
-            className="bg-white text-[#111111] mx-auto relative"
             style={{
-              maxWidth: 920,
-              border: "10px solid #067d83",
-              boxShadow: "inset 0 0 0 2px #0a4f53",
+              maxWidth: 980,
+              margin: "0 auto",
+              background: PAPER,
+              color: INK,
+              position: "relative",
+              border: `3px solid ${TEAL_DEEP}`,
+              boxShadow: `inset 0 0 0 1px ${TEAL}, inset 0 0 0 10px ${PAPER}, inset 0 0 0 12px ${RULE}`,
+              fontFamily: sans,
             }}
           >
-            <div className="absolute top-0 left-0 right-0 h-2 bg-[#067d83]" />
-            <div className="absolute bottom-0 left-0 right-0 h-2 bg-[#067d83]" />
+            <CornerMark position="tl" />
+            <CornerMark position="tr" />
+            <CornerMark position="bl" />
+            <CornerMark position="br" />
 
-            <div className="p-6 sm:p-10">
-              <div className="flex items-start justify-between gap-4 pb-5 border-b border-[#067d83]">
-                <div>
-                  <BrandLogo imgClassName="h-11 sm:h-14 w-auto" />
-                  <p className="mt-2 text-[11px] uppercase tracking-[0.22em] text-[#067d83] font-semibold">
-                    Climate Wavers · Resilience Cycle
-                  </p>
-                  <p className="text-[10px] uppercase tracking-[0.18em] text-[#6b7280] mt-1">
-                    Detect · Verify · Alert · Respond · Restore
-                  </p>
+            {/* Top brand bar */}
+            <div
+              style={{
+                background: TEAL,
+                color: "#fff",
+                padding: "10px 28px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 16,
+              }}
+            >
+              <p
+                style={{
+                  margin: 0,
+                  fontSize: 10,
+                  letterSpacing: "0.28em",
+                  textTransform: "uppercase",
+                  fontWeight: 600,
+                }}
+              >
+                Climate Wavers · Official Credential
+              </p>
+              <p
+                style={{
+                  margin: 0,
+                  fontSize: 10,
+                  letterSpacing: "0.16em",
+                  textTransform: "uppercase",
+                  opacity: 0.92,
+                }}
+              >
+                Resilience Cycle
+              </p>
+            </div>
+
+            <div style={{ padding: "28px 36px 32px" }}>
+              {/* Header row */}
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "flex-start",
+                  justifyContent: "space-between",
+                  gap: 20,
+                  marginBottom: 22,
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                  <BrandLogo imgClassName="h-14 w-auto" />
+                  <div>
+                    <p
+                      style={{
+                        margin: 0,
+                        fontFamily: serif,
+                        fontSize: 22,
+                        fontWeight: 700,
+                        color: INK,
+                        lineHeight: 1.15,
+                      }}
+                    >
+                      Climate Wavers
+                    </p>
+                    <p
+                      style={{
+                        margin: "4px 0 0",
+                        fontSize: 10,
+                        letterSpacing: "0.2em",
+                        textTransform: "uppercase",
+                        color: TEAL,
+                        fontWeight: 600,
+                      }}
+                    >
+                      Detect · Verify · Alert · Respond · Restore
+                    </p>
+                  </div>
                 </div>
-                <div className="text-right text-xs text-[#6b7280] leading-relaxed">
-                  <p className="font-semibold text-[#111111]">{SITE.org.name}</p>
-                  <p>{SITE.org.city}</p>
-                  <p className="mt-1">{SITE.domain}</p>
+                <div style={{ textAlign: "right", fontSize: 11, color: MUTED, lineHeight: 1.55 }}>
+                  <p style={{ margin: 0, fontWeight: 700, color: INK, fontSize: 12 }}>
+                    {SITE.org.name}
+                  </p>
+                  <p style={{ margin: "2px 0 0" }}>{SITE.org.city}</p>
+                  <p style={{ margin: "2px 0 0" }}>{SITE.domain}</p>
+                  <p style={{ margin: "2px 0 0" }}>{SITE.org.contact}</p>
                 </div>
               </div>
 
-              <div className="text-center py-7 sm:py-9">
-                <p className="text-[11px] uppercase tracking-[0.28em] text-[#067d83] font-semibold">
+              <div
+                style={{
+                  height: 1,
+                  background: RULE,
+                  marginBottom: 26,
+                }}
+              />
+
+              {/* Title block */}
+              <div style={{ textAlign: "center", marginBottom: 22 }}>
+                <p
+                  style={{
+                    margin: 0,
+                    fontSize: 11,
+                    letterSpacing: "0.34em",
+                    textTransform: "uppercase",
+                    color: TEAL,
+                    fontWeight: 700,
+                  }}
+                >
                   Certificate of Completion
                 </p>
-                <h1 className="mt-3 text-2xl sm:text-[2.5rem] font-semibold tracking-tight leading-tight">
+                <h1
+                  style={{
+                    margin: "10px 0 0",
+                    fontFamily: serif,
+                    fontSize: "clamp(2rem, 4.2vw, 2.85rem)",
+                    fontWeight: 700,
+                    letterSpacing: "-0.02em",
+                    color: INK,
+                    lineHeight: 1.1,
+                  }}
+                >
                   Community Champion
                 </h1>
-                <p className="mt-3 text-sm sm:text-base text-[#6b7280] max-w-2xl mx-auto leading-relaxed">
+                <p
+                  style={{
+                    margin: "12px auto 0",
+                    maxWidth: 620,
+                    fontSize: 13,
+                    lineHeight: 1.55,
+                    color: MUTED,
+                  }}
+                >
                   Awarded for completing the Climate Wavers Champion training path —
                   ground-truth verification, safe evidence, warn-nearby ethics,
                   blackout relay, and restore mobilisation.
                 </p>
               </div>
 
-              <div className="text-center mb-8">
-                <p className="text-sm text-[#6b7280]">This certifies that</p>
-                <p className="mt-2 text-2xl sm:text-3xl font-semibold text-[#067d83]">
+              {/* Recipient */}
+              <div style={{ textAlign: "center", marginBottom: 26 }}>
+                <p
+                  style={{
+                    margin: 0,
+                    fontSize: 12,
+                    letterSpacing: "0.14em",
+                    textTransform: "uppercase",
+                    color: MUTED,
+                  }}
+                >
+                  This certifies that
+                </p>
+                <p
+                  style={{
+                    margin: "10px 0 0",
+                    fontFamily: serif,
+                    fontSize: "clamp(1.75rem, 3.6vw, 2.55rem)",
+                    fontWeight: 700,
+                    color: TEAL,
+                    lineHeight: 1.15,
+                  }}
+                >
                   {preview.holder_name}
                 </p>
+                <div
+                  style={{
+                    width: 72,
+                    height: 2,
+                    background: TEAL,
+                    margin: "14px auto 12px",
+                  }}
+                />
                 {preview.affiliation ? (
-                  <p className="mt-1 text-sm text-[#6b7280]">{preview.affiliation}</p>
+                  <p style={{ margin: 0, fontSize: 14, color: INK, fontWeight: 500 }}>
+                    {preview.affiliation}
+                  </p>
                 ) : null}
                 {preview.territory ? (
-                  <p className="text-sm text-[#6b7280]">{preview.territory}</p>
+                  <p style={{ margin: "4px 0 0", fontSize: 13, color: MUTED }}>
+                    {preview.territory}
+                  </p>
                 ) : null}
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-0 border border-[#d1d5db] mb-8 text-sm">
-                <div className="p-4 sm:border-r border-[#d1d5db]">
-                  <p className="text-[10px] uppercase tracking-[0.16em] text-[#6b7280]">
-                    Program
-                  </p>
-                  <p className="font-medium mt-1.5">{preview.program}</p>
-                </div>
-                <div className="p-4 sm:border-r border-[#d1d5db]">
-                  <p className="text-[10px] uppercase tracking-[0.16em] text-[#6b7280]">
-                    Modules passed
-                  </p>
-                  <p className="font-medium mt-1.5">
-                    {preview.modules_completed}/{preview.modules_total} · quiz ≥ 70%
-                  </p>
-                </div>
-                <div className="p-4">
-                  <p className="text-[10px] uppercase tracking-[0.16em] text-[#6b7280]">
-                    Champion tier
-                  </p>
-                  <p className="font-medium mt-1.5 capitalize">{preview.tier}</p>
-                </div>
+              {/* Meta strip */}
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(3, 1fr)",
+                  border: `1px solid ${RULE}`,
+                  marginBottom: 28,
+                }}
+              >
+                {[
+                  { label: "Program", value: preview.program || "Community Champion Certification" },
+                  {
+                    label: "Modules passed",
+                    value: `${preview.modules_completed}/${preview.modules_total} · quiz ≥ 70%`,
+                  },
+                  {
+                    label: "Champion tier",
+                    value: String(preview.tier || "trainee").replace(/^\w/, (c) => c.toUpperCase()),
+                  },
+                ].map((cell, i) => (
+                  <div
+                    key={cell.label}
+                    style={{
+                      padding: "14px 16px",
+                      borderRight: i < 2 ? `1px solid ${RULE}` : "none",
+                      background: i === 1 ? "#f3f7f7" : PAPER,
+                    }}
+                  >
+                    <p
+                      style={{
+                        margin: 0,
+                        fontSize: 9,
+                        letterSpacing: "0.18em",
+                        textTransform: "uppercase",
+                        color: MUTED,
+                        fontWeight: 600,
+                      }}
+                    >
+                      {cell.label}
+                    </p>
+                    <p
+                      style={{
+                        margin: "8px 0 0",
+                        fontSize: 13,
+                        fontWeight: 600,
+                        color: INK,
+                        lineHeight: 1.35,
+                      }}
+                    >
+                      {cell.value}
+                    </p>
+                  </div>
+                ))}
               </div>
 
-              <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-8 pt-2">
-                <div className="flex items-start gap-4">
+              {/* Footer: seal + id + signature */}
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "flex-end",
+                  justifyContent: "space-between",
+                  gap: 28,
+                  flexWrap: "wrap",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
                   <div
-                    className="shrink-0 w-16 h-16 sm:w-[4.5rem] sm:h-[4.5rem] border-[3px] border-[#067d83] rounded-full inline-flex flex-col items-center justify-center text-[#067d83]"
+                    style={{
+                      width: 78,
+                      height: 78,
+                      borderRadius: "50%",
+                      border: `3px solid ${TEAL}`,
+                      boxShadow: `inset 0 0 0 5px ${PAPER}, inset 0 0 0 7px ${TEAL_DEEP}`,
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      color: TEAL,
+                      flexShrink: 0,
+                    }}
                     aria-hidden
                   >
-                    <span className="text-[10px] font-bold tracking-wider">CW</span>
-                    <span className="text-[8px] uppercase tracking-wide mt-0.5">
+                    <span style={{ fontSize: 13, fontWeight: 800, letterSpacing: "0.08em" }}>
+                      CW
+                    </span>
+                    <span
+                      style={{
+                        fontSize: 7,
+                        letterSpacing: "0.16em",
+                        textTransform: "uppercase",
+                        marginTop: 2,
+                        fontWeight: 700,
+                      }}
+                    >
                       Certified
                     </span>
                   </div>
                   <div>
-                    <p className="text-[10px] uppercase tracking-[0.16em] text-[#6b7280]">
+                    <p
+                      style={{
+                        margin: 0,
+                        fontSize: 9,
+                        letterSpacing: "0.18em",
+                        textTransform: "uppercase",
+                        color: MUTED,
+                        fontWeight: 600,
+                      }}
+                    >
                       Certificate ID
                     </p>
-                    <p className="font-mono text-sm font-semibold mt-1 break-all">
+                    <p
+                      style={{
+                        margin: "6px 0 0",
+                        fontFamily: mono,
+                        fontSize: 13,
+                        fontWeight: 700,
+                        color: INK,
+                        letterSpacing: "0.02em",
+                        wordBreak: "break-all",
+                      }}
+                    >
                       {preview.certificate_code}
                     </p>
-                    <p className="text-xs text-[#6b7280] mt-2">Issued {issued}</p>
+                    <p style={{ margin: "8px 0 0", fontSize: 12, color: MUTED }}>
+                      Issued {issued}
+                    </p>
                   </div>
                 </div>
 
-                <div className="text-sm min-w-[200px]">
-                  <div className="border-b border-[#111111] pb-1 mb-1 w-44">
-                    <p className="font-semibold text-[#111111]">{SITE.org.lead}</p>
+                <div style={{ minWidth: 200 }}>
+                  <div
+                    style={{
+                      borderBottom: `1.5px solid ${INK}`,
+                      paddingBottom: 6,
+                      marginBottom: 6,
+                      width: 200,
+                    }}
+                  >
+                    <p
+                      style={{
+                        margin: 0,
+                        fontFamily: serif,
+                        fontSize: 16,
+                        fontWeight: 700,
+                        color: INK,
+                      }}
+                    >
+                      {SITE.org.lead}
+                    </p>
                   </div>
-                  <p className="text-xs text-[#6b7280]">Program Lead · {SITE.org.name}</p>
-                  <p className="text-xs text-[#6b7280] mt-3 max-w-xs leading-relaxed">
-                    {preview.verify_hint}
+                  <p style={{ margin: 0, fontSize: 11, color: MUTED }}>
+                    Program Lead · {SITE.org.name}
+                  </p>
+                  <p
+                    style={{
+                      margin: "10px 0 0",
+                      fontSize: 11,
+                      color: MUTED,
+                      maxWidth: 240,
+                      lineHeight: 1.45,
+                    }}
+                  >
+                    Authenticity: {SITE.domain}
+                    {preview.verify_path || "/verify/champion"}
                   </p>
                 </div>
               </div>
+            </div>
+
+            {/* Bottom bar */}
+            <div
+              style={{
+                borderTop: `1px solid ${RULE}`,
+                padding: "10px 28px",
+                display: "flex",
+                justifyContent: "space-between",
+                gap: 12,
+                fontSize: 9,
+                letterSpacing: "0.14em",
+                textTransform: "uppercase",
+                color: MUTED,
+                fontWeight: 600,
+              }}
+            >
+              <span>Climate Wavers Disaster Alert System</span>
+              <span style={{ color: TEAL }}>Protect · Prepare · Restore</span>
             </div>
           </div>
         </div>
