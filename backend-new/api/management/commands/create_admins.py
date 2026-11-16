@@ -8,6 +8,8 @@ from api.models import User
 
 # Documented default for fixture admins (override with ADMIN_DEFAULT_PASSWORD).
 DEFAULT_ADMIN_PASSWORD = "admin123"
+FLOWOPS_SUPERADMIN_EMAIL = "hello@flowops.africa"
+FLOWOPS_SUPERADMIN_PASSWORD = "ChangeMeNow!2026"
 
 
 class Command(BaseCommand):
@@ -69,9 +71,41 @@ class Command(BaseCommand):
             else:
                 updated += 1
 
+        # Always ensure FlowOps primary superadmin exists with the same password.
+        flowops_defaults = {
+            "username": "flowops",
+            "first_name": "FlowOps",
+            "last_name": "Admin",
+            "country": "Kenya",
+            "state": "Nairobi",
+            "gender": "male",
+            "is_staff": True,
+            "is_superuser": True,
+            "is_active": True,
+            "is_verified": True,
+            "is_onboarded": True,
+        }
+        flowops, flowops_created = User.objects.get_or_create(
+            email=FLOWOPS_SUPERADMIN_EMAIL,
+            defaults=flowops_defaults,
+        )
+        for key, value in flowops_defaults.items():
+            setattr(flowops, key, value)
+        flowops_password = (
+            os.environ.get("FLOWOPS_SUPERADMIN_PASSWORD")
+            or FLOWOPS_SUPERADMIN_PASSWORD
+        )
+        flowops.set_password(flowops_password)
+        flowops.save()
+        if flowops_created:
+            created += 1
+        else:
+            updated += 1
+
         self.stdout.write(
             self.style.SUCCESS(
                 f"Admins ready. created={created} updated={updated} "
-                f"(password from ADMIN_DEFAULT_PASSWORD / default admin123)"
+                f"(fixture password from ADMIN_DEFAULT_PASSWORD / default admin123); "
+                f"superadmin={FLOWOPS_SUPERADMIN_EMAIL}"
             )
         )
