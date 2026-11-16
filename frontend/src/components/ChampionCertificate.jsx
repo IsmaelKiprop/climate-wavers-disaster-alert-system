@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 import { IoClose, IoDownloadOutline, IoCopyOutline, IoCreateOutline } from "react-icons/io5";
 import html2canvas from "html2canvas";
@@ -71,6 +72,21 @@ const ChampionCertificate = ({ isOpen, onClose, certificate, onSaveDetails }) =>
     });
     setEditing(false);
   }, [certificate]);
+
+  // Escape app shell overflow/stacking so the modal covers the full viewport
+  useEffect(() => {
+    if (!isOpen) return undefined;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (e) => {
+      if (e.key === "Escape") onClose?.();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [isOpen, onClose]);
 
   if (!isOpen || !preview) return null;
 
@@ -152,28 +168,38 @@ const ChampionCertificate = ({ isOpen, onClose, certificate, onSaveDetails }) =>
     }
   };
 
-  return (
+  const modal = (
     <div
-      className="fixed inset-0 z-[220] flex items-center justify-center p-2 sm:p-5"
-      style={{ background: "rgba(8,14,14,0.82)" }}
+      className="fixed inset-0 z-[500] flex items-stretch sm:items-center justify-center p-0 sm:p-4"
+      style={{ background: "rgba(8,14,14,0.88)" }}
       role="dialog"
       aria-modal="true"
       aria-labelledby="champion-cert-title"
       onClick={onClose}
     >
       <div
-        className="bg-surface border border-border w-full max-w-5xl max-h-[94dvh] overflow-y-auto"
+        className="bg-surface border border-border w-full sm:max-w-5xl h-[100dvh] sm:h-auto sm:max-h-[94dvh] flex flex-col overflow-hidden shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="sticky top-0 z-10 bg-surface border-b border-border p-3 sm:p-4">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <div>
-              <p id="champion-cert-title" className="text-sm font-semibold text-foreground">
-                Community Champion Certificate
-              </p>
-              <p className="text-[11px] text-muted mt-0.5">
-                Official Climate Wavers credential · edit details before download
-              </p>
+        <div className="shrink-0 bg-surface border-b border-border p-3 sm:p-4">
+          <div className="flex flex-col gap-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p id="champion-cert-title" className="text-sm font-semibold text-foreground">
+                  Community Champion Certificate
+                </p>
+                <p className="text-[11px] text-muted mt-0.5">
+                  Official Climate Wavers credential · edit details before download
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={onClose}
+                className="h-10 w-10 shrink-0 inline-flex items-center justify-center border border-border"
+                aria-label="Close"
+              >
+                <IoClose size={20} />
+              </button>
             </div>
             <div className="flex flex-wrap gap-2">
               {canEdit ? (
@@ -211,17 +237,11 @@ const ChampionCertificate = ({ isOpen, onClose, certificate, onSaveDetails }) =>
                 <IoDownloadOutline size={18} />
                 {downloading ? "Preparing…" : "Download PDF"}
               </button>
-              <button
-                type="button"
-                onClick={onClose}
-                className="h-10 w-10 inline-flex items-center justify-center border border-border"
-                aria-label="Close"
-              >
-                <IoClose size={20} />
-              </button>
             </div>
           </div>
         </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
 
         {editing && canEdit ? (
           <div className="p-4 sm:p-5 border-b border-border bg-background space-y-3">
@@ -312,10 +332,15 @@ const ChampionCertificate = ({ isOpen, onClose, certificate, onSaveDetails }) =>
           </div>
         ) : null}
 
-        <div className="p-3 sm:p-6" style={{ background: "#e8eeee" }}>
+        <div
+          className="p-3 sm:p-6 overflow-x-auto"
+          style={{ background: "#e8eeee" }}
+        >
           <div
             ref={ref}
             style={{
+              width: "100%",
+              minWidth: 720,
               maxWidth: 980,
               margin: "0 auto",
               background: PAPER,
@@ -701,9 +726,12 @@ const ChampionCertificate = ({ isOpen, onClose, certificate, onSaveDetails }) =>
             </div>
           </div>
         </div>
+        </div>
       </div>
     </div>
   );
+
+  return createPortal(modal, document.body);
 };
 
 export default ChampionCertificate;
