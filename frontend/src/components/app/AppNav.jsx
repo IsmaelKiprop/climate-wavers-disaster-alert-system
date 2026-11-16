@@ -27,7 +27,14 @@ import {
 } from "react-icons/io5";
 import { MdOutlineCampaign, MdCampaign } from "react-icons/md";
 import { RiAlarmWarningLine, RiAlarmWarningFill } from "react-icons/ri";
-import { getUser, logout, isAdmin, setTreeAdminAccess } from "../../utils/factory";
+import {
+  getUser,
+  logout,
+  isAdmin,
+  isPlatformStaff,
+  setTreeAdminAccess,
+} from "../../utils/factory";
+import { MdOutlineAdminPanelSettings } from "react-icons/md";
 import { useEffect, useState } from "react";
 import Modal from "../Modal";
 import Createpost from "../Createpost";
@@ -146,6 +153,16 @@ const AppNav = ({ onNavigate, compact = false }) => {
         },
         { to: "/app/waverx", label: "WaverX", Icon: WaverXIcon, ActiveIcon: WaverXIcon },
         { to: "/app/plant-tree", label: "Plant Trees", Icon: IoLeafOutline, ActiveIcon: IoLeafOutline },
+        ...(isPlatformStaff()
+          ? [
+              {
+                to: "/app/platform-admin",
+                label: "Platform Admin",
+                Icon: MdOutlineAdminPanelSettings,
+                ActiveIcon: MdOutlineAdminPanelSettings,
+              },
+            ]
+          : []),
         ...(treeAdminOk || isAdmin()
           ? [
               {

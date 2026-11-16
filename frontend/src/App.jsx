@@ -42,6 +42,42 @@ const PublicProjectView = lazy(() => import("./components/PublicProjectView"));
 const MyCertificates = lazy(() => import("./pages/MyCertificates"));
 const PaymentSuccess = lazy(() => import("./pages/PaymentSuccess"));
 const SharedProfilePage = lazy(() => import("./pages/SharedProfilePage"));
+const PlatformAdminLayout = lazy(() =>
+  import("./platform-admin").then((m) => ({ default: m.PlatformAdminLayout }))
+);
+const PlatformOverview = lazy(() =>
+  import("./platform-admin").then((m) => ({ default: m.Overview }))
+);
+const PlatformUsers = lazy(() =>
+  import("./platform-admin").then((m) => ({ default: m.Users }))
+);
+const PlatformUserDetail = lazy(() =>
+  import("./platform-admin").then((m) => ({ default: m.UserDetail }))
+);
+const PlatformContent = lazy(() =>
+  import("./platform-admin").then((m) => ({ default: m.Content }))
+);
+const PlatformDisasters = lazy(() =>
+  import("./platform-admin").then((m) => ({ default: m.Disasters }))
+);
+const PlatformTrees = lazy(() =>
+  import("./platform-admin").then((m) => ({ default: m.TreesPayments }))
+);
+const PlatformChampions = lazy(() =>
+  import("./platform-admin").then((m) => ({ default: m.Champions }))
+);
+const PlatformResponders = lazy(() =>
+  import("./platform-admin").then((m) => ({ default: m.Responders }))
+);
+const PlatformCalendar = lazy(() =>
+  import("./platform-admin").then((m) => ({ default: m.Calendar }))
+);
+const PlatformNewsletter = lazy(() =>
+  import("./platform-admin").then((m) => ({ default: m.Newsletter }))
+);
+const PlatformAcceptInvite = lazy(() =>
+  import("./platform-admin").then((m) => ({ default: m.AcceptInvite }))
+);
 
 const AuthSharedLayout = lazy(() => import("./pages/AuthenticatedPages/SharedLayout"));
 const AuthMainfeed = lazy(() => import("./pages/AuthenticatedPages/Mainfeed"));
@@ -195,6 +231,33 @@ function App() {
               <Route path="/p/:projectId" element={<PublicProjectView />} />
               <Route path="/u/:userId" element={<SharedProfilePage />} />
               <Route path="/gift/:userId" element={<PlantTree />} />
+              <Route
+                path="/app/platform-admin"
+                element={
+                  <ProtectedRoute>
+                    <PlatformAdminLayout />
+                  </ProtectedRoute>
+                }
+              >
+                <Route index element={<PlatformOverview />} />
+                <Route path="users" element={<PlatformUsers />} />
+                <Route path="users/:id" element={<PlatformUserDetail />} />
+                <Route path="content" element={<PlatformContent />} />
+                <Route path="disasters" element={<PlatformDisasters />} />
+                <Route path="trees" element={<PlatformTrees />} />
+                <Route path="champions" element={<PlatformChampions />} />
+                <Route path="responders" element={<PlatformResponders />} />
+                <Route path="calendar" element={<PlatformCalendar />} />
+                <Route path="newsletter" element={<PlatformNewsletter />} />
+              </Route>
+              <Route
+                path="/app/platform-admin/accept-invite"
+                element={
+                  <ProtectedRoute>
+                    <PlatformAcceptInvite />
+                  </ProtectedRoute>
+                }
+              />
               <Route path="/app" element={<AuthSharedLayout />}>
                 <Route index element={<AuthMainfeed />} />
                 <Route path="/app/community" element={<AuthCommunity />} />

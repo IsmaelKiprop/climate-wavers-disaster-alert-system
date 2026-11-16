@@ -400,6 +400,13 @@ export const hasTreeAdminAccessCache = () => {
   }
 };
 
+/** Platform staff only (Django is_staff / superuser) — not Tree Admin operators. */
+export const isPlatformStaff = () => {
+  const user = getUser();
+  if (!user) return false;
+  return Boolean(user.is_staff || user.is_superuser);
+};
+
 // Check if user is admin or staff (includes approved Tree Admins after /tree-admin/me/)
 export const isAdmin = () => {
   const user = getUser();

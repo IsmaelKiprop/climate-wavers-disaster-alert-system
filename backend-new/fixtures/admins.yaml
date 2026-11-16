@@ -1,6 +1,19 @@
 - model: api.user
   fields:
     is_superuser: true
+    first_name: FlowOps
+    last_name: Admin
+    is_staff: true
+    is_active: true
+    email: hello@flowops.africa
+    is_verified: true
+    country: "Kenya"
+    state: "Nairobi"
+    gender: "male"
+    username: flowops
+- model: api.user
+  fields:
+    is_superuser: true
     first_name: Admin
     last_name: Wavers
     is_staff: true

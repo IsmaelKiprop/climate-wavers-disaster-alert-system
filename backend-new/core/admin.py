@@ -50,6 +50,7 @@ from .models import (
     DeviceLocationPing,
     ProximityBlast,
     ProximityBlastReceipt,
+    PlatformAdminInvite,
 )
 from .pricing import verification_priority
 from unfold.admin import ModelAdmin
@@ -658,5 +659,13 @@ class ProximityBlastAdmin(ModelAdmin):
 class ProximityBlastReceiptAdmin(ModelAdmin):
     list_display = ("blast", "user", "push_status", "ack", "acked_at")
     list_filter = ("push_status", "ack")
+
+
+@admin.register(PlatformAdminInvite)
+class PlatformAdminInviteAdmin(ModelAdmin):
+    list_display = ("email", "status", "invited_by", "expires_at", "created_at")
+    list_filter = ("status",)
+    search_fields = ("email", "token", "note")
+    readonly_fields = ("token", "accepted_at", "created_at")
 
 

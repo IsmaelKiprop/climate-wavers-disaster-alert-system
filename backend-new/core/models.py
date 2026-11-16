@@ -5,6 +5,7 @@ from django.core.exceptions import ValidationError
 from django.contrib.contenttypes.models import ContentType
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.utils.html import strip_tags
+from django.utils import timezone
 import re
 
 
@@ -21,6 +22,7 @@ class Notification(models.Model):
         ("climate_event", "Climate Event"),
         ("champion", "Community Champion"),
         ("proximity_alert", "Proximity Alert"),
+        ("platform_admin", "Platform Admin"),
     ]
 
     user = models.ForeignKey(
@@ -2752,3 +2754,57 @@ class ChampionRating(models.Model):
 
     def __str__(self):
         return f"{self.score}/5 for champion {self.champion_id} by {self.user_id}"
+
+
+class PlatformAdminInvite(models.Model):
+    """Staff invite another person to Platform Admin (is_staff)."""
+
+    STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("accepted", "Accepted"),
+        ("revoked", "Revoked"),
+        ("expired", "Expired"),
+    ]
+
+    email = models.EmailField(db_index=True)
+    token = models.CharField(max_length=64, unique=True, db_index=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
+    note = models.CharField(max_length=255, blank=True, default="")
+    invited_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="sent_platform_admin_invites",
+    )
+    accepted_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="accepted_platform_admin_invites",
+    )
+    expires_at = models.DateTimeField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    accepted_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["email", "status"]),
+            models.Index(fields=["status", "expires_at"]),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["email"],
+                condition=models.Q(status="pending"),
+                name="uniq_pending_platform_admin_invite",
+            )
+        ]
+
+    def __str__(self):
+        return f"PlatformAdminInvite {self.email} ({self.status})"
+
+    @property
+    def is_expired(self):
+        return timezone.now() >= self.expires_at
