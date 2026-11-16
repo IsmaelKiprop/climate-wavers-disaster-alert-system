@@ -463,6 +463,33 @@ const ChampionDesk = () => {
     }
   };
 
+  const nextTrainingModule = (() => {
+    if (!activeModule || !training.length) return null;
+    const idx = training.findIndex((m) => m.id === activeModule);
+    if (idx < 0) return null;
+    return (
+      training.slice(idx + 1).find((m) => !m.locked && !m.completed) ||
+      training.slice(idx + 1).find((m) => !m.locked) ||
+      null
+    );
+  })();
+
+  const goToNextModule = async () => {
+    if (!nextTrainingModule) {
+      setActiveModule(null);
+      setModuleDetail(null);
+      setQuizResult(null);
+      return;
+    }
+    await openModule(nextTrainingModule.id, nextTrainingModule.locked);
+  };
+
+  const backToPath = () => {
+    setActiveModule(null);
+    setModuleDetail(null);
+    setQuizResult(null);
+  };
+
   const registerCamera = async (e) => {
     e.preventDefault();
     setBusy(true);
@@ -973,11 +1000,7 @@ const ChampionDesk = () => {
                   </h2>
                   <button
                     type="button"
-                    onClick={() => {
-                      setActiveModule(null);
-                      setModuleDetail(null);
-                      setQuizResult(null);
-                    }}
+                    onClick={backToPath}
                     className="text-xs text-muted hover:text-foreground"
                   >
                     Back to path
@@ -1040,22 +1063,58 @@ const ChampionDesk = () => {
                     >
                       Score {quizResult.score}% —{" "}
                       {quizResult.passed
-                        ? "Passed. Next module unlocked."
+                        ? nextTrainingModule
+                          ? `Passed. Continue to “${nextTrainingModule.title || nextTrainingModule.label}”.`
+                          : "Passed. Path progress updated."
                         : `Need ${quizResult.pass_score}%. Try again.`}
                     </p>
                   ) : null}
-                  <button
-                    type="button"
-                    disabled={busy || moduleDetail?.completed}
-                    onClick={submitQuiz}
-                    className="h-11 px-4 bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-50"
-                  >
-                    {moduleDetail?.completed
-                      ? "Already passed"
-                      : busy
-                        ? "Checking…"
-                        : "Submit quiz"}
-                  </button>
+                  {moduleDetail?.completed || quizResult?.passed ? (
+                    <div className="flex flex-wrap gap-2">
+                      {nextTrainingModule ? (
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={goToNextModule}
+                          className="h-11 px-4 bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-50"
+                        >
+                          {busy ? "Opening…" : `Continue → ${nextTrainingModule.title || nextTrainingModule.label}`}
+                        </button>
+                      ) : trainingMeta.path_complete || trainingMeta.certificate ? (
+                        <button
+                          type="button"
+                          onClick={openCertificate}
+                          className="h-11 px-4 bg-primary text-primary-foreground text-sm font-semibold"
+                        >
+                          View certificate
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={backToPath}
+                          className="h-11 px-4 bg-primary text-primary-foreground text-sm font-semibold"
+                        >
+                          Back to learning path
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={backToPath}
+                        className="h-11 px-4 border border-border text-sm"
+                      >
+                        All modules
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={submitQuiz}
+                      className="h-11 px-4 bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-50"
+                    >
+                      {busy ? "Checking…" : "Submit quiz"}
+                    </button>
+                  )}
                 </div>
               </div>
             )}
