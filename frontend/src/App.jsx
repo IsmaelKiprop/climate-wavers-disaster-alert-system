@@ -31,6 +31,9 @@ const Consulting = lazy(() => import("./pages/Consulting"));
 const PricingPage = lazy(() => import("./pages/PricingPage"));
 const PublicResponderApply = lazy(() => import("./pages/PublicResponderApply"));
 const PublicTreeAdminApply = lazy(() => import("./pages/PublicTreeAdminApply"));
+const PublicChampionApply = lazy(() => import("./pages/PublicChampionApply"));
+const ChampionDirectoryPage = lazy(() => import("./pages/ChampionDirectoryPage"));
+const VerifyChampionCertificate = lazy(() => import("./pages/VerifyChampionCertificate"));
 const DisasterPage = lazy(() => import("./pages/DisasterPage"));
 const Donations = lazy(() => import("./components/Donations"));
 const PlantTree = lazy(() => import("./components/PlantTree"));
@@ -55,6 +58,7 @@ const AuthUploadCover = lazy(() => import("./pages/AuthenticatedPages/UploadCove
 const AuthUploadPhoto = lazy(() => import("./pages/AuthenticatedPages/UploadPhoto"));
 const AuthAlertSettings = lazy(() => import("./pages/AuthenticatedPages/AlertSettings"));
 const AuthResponder = lazy(() => import("./pages/AuthenticatedPages/Responder"));
+const AuthChampions = lazy(() => import("./pages/AuthenticatedPages/Champions"));
 const AuthChat = lazy(() => import("./pages/AuthenticatedPages/Chat"));
 const AuthCalendar = lazy(() => import("./pages/AuthenticatedPages/Calendar"));
 const AuthHashtag = lazy(() => import("./pages/AuthenticatedPages/Hashtag"));
@@ -177,6 +181,16 @@ function App() {
               <Route path="/pricing" element={<PricingPage />} />
               <Route path="/responders/apply" element={<PublicResponderApply />} />
               <Route path="/tree-admins/apply" element={<PublicTreeAdminApply />} />
+              <Route path="/champions/apply" element={<PublicChampionApply />} />
+              <Route path="/champions" element={<ChampionDirectoryPage />} />
+              <Route
+                path="/verify/champion"
+                element={<VerifyChampionCertificate />}
+              />
+              <Route
+                path="/verify/champion/:code"
+                element={<VerifyChampionCertificate />}
+              />
               <Route path="/project" element={<PublicProjectView />} />
               <Route path="/p/:projectId" element={<PublicProjectView />} />
               <Route path="/u/:userId" element={<SharedProfilePage />} />
@@ -214,6 +228,7 @@ function App() {
                 <Route path="/app/alert-settings" element={<AuthAlertSettings />} />
                 <Route path="/app/responder" element={<AuthResponder />} />
                 <Route path="/app/responder/apply" element={<AuthResponder />} />
+                <Route path="/app/champions" element={<AuthChampions />} />
                 <Route path="/app/:userId/profile" element={<AuthProfile />} />
                 <Route path="/app/:postId/comments" element={<AuthComment type={"post"} />} />
                 <Route

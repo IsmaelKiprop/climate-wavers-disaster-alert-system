@@ -37,6 +37,19 @@ from .models import (
     ClimateEvent,
     ClimateEventInvite,
     CalendarObservance,
+    CommunityChampion,
+    ChampionCheckIn,
+    ChampionVerification,
+    ChampionEnrollment,
+    ChampionTrainingProgress,
+    ChampionRating,
+    PartnerCamera,
+    CameraClip,
+    CameraAccessLog,
+    DevicePushToken,
+    DeviceLocationPing,
+    ProximityBlast,
+    ProximityBlastReceipt,
 )
 from .pricing import verification_priority
 from unfold.admin import ModelAdmin
@@ -502,5 +515,148 @@ class CalendarObservanceAdmin(ModelAdmin):
     list_filter = ("category", "is_active", "month")
     search_fields = ("title", "slug", "authority")
     prepopulated_fields = {"slug": ("title",)}
+
+
+@admin.register(CommunityChampion)
+class CommunityChampionAdmin(ModelAdmin):
+    list_display = (
+        "display_name",
+        "user",
+        "status",
+        "tier",
+        "city",
+        "country",
+        "impact_score",
+        "rating_avg",
+        "rating_count",
+        "verifications_count",
+        "certificate_code",
+        "approved_at",
+    )
+    list_filter = ("status", "tier", "country")
+    search_fields = (
+        "display_name",
+        "user__email",
+        "user__username",
+        "affiliation",
+        "city",
+        "certificate_code",
+    )
+    readonly_fields = ("certificate_code", "certificate_issued_at", "trained_at")
+    actions = ["approve_champions", "suspend_champions"]
+
+    @admin.action(description="Approve selected champions")
+    def approve_champions(self, request, queryset):
+        now = timezone.now()
+        for champ in queryset:
+            champ.status = "active"
+            champ.approved_at = now
+            champ.approved_by = request.user
+            # Certificate / trained_at issued only after ALX path quizzes are passed
+            champ.apply_tier_radius()
+            champ.save()
+        self.message_user(request, f"Approved {queryset.count()} champion(s).", messages.SUCCESS)
+
+    @admin.action(description="Suspend selected champions")
+    def suspend_champions(self, request, queryset):
+        queryset.update(status="suspended")
+        self.message_user(request, f"Suspended {queryset.count()} champion(s).", messages.WARNING)
+
+
+@admin.register(ChampionVerification)
+class ChampionVerificationAdmin(ModelAdmin):
+    list_display = ("id", "champion", "disaster", "decision", "evidence_score", "created_at")
+    list_filter = ("decision", "source_channel")
+    search_fields = ("champion__display_name", "note")
+
+
+@admin.register(ChampionEnrollment)
+class ChampionEnrollmentAdmin(ModelAdmin):
+    list_display = ("name", "email", "phone", "champion", "sms_opt_in", "created_at")
+    search_fields = ("name", "email", "phone")
+
+
+@admin.register(ChampionTrainingProgress)
+class ChampionTrainingProgressAdmin(ModelAdmin):
+    list_display = (
+        "champion",
+        "module",
+        "passed",
+        "quiz_score",
+        "attempts",
+        "completed_at",
+    )
+    list_filter = ("module", "passed")
+
+
+@admin.register(ChampionCheckIn)
+class ChampionCheckInAdmin(ModelAdmin):
+    list_display = ("champion", "latitude", "longitude", "accuracy_m", "created_at")
+
+
+@admin.register(ChampionRating)
+class ChampionRatingAdmin(ModelAdmin):
+    list_display = ("champion", "user", "score", "comment", "updated_at")
+    list_filter = ("score",)
+    search_fields = ("champion__display_name", "user__username", "comment")
+
+
+@admin.register(PartnerCamera)
+class PartnerCameraAdmin(ModelAdmin):
+    list_display = ("name", "status", "stream_type", "city_label", "created_at")
+    list_filter = ("status", "stream_type")
+    search_fields = ("name", "consent_note")
+    actions = ["activate_cameras"]
+
+    def city_label(self, obj):
+        return f"{obj.latitude}, {obj.longitude}"
+
+    @admin.action(description="Activate selected cameras")
+    def activate_cameras(self, request, queryset):
+        queryset.update(status="active")
+
+
+@admin.register(CameraClip)
+class CameraClipAdmin(ModelAdmin):
+    list_display = ("id", "camera", "sync_status", "source", "duration_s", "started_at")
+    list_filter = ("sync_status", "source")
+
+
+@admin.register(CameraAccessLog)
+class CameraAccessLogAdmin(ModelAdmin):
+    list_display = ("camera", "user", "action", "created_at")
+    list_filter = ("action",)
+
+
+@admin.register(DevicePushToken)
+class DevicePushTokenAdmin(ModelAdmin):
+    list_display = ("user", "platform", "updated_at")
+    list_filter = ("platform",)
+
+
+@admin.register(DeviceLocationPing)
+class DeviceLocationPingAdmin(ModelAdmin):
+    list_display = ("user", "latitude", "longitude", "proximity_alerts_opt_in", "updated_at")
+
+
+@admin.register(ProximityBlast)
+class ProximityBlastAdmin(ModelAdmin):
+    list_display = (
+        "id",
+        "champion",
+        "radius_m",
+        "targeted_count",
+        "delivered_count",
+        "need_help_count",
+        "status",
+        "created_at",
+    )
+    list_filter = ("status",)
+
+
+@admin.register(ProximityBlastReceipt)
+class ProximityBlastReceiptAdmin(ModelAdmin):
+    list_display = ("blast", "user", "push_status", "ack", "acked_at")
+    list_filter = ("push_status", "ack")
 
 

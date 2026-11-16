@@ -6,7 +6,7 @@ import TreeBadge from "./TreeBadge";
 import { toast } from "react-toastify";
 import Feed from "./Feed";
 import ProfileEditModal from "./ProfileEditModal";
-import { useParams, useNavigate } from "react-router-dom";
+import { Link, useParams, useNavigate } from "react-router-dom";
 import { useProfile } from "../hooks/useProfile";
 import { useTrending } from "../hooks/useTrending";
 import { endpoints } from "../utils/endpoints";
@@ -57,6 +57,8 @@ const Profile = () => {
   const { isFollowing, setFollowing } = useFollow();
   const isFollow = isFollowing(profile?.id || userId, isFollowLocal);
   const completeness = getProfileCompleteness(profile);
+  const [championBadge, setChampionBadge] = useState(null);
+  const [championStatus, setChampionStatus] = useState(null);
 
   const {
     error,
@@ -67,6 +69,33 @@ const Profile = () => {
   } = useProfile({
     user_id: userId,
   });
+
+  useEffect(() => {
+    if (!userId || String(me.id) !== String(userId)) {
+      setChampionBadge(null);
+      setChampionStatus(null);
+      return undefined;
+    }
+    let alive = true;
+    client
+      .run("get", endpoints.championsMe, {}, true)
+      .then((data) => {
+        if (!alive) return;
+        const c = data?.champion;
+        setChampionStatus(c?.status || null);
+        if (c && c.status === "active") setChampionBadge(c);
+        else setChampionBadge(null);
+      })
+      .catch(() => {
+        if (alive) {
+          setChampionBadge(null);
+          setChampionStatus(null);
+        }
+      });
+    return () => {
+      alive = false;
+    };
+  }, [userId, me.id]);
 
   const { data: trendingData, isLoading: trendingLoading, error: trendingError } = useTrending();
 
@@ -363,6 +392,14 @@ const Profile = () => {
                   {viewUser?.is_verified ? (
                     <ClimateVerifiedBadge size="lg" showLabel />
                   ) : null}
+                  {championBadge ? (
+                    <Link
+                      to="/app/champions"
+                      className="text-xs font-semibold uppercase tracking-wide border border-primary text-primary px-2 py-0.5"
+                    >
+                      Champion · {championBadge.tier}
+                    </Link>
+                  ) : null}
                 </h1>
                 {viewUser?.username ? (
                   <p className="mt-1 text-sm text-muted">@{viewUser.username}</p>
@@ -382,6 +419,35 @@ const Profile = () => {
 
               {isOwnProfile ? (
                 <div className="flex flex-col gap-3">
+                  {!championStatus ? (
+                    <Link
+                      to="/champions/apply"
+                      className="h-11 px-4 bg-primary text-primary-foreground text-sm font-semibold inline-flex items-center justify-center"
+                    >
+                      Become a Community Champion
+                    </Link>
+                  ) : championStatus === "pending" ? (
+                    <Link
+                      to="/app/champions"
+                      className="h-11 px-4 border border-border text-sm font-medium inline-flex items-center justify-center"
+                    >
+                      Champion application pending — open desk
+                    </Link>
+                  ) : championStatus === "active" ? (
+                    <Link
+                      to="/app/champions"
+                      className="h-11 px-4 border border-primary text-primary text-sm font-semibold inline-flex items-center justify-center"
+                    >
+                      Open Champion Desk
+                    </Link>
+                  ) : (
+                    <Link
+                      to="/champions/apply"
+                      className="h-11 px-4 bg-primary text-primary-foreground text-sm font-semibold inline-flex items-center justify-center"
+                    >
+                      Become a Community Champion
+                    </Link>
+                  )}
                   <div className="flex flex-col sm:flex-row gap-2">
                     {completeness.isComplete ? (
                       <button

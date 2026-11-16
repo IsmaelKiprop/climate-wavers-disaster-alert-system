@@ -19,6 +19,8 @@ class Notification(models.Model):
         ("disaster", "Disaster"),
         ("mention", "Mention"),
         ("climate_event", "Climate Event"),
+        ("champion", "Community Champion"),
+        ("proximity_alert", "Proximity Alert"),
     ]
 
     user = models.ForeignKey(
@@ -2258,3 +2260,495 @@ class ClimateEventInvite(models.Model):
     def __str__(self):
         who = self.user_id or self.email or "?"
         return f"{who} @ event {self.event_id} ({self.rsvp})"
+
+
+class CommunityChampion(models.Model):
+    """Ground-truth Community Champion for the Resilience Cycle Verify step."""
+
+    STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("active", "Active"),
+        ("suspended", "Suspended"),
+        ("rejected", "Rejected"),
+    ]
+    TIER_CHOICES = [
+        ("trainee", "Trainee"),
+        ("active", "Active"),
+        ("trusted", "Trusted"),
+    ]
+    TIER_RADIUS_KM = {"trainee": 5, "active": 15, "trusted": 30}
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="community_champion",
+    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
+    tier = models.CharField(max_length=20, choices=TIER_CHOICES, default="trainee")
+    display_name = models.CharField(max_length=120, blank=True, default="")
+    bio = models.TextField(blank=True, default="")
+    phone = models.CharField(max_length=32, blank=True, default="")
+    affiliation = models.CharField(
+        max_length=200,
+        blank=True,
+        default="",
+        help_text="School, church, CBO, or local group",
+    )
+    languages = models.CharField(max_length=200, blank=True, default="")
+    country = models.CharField(max_length=100, default="Kenya")
+    region = models.CharField(max_length=100, blank=True, default="")
+    city = models.CharField(max_length=100, blank=True, default="")
+    ward = models.CharField(max_length=100, blank=True, default="")
+    latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    radius_km = models.PositiveIntegerField(default=5)
+    relay_nodes = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Named blackout relay contacts: [{name, role, phone}]",
+    )
+    sponsor_name = models.CharField(max_length=200, blank=True, default="")
+    trained_at = models.DateTimeField(null=True, blank=True)
+    approved_at = models.DateTimeField(null=True, blank=True)
+    approved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="approved_champions",
+    )
+    last_check_in_at = models.DateTimeField(null=True, blank=True)
+    verifications_count = models.PositiveIntegerField(default=0)
+    enrollments_count = models.PositiveIntegerField(default=0)
+    proximity_blasts_count = models.PositiveIntegerField(default=0)
+    rating_avg = models.DecimalField(max_digits=3, decimal_places=2, default=0)
+    rating_count = models.PositiveIntegerField(default=0)
+    impact_score = models.PositiveIntegerField(
+        default=0,
+        help_text="Computed community impact score (0–100)",
+    )
+    certificate_code = models.CharField(max_length=40, blank=True, default="", db_index=True)
+    certificate_issued_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["status", "tier"]),
+            models.Index(fields=["country", "city"]),
+            models.Index(fields=["-impact_score"]),
+            models.Index(fields=["-rating_avg"]),
+        ]
+
+    def __str__(self):
+        return f"Champion {self.display_name or self.user_id} ({self.status}/{self.tier})"
+
+    def apply_tier_radius(self):
+        self.radius_km = self.TIER_RADIUS_KM.get(self.tier, 5)
+
+
+class ChampionCheckIn(models.Model):
+    champion = models.ForeignKey(
+        CommunityChampion, on_delete=models.CASCADE, related_name="check_ins"
+    )
+    latitude = models.DecimalField(max_digits=9, decimal_places=6)
+    longitude = models.DecimalField(max_digits=9, decimal_places=6)
+    accuracy_m = models.FloatField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+
+class ChampionVerification(models.Model):
+    DECISION_CHOICES = [
+        ("confirm", "Confirm"),
+        ("deny", "Deny"),
+        ("escalate", "Escalate"),
+    ]
+    FEED_COMPARISON_CHOICES = [
+        ("matches", "Matches feed"),
+        ("worse", "Worse than feed"),
+        ("false_alarm", "False alarm"),
+        ("unclear", "Unclear"),
+    ]
+    SOURCE_CHOICES = [
+        ("app", "App"),
+        ("sms", "SMS"),
+        ("offline_sync", "Offline sync"),
+    ]
+
+    champion = models.ForeignKey(
+        CommunityChampion, on_delete=models.CASCADE, related_name="verifications"
+    )
+    disaster = models.ForeignKey(
+        Disaster, on_delete=models.CASCADE, related_name="champion_verifications"
+    )
+    decision = models.CharField(max_length=20, choices=DECISION_CHOICES)
+    note = models.TextField(blank=True, default="")
+    feed_comparison = models.CharField(
+        max_length=20, choices=FEED_COMPARISON_CHOICES, blank=True, default=""
+    )
+    field_signals = models.JSONField(default=dict, blank=True)
+    latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    accuracy_m = models.FloatField(null=True, blank=True)
+    distance_km = models.FloatField(null=True, blank=True)
+    evidence = models.JSONField(default=list, blank=True)
+    jitsi_room = models.CharField(max_length=120, blank=True, default="")
+    evidence_score = models.PositiveIntegerField(default=0)
+    source_channel = models.CharField(
+        max_length=20, choices=SOURCE_CHOICES, default="app"
+    )
+    queued_offline_at = models.DateTimeField(null=True, blank=True)
+    synced_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["champion", "disaster"],
+                name="uniq_champion_disaster_verification",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["disaster", "decision"]),
+            models.Index(fields=["created_at"]),
+        ]
+
+    def __str__(self):
+        return f"{self.decision} by {self.champion_id} on disaster {self.disaster_id}"
+
+
+class ChampionEnrollment(models.Model):
+    champion = models.ForeignKey(
+        CommunityChampion, on_delete=models.CASCADE, related_name="enrollments"
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="champion_enrollments",
+    )
+    name = models.CharField(max_length=120, blank=True, default="")
+    email = models.EmailField(blank=True, default="")
+    phone = models.CharField(max_length=32, blank=True, default="")
+    channel_pref = models.CharField(max_length=20, blank=True, default="whatsapp")
+    sms_opt_in = models.BooleanField(default=False)
+    push_opt_in = models.BooleanField(default=True)
+    consent_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["champion", "created_at"]),
+            models.Index(fields=["phone"]),
+            models.Index(fields=["email"]),
+        ]
+
+
+class ChampionTrainingProgress(models.Model):
+    MODULE_CHOICES = [
+        ("ground_rules", "Ground rules"),
+        ("location_proof", "Location proof"),
+        ("live_cam", "Phone live cam"),
+        ("cctv_consent", "CCTV consent"),
+        ("warn_nearby", "Warn nearby ethics"),
+        ("blackout_relay", "Blackout relay"),
+        ("restore_days", "Restore days"),
+    ]
+
+    champion = models.ForeignKey(
+        CommunityChampion, on_delete=models.CASCADE, related_name="training"
+    )
+    module = models.CharField(max_length=40, choices=MODULE_CHOICES)
+    quiz_score = models.PositiveSmallIntegerField(default=0)
+    attempts = models.PositiveSmallIntegerField(default=0)
+    passed = models.BooleanField(default=False)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["champion", "module"],
+                name="uniq_champion_training_module",
+            )
+        ]
+
+
+class PartnerCamera(models.Model):
+    STREAM_TYPES = [
+        ("hls", "HLS"),
+        ("rtsp", "RTSP"),
+        ("mjpeg", "MJPEG"),
+    ]
+    STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("active", "Active"),
+        ("offline", "Offline"),
+        ("rejected", "Rejected"),
+    ]
+
+    name = models.CharField(max_length=200)
+    latitude = models.DecimalField(max_digits=9, decimal_places=6)
+    longitude = models.DecimalField(max_digits=9, decimal_places=6)
+    coverage_radius_m = models.PositiveIntegerField(default=200)
+    stream_type = models.CharField(max_length=20, choices=STREAM_TYPES, default="hls")
+    stream_url = models.CharField(max_length=1000, blank=True, default="")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
+    consent_note = models.TextField(blank=True, default="")
+    retention_days = models.PositiveIntegerField(default=14)
+    nvr_sync_enabled = models.BooleanField(default=False)
+    champion = models.ForeignKey(
+        CommunityChampion,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="cameras",
+    )
+    responder_org = models.ForeignKey(
+        "ResponderOrganization",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="partner_cameras",
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="registered_cameras",
+    )
+    last_seen_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["status"]),
+            models.Index(fields=["latitude", "longitude"]),
+        ]
+
+    def __str__(self):
+        return f"{self.name} ({self.status})"
+
+
+class CameraClip(models.Model):
+    SYNC_STATUS = [
+        ("recording", "Recording"),
+        ("uploading", "Uploading"),
+        ("synced", "Synced"),
+        ("failed", "Failed"),
+    ]
+    SOURCE_CHOICES = [
+        ("live_record", "Live record"),
+        ("nvr_backfill", "NVR backfill"),
+        ("snapshot", "Snapshot"),
+    ]
+
+    camera = models.ForeignKey(
+        PartnerCamera, on_delete=models.CASCADE, related_name="clips"
+    )
+    disaster = models.ForeignKey(
+        Disaster,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="camera_clips",
+    )
+    verification = models.ForeignKey(
+        ChampionVerification,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="camera_clips",
+    )
+    started_at = models.DateTimeField()
+    duration_s = models.PositiveIntegerField(default=30)
+    storage_url = models.CharField(max_length=1000, blank=True, default="")
+    sync_status = models.CharField(
+        max_length=20, choices=SYNC_STATUS, default="recording"
+    )
+    source = models.CharField(
+        max_length=20, choices=SOURCE_CHOICES, default="live_record"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+class CameraAccessLog(models.Model):
+    ACTION_CHOICES = [
+        ("view", "View"),
+        ("record", "Record"),
+        ("playback_token", "Playback token"),
+    ]
+
+    camera = models.ForeignKey(
+        PartnerCamera, on_delete=models.CASCADE, related_name="access_logs"
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
+    action = models.CharField(max_length=20, choices=ACTION_CHOICES)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+class DevicePushToken(models.Model):
+    PLATFORM_CHOICES = [
+        ("web", "Web"),
+        ("android", "Android"),
+        ("ios", "iOS"),
+    ]
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="push_tokens",
+    )
+    platform = models.CharField(max_length=20, choices=PLATFORM_CHOICES, default="web")
+    token = models.CharField(max_length=512)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "token"],
+                name="uniq_user_push_token",
+            )
+        ]
+
+
+class DeviceLocationPing(models.Model):
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="location_pings",
+    )
+    latitude = models.DecimalField(max_digits=9, decimal_places=6)
+    longitude = models.DecimalField(max_digits=9, decimal_places=6)
+    accuracy_m = models.FloatField(null=True, blank=True)
+    proximity_alerts_opt_in = models.BooleanField(default=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["updated_at"]),
+            models.Index(fields=["latitude", "longitude"]),
+        ]
+
+
+class ProximityBlast(models.Model):
+    STATUS_CHOICES = [
+        ("queued", "Queued"),
+        ("sending", "Sending"),
+        ("sent", "Sent"),
+        ("failed", "Failed"),
+    ]
+
+    champion = models.ForeignKey(
+        CommunityChampion, on_delete=models.CASCADE, related_name="proximity_blasts"
+    )
+    disaster = models.ForeignKey(
+        Disaster,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="proximity_blasts",
+    )
+    center_lat = models.DecimalField(max_digits=9, decimal_places=6)
+    center_lng = models.DecimalField(max_digits=9, decimal_places=6)
+    radius_m = models.PositiveIntegerField(default=1000)
+    message_template = models.CharField(max_length=200, default="Hazard nearby — stay safe")
+    note = models.CharField(max_length=120, blank=True, default="")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="queued")
+    targeted_count = models.PositiveIntegerField(default=0)
+    delivered_count = models.PositiveIntegerField(default=0)
+    opened_count = models.PositiveIntegerField(default=0)
+    acked_count = models.PositiveIntegerField(default=0)
+    need_help_count = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+class ProximityBlastReceipt(models.Model):
+    ACK_CHOICES = [
+        ("", "None"),
+        ("got_it", "Got it"),
+        ("need_help", "Need help"),
+        ("false_alarm", "False alarm"),
+    ]
+    PUSH_STATUS = [
+        ("pending", "Pending"),
+        ("sent", "Sent"),
+        ("failed", "Failed"),
+        ("opened", "Opened"),
+    ]
+
+    blast = models.ForeignKey(
+        ProximityBlast, on_delete=models.CASCADE, related_name="receipts"
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="proximity_receipts",
+    )
+    push_status = models.CharField(max_length=20, choices=PUSH_STATUS, default="pending")
+    ack = models.CharField(max_length=20, choices=ACK_CHOICES, blank=True, default="")
+    opened_at = models.DateTimeField(null=True, blank=True)
+    acked_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["blast", "user"],
+                name="uniq_blast_user_receipt",
+            )
+        ]
+
+
+class ChampionRating(models.Model):
+    """Community rating of a champion's reliability and impact (1–5)."""
+
+    champion = models.ForeignKey(
+        CommunityChampion,
+        on_delete=models.CASCADE,
+        related_name="ratings",
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="champion_ratings_given",
+    )
+    score = models.PositiveSmallIntegerField(
+        help_text="1 = poor, 5 = excellent",
+    )
+    comment = models.CharField(max_length=400, blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["champion", "user"],
+                name="uniq_champion_rating_user",
+            ),
+            models.CheckConstraint(
+                check=models.Q(score__gte=1) & models.Q(score__lte=5),
+                name="champion_rating_score_1_5",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["champion", "-created_at"]),
+        ]
+
+    def __str__(self):
+        return f"{self.score}/5 for champion {self.champion_id} by {self.user_id}"

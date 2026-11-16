@@ -52,6 +52,13 @@ def user_can_host_ops(user) -> bool:
         return True
     if SocialGroupMembership.objects.filter(user=user, role__in=("owner", "admin")).exists():
         return True
+    try:
+        from .champions import user_is_active_champion
+
+        if user_is_active_champion(user):
+            return True
+    except Exception:
+        pass
     return False
 
 

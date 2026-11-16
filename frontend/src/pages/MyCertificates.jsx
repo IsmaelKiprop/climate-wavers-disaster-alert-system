@@ -1,240 +1,316 @@
-import React, { useState, useEffect } from 'react';
-import { IoLeaf, IoDownload, IoShare, IoCheckmarkCircle, IoTime, IoLocation } from 'react-icons/io5';
-import TreeCertificate from '../components/TreeCertificate';
-import { toast } from 'react-toastify';
-import { getUser } from '../utils/factory';
-import { client } from '../api';
-import { endpoints } from '../utils/endpoints';
+import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+import {
+  IoLeaf,
+  IoRibbonOutline,
+  IoCheckmarkCircle,
+  IoTime,
+  IoLocation,
+} from "react-icons/io5";
+import { toast } from "react-toastify";
+import TreeCertificate from "../components/TreeCertificate";
+import ChampionCertificate from "../components/ChampionCertificate";
+import { getUser } from "../utils/factory";
+import { client } from "../api";
+import { endpoints } from "../utils/endpoints";
 
 const MyCertificates = () => {
-  const [certificates, setCertificates] = useState([]);
-  const [selectedCertificate, setSelectedCertificate] = useState(null);
-  const [showCertificate, setShowCertificate] = useState(false);
-  const [downloadedCertificates, setDownloadedCertificates] = useState(new Set());
+  const [treeCerts, setTreeCerts] = useState([]);
+  const [championCert, setChampionCert] = useState(null);
+  const [selectedTree, setSelectedTree] = useState(null);
+  const [showTree, setShowTree] = useState(false);
+  const [showChampion, setShowChampion] = useState(false);
+  const [downloaded, setDownloaded] = useState(new Set());
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
   const me = getUser();
 
   useEffect(() => {
-    const fetchCertificates = async () => {
-      if (!me || !me.id) {
-        setError('User not logged in.');
+    const load = async () => {
+      if (!me?.id) {
         setLoading(false);
         return;
       }
-      
+      setLoading(true);
       try {
-        setLoading(true);
-        // Fetch user's tree donations from the database
-        const response = await client.run('get', `${endpoints.treeProjectDonations}?donor=${me.id}`, null, true);
-        
-        if (response.results) {
-          const fetchedCertificates = response.results.map(donation => ({
-            certificate_id: `CW${donation.payment_reference}${donation.id}`,
-            tree_type: donation.project_name || 'Tree Planting',
-            co2_absorption: donation.co2_absorption_per_tree || 0,
-            location: `${donation.project_city || 'Unknown'}, ${donation.project_country || 'Unknown'}`,
-            planting_date: new Date(donation.created_at).toLocaleDateString(),
-            user_name: `${donation.donor_first_name || ''} ${donation.donor_last_name || ''}`.trim() || donation.donor_username || 'Anonymous',
-            trees_planted: donation.trees_purchased || 0,
-            amount: donation.amount || 0,
-            is_downloaded: donation.is_downloaded || false
-          }));
-          setCertificates(fetchedCertificates);
+        const [treeRes, champRes] = await Promise.allSettled([
+          client.run(
+            "get",
+            `${endpoints.treeProjectDonations}?donor=${me.id}`,
+            null,
+            true
+          ),
+          client.run("get", endpoints.championsCertificate, {}, true),
+        ]);
+
+        if (treeRes.status === "fulfilled" && treeRes.value?.results) {
+          setTreeCerts(
+            treeRes.value.results.map((donation) => ({
+              certificate_id: `CW${donation.payment_reference}${donation.id}`,
+              tree_type: donation.project_name || "Tree Planting",
+              co2_absorption: donation.co2_absorption_per_tree || 0,
+              location: `${donation.project_city || "Unknown"}, ${
+                donation.project_country || "Unknown"
+              }`,
+              planting_date: new Date(donation.created_at).toLocaleDateString(),
+              user_name:
+                `${donation.donor_first_name || ""} ${donation.donor_last_name || ""}`.trim() ||
+                donation.donor_username ||
+                "Anonymous",
+              trees_planted: donation.trees_purchased || 0,
+              amount: donation.amount || 0,
+              is_downloaded: donation.is_downloaded || false,
+              kind: "tree",
+            }))
+          );
+        } else {
+          setTreeCerts([]);
+        }
+
+        if (champRes.status === "fulfilled" && champRes.value?.certificate) {
+          setChampionCert(champRes.value.certificate);
+        } else {
+          setChampionCert(null);
         }
       } catch (err) {
-        console.error('Error fetching certificates:', err);
-        setError('Failed to load your certificates.');
-        toast.error('Failed to load your certificates.');
+        console.error(err);
+        toast.error("Failed to load certificates");
       } finally {
         setLoading(false);
       }
     };
-
-    fetchCertificates();
+    load();
   }, [me]);
 
-  const handleViewCertificate = (certificate) => {
-    setSelectedCertificate(certificate);
-    setShowCertificate(true);
-  };
-
-  const handleDownloadCertificate = async (certificateId) => {
+  const markTreeDownloaded = async (certificateId) => {
     try {
-      // Update local state
-      setDownloadedCertificates(prev => new Set([...prev, certificateId]));
-      
-      // Update certificate in the database
-      await client.run('post', endpoints.markCertificateDownloaded, {
-        certificate_id: certificateId,
-        user_id: me.id
-      }, true);
-      
-      // Update local certificates state
-      setCertificates(prev => prev.map(cert => 
-        cert.certificate_id === certificateId 
-          ? { ...cert, is_downloaded: true } 
-          : cert
-      ));
-      
-      toast.success('Certificate marked as downloaded!');
-    } catch (error) {
-      console.error('Error marking certificate as downloaded:', error);
-      toast.error('Failed to mark certificate as downloaded');
+      setDownloaded((prev) => new Set([...prev, certificateId]));
+      await client.run(
+        "post",
+        endpoints.markCertificateDownloaded,
+        { certificate_id: certificateId, user_id: me.id },
+        true
+      );
+      setTreeCerts((prev) =>
+        prev.map((c) =>
+          c.certificate_id === certificateId ? { ...c, is_downloaded: true } : c
+        )
+      );
+      toast.success("Certificate marked as downloaded");
+    } catch {
+      toast.error("Failed to mark certificate as downloaded");
     }
   };
 
-  const handleShareCertificate = () => {
-    toast.success('Certificate shared! 🌳');
-  };
+  const totalCount = treeCerts.length + (championCert ? 1 : 0);
+  const treesPlanted = treeCerts.reduce(
+    (sum, c) => sum + (c.trees_planted || 1),
+    0
+  );
+  const co2 = treeCerts.reduce((sum, c) => sum + (c.co2_absorption || 15), 0);
 
-  if (certificates.length === 0) {
+  if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 flex items-center justify-center">
-        <div className="text-center max-w-md mx-auto px-4">
-          <div className="inline-flex items-center justify-center w-20 h-20 bg-green-100 rounded-full mb-6">
-            <IoLeaf className="w-12 h-12 text-green-600" />
-          </div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-4">
-            No Certificates Yet
+      <div className="min-h-[60vh] flex items-center justify-center bg-background">
+        <p className="text-sm text-muted">Loading certificates…</p>
+      </div>
+    );
+  }
+
+  if (!me?.id) {
+    return (
+      <div className="min-h-[60vh] flex items-center justify-center bg-background px-4">
+        <p className="text-sm text-muted">Sign in to view your certificates.</p>
+      </div>
+    );
+  }
+
+  if (totalCount === 0) {
+    return (
+      <div className="min-h-[60vh] bg-background flex items-center justify-center px-4">
+        <div className="text-center max-w-md">
+          <h1 className="text-2xl font-semibold text-foreground">
+            No certificates yet
           </h1>
-          <p className="text-lg text-gray-600 mb-6">
-            Plant your first tree to receive a beautiful certificate!
+          <p className="text-sm text-muted mt-2">
+            Complete Community Champion training or plant a tree to earn one.
           </p>
-          <button
-            onClick={() => window.location.href = '/app/plant-tree'}
-            className="bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200"
-          >
-            Plant a Tree 🌳
-          </button>
+          <div className="mt-6 flex flex-col sm:flex-row gap-2 justify-center">
+            <Link
+              to="/app/champions"
+              className="h-11 px-4 inline-flex items-center justify-center bg-primary text-primary-foreground text-sm font-semibold"
+            >
+              Champion training
+            </Link>
+            <Link
+              to="/app/plant-tree"
+              className="h-11 px-4 inline-flex items-center justify-center border border-border text-sm font-medium"
+            >
+              Plant a tree
+            </Link>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50">
-      <div className="container mx-auto px-4 py-8">
-        <div className="max-w-6xl mx-auto">
-          {/* Header */}
-          <div className="text-center mb-8">
-            <h1 className="text-4xl font-bold text-gray-900 mb-4 flex items-center justify-center">
-              <IoLeaf className="w-10 h-10 text-green-600 mr-3" />
-              My Tree Certificates
-            </h1>
-            <p className="text-lg text-gray-600">
-              Your environmental impact certificates
-            </p>
-          </div>
+    <div className="min-h-[100dvh] bg-background text-foreground">
+      <div className="max-w-6xl mx-auto px-4 py-8 sm:py-10">
+        <div className="mb-8">
+          <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight">
+            My certificates
+          </h1>
+          <p className="text-sm text-muted mt-1">
+            Community Champion training and tree planting credentials
+          </p>
+        </div>
 
-          {/* Certificates Grid */}
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {certificates.map((certificate, index) => (
-              <div
-                key={certificate.certificate_id || index}
-                className="bg-white rounded-xl shadow-lg hover:shadow-xl transition-shadow duration-300 overflow-hidden"
-              >
-                {/* Certificate Preview */}
-                <div className="bg-gradient-to-br from-green-100 to-blue-100 p-6">
-                  <div className="text-center">
-                    <div className="inline-flex items-center justify-center w-16 h-16 bg-green-200 rounded-full mb-4">
-                      <IoLeaf className="w-8 h-8 text-green-600" />
-                    </div>
-                    <h3 className="text-xl font-bold text-gray-900 mb-2">
-                      Tree Planting Certificate
-                    </h3>
-                    <p className="text-sm text-gray-600">
-                      Certificate #{certificate.certificate_id}
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {championCert ? (
+            <article className="border border-primary bg-surface overflow-hidden flex flex-col">
+              <div className="p-5 border-b border-border">
+                <div className="flex items-start gap-3">
+                  <span className="inline-flex h-12 w-12 items-center justify-center border-[3px] border-primary text-primary rounded-full shrink-0">
+                    <IoRibbonOutline size={22} />
+                  </span>
+                  <div>
+                    <p className="text-[11px] uppercase tracking-[0.18em] text-primary font-semibold">
+                      Training
+                    </p>
+                    <h2 className="text-lg font-semibold mt-0.5">
+                      Community Champion
+                    </h2>
+                    <p className="text-xs text-muted mt-1 font-mono break-all">
+                      {championCert.certificate_code}
                     </p>
                   </div>
                 </div>
-
-                {/* Certificate Details */}
-                <div className="p-6">
-                  <div className="space-y-3 mb-6">
-                    <div className="flex items-center text-gray-600">
-                      <IoLocation className="w-4 h-4 mr-2 text-green-600" />
-                      <span className="text-sm">{certificate.location}</span>
-                    </div>
-                    <div className="flex items-center text-gray-600">
-                      <IoTime className="w-4 h-4 mr-2 text-blue-600" />
-                      <span className="text-sm">{certificate.planting_date}</span>
-                    </div>
-                    <div className="flex items-center text-gray-600">
-                      <IoLeaf className="w-4 h-4 mr-2 text-green-600" />
-                      <span className="text-sm">
-                        {certificate.trees_planted} tree{certificate.trees_planted > 1 ? 's' : ''} planted
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Action Buttons */}
-                  <div className="space-y-3">
-                    <button
-                      onClick={() => handleViewCertificate(certificate)}
-                      className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors duration-200 flex items-center justify-center"
+              </div>
+              <div className="p-5 flex-1 flex flex-col gap-3">
+                <p className="text-sm text-muted">
+                  {championCert.modules_completed}/{championCert.modules_total}{" "}
+                  modules · quiz ≥ 70%
+                </p>
+                {championCert.issued_at ? (
+                  <p className="text-sm text-muted inline-flex items-center gap-1.5">
+                    <IoTime size={14} />
+                    Issued{" "}
+                    {new Date(championCert.issued_at).toLocaleDateString()}
+                  </p>
+                ) : null}
+                <div className="mt-auto space-y-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowChampion(true)}
+                    className="w-full h-10 bg-primary text-primary-foreground text-sm font-semibold inline-flex items-center justify-center gap-1.5"
+                  >
+                    <IoCheckmarkCircle size={16} />
+                    View certificate
+                  </button>
+                  {championCert.verify_path ? (
+                    <Link
+                      to={championCert.verify_path}
+                      className="w-full h-10 border border-border text-sm font-medium inline-flex items-center justify-center"
                     >
-                      <IoCheckmarkCircle className="w-4 h-4 mr-2" />
-                      View Certificate
-                    </button>
-                    
-                    {downloadedCertificates.has(certificate.certificate_id) ? (
-                      <div className="w-full bg-gray-100 text-gray-600 font-semibold py-2 px-4 rounded-lg flex items-center justify-center">
-                        <IoCheckmarkCircle className="w-4 h-4 mr-2 text-green-600" />
-                        Downloaded
-                      </div>
-                    ) : (
-                      <button
-                        onClick={() => handleDownloadCertificate(certificate.certificate_id)}
-                        className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors duration-200 flex items-center justify-center"
-                      >
-                        <IoDownload className="w-4 h-4 mr-2" />
-                        Download PDF
-                      </button>
-                    )}
+                      Public verify page
+                    </Link>
+                  ) : null}
+                </div>
+              </div>
+            </article>
+          ) : null}
+
+          {treeCerts.map((certificate) => (
+            <article
+              key={certificate.certificate_id}
+              className="border border-border bg-surface overflow-hidden flex flex-col"
+            >
+              <div className="p-5 border-b border-border">
+                <div className="flex items-start gap-3">
+                  <span className="inline-flex h-12 w-12 items-center justify-center border border-border text-primary shrink-0">
+                    <IoLeaf size={22} />
+                  </span>
+                  <div>
+                    <p className="text-[11px] uppercase tracking-[0.18em] text-muted font-semibold">
+                      Restore
+                    </p>
+                    <h2 className="text-lg font-semibold mt-0.5">
+                      Tree planting
+                    </h2>
+                    <p className="text-xs text-muted mt-1 break-all">
+                      #{certificate.certificate_id}
+                    </p>
                   </div>
                 </div>
               </div>
-            ))}
-          </div>
+              <div className="p-5 flex-1 flex flex-col gap-2 text-sm text-muted">
+                <p className="inline-flex items-center gap-1.5">
+                  <IoLocation size={14} />
+                  {certificate.location}
+                </p>
+                <p className="inline-flex items-center gap-1.5">
+                  <IoTime size={14} />
+                  {certificate.planting_date}
+                </p>
+                <p className="inline-flex items-center gap-1.5">
+                  <IoLeaf size={14} />
+                  {certificate.trees_planted} tree
+                  {certificate.trees_planted === 1 ? "" : "s"} planted
+                </p>
+                <div className="mt-auto pt-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedTree(certificate);
+                      setShowTree(true);
+                    }}
+                    className="w-full h-10 bg-primary text-primary-foreground text-sm font-semibold inline-flex items-center justify-center gap-1.5"
+                  >
+                    <IoCheckmarkCircle size={16} />
+                    View certificate
+                  </button>
+                </div>
+              </div>
+            </article>
+          ))}
+        </div>
 
-          {/* Stats */}
-          <div className="mt-12 bg-white rounded-xl shadow-lg p-6">
-            <h2 className="text-2xl font-bold text-gray-900 mb-6 text-center">
-              Your Environmental Impact
-            </h2>
-            <div className="grid md:grid-cols-3 gap-6">
-              <div className="text-center">
-                <div className="text-3xl font-bold text-green-600 mb-2">
-                  {certificates.length}
-                </div>
-                <div className="text-gray-600">Certificates Earned</div>
-              </div>
-              <div className="text-center">
-                <div className="text-3xl font-bold text-blue-600 mb-2">
-                  {certificates.reduce((sum, cert) => sum + (cert.trees_planted || 1), 0)}
-                </div>
-                <div className="text-gray-600">Trees Planted</div>
-              </div>
-              <div className="text-center">
-                <div className="text-3xl font-bold text-purple-600 mb-2">
-                  {certificates.reduce((sum, cert) => sum + (cert.co2_absorption || 15), 0)}kg
-                </div>
-                <div className="text-gray-600">CO₂ Absorbed</div>
-              </div>
+        <div className="mt-10 border border-border bg-surface p-5 sm:p-6">
+          <h2 className="text-lg font-semibold">Your impact snapshot</h2>
+          <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-4 text-center sm:text-left">
+            <div>
+              <p className="text-2xl font-semibold text-primary">{totalCount}</p>
+              <p className="text-sm text-muted">Certificates</p>
+            </div>
+            <div>
+              <p className="text-2xl font-semibold text-primary">{treesPlanted}</p>
+              <p className="text-sm text-muted">Trees planted</p>
+            </div>
+            <div>
+              <p className="text-2xl font-semibold text-primary">{co2}kg</p>
+              <p className="text-sm text-muted">CO₂ absorption (est.)</p>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Certificate Modal */}
       <TreeCertificate
-        isOpen={showCertificate}
-        onClose={() => setShowCertificate(false)}
-        certificateData={selectedCertificate}
-        onDownload={handleDownloadCertificate}
-        onShare={handleShareCertificate}
-        isDownloaded={selectedCertificate ? downloadedCertificates.has(selectedCertificate.certificate_id) : false}
+        isOpen={showTree}
+        onClose={() => setShowTree(false)}
+        certificateData={selectedTree}
+        onDownload={markTreeDownloaded}
+        onShare={() => toast.success("Certificate shared")}
+        isDownloaded={
+          selectedTree
+            ? downloaded.has(selectedTree.certificate_id) ||
+              selectedTree.is_downloaded
+            : false
+        }
+      />
+      <ChampionCertificate
+        isOpen={showChampion}
+        onClose={() => setShowChampion(false)}
+        certificate={championCert}
       />
     </div>
   );

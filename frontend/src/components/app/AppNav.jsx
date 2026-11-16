@@ -22,6 +22,8 @@ import {
   IoPeopleCircle,
   IoCalendarOutline,
   IoCalendar,
+  IoFlagOutline,
+  IoFlag,
 } from "react-icons/io5";
 import { MdOutlineCampaign, MdCampaign } from "react-icons/md";
 import { RiAlarmWarningLine, RiAlarmWarningFill } from "react-icons/ri";
@@ -42,6 +44,7 @@ const AppNav = ({ onNavigate, compact = false }) => {
   const [user, setUser] = useState(getUser());
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [treeAdminOk, setTreeAdminOk] = useState(isAdmin());
+  const [championActive, setChampionActive] = useState(false);
 
   useEffect(() => {
     const sync = () => setUser(getUser());
@@ -57,6 +60,7 @@ const AppNav = ({ onNavigate, compact = false }) => {
     if (!user?.id && !user?.email) {
       setTreeAdminOk(false);
       setTreeAdminAccess(false);
+      setChampionActive(false);
       return;
     }
     let cancelled = false;
@@ -69,6 +73,23 @@ const AppNav = ({ onNavigate, compact = false }) => {
         setTreeAdminOk(ok || isAdmin());
       } catch {
         if (!cancelled) setTreeAdminOk(isAdmin());
+      }
+    })();
+    (async () => {
+      try {
+        const data = await client.run(
+          "get",
+          endpoints.championsMe,
+          {},
+          true,
+          false,
+          false,
+          false
+        );
+        if (cancelled) return;
+        setChampionActive(data?.champion?.status === "active");
+      } catch {
+        if (!cancelled) setChampionActive(false);
       }
     })();
     return () => {
@@ -92,6 +113,12 @@ const AppNav = ({ onNavigate, compact = false }) => {
         { to: "/onboarding/notifications", label: "Notifications", Icon: IoNotificationsOutline, ActiveIcon: IoNotifications },
         { to: "/onboarding/alert-settings", label: "Alert settings", Icon: IoPhonePortraitOutline, ActiveIcon: IoPhonePortraitOutline },
         { to: "/onboarding/responder", label: "Responder Desk", Icon: IoShieldOutline, ActiveIcon: IoShieldCheckmark },
+        {
+          to: championActive ? "/app/champions" : "/champions/apply",
+          label: championActive ? "Champions" : "Become a Champion",
+          Icon: IoFlagOutline,
+          ActiveIcon: IoFlag,
+        },
         { to: "/onboarding/disasters", label: "Alerts", Icon: RiAlarmWarningLine, ActiveIcon: RiAlarmWarningFill },
       ]
     : [
@@ -148,6 +175,12 @@ const AppNav = ({ onNavigate, compact = false }) => {
           label: "Responder Desk",
           Icon: IoShieldOutline,
           ActiveIcon: IoShieldCheckmark,
+        },
+        {
+          to: championActive ? "/app/champions" : "/champions/apply",
+          label: championActive ? "Champion Desk" : "Become a Community Champion",
+          Icon: IoFlagOutline,
+          ActiveIcon: IoFlag,
         },
         { to: "/campaigns", label: "Campaigns", Icon: MdOutlineCampaign, ActiveIcon: MdCampaign },
         { to: "/disasters", label: "Alerts", Icon: RiAlarmWarningLine, ActiveIcon: RiAlarmWarningFill },

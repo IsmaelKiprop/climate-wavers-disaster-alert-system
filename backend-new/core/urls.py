@@ -60,6 +60,34 @@ from .chat import (
 )
 from .climate_events import ClimateEventViewSet
 from .calendar_observances import CalendarObservanceViewSet
+from .champions import (
+    ChampionApplyView,
+    ChampionMeView,
+    ChampionCheckInView,
+    ChampionDirectoryView,
+    ChampionApproveView,
+    ChampionVerifyQueueView,
+    ChampionVerificationCreateView,
+    ChampionLiveCamView,
+    ChampionEnrollmentListCreateView,
+    ChampionTrainingView,
+    ChampionTrainingModuleView,
+    ChampionTrainingQuizView,
+    ChampionCertificateView,
+    ChampionCertificateVerifyView,
+    ChampionImpactView,
+    ChampionRatingListCreateView,
+    PartnerCameraNearbyView,
+    PartnerCameraRegisterView,
+    PartnerCameraPlaybackTokenView,
+    PartnerCameraRecordMomentView,
+    DevicePushTokenView,
+    DeviceLocationPingView,
+    WarnNearbyPreviewView,
+    WarnNearbyCreateView,
+    WarnNearbyAckView,
+    WarnNearbyDetailView,
+)
 
 
 # Initialize the default router
@@ -229,6 +257,133 @@ urlpatterns = [
     path('points/balance/', wavers_points_balance, name='wavers-points-balance'),
     path('points/ledger/', wavers_points_ledger, name='wavers-points-ledger'),
     path('points/redeem/', wavers_points_redeem, name='wavers-points-redeem'),
+
+    # Community Champions
+    path("champions/apply/", ChampionApplyView.as_view(), name="champions-apply"),
+    path("champions/me/", ChampionMeView.as_view(), name="champions-me"),
+    path("champions/me/check-in/", ChampionCheckInView.as_view(), name="champions-check-in"),
+    path("champions/directory/", ChampionDirectoryView.as_view(), name="champions-directory"),
+    path("champions/me/impact/", ChampionImpactView.as_view(), name="champions-me-impact"),
+    path(
+        "champions/<int:champion_id>/impact/",
+        ChampionImpactView.as_view(),
+        name="champions-impact",
+    ),
+    path(
+        "champions/<int:champion_id>/ratings/",
+        ChampionRatingListCreateView.as_view(),
+        name="champions-ratings",
+    ),
+    path(
+        "champions/<int:champion_id>/moderate/",
+        ChampionApproveView.as_view(),
+        name="champions-moderate",
+    ),
+    path(
+        "champions/verify-queue/",
+        ChampionVerifyQueueView.as_view(),
+        name="champions-verify-queue",
+    ),
+    path(
+        "champions/verifications/",
+        ChampionVerificationCreateView.as_view(),
+        name="champions-verifications",
+    ),
+    path(
+        "champions/live-cam/",
+        ChampionLiveCamView.as_view(),
+        name="champions-live-cam",
+    ),
+    path(
+        "champions/verifications/<int:verification_id>/live-cam/",
+        ChampionLiveCamView.as_view(),
+        name="champions-verification-live-cam",
+    ),
+    path(
+        "champions/enrollments/",
+        ChampionEnrollmentListCreateView.as_view(),
+        name="champions-enrollments",
+    ),
+    path(
+        "champions/training/",
+        ChampionTrainingView.as_view(),
+        name="champions-training",
+    ),
+    path(
+        "champions/training/<str:module_id>/",
+        ChampionTrainingModuleView.as_view(),
+        name="champions-training-module",
+    ),
+    path(
+        "champions/training/<str:module_id>/quiz/",
+        ChampionTrainingQuizView.as_view(),
+        name="champions-training-quiz",
+    ),
+    path(
+        "champions/certificate/",
+        ChampionCertificateView.as_view(),
+        name="champions-certificate",
+    ),
+    path(
+        "champions/certificate/verify/",
+        ChampionCertificateVerifyView.as_view(),
+        name="champions-certificate-verify-query",
+    ),
+    path(
+        "champions/certificate/verify/<str:code>/",
+        ChampionCertificateVerifyView.as_view(),
+        name="champions-certificate-verify",
+    ),
+    path(
+        "champions/cameras/nearby/",
+        PartnerCameraNearbyView.as_view(),
+        name="champions-cameras-nearby",
+    ),
+    path(
+        "champions/cameras/",
+        PartnerCameraRegisterView.as_view(),
+        name="champions-cameras-register",
+    ),
+    path(
+        "champions/cameras/<str:camera_id>/playback-token/",
+        PartnerCameraPlaybackTokenView.as_view(),
+        name="champions-cameras-playback",
+    ),
+    path(
+        "champions/cameras/<str:camera_id>/record-moment/",
+        PartnerCameraRecordMomentView.as_view(),
+        name="champions-cameras-record",
+    ),
+    path(
+        "champions/devices/push-token/",
+        DevicePushTokenView.as_view(),
+        name="champions-push-token",
+    ),
+    path(
+        "champions/devices/location-ping/",
+        DeviceLocationPingView.as_view(),
+        name="champions-location-ping",
+    ),
+    path(
+        "champions/warn-nearby/preview/",
+        WarnNearbyPreviewView.as_view(),
+        name="champions-warn-preview",
+    ),
+    path(
+        "champions/warn-nearby/",
+        WarnNearbyCreateView.as_view(),
+        name="champions-warn-create",
+    ),
+    path(
+        "champions/warn-nearby/<int:blast_id>/ack/",
+        WarnNearbyAckView.as_view(),
+        name="champions-warn-ack",
+    ),
+    path(
+        "champions/warn-nearby/<int:blast_id>/",
+        WarnNearbyDetailView.as_view(),
+        name="champions-warn-detail",
+    ),
 
     # Community + responder chat
     path('chat/conversations/', ChatBootstrapView.as_view(), name='chat-conversations'),

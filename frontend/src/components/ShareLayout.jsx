@@ -6,6 +6,7 @@ import DashboardSidebar from "./DashboardSidebar";
 import OnlinePeopleMobile from "./OnlinePeopleMobile";
 import { Outlet, useLocation } from "react-router-dom";
 import Footer from "./FooterBar";
+import ProximitySirenOverlay from "./ProximitySirenOverlay";
 import { usePresenceHeartbeat } from "../hooks/usePresenceHeartbeat";
 import {
   avatarUrl,
@@ -84,6 +85,7 @@ const SharedLayout = ({ showRight = true }) => {
       <div className="md:hidden shrink-0">
         <Footer />
       </div>
+      <ProximitySirenOverlay />
     </div>
   );
 };

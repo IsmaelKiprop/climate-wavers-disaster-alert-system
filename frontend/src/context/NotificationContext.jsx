@@ -147,6 +147,21 @@ export const NotificationProvider = ({ children }) => {
           created_at: new Date().toISOString(),
           is_read: false,
         });
+        if (
+          data.notification_type === "proximity_alert" ||
+          data.content?.siren
+        ) {
+          window.dispatchEvent(
+            new CustomEvent("cw-proximity-siren", {
+              detail: {
+                message: data.message,
+                blast_id: data.content?.blast_id,
+                note: data.content?.note,
+                disaster_id: data.content?.disaster_id,
+              },
+            })
+          );
+        }
       } catch {
         // Ignore malformed frames.
       }
