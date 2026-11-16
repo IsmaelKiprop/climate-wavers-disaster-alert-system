@@ -4,23 +4,39 @@ import { toast } from "react-toastify";
 import PublicPage from "../components/PublicPage";
 import { client } from "../api";
 import { endpoints } from "../utils/endpoints";
-import { avatarInitial, getAuthToken, secureMediaUrl } from "../utils/factory";
+import {
+  avatarInitial,
+  avatarUrl,
+  getAuthToken,
+  getUser,
+  hasCustomAvatar,
+} from "../utils/factory";
 
 const ChampionAvatar = ({ champion, size = "h-14 w-14" }) => {
-  const src = secureMediaUrl(
-    champion?.profile_picture || champion?.profile_pic || champion?.picture || ""
-  );
+  const [broken, setBroken] = useState(false);
+  const src = !broken
+    ? avatarUrl({
+        profile_picture: champion?.profile_picture,
+        profile_pic: champion?.profile_pic,
+        picture: champion?.picture,
+      })
+    : "";
+  // avatarUrl falls back to /avatar.png — treat default as “no custom photo”
+  const showPhoto = Boolean(src) && hasCustomAvatar(champion) && !broken;
   const initial = avatarInitial({
-    first_name: champion?.display_name,
+    first_name: (champion?.display_name || "").split(" ")[0],
+    last_name: (champion?.display_name || "").split(" ").slice(1).join(" "),
     username: champion?.display_name,
   });
-  if (src) {
+
+  if (showPhoto) {
     return (
       <img
         src={src}
         alt=""
         className={`${size} shrink-0 object-cover border border-border bg-background`}
         style={{ borderRadius: 6 }}
+        onError={() => setBroken(true)}
       />
     );
   }
@@ -54,6 +70,32 @@ const Stars = ({ value = 0, onPick, size = "text-sm" }) => (
   </div>
 );
 
+const enrichChampionPhoto = (champion, meUser, myChampionId) => {
+  if (!champion) return champion;
+  const isSelf =
+    (myChampionId && champion.id === myChampionId) ||
+    (meUser?.id &&
+      champion.user_id != null &&
+      String(champion.user_id) === String(meUser.id));
+  if (!isSelf || !meUser) {
+    return { ...champion, is_self: Boolean(isSelf) };
+  }
+  const photo =
+    champion.profile_picture ||
+    meUser.profile_picture ||
+    meUser.profile_pic ||
+    meUser.picture ||
+    "";
+  return {
+    ...champion,
+    is_self: true,
+    profile_picture: photo || champion.profile_picture || "",
+    profile_pic: meUser.profile_pic || champion.profile_pic || "",
+    picture: meUser.picture || champion.picture || "",
+    user_id: champion.user_id || meUser.id,
+  };
+};
+
 const ChampionDirectoryPage = () => {
   const [rows, setRows] = useState([]);
   const [city, setCity] = useState("");
@@ -63,6 +105,7 @@ const ChampionDirectoryPage = () => {
   const [score, setScore] = useState(5);
   const [comment, setComment] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [myChampionId, setMyChampionId] = useState(null);
 
   const load = async (cityFilter = city, orderBy = order) => {
     setLoading(true);
@@ -77,7 +120,21 @@ const ChampionDirectoryPage = () => {
         {},
         false
       );
-      setRows(data?.results || []);
+      let myId = myChampionId;
+      const meUser = getUser();
+      if (getAuthToken()) {
+        try {
+          const mine = await client.run("get", endpoints.championsMe, {}, true);
+          myId = mine?.champion?.id ?? null;
+          setMyChampionId(myId);
+        } catch {
+          /* not a champion */
+        }
+      }
+      const list = (data?.results || []).map((c) =>
+        enrichChampionPhoto(c, meUser, myId)
+      );
+      setRows(list);
     } catch {
       setRows([]);
     } finally {
@@ -187,7 +244,13 @@ const ChampionDirectoryPage = () => {
           <p className="text-sm text-muted">No active champions yet.</p>
         ) : (
           <ul className="space-y-3">
-            {rows.map((c) => (
+            {rows.map((c) => {
+              const meUser = getUser();
+              const needsPhoto = c.is_self && !hasCustomAvatar(c);
+              const profilePath = meUser?.id
+                ? `/app/${meUser.id}/profile`
+                : "/login";
+              return (
               <li key={c.id} className="border border-border p-4">
                 <div className="flex gap-3 sm:gap-4">
                   <ChampionAvatar champion={c} />
@@ -210,23 +273,34 @@ const ChampionDirectoryPage = () => {
                         {c.bio}
                       </p>
                     ) : null}
+                    {needsPhoto ? (
+                      <p className="mt-2 text-xs text-muted">
+                        No profile photo yet.{" "}
+                        <Link to={profilePath} className="text-primary font-medium hover:underline">
+                          Add photo on your profile
+                        </Link>{" "}
+                        so it shows on your Champion card.
+                      </p>
+                    ) : null}
                     <div className="mt-3 flex flex-wrap items-center gap-3">
                       <Stars value={Number(c.rating_avg) || 0} />
                       <span className="text-xs text-muted">
                         {(Number(c.rating_avg) || 0).toFixed(1)} · {c.rating_count || 0}{" "}
                         ratings
                       </span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setRatingFor(c);
-                          setScore(5);
-                          setComment("");
-                        }}
-                        className="text-xs font-medium text-primary"
-                      >
-                        Rate
-                      </button>
+                      {!c.is_self ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRatingFor(c);
+                            setScore(5);
+                            setComment("");
+                          }}
+                          className="text-xs font-medium text-primary"
+                        >
+                          Rate
+                        </button>
+                      ) : null}
                     </div>
                     <p className="text-xs text-muted mt-2">
                       {c.verifications_count || 0} verifications ·{" "}
@@ -237,7 +311,8 @@ const ChampionDirectoryPage = () => {
                   </div>
                 </div>
               </li>
-            ))}
+              );
+            })}
           </ul>
         )}
 
