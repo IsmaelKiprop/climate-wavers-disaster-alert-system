@@ -51,7 +51,7 @@ const AppNav = ({ onNavigate, compact = false }) => {
   const [user, setUser] = useState(getUser());
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [treeAdminOk, setTreeAdminOk] = useState(isAdmin());
-  const [championActive, setChampionActive] = useState(false);
+  const [hasChampionDesk, setHasChampionDesk] = useState(false);
 
   useEffect(() => {
     const sync = () => setUser(getUser());
@@ -67,7 +67,7 @@ const AppNav = ({ onNavigate, compact = false }) => {
     if (!user?.id && !user?.email) {
       setTreeAdminOk(false);
       setTreeAdminAccess(false);
-      setChampionActive(false);
+      setHasChampionDesk(false);
       return;
     }
     let cancelled = false;
@@ -94,9 +94,10 @@ const AppNav = ({ onNavigate, compact = false }) => {
           false
         );
         if (cancelled) return;
-        setChampionActive(data?.champion?.status === "active");
+        // Pending applicants need the desk for training/quizzes — not only active
+        setHasChampionDesk(Boolean(data?.champion?.id || data?.champion?.status));
       } catch {
-        if (!cancelled) setChampionActive(false);
+        if (!cancelled) setHasChampionDesk(false);
       }
     })();
     return () => {
@@ -121,8 +122,8 @@ const AppNav = ({ onNavigate, compact = false }) => {
         { to: "/onboarding/alert-settings", label: "Alert settings", Icon: IoPhonePortraitOutline, ActiveIcon: IoPhonePortraitOutline },
         { to: "/onboarding/responder", label: "Responder Desk", Icon: IoShieldOutline, ActiveIcon: IoShieldCheckmark },
         {
-          to: championActive ? "/app/champions" : "/champions/apply",
-          label: championActive ? "Champions" : "Become a Champion",
+          to: hasChampionDesk ? "/app/champions" : "/champions/apply",
+          label: hasChampionDesk ? "Champion Desk" : "Become a Champion",
           Icon: IoFlagOutline,
           ActiveIcon: IoFlag,
         },
@@ -194,8 +195,8 @@ const AppNav = ({ onNavigate, compact = false }) => {
           ActiveIcon: IoShieldCheckmark,
         },
         {
-          to: championActive ? "/app/champions" : "/champions/apply",
-          label: championActive ? "Champion Desk" : "Become a Community Champion",
+          to: hasChampionDesk ? "/app/champions" : "/champions/apply",
+          label: hasChampionDesk ? "Champion Desk" : "Become a Community Champion",
           Icon: IoFlagOutline,
           ActiveIcon: IoFlag,
         },

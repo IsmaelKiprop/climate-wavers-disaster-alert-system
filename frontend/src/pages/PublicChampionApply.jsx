@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import PublicPage from "../components/PublicPage";
@@ -14,6 +14,7 @@ import {
 } from "../components/PartnerApplyShell";
 import { client } from "../api";
 import { endpoints } from "../utils/endpoints";
+import { getUser } from "../utils/factory";
 
 const STEPS = [
   {
@@ -56,6 +57,34 @@ const PublicChampionApply = () => {
   const navigate = useNavigate();
   const [form, setForm] = useState(emptyForm);
   const [submitting, setSubmitting] = useState(false);
+  const [checking, setChecking] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const user = getUser();
+      if (!user?.id && !user?.email) {
+        if (!cancelled) setChecking(false);
+        return;
+      }
+      try {
+        const data = await client.run("get", endpoints.championsMe, {}, true);
+        if (cancelled) return;
+        if (data?.champion?.id || data?.champion?.status) {
+          toast.info("Opening your Champion Desk — training is there");
+          navigate("/app/champions", { replace: true });
+          return;
+        }
+      } catch {
+        /* no profile yet — stay on apply */
+      } finally {
+        if (!cancelled) setChecking(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [navigate]);
 
   const update = (key, value) => setForm((f) => ({ ...f, [key]: value }));
 
@@ -107,6 +136,16 @@ const PublicChampionApply = () => {
     }
   };
 
+  if (checking) {
+    return (
+      <PublicPage>
+        <div className="max-w-xl mx-auto px-4 py-16 text-center text-sm text-muted">
+          Checking your Champion application…
+        </div>
+      </PublicPage>
+    );
+  }
+
   return (
     <PublicPage>
       <ApplyHero
@@ -114,6 +153,7 @@ const PublicChampionApply = () => {
         title="Verify hazards on the ground"
         description="Nothing goes wide until a champion proves it — with GPS, evidence, and nearby phone warnings."
         links={[
+          { to: "/app/champions", label: "Already applied? Open Champion Desk" },
           { to: "/responders/apply", label: "Apply as responder instead" },
           { to: "/tree-admins/apply", label: "Tree Admin" },
         ]}
