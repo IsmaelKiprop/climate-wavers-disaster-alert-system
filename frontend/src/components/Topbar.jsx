@@ -8,6 +8,7 @@ import Modal from "../components/Modal";
 import Report from "./Report";
 import UserAvatar from "./UserAvatar";
 import { IoNotifications, IoNotificationsOutline, IoSearch, IoLogOutOutline, IoPersonOutline, IoMenu, IoChevronBack, IoChevronForward, IoSunnyOutline, IoMoonOutline } from "react-icons/io5";
+import { RiAlarmWarningLine } from "react-icons/ri";
 import { useNotifications } from "../context/NotificationContext";
 import { useSidebar } from "../context/SidebarContext";
 import { useTheme } from "../context/ThemeContext";
@@ -109,18 +110,34 @@ const Topbar = () => {
         </Link>
       </div>
 
-      <div className="flex-1 max-w-xl">
+      <div className="flex-1 min-w-0 max-w-xl">
         <button
           type="button"
           onClick={() => setIsSearchOpen(true)}
           className="w-full h-10 px-3 bg-background border border-border flex items-center gap-2 text-left text-muted text-sm"
         >
-          <IoSearch size={16} />
-          <span className="truncate">Search posts, people, hashtags</span>
+          <IoSearch size={16} className="shrink-0" />
+          <span className="truncate">Search</span>
         </button>
       </div>
 
       <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+        <button
+          type="button"
+          className="inline-flex items-center gap-1 min-h-9 px-2 sm:px-3 py-1.5 bg-primary text-primary-foreground text-[11px] sm:text-sm font-semibold hover:bg-primary-dark"
+          onClick={() => setIsModalOpen(true)}
+          aria-label="Report disaster"
+        >
+          <RiAlarmWarningLine size={15} className="shrink-0" aria-hidden="true" />
+          <span className="whitespace-nowrap leading-none">Report disaster</span>
+        </button>
+
+        {isModalOpen ? (
+          <Modal title="Report disaster" closeFn={() => setIsModalOpen(false)}>
+            <Report />
+          </Modal>
+        ) : null}
+
         <button
           type="button"
           onClick={toggleTheme}
@@ -130,20 +147,6 @@ const Topbar = () => {
         >
           {isDark ? <IoSunnyOutline size={20} /> : <IoMoonOutline size={20} />}
         </button>
-
-        <button
-          type="button"
-          className="hidden md:inline-flex items-center px-3 py-2 bg-primary text-primary-foreground text-sm font-medium hover:bg-primary-dark"
-          onClick={() => setIsModalOpen(true)}
-        >
-          Report disaster
-        </button>
-
-        {isModalOpen ? (
-          <Modal title="Report disaster" closeFn={() => setIsModalOpen(false)}>
-            <Report />
-          </Modal>
-        ) : null}
 
         <NavLink
           to={notificationsTo}
@@ -165,10 +168,6 @@ const Topbar = () => {
             </>
           )}
         </NavLink>
-
-        <button type="button" className="md:hidden p-2 text-sm font-medium text-primary" aria-label="Report disaster" onClick={() => setIsModalOpen(true)}>
-          Report
-        </button>
 
         <div className="relative hidden md:block" ref={userMenuRef}>
           <button

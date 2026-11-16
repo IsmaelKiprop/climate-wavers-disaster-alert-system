@@ -38,6 +38,7 @@ import { MdOutlineAdminPanelSettings } from "react-icons/md";
 import { useEffect, useState } from "react";
 import Modal from "../Modal";
 import Createpost from "../Createpost";
+import Report from "../Report";
 import { useNotifications } from "../../context/NotificationContext";
 import { client } from "../../api";
 import { endpoints } from "../../utils/endpoints";
@@ -50,6 +51,7 @@ const AppNav = ({ onNavigate, compact = false }) => {
   const { hasNewNotification } = useNotifications() || {};
   const [user, setUser] = useState(getUser());
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isReportOpen, setIsReportOpen] = useState(false);
   const [treeAdminOk, setTreeAdminOk] = useState(isAdmin());
   const [hasChampionDesk, setHasChampionDesk] = useState(false);
 
@@ -245,19 +247,36 @@ const AppNav = ({ onNavigate, compact = false }) => {
         ))}
       </nav>
 
-      {!onboarding ? (
+      <div className={`flex flex-col gap-2 ${isCompact ? "items-stretch" : ""}`}>
         <button
           type="button"
-          title="New post"
-          aria-label="New post"
+          title="Report disaster"
+          aria-label="Report disaster"
           className={`min-h-11 text-sm font-medium bg-primary text-primary-foreground hover:bg-primary-dark ${
             isCompact ? "px-0 flex items-center justify-center" : "w-full py-2.5"
           }`}
-          onClick={() => setIsModalOpen(true)}
+          onClick={() => setIsReportOpen(true)}
         >
-          {isCompact ? <IoCreateOutline size={18} /> : "New post"}
+          {isCompact ? (
+            <RiAlarmWarningLine size={18} aria-hidden="true" />
+          ) : (
+            "Report disaster"
+          )}
         </button>
-      ) : null}
+        {!onboarding ? (
+          <button
+            type="button"
+            title="New post"
+            aria-label="New post"
+            className={`min-h-11 text-sm font-medium border border-border text-foreground hover:bg-background ${
+              isCompact ? "px-0 flex items-center justify-center" : "w-full py-2.5"
+            }`}
+            onClick={() => setIsModalOpen(true)}
+          >
+            {isCompact ? <IoCreateOutline size={18} /> : "New post"}
+          </button>
+        ) : null}
+      </div>
 
       <div className="pt-3 border-t border-border">
         {user?.first_name && !isCompact ? (
@@ -280,6 +299,12 @@ const AppNav = ({ onNavigate, compact = false }) => {
           {isCompact ? <span className="sr-only">Log out</span> : "Log out"}
         </button>
       </div>
+
+      {isReportOpen ? (
+        <Modal title="Report disaster" closeFn={() => setIsReportOpen(false)}>
+          <Report />
+        </Modal>
+      ) : null}
 
       {isModalOpen ? (
         <Modal closeFn={() => setIsModalOpen(false)}>
