@@ -311,6 +311,15 @@ const MyCertificates = () => {
         isOpen={showChampion}
         onClose={() => setShowChampion(false)}
         certificate={championCert}
+        onSaveDetails={async (fields) => {
+          const data = await client.run("patch", endpoints.championsMe, fields, true);
+          const cert =
+            data?.certificate ||
+            (await client.run("get", endpoints.championsCertificate, {}, true))
+              ?.certificate;
+          if (cert) setChampionCert(cert);
+          return cert;
+        }}
       />
     </div>
   );

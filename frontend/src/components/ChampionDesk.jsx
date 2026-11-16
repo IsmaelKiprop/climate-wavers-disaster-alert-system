@@ -463,6 +463,19 @@ const ChampionDesk = () => {
     }
   };
 
+  const saveCertificateDetails = async (fields) => {
+    const data = await client.run("patch", endpoints.championsMe, fields, true);
+    if (data?.champion) setMe(data.champion);
+    const cert =
+      data?.certificate ||
+      (await client.run("get", endpoints.championsCertificate, {}, true))?.certificate;
+    if (cert) {
+      setCertData(cert);
+      setTrainingMeta((m) => ({ ...m, certificate: cert }));
+    }
+    return cert;
+  };
+
   const nextTrainingModule = (() => {
     if (!activeModule || !training.length) return null;
     const idx = training.findIndex((m) => m.id === activeModule);
@@ -1122,6 +1135,7 @@ const ChampionDesk = () => {
               isOpen={showCert}
               onClose={() => setShowCert(false)}
               certificate={certData}
+              onSaveDetails={saveCertificateDetails}
             />
           </div>
         ) : null}

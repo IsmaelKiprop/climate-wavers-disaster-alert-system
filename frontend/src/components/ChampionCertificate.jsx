@@ -1,24 +1,54 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { IoClose, IoDownloadOutline, IoCopyOutline } from "react-icons/io5";
+import { IoClose, IoDownloadOutline, IoCopyOutline, IoCreateOutline } from "react-icons/io5";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import { toast } from "react-toastify";
 import { SITE } from "../config/site";
 import BrandLogo from "./BrandLogo";
 
+const fieldClass =
+  "w-full h-10 border border-border bg-background px-3 text-sm text-foreground";
+
 /**
  * Branded Community Champion certificate (training path completion).
- * Solid CW brand colors — no decorative gradients.
+ * Optional editable name / affiliation / location before download.
  */
-const ChampionCertificate = ({ isOpen, onClose, certificate }) => {
+const ChampionCertificate = ({ isOpen, onClose, certificate, onSaveDetails }) => {
   const ref = useRef(null);
   const [downloading, setDownloading] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [draft, setDraft] = useState({
+    display_name: "",
+    affiliation: "",
+    ward: "",
+    city: "",
+    region: "",
+    country: "",
+  });
+  const [preview, setPreview] = useState(certificate);
 
-  if (!isOpen || !certificate) return null;
+  useEffect(() => {
+    if (!certificate) return;
+    setPreview(certificate);
+    setDraft({
+      display_name: certificate.holder_name || "",
+      affiliation: certificate.affiliation || "",
+      ward: certificate.ward || "",
+      city: certificate.city_name || "",
+      region: certificate.region || "",
+      country: certificate.country || "",
+    });
+    setEditing(false);
+  }, [certificate]);
 
-  const issued = certificate.issued_at
-    ? new Date(certificate.issued_at).toLocaleDateString(undefined, {
+  if (!isOpen || !preview) return null;
+
+  const canEdit = typeof onSaveDetails === "function";
+
+  const issued = preview.issued_at
+    ? new Date(preview.issued_at).toLocaleDateString(undefined, {
         year: "numeric",
         month: "long",
         day: "numeric",
@@ -40,7 +70,7 @@ const ChampionCertificate = ({ isOpen, onClose, certificate }) => {
       const h = (canvas.height * w) / canvas.width;
       pdf.addImage(img, "PNG", 0, 0, w, Math.min(h, 210));
       pdf.save(
-        `Climate_Wavers_Champion_${certificate.certificate_code || "cert"}.pdf`
+        `Climate_Wavers_Champion_${preview.certificate_code || "cert"}.pdf`
       );
       toast.success("Certificate PDF downloaded");
     } catch (err) {
@@ -53,10 +83,37 @@ const ChampionCertificate = ({ isOpen, onClose, certificate }) => {
 
   const copyCode = async () => {
     try {
-      await navigator.clipboard.writeText(certificate.certificate_code || "");
+      await navigator.clipboard.writeText(preview.certificate_code || "");
       toast.success("Certificate ID copied");
     } catch {
       toast.error("Could not copy");
+    }
+  };
+
+  const saveDetails = async () => {
+    if (!canEdit) return;
+    const name = (draft.display_name || "").trim();
+    if (!name) {
+      toast.error("Name is required on the certificate");
+      return;
+    }
+    setSaving(true);
+    try {
+      const updated = await onSaveDetails({
+        display_name: name,
+        affiliation: (draft.affiliation || "").trim(),
+        ward: (draft.ward || "").trim(),
+        city: (draft.city || "").trim(),
+        region: (draft.region || "").trim(),
+        country: (draft.country || "").trim() || "Kenya",
+      });
+      if (updated) setPreview(updated);
+      setEditing(false);
+      toast.success("Certificate details updated");
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || err?.message || "Could not save");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -73,46 +130,147 @@ const ChampionCertificate = ({ isOpen, onClose, certificate }) => {
         className="bg-surface border border-border w-full max-w-4xl max-h-[92dvh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between gap-3 p-4 border-b border-border">
-          <p id="champion-cert-title" className="text-sm font-semibold text-foreground">
-            Community Champion Certificate
-          </p>
-          <div className="flex gap-2">
-            {certificate.verify_path ? (
-              <Link
-                to={certificate.verify_path}
-                className="h-10 px-3 border border-border text-sm font-medium inline-flex items-center"
+        <div className="sticky top-0 z-10 bg-surface border-b border-border p-3 sm:p-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <p id="champion-cert-title" className="text-sm font-semibold text-foreground">
+              Community Champion Certificate
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {canEdit ? (
+                <button
+                  type="button"
+                  onClick={() => setEditing((v) => !v)}
+                  className="h-10 px-3 border border-border text-sm font-medium inline-flex items-center gap-1.5"
+                >
+                  <IoCreateOutline size={16} />
+                  {editing ? "Hide editor" : "Edit name & place"}
+                </button>
+              ) : null}
+              {preview.verify_path ? (
+                <Link
+                  to={preview.verify_path}
+                  className="h-10 px-3 border border-border text-sm font-medium inline-flex items-center"
+                >
+                  Verify page
+                </Link>
+              ) : null}
+              <button
+                type="button"
+                onClick={copyCode}
+                className="h-10 px-3 border border-border text-sm font-medium inline-flex items-center gap-1.5"
               >
-                Verify page
-              </Link>
-            ) : null}
-            <button
-              type="button"
-              onClick={copyCode}
-              className="h-10 px-3 border border-border text-sm font-medium inline-flex items-center gap-1.5"
-            >
-              <IoCopyOutline size={16} />
-              Copy ID
-            </button>
-            <button
-              type="button"
-              onClick={downloadPdf}
-              disabled={downloading}
-              className="h-10 px-3 bg-primary text-primary-foreground text-sm font-medium inline-flex items-center gap-1.5"
-            >
-              <IoDownloadOutline size={18} />
-              {downloading ? "Preparing…" : "Download PDF"}
-            </button>
-            <button
-              type="button"
-              onClick={onClose}
-              className="h-10 w-10 inline-flex items-center justify-center border border-border"
-              aria-label="Close"
-            >
-              <IoClose size={20} />
-            </button>
+                <IoCopyOutline size={16} />
+                Copy ID
+              </button>
+              <button
+                type="button"
+                onClick={downloadPdf}
+                disabled={downloading}
+                className="h-10 px-3 bg-primary text-primary-foreground text-sm font-medium inline-flex items-center gap-1.5"
+              >
+                <IoDownloadOutline size={18} />
+                {downloading ? "Preparing…" : "Download PDF"}
+              </button>
+              <button
+                type="button"
+                onClick={onClose}
+                className="h-10 w-10 inline-flex items-center justify-center border border-border"
+                aria-label="Close"
+              >
+                <IoClose size={20} />
+              </button>
+            </div>
           </div>
         </div>
+
+        {editing && canEdit ? (
+          <div className="p-4 sm:p-5 border-b border-border bg-background space-y-3">
+            <p className="text-xs uppercase tracking-wide text-muted">
+              Edit certificate details
+            </p>
+            <div className="grid sm:grid-cols-2 gap-3">
+              <label className="block text-sm">
+                <span className="text-muted text-xs">Full name on certificate</span>
+                <input
+                  className={`${fieldClass} mt-1`}
+                  value={draft.display_name}
+                  onChange={(e) => setDraft((d) => ({ ...d, display_name: e.target.value }))}
+                  required
+                />
+              </label>
+              <label className="block text-sm">
+                <span className="text-muted text-xs">Affiliation / group</span>
+                <input
+                  className={`${fieldClass} mt-1`}
+                  value={draft.affiliation}
+                  onChange={(e) => setDraft((d) => ({ ...d, affiliation: e.target.value }))}
+                  placeholder="School, church, CBO, neighborhood group"
+                />
+              </label>
+              <label className="block text-sm">
+                <span className="text-muted text-xs">Ward / area</span>
+                <input
+                  className={`${fieldClass} mt-1`}
+                  value={draft.ward}
+                  onChange={(e) => setDraft((d) => ({ ...d, ward: e.target.value }))}
+                />
+              </label>
+              <label className="block text-sm">
+                <span className="text-muted text-xs">City / town</span>
+                <input
+                  className={`${fieldClass} mt-1`}
+                  value={draft.city}
+                  onChange={(e) => setDraft((d) => ({ ...d, city: e.target.value }))}
+                  placeholder="Nairobi"
+                />
+              </label>
+              <label className="block text-sm">
+                <span className="text-muted text-xs">Region / county</span>
+                <input
+                  className={`${fieldClass} mt-1`}
+                  value={draft.region}
+                  onChange={(e) => setDraft((d) => ({ ...d, region: e.target.value }))}
+                />
+              </label>
+              <label className="block text-sm">
+                <span className="text-muted text-xs">Country</span>
+                <input
+                  className={`${fieldClass} mt-1`}
+                  value={draft.country}
+                  onChange={(e) => setDraft((d) => ({ ...d, country: e.target.value }))}
+                />
+              </label>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={saving}
+                onClick={saveDetails}
+                className="h-10 px-4 bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-50"
+              >
+                {saving ? "Saving…" : "Save on certificate"}
+              </button>
+              <button
+                type="button"
+                disabled={saving}
+                onClick={() => {
+                  setDraft({
+                    display_name: preview.holder_name || "",
+                    affiliation: preview.affiliation || "",
+                    ward: preview.ward || "",
+                    city: preview.city_name || "",
+                    region: preview.region || "",
+                    country: preview.country || "",
+                  });
+                  setEditing(false);
+                }}
+                className="h-10 px-4 border border-border text-sm"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : null}
 
         <div className="p-4 sm:p-6 bg-background">
           <div
@@ -162,15 +320,13 @@ const ChampionCertificate = ({ isOpen, onClose, certificate }) => {
               <div className="text-center mb-8">
                 <p className="text-sm text-[#6b7280]">This certifies that</p>
                 <p className="mt-2 text-2xl sm:text-3xl font-semibold text-[#067d83]">
-                  {certificate.holder_name}
+                  {preview.holder_name}
                 </p>
-                {certificate.affiliation ? (
-                  <p className="mt-1 text-sm text-[#6b7280]">
-                    {certificate.affiliation}
-                  </p>
+                {preview.affiliation ? (
+                  <p className="mt-1 text-sm text-[#6b7280]">{preview.affiliation}</p>
                 ) : null}
-                {certificate.territory ? (
-                  <p className="text-sm text-[#6b7280]">{certificate.territory}</p>
+                {preview.territory ? (
+                  <p className="text-sm text-[#6b7280]">{preview.territory}</p>
                 ) : null}
               </div>
 
@@ -179,21 +335,21 @@ const ChampionCertificate = ({ isOpen, onClose, certificate }) => {
                   <p className="text-[10px] uppercase tracking-[0.16em] text-[#6b7280]">
                     Program
                   </p>
-                  <p className="font-medium mt-1.5">{certificate.program}</p>
+                  <p className="font-medium mt-1.5">{preview.program}</p>
                 </div>
                 <div className="p-4 sm:border-r border-[#d1d5db]">
                   <p className="text-[10px] uppercase tracking-[0.16em] text-[#6b7280]">
                     Modules passed
                   </p>
                   <p className="font-medium mt-1.5">
-                    {certificate.modules_completed}/{certificate.modules_total} · quiz ≥ 70%
+                    {preview.modules_completed}/{preview.modules_total} · quiz ≥ 70%
                   </p>
                 </div>
                 <div className="p-4">
                   <p className="text-[10px] uppercase tracking-[0.16em] text-[#6b7280]">
                     Champion tier
                   </p>
-                  <p className="font-medium mt-1.5 capitalize">{certificate.tier}</p>
+                  <p className="font-medium mt-1.5 capitalize">{preview.tier}</p>
                 </div>
               </div>
 
@@ -213,7 +369,7 @@ const ChampionCertificate = ({ isOpen, onClose, certificate }) => {
                       Certificate ID
                     </p>
                     <p className="font-mono text-sm font-semibold mt-1 break-all">
-                      {certificate.certificate_code}
+                      {preview.certificate_code}
                     </p>
                     <p className="text-xs text-[#6b7280] mt-2">Issued {issued}</p>
                   </div>
@@ -225,7 +381,7 @@ const ChampionCertificate = ({ isOpen, onClose, certificate }) => {
                   </div>
                   <p className="text-xs text-[#6b7280]">Program Lead · {SITE.org.name}</p>
                   <p className="text-xs text-[#6b7280] mt-3 max-w-xs leading-relaxed">
-                    {certificate.verify_hint}
+                    {preview.verify_hint}
                   </p>
                 </div>
               </div>

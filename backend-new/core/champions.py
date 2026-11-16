@@ -382,7 +382,12 @@ class ChampionMeView(APIView):
         if "relay_nodes" in data and isinstance(data.get("relay_nodes"), list):
             champ.relay_nodes = data.get("relay_nodes")[:20]
         champ.save()
-        return Response({"champion": serialize_champion(champ)})
+        return Response(
+            {
+                "champion": serialize_champion(champ),
+                "certificate": serialize_certificate(champ),
+            }
+        )
 
 
 class ChampionCheckInView(APIView):
@@ -899,6 +904,24 @@ def _issue_certificate_if_ready(champ: CommunityChampion) -> bool:
     return issued_now
 
 
+def _format_champion_territory(champ: CommunityChampion) -> str:
+    """Build location line without duplicated country/city fragments."""
+    parts = []
+    for raw in (champ.ward, champ.city, champ.region, champ.country):
+        text = (raw or "").strip()
+        if not text:
+            continue
+        joined = ", ".join(parts).lower()
+        key = text.lower()
+        if key in joined:
+            continue
+        # Avoid "Nairobi, Kenya" + "Kenya"
+        if parts and any(key == p.lower() or key.endswith(", " + p.lower()) for p in parts):
+            continue
+        parts.append(text)
+    return ", ".join(parts)
+
+
 def serialize_certificate(champ: CommunityChampion, *, public=False) -> dict | None:
     if not champ.certificate_code:
         return None
@@ -917,9 +940,11 @@ def serialize_certificate(champ: CommunityChampion, *, public=False) -> dict | N
         "city": "Nairobi, Kenya",
         "tier": champ.tier,
         "affiliation": champ.affiliation or "",
-        "territory": ", ".join(
-            p for p in [champ.ward, champ.city, champ.country] if p
-        ),
+        "ward": champ.ward or "",
+        "city_name": champ.city or "",
+        "region": champ.region or "",
+        "country": champ.country or "",
+        "territory": _format_champion_territory(champ),
         "modules_completed": len(TRAINING_MODULES),
         "modules_total": len(TRAINING_MODULES),
         "issued_at": champ.certificate_issued_at.isoformat()
