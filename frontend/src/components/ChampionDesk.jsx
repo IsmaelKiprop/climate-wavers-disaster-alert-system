@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { toast } from "react-toastify";
 import { client } from "../api";
 import { endpoints } from "../utils/endpoints";
+import { avatarInitial, getUser, secureMediaUrl } from "../utils/factory";
 import ChampionCertificate from "./ChampionCertificate";
 
 const TABS = ["Verify", "Warn", "Network", "Training", "Cameras", "Impact"];
@@ -560,14 +561,43 @@ const ChampionDesk = () => {
     <div className="min-h-screen bg-background">
       <div className="max-w-6xl mx-auto px-3 sm:px-6 py-4 sm:py-6 space-y-5">
         <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
-          <div>
-            <p className="text-xs uppercase tracking-wide text-muted">Community Champions</p>
-            <h1 className="text-2xl sm:text-3xl font-semibold text-foreground mt-1">
-              {me.display_name}
-            </h1>
-            <p className="text-sm text-muted mt-1">
-              {me.status} · {me.tier} · {me.city || me.ward || me.country} · {me.radius_km} km
-            </p>
+          <div className="flex items-start gap-3 sm:gap-4 min-w-0">
+            {(() => {
+              const user = getUser();
+              const src = secureMediaUrl(
+                me.profile_picture ||
+                  user?.profile_picture ||
+                  user?.profile_pic ||
+                  user?.picture ||
+                  ""
+              );
+              const initial = avatarInitial(user) || (me.display_name || "C").charAt(0);
+              return src ? (
+                <img
+                  src={src}
+                  alt=""
+                  className="h-14 w-14 sm:h-16 sm:w-16 shrink-0 object-cover border border-border bg-background"
+                  style={{ borderRadius: 6 }}
+                />
+              ) : (
+                <div
+                  className="h-14 w-14 sm:h-16 sm:w-16 shrink-0 border border-border bg-surface text-primary inline-flex items-center justify-center text-xl font-semibold"
+                  style={{ borderRadius: 6 }}
+                  aria-hidden
+                >
+                  {initial}
+                </div>
+              );
+            })()}
+            <div className="min-w-0">
+              <p className="text-xs uppercase tracking-wide text-muted">Community Champions</p>
+              <h1 className="text-2xl sm:text-3xl font-semibold text-foreground mt-1">
+                {me.display_name}
+              </h1>
+              <p className="text-sm text-muted mt-1">
+                {me.status} · {me.tier} · {me.city || me.ward || me.country} · {me.radius_km} km
+              </p>
+            </div>
           </div>
           <div className="flex flex-wrap gap-2">
             <button

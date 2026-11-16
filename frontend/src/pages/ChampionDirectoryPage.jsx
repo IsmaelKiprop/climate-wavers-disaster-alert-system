@@ -4,7 +4,36 @@ import { toast } from "react-toastify";
 import PublicPage from "../components/PublicPage";
 import { client } from "../api";
 import { endpoints } from "../utils/endpoints";
-import { getAuthToken } from "../utils/factory";
+import { avatarInitial, getAuthToken, secureMediaUrl } from "../utils/factory";
+
+const ChampionAvatar = ({ champion, size = "h-14 w-14" }) => {
+  const src = secureMediaUrl(
+    champion?.profile_picture || champion?.profile_pic || champion?.picture || ""
+  );
+  const initial = avatarInitial({
+    first_name: champion?.display_name,
+    username: champion?.display_name,
+  });
+  if (src) {
+    return (
+      <img
+        src={src}
+        alt=""
+        className={`${size} shrink-0 object-cover border border-border bg-background`}
+        style={{ borderRadius: 6 }}
+      />
+    );
+  }
+  return (
+    <div
+      className={`${size} shrink-0 border border-border bg-surface text-primary inline-flex items-center justify-center text-lg font-semibold`}
+      style={{ borderRadius: 6 }}
+      aria-hidden
+    >
+      {initial || "C"}
+    </div>
+  );
+};
 
 const Stars = ({ value = 0, onPick, size = "text-sm" }) => (
   <div className={`inline-flex gap-0.5 ${size}`} aria-label={`${value} of 5 stars`}>
@@ -160,48 +189,53 @@ const ChampionDirectoryPage = () => {
           <ul className="space-y-3">
             {rows.map((c) => (
               <li key={c.id} className="border border-border p-4">
-                <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <h2 className="text-lg font-semibold text-foreground">
-                    {c.display_name}
-                  </h2>
-                  <span className="text-xs uppercase tracking-wide text-muted">
-                    {c.tier} · impact {c.impact_score ?? 0}
-                  </span>
+                <div className="flex gap-3 sm:gap-4">
+                  <ChampionAvatar champion={c} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-baseline justify-between gap-2">
+                      <h2 className="text-lg font-semibold text-foreground">
+                        {c.display_name}
+                      </h2>
+                      <span className="text-xs uppercase tracking-wide text-muted">
+                        {c.tier} · impact {c.impact_score ?? 0}
+                      </span>
+                    </div>
+                    <p className="text-sm text-muted mt-1">
+                      {[c.affiliation, c.ward, c.city, c.country]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </p>
+                    {c.bio ? (
+                      <p className="text-sm text-foreground-soft mt-2 line-clamp-3">
+                        {c.bio}
+                      </p>
+                    ) : null}
+                    <div className="mt-3 flex flex-wrap items-center gap-3">
+                      <Stars value={Number(c.rating_avg) || 0} />
+                      <span className="text-xs text-muted">
+                        {(Number(c.rating_avg) || 0).toFixed(1)} · {c.rating_count || 0}{" "}
+                        ratings
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRatingFor(c);
+                          setScore(5);
+                          setComment("");
+                        }}
+                        className="text-xs font-medium text-primary"
+                      >
+                        Rate
+                      </button>
+                    </div>
+                    <p className="text-xs text-muted mt-2">
+                      {c.verifications_count || 0} verifications ·{" "}
+                      {c.enrollments_count || 0} households ·{" "}
+                      {c.proximity_blasts_count || 0} warn blasts
+                      {c.sponsor_name ? ` · Sponsored by ${c.sponsor_name}` : ""}
+                    </p>
+                  </div>
                 </div>
-                <p className="text-sm text-muted mt-1">
-                  {[c.affiliation, c.ward, c.city, c.country]
-                    .filter(Boolean)
-                    .join(" · ")}
-                </p>
-                {c.bio ? (
-                  <p className="text-sm text-foreground-soft mt-2 line-clamp-3">
-                    {c.bio}
-                  </p>
-                ) : null}
-                <div className="mt-3 flex flex-wrap items-center gap-3">
-                  <Stars value={Number(c.rating_avg) || 0} />
-                  <span className="text-xs text-muted">
-                    {(Number(c.rating_avg) || 0).toFixed(1)} · {c.rating_count || 0}{" "}
-                    ratings
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setRatingFor(c);
-                      setScore(5);
-                      setComment("");
-                    }}
-                    className="text-xs font-medium text-primary"
-                  >
-                    Rate
-                  </button>
-                </div>
-                <p className="text-xs text-muted mt-2">
-                  {c.verifications_count || 0} verifications ·{" "}
-                  {c.enrollments_count || 0} households ·{" "}
-                  {c.proximity_blasts_count || 0} warn blasts
-                  {c.sponsor_name ? ` · Sponsored by ${c.sponsor_name}` : ""}
-                </p>
               </li>
             ))}
           </ul>

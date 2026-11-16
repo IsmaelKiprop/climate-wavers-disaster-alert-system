@@ -70,7 +70,9 @@ def haversine_km(lat1, lng1, lat2, lng2) -> float:
 def get_champion(user) -> CommunityChampion | None:
     if not user or not user.is_authenticated:
         return None
-    return CommunityChampion.objects.filter(user=user).first()
+    return (
+        CommunityChampion.objects.select_related("user").filter(user=user).first()
+    )
 
 
 def require_active_champion(user):
@@ -165,6 +167,23 @@ def compute_champion_impact(champ: CommunityChampion) -> dict:
     }
 
 
+def _champion_profile_picture(champ: CommunityChampion) -> str:
+    user = getattr(champ, "user", None)
+    if not user:
+        return ""
+    try:
+        pic = user.profile_picture
+    except Exception:
+        pic = None
+    if not pic:
+        pic = (
+            getattr(user, "profile_pic", None)
+            or getattr(user, "picture", None)
+            or getattr(user, "default_avatar", None)
+        )
+    return str(pic or "").strip()
+
+
 def serialize_champion(champ: CommunityChampion, *, public=False) -> dict:
     data = {
         "id": champ.id,
@@ -197,6 +216,8 @@ def serialize_champion(champ: CommunityChampion, *, public=False) -> dict:
         else None,
         "trained_at": champ.trained_at.isoformat() if champ.trained_at else None,
         "approved_at": champ.approved_at.isoformat() if champ.approved_at else None,
+        "profile_picture": _champion_profile_picture(champ),
+        "user_id": champ.user_id,
     }
     if not public:
         data.update(
