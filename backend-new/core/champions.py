@@ -572,7 +572,7 @@ class ChampionApproveView(APIView):
             champ.status = "active"
             champ.approved_at = timezone.now()
             champ.approved_by = request.user
-            # trained_at + certificate come from completing the ALX training path
+            # trained_at + certificate come from completing the Champion training path
             champ.apply_tier_radius()
             champ.save()
             notify_user(
@@ -952,7 +952,7 @@ def serialize_certificate(champ: CommunityChampion, *, public=False) -> dict | N
 
 
 class ChampionTrainingView(APIView):
-    """ALX-style path: list modules (locked until previous passed)."""
+    """Champion training path: list modules (locked until previous passed)."""
 
     permission_classes = [IsAuthenticated]
 
@@ -981,7 +981,7 @@ class ChampionTrainingView(APIView):
             modules.append(card)
         return Response(
             {
-                "style": "alx_path",
+                "style": "champion_path",
                 "modules": modules,
                 "completed_count": len(passed),
                 "total": len(TRAINING_MODULES),
@@ -1021,7 +1021,7 @@ class ChampionTrainingModuleView(APIView):
 
 
 class ChampionTrainingQuizView(APIView):
-    """POST answers — must pass to mark module complete (ALX style)."""
+    """POST answers — must pass to mark module complete."""
 
     permission_classes = [IsAuthenticated]
 

@@ -549,7 +549,7 @@ const ChampionDesk = () => {
           <div className="border border-primary p-4 text-sm space-y-1">
             <p className="font-semibold text-foreground">Application pending approval</p>
             <p className="text-muted">
-              Climate Wavers staff will review your application. Finish ALX-style training
+              Climate Wavers staff will review your application. Finish Champion training
               now — Verify, Warn, and Network unlock after you are approved.
             </p>
           </div>
@@ -902,7 +902,7 @@ const ChampionDesk = () => {
             <div className="flex flex-wrap items-center justify-between gap-3 border border-border p-4">
               <div>
                 <p className="text-xs uppercase tracking-wide text-muted">
-                  ALX-style learning path
+                  Champion learning path
                 </p>
                 <p className="text-sm font-medium mt-1">
                   {trainingMeta.completed_count}/{trainingMeta.total} modules passed

@@ -1,5 +1,5 @@
 """
-ALX-style Community Champion curriculum.
+Climate Wavers Community Champion curriculum.
 
 Each module: lesson content → quiz (must pass) → unlock next.
 Certificate issued when all modules are passed.
@@ -490,7 +490,7 @@ CURRICULUM = [
                 "id": "q3",
                 "prompt": "Training certificates mean:",
                 "choices": [
-                    "You finished the ALX-style path and can serve responsibly",
+                    "You finished the Champion training path and can serve responsibly",
                     "You own the USGS network",
                     "You can skip Verify forever",
                     "You become a government officer automatically",

@@ -8,7 +8,7 @@ import { SITE } from "../config/site";
 import BrandLogo from "./BrandLogo";
 
 /**
- * Branded Community Champion certificate (ALX-style path completion).
+ * Branded Community Champion certificate (training path completion).
  * Solid CW brand colors — no decorative gradients.
  */
 const ChampionCertificate = ({ isOpen, onClose, certificate }) => {
@@ -153,7 +153,7 @@ const ChampionCertificate = ({ isOpen, onClose, certificate }) => {
                   Community Champion
                 </h1>
                 <p className="mt-3 text-sm sm:text-base text-[#6b7280] max-w-2xl mx-auto leading-relaxed">
-                  Awarded for completing the end-to-end ALX-style training path —
+                  Awarded for completing the Climate Wavers Champion training path —
                   ground-truth verification, safe evidence, warn-nearby ethics,
                   blackout relay, and restore mobilisation.
                 </p>

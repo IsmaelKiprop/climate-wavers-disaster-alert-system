@@ -553,7 +553,7 @@ class CommunityChampionAdmin(ModelAdmin):
             champ.status = "active"
             champ.approved_at = now
             champ.approved_by = request.user
-            # Certificate / trained_at issued only after ALX path quizzes are passed
+            # Certificate / trained_at issued only after Champion path quizzes are passed
             champ.apply_tier_radius()
             champ.save()
         self.message_user(request, f"Approved {queryset.count()} champion(s).", messages.SUCCESS)

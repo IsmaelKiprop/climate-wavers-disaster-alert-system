@@ -224,7 +224,7 @@ class ChampionsAPITests(APITestCase):
         self.assertEqual(rec.status_code, 201)
         self.assertEqual(rec.data["sync_status"], "synced")
 
-    def test_training_alx_path_quiz_and_certificate(self):
+    def test_training_champion_path_quiz_and_certificate(self):
         from core.champion_curriculum import CURRICULUM
 
         champ = CommunityChampion.objects.create(
@@ -239,7 +239,7 @@ class ChampionsAPITests(APITestCase):
 
         path = self.client.get("/api/v1/champions/training/")
         self.assertEqual(path.status_code, 200)
-        self.assertEqual(path.data["style"], "alx_path")
+        self.assertEqual(path.data["style"], "champion_path")
         self.assertEqual(path.data["total"], len(CURRICULUM))
         self.assertFalse(path.data["modules"][0]["locked"])
         self.assertTrue(path.data["modules"][1]["locked"])
