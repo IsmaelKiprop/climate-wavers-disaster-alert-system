@@ -5,7 +5,7 @@ import ReactDOM from "react-dom";
 const Modal = ({ children, closeFn, title = "Create Post" }) => {
   return ReactDOM.createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/50"
+      className="fixed inset-0 z-[120] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/50"
       onClick={closeFn}
     >
       <div
