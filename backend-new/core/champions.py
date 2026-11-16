@@ -1493,17 +1493,65 @@ class DevicePushTokenView(APIView):
 class DeviceLocationPingView(APIView):
     permission_classes = [IsAuthenticated]
 
-    def post(self, request):
-        lat = _parse_float(request.data.get("latitude"))
-        lng = _parse_float(request.data.get("longitude"))
-        if lat is None or lng is None:
-            return Response({"detail": "latitude and longitude required"}, status=400)
-        opt_in = bool(request.data.get("proximity_alerts_opt_in", True))
+    def get(self, request):
         ping = (
             DeviceLocationPing.objects.filter(user=request.user)
             .order_by("-updated_at")
             .first()
         )
+        if not ping:
+            return Response(
+                {
+                    "proximity_alerts_opt_in": False,
+                    "has_location": False,
+                    "latitude": None,
+                    "longitude": None,
+                    "updated_at": None,
+                }
+            )
+        return Response(
+            {
+                "proximity_alerts_opt_in": bool(ping.proximity_alerts_opt_in),
+                "has_location": True,
+                "latitude": float(ping.latitude),
+                "longitude": float(ping.longitude),
+                "updated_at": ping.updated_at.isoformat() if ping.updated_at else None,
+            }
+        )
+
+    def post(self, request):
+        lat = _parse_float(request.data.get("latitude"))
+        lng = _parse_float(request.data.get("longitude"))
+        opt_in_raw = request.data.get("proximity_alerts_opt_in", None)
+        ping = (
+            DeviceLocationPing.objects.filter(user=request.user)
+            .order_by("-updated_at")
+            .first()
+        )
+
+        # Opt-out / opt-in toggle without forcing a fresh GPS fix
+        if lat is None and lng is None:
+            if ping is None:
+                return Response(
+                    {"detail": "Share your location once before changing nearby-siren settings."},
+                    status=400,
+                )
+            if opt_in_raw is not None:
+                ping.proximity_alerts_opt_in = bool(opt_in_raw)
+                ping.save(update_fields=["proximity_alerts_opt_in", "updated_at"])
+            return Response(
+                {
+                    "proximity_alerts_opt_in": bool(ping.proximity_alerts_opt_in),
+                    "has_location": True,
+                    "latitude": float(ping.latitude),
+                    "longitude": float(ping.longitude),
+                    "updated_at": ping.updated_at.isoformat(),
+                }
+            )
+
+        if lat is None or lng is None:
+            return Response({"detail": "latitude and longitude required"}, status=400)
+        opt_in = True if opt_in_raw is None else bool(opt_in_raw)
         if ping:
             ping.latitude = lat
             ping.longitude = lng
@@ -1518,7 +1566,15 @@ class DeviceLocationPingView(APIView):
                 accuracy_m=_parse_float(request.data.get("accuracy_m")),
                 proximity_alerts_opt_in=opt_in,
             )
-        return Response({"updated_at": ping.updated_at.isoformat()})
+        return Response(
+            {
+                "proximity_alerts_opt_in": bool(ping.proximity_alerts_opt_in),
+                "has_location": True,
+                "latitude": float(ping.latitude),
+                "longitude": float(ping.longitude),
+                "updated_at": ping.updated_at.isoformat(),
+            }
+        )
 
 
 def _devices_in_radius(lat, lng, radius_m, ttl_minutes=90):

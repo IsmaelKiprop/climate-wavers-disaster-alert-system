@@ -8,8 +8,14 @@ const AlertSettings = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [otpBusy, setOtpBusy] = useState(false);
+  const [sirenBusy, setSirenBusy] = useState(false);
   const [code, setCode] = useState("");
   const [otpNotice, setOtpNotice] = useState(null);
+  const [proximity, setProximity] = useState({
+    proximity_alerts_opt_in: false,
+    has_location: false,
+    updated_at: null,
+  });
   const [form, setForm] = useState({
     email_alerts: true,
     whatsapp_alerts: false,
@@ -23,22 +29,35 @@ const AlertSettings = () => {
 
   useEffect(() => {
     let active = true;
-    client
-      .run("get", endpoints.alertPreferences, {}, true, false, false, false)
-      .then((data) => {
-        if (!active || !data) return;
-        setForm({
-          email_alerts: Boolean(data.email_alerts),
-          whatsapp_alerts: Boolean(data.whatsapp_alerts),
-          radius_km: data.radius_km || 100,
-          min_magnitude: data.min_magnitude || 4.5,
-          latitude: data.latitude ?? "",
-          longitude: data.longitude ?? "",
-          phone: data.phone || "",
-          phone_verified: Boolean(data.phone_verified),
-        });
+    Promise.allSettled([
+      client.run("get", endpoints.alertPreferences, {}, true, false, false, false),
+      client.run("get", endpoints.championsLocationPing, {}, true, false, false, false),
+    ])
+      .then(([prefRes, pingRes]) => {
+        if (!active) return;
+        if (prefRes.status === "fulfilled" && prefRes.value) {
+          const data = prefRes.value;
+          setForm({
+            email_alerts: Boolean(data.email_alerts),
+            whatsapp_alerts: Boolean(data.whatsapp_alerts),
+            radius_km: data.radius_km || 100,
+            min_magnitude: data.min_magnitude || 4.5,
+            latitude: data.latitude ?? "",
+            longitude: data.longitude ?? "",
+            phone: data.phone || "",
+            phone_verified: Boolean(data.phone_verified),
+          });
+        } else {
+          toast.error("Could not load alert settings.");
+        }
+        if (pingRes.status === "fulfilled" && pingRes.value) {
+          setProximity({
+            proximity_alerts_opt_in: Boolean(pingRes.value.proximity_alerts_opt_in),
+            has_location: Boolean(pingRes.value.has_location),
+            updated_at: pingRes.value.updated_at || null,
+          });
+        }
       })
-      .catch(() => toast.error("Could not load alert settings."))
       .finally(() => active && setLoading(false));
     return () => {
       active = false;
@@ -60,6 +79,76 @@ const AlertSettings = () => {
       },
       () => toast.error("Could not read your location.")
     );
+  };
+
+  const postLocationPing = (coords, optIn) =>
+    client.run(
+      "post",
+      endpoints.championsLocationPing,
+      {
+        latitude: coords?.latitude,
+        longitude: coords?.longitude,
+        accuracy_m: coords?.accuracy,
+        proximity_alerts_opt_in: optIn,
+      },
+      true,
+      false,
+      false,
+      false
+    );
+
+  const enableNearbySirens = async () => {
+    if (!navigator.geolocation) {
+      toast.error("Location is required for nearby Champion sirens.");
+      return;
+    }
+    setSirenBusy(true);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          const data = await postLocationPing(
+            {
+              latitude: pos.coords.latitude,
+              longitude: pos.coords.longitude,
+              accuracy: pos.coords.accuracy,
+            },
+            true
+          );
+          setProximity({
+            proximity_alerts_opt_in: Boolean(data?.proximity_alerts_opt_in),
+            has_location: true,
+            updated_at: data?.updated_at || null,
+          });
+          toast.success("Opted in — Champions can warn your phone when you are near a hazard.");
+        } catch {
+          toast.error("Could not enable nearby sirens.");
+        } finally {
+          setSirenBusy(false);
+        }
+      },
+      () => {
+        setSirenBusy(false);
+        toast.error("Allow location access to opt in to nearby sirens.");
+      },
+      { enableHighAccuracy: true, timeout: 20000 }
+    );
+  };
+
+  const disableNearbySirens = async () => {
+    setSirenBusy(true);
+    try {
+      const data = await postLocationPing(null, false);
+      setProximity({
+        proximity_alerts_opt_in: Boolean(data?.proximity_alerts_opt_in),
+        has_location: Boolean(data?.has_location),
+        updated_at: data?.updated_at || null,
+      });
+      toast.success("Nearby Champion sirens turned off.");
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "Could not update nearby sirens.");
+    } finally {
+      setSirenBusy(false);
+    }
   };
 
   const save = async (event) => {
@@ -225,6 +314,58 @@ const AlertSettings = () => {
             </span>
           </span>
         </label>
+
+        <div className="border border-border bg-surface p-4 space-y-3">
+          <div>
+            <p className="text-sm font-medium text-foreground">Nearby Champion sirens</p>
+            <p className="mt-1 text-sm text-muted">
+              Opt in so Community Champions can send a geofenced phone siren when you are
+              near a verified hazard. Uses recent device location — not SMS-first.
+            </p>
+          </div>
+          <p className="text-xs text-muted">
+            Status:{" "}
+            {proximity.proximity_alerts_opt_in
+              ? "Opted in"
+              : proximity.has_location
+                ? "Location saved · sirens off"
+                : "Not opted in"}
+            {proximity.updated_at
+              ? ` · last update ${new Date(proximity.updated_at).toLocaleString()}`
+              : ""}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {proximity.proximity_alerts_opt_in ? (
+              <button
+                type="button"
+                disabled={sirenBusy}
+                onClick={disableNearbySirens}
+                className="h-10 px-4 border border-border text-sm disabled:opacity-50"
+              >
+                {sirenBusy ? "Updating…" : "Turn off nearby sirens"}
+              </button>
+            ) : (
+              <button
+                type="button"
+                disabled={sirenBusy}
+                onClick={enableNearbySirens}
+                className="h-10 px-4 bg-primary text-primary-foreground text-sm font-medium disabled:opacity-50"
+              >
+                {sirenBusy ? "Enabling…" : "Opt in with my location"}
+              </button>
+            )}
+            {proximity.proximity_alerts_opt_in ? (
+              <button
+                type="button"
+                disabled={sirenBusy}
+                onClick={enableNearbySirens}
+                className="h-10 px-4 border border-border text-sm disabled:opacity-50"
+              >
+                Refresh location
+              </button>
+            ) : null}
+          </div>
+        </div>
 
         <div>
           <label className="block text-sm font-medium mb-1" htmlFor="radius">

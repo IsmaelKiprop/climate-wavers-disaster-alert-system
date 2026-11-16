@@ -835,8 +835,8 @@ const ChampionDesk = () => {
         {tab === "Warn" && active ? (
           <div className="max-w-xl space-y-4 border border-border p-4">
             <p className="text-sm text-muted">
-              Geofenced phone siren for people who opted in and were recently near the hazard.
-              Not SMS-first.
+              Geofenced phone siren for people who opted in under Alert settings and were
+              recently near the hazard. Not SMS-first.
             </p>
             {!selected ? (
               <p className="text-sm text-foreground">
