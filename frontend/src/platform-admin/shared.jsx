@@ -202,6 +202,38 @@ export const PageHeader = ({ title, subtitle, actions }) => (
   </div>
 );
 
+export const DetailField = ({ label, children }) => (
+  <div className="min-w-0">
+    <p className="text-[11px] uppercase tracking-wide text-muted">{label}</p>
+    <div className="mt-1 text-sm text-foreground break-words">{children || "—"}</div>
+  </div>
+);
+
+export const DetailPanel = ({ title, subtitle, badge, empty, children, actions }) => (
+  <aside className="border border-border bg-surface p-4 sm:p-5 sticky top-4">
+    {!children ? (
+      <p className="text-sm text-muted">{empty || "Select a row to review full details."}</p>
+    ) : (
+      <div className="space-y-4">
+        {(title || badge) && (
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[11px] uppercase tracking-wide text-muted">Application detail</p>
+              {title ? (
+                <h2 className="text-lg font-semibold text-foreground mt-1 break-words">{title}</h2>
+              ) : null}
+              {subtitle ? <p className="text-xs text-muted mt-1">{subtitle}</p> : null}
+            </div>
+            {badge ? <div className="flex flex-wrap gap-1 justify-end shrink-0">{badge}</div> : null}
+          </div>
+        )}
+        {children}
+        {actions ? <div className="flex flex-wrap gap-2 border-t border-border pt-4">{actions}</div> : null}
+      </div>
+    )}
+  </aside>
+);
+
 export const loadMoreBtn = ({ page, setOffset, loading }) =>
   page?.next_offset != null ? (
     <button

@@ -13,7 +13,7 @@ const QUICK = [
 ];
 
 const Overview = () => {
-  const { refreshCounts } = useOutletContext() || {};
+  const { counts: navCounts, refreshCounts } = useOutletContext() || {};
   const [kpis, setKpis] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -23,8 +23,10 @@ const Overview = () => {
       setLoading(true);
       try {
         const data = await client.run("get", endpoints.platformAdminOverview, {}, true);
-        if (!cancelled) {
-          setKpis(data?.kpis || {});
+        if (cancelled) return;
+        setKpis(data?.kpis || {});
+        if (data?.counts) {
+          // Prefer overview counts when present; also refresh nav badges once.
           refreshCounts?.();
         }
       } catch {
@@ -36,17 +38,20 @@ const Overview = () => {
     return () => {
       cancelled = true;
     };
-  }, [refreshCounts]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- load once on mount; refreshCounts is stable via useCallback
+  }, []);
+
+  const merged = { ...(navCounts || {}), ...(kpis || {}) };
 
   const items = [
-    { label: "Users", value: kpis?.users_total },
-    { label: "Pending champions", value: kpis?.pending_champions },
-    { label: "Pending Tree Admins", value: kpis?.pending_tree_orgs },
-    { label: "Pending responders", value: kpis?.pending_responder_orgs },
-    { label: "Open disasters", value: kpis?.open_disasters },
-    { label: "Unverified projects", value: kpis?.unverified_projects },
-    { label: "Pending cameras", value: kpis?.pending_cameras },
-    { label: "Payment attention", value: kpis?.attention_payments },
+    { label: "Users", value: merged.users_total },
+    { label: "Pending champions", value: merged.pending_champions },
+    { label: "Pending Tree Admins", value: merged.pending_tree_orgs },
+    { label: "Pending responders", value: merged.pending_responder_orgs },
+    { label: "Open disasters", value: merged.open_disasters },
+    { label: "Unverified projects", value: merged.unverified_projects },
+    { label: "Pending cameras", value: merged.pending_cameras },
+    { label: "Payment attention", value: merged.attention_payments },
   ];
 
   return (
@@ -55,7 +60,7 @@ const Overview = () => {
         title="Overview"
         subtitle="Climate Wavers operations queue — staff only"
       />
-      {loading ? (
+      {loading && !kpis ? (
         <p className="text-sm text-muted">Loading KPIs…</p>
       ) : (
         <StatStrip items={items} />
@@ -73,7 +78,7 @@ const Overview = () => {
             >
               <p className="text-sm font-medium text-foreground">{q.label}</p>
               <p className="text-2xl font-semibold text-primary mt-2">
-                {kpis?.[q.key] ?? "—"}
+                {merged[q.key] ?? "—"}
               </p>
             </Link>
           ))}

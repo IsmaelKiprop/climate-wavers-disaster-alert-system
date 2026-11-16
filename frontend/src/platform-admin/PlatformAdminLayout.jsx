@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 import { IoClose, IoMenuOutline, IoArrowBackOutline } from "react-icons/io5";
 import { toast } from "react-toastify";
@@ -15,6 +15,15 @@ const PlatformAdminLayout = () => {
   const [counts, setCounts] = useState({});
   const [drawer, setDrawer] = useState(false);
   const user = getUser();
+
+  const refreshCounts = useCallback(async () => {
+    try {
+      const data = await client.run("get", endpoints.platformAdminMe, {}, true);
+      setCounts(data?.counts || {});
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   useEffect(() => {
     if (!isPlatformStaff()) {
@@ -46,15 +55,6 @@ const PlatformAdminLayout = () => {
       cancelled = true;
     };
   }, []);
-
-  const refreshCounts = async () => {
-    try {
-      const data = await client.run("get", endpoints.platformAdminMe, {}, true);
-      setCounts(data?.counts || {});
-    } catch {
-      /* ignore */
-    }
-  };
 
   if (!ready) {
     return (

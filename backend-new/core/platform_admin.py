@@ -245,35 +245,72 @@ def serialize_disaster(d):
 
 def serialize_champion(c):
     training_passed = c.training.filter(passed=True).count()
+    u = c.user
     return {
         "id": c.id,
-        "display_name": c.display_name or getattr(c.user, "username", ""),
+        "display_name": c.display_name or getattr(u, "username", ""),
         "user_id": c.user_id,
-        "email": getattr(c.user, "email", ""),
+        "email": getattr(u, "email", "") or "",
+        "username": getattr(u, "username", "") or "",
+        "user_phone": getattr(u, "phone", None) or "",
         "status": c.status,
         "tier": c.tier,
-        "city": c.city or "",
-        "country": c.country or "",
+        "bio": c.bio or "",
+        "phone": c.phone or "",
         "affiliation": c.affiliation or "",
+        "languages": c.languages or "",
+        "country": c.country or "",
+        "region": c.region or "",
+        "city": c.city or "",
+        "ward": c.ward or "",
+        "latitude": float(c.latitude) if c.latitude is not None else None,
+        "longitude": float(c.longitude) if c.longitude is not None else None,
+        "radius_km": c.radius_km,
+        "relay_nodes": c.relay_nodes or [],
+        "sponsor_name": c.sponsor_name or "",
         "impact_score": c.impact_score or 0,
         "rating_avg": float(c.rating_avg or 0),
+        "rating_count": c.rating_count or 0,
         "verifications_count": c.verifications_count or 0,
+        "enrollments_count": c.enrollments_count or 0,
+        "proximity_blasts_count": c.proximity_blasts_count or 0,
         "certificate_code": c.certificate_code or "",
+        "certificate_issued_at": c.certificate_issued_at.isoformat()
+        if c.certificate_issued_at
+        else None,
         "training_passed": training_passed,
         "trained_at": c.trained_at.isoformat() if c.trained_at else None,
+        "approved_at": c.approved_at.isoformat() if c.approved_at else None,
+        "last_check_in_at": c.last_check_in_at.isoformat() if c.last_check_in_at else None,
         "created_at": c.created_at.isoformat() if c.created_at else None,
+        "updated_at": c.updated_at.isoformat() if c.updated_at else None,
     }
 
 
 def serialize_camera(cam):
+    champ = cam.champion
     return {
         "id": cam.id,
         "name": cam.name,
         "status": cam.status,
         "latitude": float(cam.latitude) if cam.latitude is not None else None,
         "longitude": float(cam.longitude) if cam.longitude is not None else None,
+        "coverage_radius_m": cam.coverage_radius_m,
+        "stream_type": cam.stream_type,
+        "stream_url": cam.stream_url or "",
+        "consent_note": cam.consent_note or "",
+        "retention_days": cam.retention_days,
+        "nvr_sync_enabled": bool(cam.nvr_sync_enabled),
         "champion_id": cam.champion_id,
+        "champion_name": (champ.display_name if champ else "")
+        or (getattr(champ.user, "email", "") if champ else ""),
+        "responder_org_id": cam.responder_org_id,
+        "responder_org_name": getattr(cam.responder_org, "name", "") if cam.responder_org_id else "",
+        "created_by_id": cam.created_by_id,
+        "created_by_email": getattr(cam.created_by, "email", "") if cam.created_by_id else "",
+        "last_seen_at": cam.last_seen_at.isoformat() if cam.last_seen_at else None,
         "created_at": cam.created_at.isoformat() if cam.created_at else None,
+        "updated_at": cam.updated_at.isoformat() if cam.updated_at else None,
     }
 
 
@@ -283,10 +320,26 @@ def serialize_tree_project(p):
         "name": p.name,
         "city": p.city or "",
         "country": p.country or "",
+        "description": (p.short_description or "")[:400]
+        if getattr(p, "short_description", None)
+        else ((p.description or "")[:400] if getattr(p, "description", None) else ""),
+        "project_type": getattr(p, "project_type", "") or "",
+        "status": getattr(p, "status", "") or "",
+        "organization_name": getattr(p, "organization_name", "") or "",
+        "organization_website": getattr(p, "organization_website", "") or "",
+        "latitude": float(p.latitude) if getattr(p, "latitude", None) is not None else None,
+        "longitude": float(p.longitude) if getattr(p, "longitude", None) is not None else None,
         "is_verified": p.is_verified,
         "is_active": getattr(p, "is_active", True),
         "target_trees": getattr(p, "target_trees", None),
         "trees_planted": getattr(p, "trees_planted", None),
+        "contact_person": getattr(p, "contact_person", "") or "",
+        "contact_email": getattr(p, "contact_email", "") or "",
+        "contact_phone": getattr(p, "contact_phone", "") or "",
+        "start_date": p.start_date.isoformat() if getattr(p, "start_date", None) else None,
+        "expected_completion": p.expected_completion.isoformat()
+        if getattr(p, "expected_completion", None)
+        else None,
         "created_at": p.created_at.isoformat() if p.created_at else None,
     }
 
@@ -306,34 +359,137 @@ def serialize_donation(d):
     }
 
 
+def _user_display_name(u):
+    if not u:
+        return ""
+    try:
+        full = (u.get_full_name() or "").strip()
+    except Exception:
+        full = ""
+    if full:
+        return full
+    return " ".join(filter(None, [u.first_name, u.last_name])).strip()
+
+
 def serialize_tree_org(o):
+    owner = None
+    memberships = list(
+        o.memberships.select_related("user").order_by("created_at")[:12]
+    )
+    for m in memberships:
+        if m.role == "owner" and m.user_id:
+            u = m.user
+            owner = {
+                "id": u.id,
+                "email": u.email or "",
+                "username": u.username or "",
+                "name": _user_display_name(u),
+                "phone": getattr(u, "phone", None) or "",
+            }
+            break
+    if owner is None and o.created_by_id:
+        u = o.created_by
+        owner = {
+            "id": u.id,
+            "email": u.email or "",
+            "username": u.username or "",
+            "name": _user_display_name(u),
+            "phone": getattr(u, "phone", None) or "",
+        }
     return {
         "id": o.id,
         "name": o.name,
         "org_type": o.org_type,
+        "website": o.website or "",
         "city": o.city or "",
         "country": o.country or "",
         "contact_email": o.contact_email or "",
+        "contact_phone": o.contact_phone or "",
+        "planting_sites_note": o.planting_sites_note or "",
         "verification_status": o.verification_status,
+        "verified_at": o.verified_at.isoformat() if o.verified_at else None,
         "plan": o.plan,
         "plan_status": o.plan_status,
+        "plan_started_at": o.plan_started_at.isoformat() if o.plan_started_at else None,
+        "plan_ends_at": o.plan_ends_at.isoformat() if o.plan_ends_at else None,
+        "seats_used": o.memberships.count(),
+        "owner": owner,
+        "members": [
+            {
+                "role": m.role,
+                "email": getattr(m.user, "email", "") or "",
+                "username": getattr(m.user, "username", "") or "",
+            }
+            for m in memberships
+            if m.user_id
+        ],
+        "created_by_id": o.created_by_id,
         "created_at": o.created_at.isoformat() if o.created_at else None,
+        "updated_at": o.updated_at.isoformat() if o.updated_at else None,
     }
 
 
 def serialize_responder_org(o):
+    owner = None
+    memberships = list(
+        o.memberships.select_related("user").order_by("created_at")[:12]
+    )
+    for m in memberships:
+        if m.role == "owner" and m.user_id:
+            u = m.user
+            owner = {
+                "id": u.id,
+                "email": u.email or "",
+                "username": u.username or "",
+                "name": _user_display_name(u),
+                "phone": getattr(u, "phone", None) or "",
+            }
+            break
+    if owner is None and o.created_by_id:
+        u = o.created_by
+        owner = {
+            "id": u.id,
+            "email": u.email or "",
+            "username": u.username or "",
+            "name": _user_display_name(u),
+            "phone": getattr(u, "phone", None) or "",
+        }
     return {
         "id": o.id,
         "name": o.name,
         "org_type": o.org_type,
+        "logo": o.logo or "",
+        "website": o.website or "",
         "city": o.city or "",
         "country": o.country or "",
+        "latitude": float(o.latitude) if o.latitude is not None else None,
+        "longitude": float(o.longitude) if o.longitude is not None else None,
+        "coverage_radius_km": o.coverage_radius_km,
+        "disaster_types": o.disaster_types or [],
         "contact_email": o.contact_email or "",
+        "contact_phone": o.contact_phone or "",
+        "whatsapp_opt_in": bool(o.whatsapp_opt_in),
         "verification_status": o.verification_status,
+        "verified_at": o.verified_at.isoformat() if o.verified_at else None,
         "plan": o.plan,
         "plan_status": o.plan_status,
+        "plan_started_at": o.plan_started_at.isoformat() if o.plan_started_at else None,
+        "plan_ends_at": o.plan_ends_at.isoformat() if o.plan_ends_at else None,
         "max_seats": o.max_seats,
+        "seats_used": o.memberships.count(),
+        "owner": owner,
+        "members": [
+            {
+                "role": m.role,
+                "email": getattr(m.user, "email", "") or "",
+                "username": getattr(m.user, "username", "") or "",
+            }
+            for m in memberships
+            if m.user_id
+        ],
+        "created_by_id": o.created_by_id,
         "created_at": o.created_at.isoformat() if o.created_at else None,
+        "updated_at": o.updated_at.isoformat() if o.updated_at else None,
     }
 
 
@@ -696,7 +852,12 @@ class PlatformAdminTreeOrgsView(APIView):
     permission_classes = [IsAuthenticated, IsPlatformStaff]
 
     def get(self, request):
-        qs = TreeAdminOrganization.objects.all().order_by("-created_at")
+        qs = (
+            TreeAdminOrganization.objects.all()
+            .select_related("created_by")
+            .prefetch_related("memberships__user")
+            .order_by("-created_at")
+        )
         status = (request.query_params.get("status") or "").strip()
         if status:
             qs = qs.filter(verification_status=status)
@@ -801,7 +962,11 @@ class PlatformAdminCamerasView(APIView):
     permission_classes = [IsAuthenticated, IsPlatformStaff]
 
     def get(self, request):
-        qs = PartnerCamera.objects.all().order_by("-created_at")
+        qs = (
+            PartnerCamera.objects.all()
+            .select_related("champion__user", "responder_org", "created_by")
+            .order_by("-created_at")
+        )
         status = (request.query_params.get("status") or "").strip()
         if status:
             qs = qs.filter(status=status)
@@ -825,7 +990,12 @@ class PlatformAdminRespondersView(APIView):
     permission_classes = [IsAuthenticated, IsPlatformStaff]
 
     def get(self, request):
-        qs = ResponderOrganization.objects.all().order_by("-created_at")
+        qs = (
+            ResponderOrganization.objects.all()
+            .select_related("created_by")
+            .prefetch_related("memberships__user")
+            .order_by("-created_at")
+        )
         status = (request.query_params.get("status") or "").strip()
         if status:
             qs = qs.filter(verification_status=status)
