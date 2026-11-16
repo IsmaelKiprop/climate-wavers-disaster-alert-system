@@ -8,7 +8,7 @@ import ChampionCertificate from "./ChampionCertificate";
 const TABS = ["Verify", "Warn", "Network", "Training", "Cameras", "Impact"];
 
 const ChampionDesk = () => {
-  const [tab, setTab] = useState("Verify");
+  const [tab, setTab] = useState("Training");
   const [me, setMe] = useState(null);
   const [impact, setImpact] = useState(null);
   const [queue, setQueue] = useState([]);
@@ -107,6 +107,15 @@ const ChampionDesk = () => {
 
   useEffect(() => {
     if (!me) return;
+    // Pending applicants can train; Verify / Network need active status
+    if (me.status !== "active") {
+      if (tab !== "Training" && tab !== "Impact") {
+        setTab("Training");
+        return;
+      }
+      if (tab === "Training") loadTraining();
+      return;
+    }
     if (tab === "Verify") loadQueue();
     if (tab === "Network") loadEnrollments();
     if (tab === "Training") loadTraining();
@@ -505,6 +514,7 @@ const ChampionDesk = () => {
   }
 
   const pending = me.status === "pending";
+  const active = me.status === "active";
 
   return (
     <div className="min-h-screen bg-background">
@@ -523,8 +533,9 @@ const ChampionDesk = () => {
             <button
               type="button"
               onClick={checkIn}
-              disabled={busy}
-              className="h-10 px-3 border border-border text-sm"
+              disabled={busy || !active}
+              className="h-10 px-3 border border-border text-sm disabled:opacity-50"
+              title={!active ? "Available after approval" : undefined}
             >
               GPS check-in
             </button>
@@ -535,29 +546,52 @@ const ChampionDesk = () => {
         </header>
 
         {pending ? (
+          <div className="border border-primary p-4 text-sm space-y-1">
+            <p className="font-semibold text-foreground">Application pending approval</p>
+            <p className="text-muted">
+              Climate Wavers staff will review your application. Finish ALX-style training
+              now — Verify, Warn, and Network unlock after you are approved.
+            </p>
+          </div>
+        ) : null}
+
+        {!active && !pending ? (
           <div className="border border-border p-4 text-sm text-muted">
-            Your application is pending Climate Wavers approval. You can complete training meanwhile.
+            Champion status: <span className="text-foreground font-medium">{me.status}</span>.
+            Training remains available; field tools need an active profile.
           </div>
         ) : null}
 
         <div className="flex flex-wrap gap-1 border-b border-border pb-2">
-          {TABS.map((t) => (
-            <button
-              key={t}
-              type="button"
-              onClick={() => setTab(t)}
-              className={`h-9 px-3 text-sm ${
-                tab === t
-                  ? "bg-primary text-primary-foreground"
-                  : "text-foreground hover:bg-[var(--cw-overlay-soft)]"
-              }`}
-            >
-              {t}
-            </button>
-          ))}
+          {TABS.map((t) => {
+            const locked = !active && t !== "Training" && t !== "Impact";
+            return (
+              <button
+                key={t}
+                type="button"
+                onClick={() => {
+                  if (locked) {
+                    toast.info("Available after your application is approved");
+                    return;
+                  }
+                  setTab(t);
+                }}
+                className={`h-9 px-3 text-sm ${
+                  tab === t
+                    ? "bg-primary text-primary-foreground"
+                    : locked
+                      ? "text-muted opacity-60"
+                      : "text-foreground hover:bg-[var(--cw-overlay-soft)]"
+                }`}
+              >
+                {t}
+                {locked ? " · locked" : ""}
+              </button>
+            );
+          })}
         </div>
 
-        {tab === "Verify" ? (
+        {tab === "Verify" && active ? (
           <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
             <div className="lg:col-span-2 space-y-2">
               <p className="text-xs uppercase tracking-wide text-muted">Nearby hazards</p>
@@ -728,7 +762,7 @@ const ChampionDesk = () => {
           </div>
         ) : null}
 
-        {tab === "Warn" ? (
+        {tab === "Warn" && active ? (
           <div className="max-w-xl space-y-4 border border-border p-4">
             <p className="text-sm text-muted">
               Geofenced phone siren for people who opted in and were recently near the hazard.
@@ -810,7 +844,7 @@ const ChampionDesk = () => {
           </div>
         ) : null}
 
-        {tab === "Network" ? (
+        {tab === "Network" && active ? (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <form onSubmit={addEnrollment} className="border border-border p-4 space-y-3">
               <p className="text-sm font-medium">Enroll household</p>
@@ -1033,7 +1067,7 @@ const ChampionDesk = () => {
           </div>
         ) : null}
 
-        {tab === "Cameras" ? (
+        {tab === "Cameras" && active ? (
           <form onSubmit={registerCamera} className="max-w-xl border border-border p-4 space-y-3">
             <p className="text-sm text-muted">
               Register an opt-in partner camera (school/church/org). Staff must approve.

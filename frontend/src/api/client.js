@@ -104,7 +104,12 @@ class Client {
       if (errorData.detail === "You are already following this user.") {
         return false;
       }
-      
+
+      // 403 permission/role gates are not form validation — callers toast or ignore
+      if (status === 403) {
+        return false;
+      }
+
       // Skip showing popup for 404 errors on post endpoints (these are handled by components)
       if (status === 404 && error.config?.url?.includes('/post/')) {
         return false;
