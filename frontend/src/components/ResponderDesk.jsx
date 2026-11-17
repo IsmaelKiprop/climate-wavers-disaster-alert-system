@@ -86,6 +86,8 @@ const ResponderDesk = () => {
   const [paystackReady, setPaystackReady] = useState(
     Boolean(typeof window !== "undefined" && window.PaystackPop)
   );
+  const [orgEdit, setOrgEdit] = useState(null);
+  const [orgBusy, setOrgBusy] = useState(false);
 
   const selectedPlanLimits = useMemo(
     () => PLAN_LIMITS[applyForm.plan] || PLAN_LIMITS.ngo || { maxCoverageKm: 500, maxSeats: 8 },
@@ -134,8 +136,25 @@ const ResponderDesk = () => {
     setOrg(data?.org || null);
     setRole(data?.role || "");
     setHasRapidbrief(Boolean(data?.has_rapidbrief ?? data?.org?.has_rapidbrief_access));
-    if (data?.org?.plan && data.org.plan !== "pilot") {
-      setBillingPlan(data.org.plan === "partner" ? "org" : data.org.plan);
+    if (data?.org) {
+      const next = data.org;
+      setOrgEdit({
+        name: next.name || "",
+        org_type: next.org_type || "ngo",
+        country: next.country || "Kenya",
+        city: next.city || "",
+        latitude: next.latitude ?? "",
+        longitude: next.longitude ?? "",
+        coverage_radius_km: next.coverage_radius_km ?? 150,
+        disaster_types: Array.isArray(next.disaster_types) ? next.disaster_types : [],
+        contact_email: next.contact_email || "",
+        contact_phone: next.contact_phone || "",
+        website: next.website || "",
+        whatsapp_opt_in: Boolean(next.whatsapp_opt_in),
+      });
+      if (next.plan && next.plan !== "pilot") {
+        setBillingPlan(next.plan === "partner" ? "org" : next.plan);
+      }
     }
     if (data?.dispatches?.length) {
       setSelected((prev) => {
@@ -238,6 +257,61 @@ const ResponderDesk = () => {
       toast.error(typeof detail === "string" ? detail : "Could not submit application.");
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const saveOrgDetails = async (event) => {
+    event.preventDefault();
+    if (!orgEdit) return;
+    setOrgBusy(true);
+    try {
+      const maxKm =
+        PLAN_LIMITS[org?.plan]?.maxCoverageKm ||
+        org?.max_coverage_km ||
+        250;
+      const payload = {
+        ...orgEdit,
+        coverage_radius_km: Math.min(
+          Number(orgEdit.coverage_radius_km) || 150,
+          maxKm
+        ),
+        latitude: Number(orgEdit.latitude),
+        longitude: Number(orgEdit.longitude),
+      };
+      const updated = await client.run(
+        "patch",
+        endpoints.responderOrg,
+        payload,
+        true
+      );
+      setOrg(updated);
+      setOrgEdit((prev) =>
+        prev
+          ? {
+              ...prev,
+              name: updated.name || "",
+              org_type: updated.org_type || prev.org_type,
+              country: updated.country || "",
+              city: updated.city || "",
+              latitude: updated.latitude ?? "",
+              longitude: updated.longitude ?? "",
+              coverage_radius_km: updated.coverage_radius_km ?? prev.coverage_radius_km,
+              disaster_types: Array.isArray(updated.disaster_types)
+                ? updated.disaster_types
+                : prev.disaster_types,
+              contact_email: updated.contact_email || "",
+              contact_phone: updated.contact_phone || "",
+              website: updated.website || "",
+              whatsapp_opt_in: Boolean(updated.whatsapp_opt_in),
+            }
+          : prev
+      );
+      toast.success("Organization details updated.");
+    } catch (err) {
+      const detail = err?.response?.data?.detail || "Could not update organization.";
+      toast.error(typeof detail === "string" ? detail : "Could not update organization.");
+    } finally {
+      setOrgBusy(false);
     }
   };
 
@@ -796,6 +870,173 @@ const ResponderDesk = () => {
           </select>
         </div>
       </div>
+
+      {isOwner && orgEdit ? (
+        <section className="mt-6 border border-border bg-surface p-4">
+          <h2 className="text-base font-semibold">Organization settings</h2>
+          <p className="mt-1 text-xs text-muted">
+            Update coverage, contacts, and org profile. Coverage is capped by your plan
+            {org?.max_coverage_km != null ? ` (max ${org.max_coverage_km} km)` : ""}.
+          </p>
+          <form className="mt-4 space-y-3" onSubmit={saveOrgDetails}>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <label className="block text-sm">
+                <span className="font-medium">Organization name</span>
+                <input
+                  className="mt-1 h-10 w-full px-3 border border-border bg-background"
+                  value={orgEdit.name}
+                  onChange={(e) => setOrgEdit((p) => ({ ...p, name: e.target.value }))}
+                  required
+                />
+              </label>
+              <label className="block text-sm">
+                <span className="font-medium">Organization type</span>
+                <select
+                  className="mt-1 h-10 w-full px-3 border border-border bg-background"
+                  value={orgEdit.org_type}
+                  onChange={(e) => setOrgEdit((p) => ({ ...p, org_type: e.target.value }))}
+                >
+                  {ORG_TYPES.map((t) => (
+                    <option key={t.value} value={t.value}>
+                      {t.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block text-sm">
+                <span className="font-medium">City</span>
+                <input
+                  className="mt-1 h-10 w-full px-3 border border-border bg-background"
+                  value={orgEdit.city}
+                  onChange={(e) => setOrgEdit((p) => ({ ...p, city: e.target.value }))}
+                />
+              </label>
+              <label className="block text-sm">
+                <span className="font-medium">Country</span>
+                <input
+                  className="mt-1 h-10 w-full px-3 border border-border bg-background"
+                  value={orgEdit.country}
+                  onChange={(e) => setOrgEdit((p) => ({ ...p, country: e.target.value }))}
+                  required
+                />
+              </label>
+              <label className="block text-sm">
+                <span className="font-medium">Contact email</span>
+                <input
+                  type="email"
+                  className="mt-1 h-10 w-full px-3 border border-border bg-background"
+                  value={orgEdit.contact_email}
+                  onChange={(e) =>
+                    setOrgEdit((p) => ({ ...p, contact_email: e.target.value }))
+                  }
+                />
+              </label>
+              <label className="block text-sm">
+                <span className="font-medium">Contact phone</span>
+                <input
+                  className="mt-1 h-10 w-full px-3 border border-border bg-background"
+                  value={orgEdit.contact_phone}
+                  onChange={(e) =>
+                    setOrgEdit((p) => ({ ...p, contact_phone: e.target.value }))
+                  }
+                />
+              </label>
+              <label className="block text-sm">
+                <span className="font-medium">Website</span>
+                <input
+                  className="mt-1 h-10 w-full px-3 border border-border bg-background"
+                  value={orgEdit.website}
+                  onChange={(e) => setOrgEdit((p) => ({ ...p, website: e.target.value }))}
+                />
+              </label>
+              <label className="block text-sm">
+                <span className="font-medium">
+                  Coverage radius (km
+                  {org?.max_coverage_km != null ? `, max ${org.max_coverage_km}` : ""})
+                </span>
+                <input
+                  type="number"
+                  min="10"
+                  max={org?.max_coverage_km || 250}
+                  className="mt-1 h-10 w-full px-3 border border-border bg-background"
+                  value={orgEdit.coverage_radius_km}
+                  onChange={(e) =>
+                    setOrgEdit((p) => ({ ...p, coverage_radius_km: e.target.value }))
+                  }
+                />
+              </label>
+              <label className="block text-sm">
+                <span className="font-medium">Latitude</span>
+                <input
+                  className="mt-1 h-10 w-full px-3 border border-border bg-background"
+                  value={orgEdit.latitude}
+                  onChange={(e) =>
+                    setOrgEdit((p) => ({ ...p, latitude: e.target.value }))
+                  }
+                  required
+                />
+              </label>
+              <label className="block text-sm">
+                <span className="font-medium">Longitude</span>
+                <input
+                  className="mt-1 h-10 w-full px-3 border border-border bg-background"
+                  value={orgEdit.longitude}
+                  onChange={(e) =>
+                    setOrgEdit((p) => ({ ...p, longitude: e.target.value }))
+                  }
+                  required
+                />
+              </label>
+            </div>
+            <div>
+              <p className="text-sm font-medium">Disaster types (empty = all)</p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {DISASTER_OPTIONS.map((type) => {
+                  const on = (orgEdit.disaster_types || []).includes(type);
+                  return (
+                    <button
+                      key={type}
+                      type="button"
+                      onClick={() =>
+                        setOrgEdit((prev) => {
+                          const set = new Set(prev.disaster_types || []);
+                          if (set.has(type)) set.delete(type);
+                          else set.add(type);
+                          return { ...prev, disaster_types: Array.from(set) };
+                        })
+                      }
+                      className={`px-3 py-1.5 text-xs border ${
+                        on
+                          ? "bg-primary text-primary-foreground border-primary"
+                          : "border-border bg-background"
+                      }`}
+                    >
+                      {type}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={orgEdit.whatsapp_opt_in}
+                onChange={(e) =>
+                  setOrgEdit((p) => ({ ...p, whatsapp_opt_in: e.target.checked }))
+                }
+              />
+              Opt in to WhatsApp RapidBrief alerts
+            </label>
+            <button
+              type="submit"
+              disabled={orgBusy}
+              className="min-h-10 px-4 bg-primary text-primary-foreground text-sm font-medium disabled:opacity-60"
+            >
+              {orgBusy ? "Saving…" : "Save organization"}
+            </button>
+          </form>
+        </section>
+      ) : null}
 
       {isOwner ? (
         <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-4">
