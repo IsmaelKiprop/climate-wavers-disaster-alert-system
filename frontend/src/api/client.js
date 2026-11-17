@@ -1,7 +1,13 @@
 import axios from "axios";
 import { toast } from "react-toastify";
 import Cookies from "js-cookie";
-import { getAuthToken, logout, setUser } from "../utils/factory";
+import {
+  clearAuthSession,
+  getAuthToken,
+  isGuestPublicPath,
+  logout,
+  setUser,
+} from "../utils/factory";
 import Swal from "sweetalert2";
 import { env } from "../config/env";
 
@@ -32,6 +38,12 @@ class Client {
   }
 
   handleSessionExpired() {
+    // Gift / public profile links must stay usable without forcing sign-in.
+    // Drop the stale token quietly so Paystack checkout can continue as a guest.
+    if (isGuestPublicPath()) {
+      clearAuthSession();
+      return true;
+    }
     if (this._sessionExpiredPrompt) return true;
     this._sessionExpiredPrompt = true;
     Swal.fire({

@@ -389,41 +389,40 @@ const PlantTree = () => {
           ) : null}
         </div>
 
-        <TreeAnalyticsPanel
-          className="mb-6"
-          projects={africanProjects}
-          userTrees={userTrees}
-          userStats={userStats}
-        />
-
+        {/* Public gift links: skip signed-in dashboards so guests can pay without auth noise. */}
         {!giftUserIdParam ? (
-          <GiftRecipientPicker
-            selectedId={giftUserId || null}
-            onSelect={selectGiftRecipient}
-            onClear={clearGiftRecipient}
-          />
+          <>
+            <TreeAnalyticsPanel
+              className="mb-6"
+              projects={africanProjects}
+              userTrees={userTrees}
+              userStats={userStats}
+            />
+            <GiftRecipientPicker
+              selectedId={giftUserId || null}
+              onSelect={selectGiftRecipient}
+              onClear={clearGiftRecipient}
+            />
+            <WaversPointsCard projectId={selectedProject?.id || selectedTree?.id || null} />
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 mb-6 md:mb-8">
+              <div className="bg-white rounded-lg shadow-md p-4 sm:p-6 text-center">
+                <FaTree className="text-2xl sm:text-3xl text-green-600 mx-auto mb-2 sm:mb-3" />
+                <h3 className="text-xl sm:text-2xl font-bold text-gray-900">{userStats.treesPlanted}</h3>
+                <p className="text-sm sm:text-base text-gray-600">Trees Planted</p>
+              </div>
+              <div className="bg-white rounded-lg shadow-md p-4 sm:p-6 text-center">
+                <FaLeaf className="text-2xl sm:text-3xl text-blue-600 mx-auto mb-2 sm:mb-3" />
+                <h3 className="text-xl sm:text-2xl font-bold text-gray-900">{userStats.co2Offset}kg</h3>
+                <p className="text-sm sm:text-base text-gray-600">CO₂ Offset</p>
+              </div>
+              <div className="bg-white rounded-lg shadow-md p-4 sm:p-6 text-center sm:col-span-2 lg:col-span-1">
+                <FaHeart className="text-2xl sm:text-3xl text-red-600 mx-auto mb-2 sm:mb-3" />
+                <h3 className="text-xl sm:text-2xl font-bold text-gray-900">{userStats.impactScore}</h3>
+                <p className="text-sm sm:text-base text-gray-600">Impact Score</p>
+              </div>
+            </div>
+          </>
         ) : null}
-
-        <WaversPointsCard projectId={selectedProject?.id || selectedTree?.id || null} />
-
-        {/* User Stats */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 mb-6 md:mb-8">
-          <div className="bg-white rounded-lg shadow-md p-4 sm:p-6 text-center">
-            <FaTree className="text-2xl sm:text-3xl text-green-600 mx-auto mb-2 sm:mb-3" />
-            <h3 className="text-xl sm:text-2xl font-bold text-gray-900">{userStats.treesPlanted}</h3>
-            <p className="text-sm sm:text-base text-gray-600">Trees Planted</p>
-          </div>
-          <div className="bg-white rounded-lg shadow-md p-4 sm:p-6 text-center">
-            <FaLeaf className="text-2xl sm:text-3xl text-blue-600 mx-auto mb-2 sm:mb-3" />
-            <h3 className="text-xl sm:text-2xl font-bold text-gray-900">{userStats.co2Offset}kg</h3>
-            <p className="text-sm sm:text-base text-gray-600">CO₂ Offset</p>
-          </div>
-          <div className="bg-white rounded-lg shadow-md p-4 sm:p-6 text-center sm:col-span-2 lg:col-span-1">
-            <FaHeart className="text-2xl sm:text-3xl text-red-600 mx-auto mb-2 sm:mb-3" />
-            <h3 className="text-xl sm:text-2xl font-bold text-gray-900">{userStats.impactScore}</h3>
-            <p className="text-sm sm:text-base text-gray-600">Impact Score</p>
-          </div>
-        </div>
 
         {/* Global Impact - Removed dummy data */}
 

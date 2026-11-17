@@ -20,6 +20,7 @@ import { fetchTreeStats } from "../utils/apiData";
 import { buildTreeAnalytics, treeAnalyticsPrompt } from "../utils/treeAnalytics";
 import { exportElementToPdf, sanitizeAiBrief } from "../utils/exportPdf";
 import { useTheme } from "../context/ThemeContext";
+import { getAuthToken } from "../utils/factory";
 
 ChartJS.register(
   CategoryScale,
@@ -132,6 +133,11 @@ const TreeAnalyticsPanel = ({
   const doughnutOptions = useMemo(() => buildDoughnutOptions(isDark), [isDark]);
 
   const enrichWithAi = async (baseReport) => {
+    // Skip auth-required AI on guest / gift pages (avoids Session expired).
+    if (!getAuthToken()) {
+      setAiBrief(baseReport?.narrative || "");
+      return;
+    }
     setAiLoading(true);
     try {
       const prompt = treeAnalyticsPrompt(baseReport);

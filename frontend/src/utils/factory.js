@@ -287,23 +287,42 @@ export const getAuthToken = () => {
   return token;
 };
 
-export const logout = () => {
-  // Clear all authentication data
+/** Clear auth cookies/storage without navigating away (guest gift pages). */
+export const clearAuthSession = () => {
   Cookies.remove("accessToken");
   Cookies.remove("user");
   Cookies.remove("email");
   Cookies.remove("csrftoken");
-  
-  // Clear localStorage data
+
   localStorage.removeItem("user_info");
   localStorage.removeItem("user");
   localStorage.removeItem("authUser");
   localStorage.removeItem("currentUser");
   localStorage.removeItem("token");
   localStorage.removeItem("posts");
-  
-  // Redirect to login page
+};
+
+export const logout = () => {
+  clearAuthSession();
   window.location.href = "/login";
+};
+
+/** Public pages where guests must keep working even if a stale token exists. */
+export const isGuestPublicPath = (pathname = "") => {
+  const path =
+    pathname ||
+    (typeof window !== "undefined" ? window.location.pathname : "") ||
+    "";
+  return (
+    path.startsWith("/gift/") ||
+    path.startsWith("/u/") ||
+    path.startsWith("/p/") ||
+    path.startsWith("/project") ||
+    path.startsWith("/share/") ||
+    path.startsWith("/champions") ||
+    path.startsWith("/responders/apply") ||
+    path.startsWith("/tree-admins/apply")
+  );
 };
 
 export const authRequest = (fn) => {

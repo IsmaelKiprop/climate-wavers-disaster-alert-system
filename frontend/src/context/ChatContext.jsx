@@ -7,7 +7,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { getAuthToken, getUser } from "../utils/factory";
+import { getAuthToken, getUser, isGuestPublicPath } from "../utils/factory";
 import { chatSocketUrl } from "../config/env";
 
 const ChatContext = createContext(null);
@@ -116,7 +116,7 @@ export const ChatProvider = ({ children }) => {
 
   const connect = useCallback(() => {
     const token = getAuthToken();
-    if (!token || typeof window === "undefined") return;
+    if (!token || typeof window === "undefined" || isGuestPublicPath()) return;
     if (
       socketRef.current &&
       (socketRef.current.readyState === WebSocket.OPEN ||
@@ -185,6 +185,7 @@ export const ChatProvider = ({ children }) => {
 
   useEffect(() => {
     const user = getUser();
+    if (isGuestPublicPath()) return undefined;
     if (!user?.id && !getAuthToken()) return undefined;
 
     // Defer chat socket so first paint / route chunks win the network.

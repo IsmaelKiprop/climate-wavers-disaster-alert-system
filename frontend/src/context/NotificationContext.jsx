@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { client } from "../api";
 import { endpoints } from "../utils/endpoints";
-import { getAuthToken } from "../utils/factory";
+import { getAuthToken, isGuestPublicPath } from "../utils/factory";
 import { notificationsSocketUrl } from "../config/env";
 import { unwrapList } from "../utils/apiData";
 import {
@@ -76,7 +76,8 @@ export const NotificationProvider = ({ children }) => {
 
   const loadNotifications = useCallback(async () => {
     const token = getAuthToken();
-    if (!token) {
+    // Don't poke auth APIs on public gift/profile links (stale tokens → Session expired).
+    if (!token || isGuestPublicPath()) {
       setNotifications([]);
       return;
     }
@@ -112,7 +113,7 @@ export const NotificationProvider = ({ children }) => {
 
   const connectSocket = useCallback(() => {
     const token = getAuthToken();
-    if (!token || typeof window === "undefined") {
+    if (!token || typeof window === "undefined" || isGuestPublicPath()) {
       stopPolling();
       return;
     }
@@ -182,7 +183,7 @@ export const NotificationProvider = ({ children }) => {
 
   useEffect(() => {
     const unbindSound = bindNotificationSoundUnlock();
-    if (!getAuthToken()) {
+    if (!getAuthToken() || isGuestPublicPath()) {
       return () => {
         unbindSound();
       };
