@@ -1,8 +1,9 @@
 {
   "name": "Climate Wavers",
   "short_name": "Climate Wavers",
-  "description": "Disaster alerts and climate action from FlowOps Africa in Nairobi.",
-  "start_url": "/",
+  "description": "Disaster alerts and climate action — works offline after first visit.",
+  "start_url": "/app",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#067d83",
@@ -11,15 +12,18 @@
     {
       "src": "/logo.jpg",
       "sizes": "192x192",
-      "type": "image/jpeg"
+      "type": "image/jpeg",
+      "purpose": "any"
     },
     {
       "src": "/logo.jpg",
       "sizes": "512x512",
-      "type": "image/jpeg"
+      "type": "image/jpeg",
+      "purpose": "any maskable"
     }
   ],
   "categories": ["environment", "weather", "social", "productivity"],
   "lang": "en",
-  "dir": "ltr"
+  "dir": "ltr",
+  "prefer_related_applications": false
 }

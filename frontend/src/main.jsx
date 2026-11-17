@@ -8,6 +8,8 @@ import { ChatProvider } from "./context/ChatContext";
 import { FollowProvider } from "./context/FollowContext";
 import { SidebarProvider } from "./context/SidebarContext";
 import { ThemeProvider } from "./context/ThemeContext";
+import { ConnectivityProvider } from "./context/ConnectivityContext";
+import { registerServiceWorker } from "./utils/registerSW";
 import "./styles/font.css";
 
 const queryClient = new QueryClient({
@@ -16,24 +18,32 @@ const queryClient = new QueryClient({
       staleTime: 60_000,
       gcTime: 10 * 60_000,
       refetchOnWindowFocus: false,
+      networkMode: "offlineFirst",
       retry: 1,
+    },
+    mutations: {
+      networkMode: "offlineFirst",
     },
   },
 });
+
+registerServiceWorker();
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
-        <NotificationProvider>
-          <ChatProvider>
-            <FollowProvider>
-              <SidebarProvider>
-                <App />
-              </SidebarProvider>
-            </FollowProvider>
-          </ChatProvider>
-        </NotificationProvider>
+        <ConnectivityProvider>
+          <NotificationProvider>
+            <ChatProvider>
+              <FollowProvider>
+                <SidebarProvider>
+                  <App />
+                </SidebarProvider>
+              </FollowProvider>
+            </ChatProvider>
+          </NotificationProvider>
+        </ConnectivityProvider>
       </ThemeProvider>
     </QueryClientProvider>
   </React.StrictMode>

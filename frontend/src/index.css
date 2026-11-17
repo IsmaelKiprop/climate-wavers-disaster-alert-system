@@ -268,3 +268,19 @@ html[data-theme="dark"] .Toastify__toast {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Low data mode — keep shell usable on weak / no mobile data. */
+html[data-low-data="1"] img:not([data-keep-image]),
+html[data-low-data="1"] video,
+html[data-low-data="1"] iframe {
+  content-visibility: auto;
+}
+html[data-low-data="1"] img:not([data-keep-image]):not(.object-contain) {
+  opacity: 0.15;
+  filter: grayscale(1);
+  max-height: 72px;
+  object-fit: cover;
+}
+html[data-low-data="1"] [data-heavy-media] {
+  display: none !important;
+}

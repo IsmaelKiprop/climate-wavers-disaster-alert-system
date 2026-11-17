@@ -19,6 +19,7 @@ export default function BrandLogo({
         className={`block object-contain ${imgClassName}`}
         style={{ borderRadius: 3 }}
         decoding="async"
+        data-keep-image="true"
       />
     </span>
   );

@@ -3,8 +3,10 @@ import { Link } from "react-router-dom";
 import { toast } from "react-toastify";
 import { client } from "../api";
 import { endpoints } from "../utils/endpoints";
+import { useConnectivity } from "../context/ConnectivityContext";
 
 const AlertSettings = () => {
+  const { lowData, setLowData, canInstall, promptInstall, online, queueCount } = useConnectivity();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [otpBusy, setOtpBusy] = useState(false);
@@ -285,6 +287,55 @@ const AlertSettings = () => {
           </div>
         </div>
       </header>
+
+      <div className="border border-border bg-surface p-4 space-y-3">
+        <div>
+          <p className="text-sm font-medium text-foreground">Use Climate Wavers without data</p>
+          <p className="mt-1 text-sm text-muted">
+            Install the app, keep low data mode on, and open it once while online. After that,
+            cached alerts stay available offline. Disaster reports queue on your phone and sync
+            when signal returns.
+          </p>
+          <p className="mt-2 text-xs text-muted">
+            Status: {online ? "Online" : "Offline"}
+            {queueCount > 0 ? ` · ${queueCount} report${queueCount === 1 ? "" : "s"} queued` : ""}
+          </p>
+        </div>
+        <label className="flex items-start gap-3 text-sm">
+          <input
+            type="checkbox"
+            checked={lowData}
+            onChange={(e) => setLowData(e.target.checked)}
+            className="mt-1"
+          />
+          <span>
+            <span className="font-medium text-foreground">Low data mode</span>
+            <span className="block text-muted">
+              Hides heavy images and skips live vision uploads so the app stays usable on weak
+              connections.
+            </span>
+          </span>
+        </label>
+        {canInstall ? (
+          <button
+            type="button"
+            onClick={async () => {
+              const ok = await promptInstall();
+              toast[ok ? "success" : "info"](
+                ok ? "App installed — open it from your home screen offline." : "Install dismissed."
+              );
+            }}
+            className="inline-flex min-h-10 items-center px-4 bg-primary text-primary-foreground text-sm font-medium"
+          >
+            Install for offline access
+          </button>
+        ) : (
+          <p className="text-xs text-muted">
+            On phone: browser menu → Add to Home Screen. Open Climate Wavers once online so the
+            offline shell can cache.
+          </p>
+        )}
+      </div>
 
       <form onSubmit={save} className="space-y-5">
         <label className="flex items-start gap-3 text-sm">

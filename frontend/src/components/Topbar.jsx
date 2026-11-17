@@ -13,6 +13,7 @@ import { useNotifications } from "../context/NotificationContext";
 import { useSidebar } from "../context/SidebarContext";
 import { useTheme } from "../context/ThemeContext";
 import { prefetchHandlers, prefetchRoute } from "../utils/routePrefetch";
+import OfflineBanner from "./OfflineBanner";
 
 const Topbar = () => {
   const location = useLocation();
@@ -83,7 +84,8 @@ const Topbar = () => {
   };
 
   return (
-    <div className="relative z-50 bg-navbar flex items-center justify-between h-16 px-3 sm:px-5 w-full gap-2 isolate">
+    <div className="relative z-50 w-full">
+    <div className="bg-navbar flex items-center justify-between h-16 px-3 sm:px-5 w-full gap-2 isolate">
       <div className="flex items-center gap-2 shrink-0">
         <button type="button" onClick={() => setIsOpen(true)} className="md:hidden p-2" aria-label="Open menu">
           <IoMenu size={22} />
@@ -242,6 +244,8 @@ const Topbar = () => {
       </div>
 
       <Search isOpen={isSearchOpen} onClose={() => setIsSearchOpen(false)} />
+    </div>
+    <OfflineBanner />
     </div>
   );
 };

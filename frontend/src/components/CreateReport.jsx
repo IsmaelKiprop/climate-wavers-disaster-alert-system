@@ -5,6 +5,8 @@ import { getLocation } from "../utils/factory";
 import { uploadFiles } from "../services/upload.service";
 import { prependCachedDisaster } from "../utils/apiData";
 import { recognizeReportImage } from "../utils/vision";
+import { enqueueOfflineAction } from "../utils/offlineQueue";
+import { useConnectivity } from "../context/ConnectivityContext";
 import axios from "axios";
 import { chatbotApiUrl } from "../config/env";
 
@@ -24,6 +26,7 @@ const parseIpinfoCoords = (info) => {
 
 const CreateReport = ({ onSubmitted }) => {
   const queryClient = useQueryClient();
+  const { online, lowData } = useConnectivity();
   const [region, setRegion] = useState("");
   const [country, setCountry] = useState("");
   const [disasterType, setDisasterType] = useState("Floods");
@@ -87,6 +90,14 @@ const CreateReport = ({ onSubmitted }) => {
     setFile(next);
     setPreview(URL.createObjectURL(next));
     setVision(null);
+    if (!online || lowData) {
+      setVisionStatus(
+        online
+          ? "Low data mode — photo kept for later; vision analysis skipped."
+          : "Offline — photo kept on this device; vision runs after sync."
+      );
+      return;
+    }
     setVisionStatus("Computer vision is reading this photo...");
     try {
       const result = await recognizeReportImage(next);
@@ -98,28 +109,54 @@ const CreateReport = ({ onSubmitted }) => {
     }
   };
 
+  const buildPayload = (images = []) => ({
+    region,
+    country,
+    disasterType,
+    details,
+    magnitude,
+    status: "unconfirmed",
+    images,
+    source: online ? "app" : "offline_sync",
+    ...(latitude != null && longitude != null
+      ? {
+          latitude,
+          longitude,
+          coordinate: { lat: latitude, lng: longitude },
+        }
+      : {}),
+  });
+
   const onSubmit = async (event) => {
     event.preventDefault();
     setBusy(true);
     setError("");
     try {
+      if (!online) {
+        // Photos need upload — queue text report now; photo can be re-added online.
+        const payload = buildPayload([]);
+        enqueueOfflineAction({ type: "disaster_report", payload });
+        prependCachedDisaster({
+          id: `offline_${Date.now()}`,
+          region,
+          country,
+          disasterType,
+          details,
+          magnitude,
+          status: "queued_offline",
+          name: `${disasterType} in ${region || "your area"}`,
+          created_at: new Date().toISOString(),
+        });
+        onSubmitted?.({
+          queued: true,
+          message: "Saved offline. We'll send this report when your data returns.",
+          vision,
+        });
+        return;
+      }
+
       const images = file ? await uploadFiles([file]) : [];
-      const { data } = await axios.post(apiUrl, {
-        region,
-        country,
-        disasterType,
-        details,
-        magnitude,
-        status: "unconfirmed",
-        images,
-        ...(latitude != null && longitude != null
-          ? {
-              latitude,
-              longitude,
-              coordinate: { lat: latitude, lng: longitude },
-            }
-          : {}),
-      });
+      const { data } = await axios.post(apiUrl, buildPayload(images));
       if (data?.disaster) {
         prependCachedDisaster(data.disaster);
         queryClient.invalidateQueries({ queryKey: ["liveDisasters"] });
@@ -130,6 +167,15 @@ const CreateReport = ({ onSubmitted }) => {
       });
     } catch (err) {
       console.error(err);
+      // Network blip — queue instead of failing hard.
+      if (!navigator.onLine || err?.message?.includes("Network")) {
+        enqueueOfflineAction({ type: "disaster_report", payload: buildPayload([]) });
+        onSubmitted?.({
+          queued: true,
+          message: "Connection dropped. Report queued and will sync when you're back online.",
+        });
+        return;
+      }
       setError("We could not submit the report. Please try again.");
     } finally {
       setBusy(false);
@@ -141,6 +187,11 @@ const CreateReport = ({ onSubmitted }) => {
       <p className="text-sm text-muted">
         Reports stay unconfirmed until they are reviewed. Computer vision reads the photo, then we alert nearby verified responders.
       </p>
+      {!online ? (
+        <p className="text-sm font-medium text-warning">
+          Offline mode — this report will queue on your phone and sync when data returns.
+        </p>
+      ) : null}
       {geoStatus ? <p className="text-xs text-muted">{geoStatus}</p> : null}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -228,7 +279,7 @@ const CreateReport = ({ onSubmitted }) => {
         disabled={busy}
         className="w-full min-h-11 bg-primary text-primary-foreground font-medium hover:bg-primary-dark disabled:opacity-60"
       >
-        {busy ? "Submitting report..." : "Submit report"}
+        {busy ? "Submitting report..." : online ? "Submit report" : "Save offline report"}
       </button>
     </form>
   );

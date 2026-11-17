@@ -3,6 +3,7 @@ import { apiUrl, chatbotApiUrl, env } from "../config/env";
 import { client } from "../api";
 import { endpoints } from "./endpoints";
 import { getAuthToken } from "./factory";
+import { writeCachedDisasters } from "./disasterCache";
 
 export function unwrapList(payload) {
   if (!payload) return [];
@@ -449,8 +450,16 @@ export async function fetchDisasters() {
 export function prependCachedDisaster(disaster) {
   const mapped = mapDisaster(disaster);
   try {
-    const existing = JSON.parse(sessionStorage.getItem(DISASTER_CACHE_KEY) || "[]");
-    cacheDisasters([mapped, ...existing]);
+    let existing = [];
+    try {
+      existing = JSON.parse(localStorage.getItem(DISASTER_CACHE_KEY) || "[]");
+    } catch {
+      existing = [];
+    }
+    if (!Array.isArray(existing) || !existing.length) {
+      existing = JSON.parse(sessionStorage.getItem(DISASTER_CACHE_KEY) || "[]");
+    }
+    cacheDisasters([mapped, ...(Array.isArray(existing) ? existing : [])]);
   } catch {
     cacheDisasters([mapped]);
   }
@@ -460,17 +469,21 @@ export function prependCachedDisaster(disaster) {
 const DISASTER_CACHE_KEY = "cw_live_disasters_v2";
 
 function cacheDisasters(list) {
-  try {
-    sessionStorage.setItem(DISASTER_CACHE_KEY, JSON.stringify(list.slice(0, 300)));
-  } catch {
-    // Ignore quota errors.
-  }
+  writeCachedDisasters(list);
 }
 
 export function getCachedDisaster(disasterId) {
   try {
     const id = decodeURIComponent(String(disasterId || ""));
-    const list = JSON.parse(sessionStorage.getItem(DISASTER_CACHE_KEY) || "[]");
+    let list = [];
+    try {
+      list = JSON.parse(localStorage.getItem(DISASTER_CACHE_KEY) || "[]");
+    } catch {
+      list = [];
+    }
+    if (!Array.isArray(list) || !list.length) {
+      list = JSON.parse(sessionStorage.getItem(DISASTER_CACHE_KEY) || "[]");
+    }
     return list.find((item) => String(item.id) === String(id)) || null;
   } catch {
     return null;
