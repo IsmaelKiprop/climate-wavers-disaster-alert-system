@@ -170,6 +170,14 @@ const ResponderDesk = () => {
       try {
         const data = await refreshMe();
         if (!active) return;
+        // Approved / pending orgs manage from /app/responder — never the apply form.
+        if (
+          forceApply &&
+          (data?.has_approved || data?.has_pending)
+        ) {
+          navigate("/app/responder", { replace: true });
+          return;
+        }
         if (data?.has_approved) {
           await loadDesk();
           await loadTeam();
@@ -183,7 +191,7 @@ const ResponderDesk = () => {
     return () => {
       active = false;
     };
-  }, [refreshMe, loadDesk, loadTeam]);
+  }, [refreshMe, loadDesk, loadTeam, forceApply, navigate]);
 
   const useMyLocation = () => {
     if (!navigator.geolocation) {
@@ -429,7 +437,12 @@ const ResponderDesk = () => {
     );
   }
 
-  const membership = me?.memberships?.[0];
+  // Prefer approved org so a duplicate pending application cannot hide the desk.
+  const memberships = me?.memberships || [];
+  const membership =
+    memberships.find((m) => m?.org?.verification_status === "approved") ||
+    memberships.find((m) => m?.org?.verification_status === "pending") ||
+    memberships[0];
   const orgStatus = membership?.org?.verification_status;
   const showApply =
     !me?.has_approved &&
@@ -644,7 +657,8 @@ const ResponderDesk = () => {
     );
   }
 
-  if (me?.has_pending || orgStatus === "pending") {
+  // If any org is approved, show the desk — don't block on a leftover pending app.
+  if (!me?.has_approved && (me?.has_pending || orgStatus === "pending")) {
     const pendingOrg = membership?.org;
     return (
       <div className="p-4 sm:p-6 max-w-xl mx-auto">

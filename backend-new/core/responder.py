@@ -295,6 +295,14 @@ def _primary_membership(user, require_approved=False):
     qs = _memberships_for(user)
     if require_approved:
         qs = qs.filter(org__verification_status="approved")
+        return qs.first()
+    # Prefer approved so a leftover pending application cannot hide the desk.
+    approved = qs.filter(org__verification_status="approved").first()
+    if approved:
+        return approved
+    pending = qs.filter(org__verification_status="pending").first()
+    if pending:
+        return pending
     return qs.first()
 
 

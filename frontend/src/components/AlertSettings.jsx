@@ -490,7 +490,17 @@ const AlertSettings = () => {
           <input
             id="phone"
             value={form.phone}
-            onChange={(e) => update("phone", e.target.value)}
+            onChange={(e) => {
+              const next = e.target.value;
+              setForm((prev) => ({
+                ...prev,
+                phone: next,
+                // Changing number invalidates verification — show OTP again.
+                phone_verified: next.trim() === (prev.phone || "").trim() ? prev.phone_verified : false,
+              }));
+              setCode("");
+              setOtpNotice(null);
+            }}
             className="w-full h-11 px-3 border border-border bg-surface"
             placeholder="+2547…"
           />
@@ -501,42 +511,46 @@ const AlertSettings = () => {
           </p>
         </div>
 
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            disabled={otpBusy || !form.phone}
-            onClick={requestCode}
-            className="h-10 px-4 border border-border text-sm disabled:opacity-50"
-          >
-            {otpBusy ? "Sending…" : "Send code"}
-          </button>
-          <input
-            value={code}
-            onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-            className="h-10 w-28 px-3 border border-border bg-surface text-center tracking-widest"
-            placeholder="000000"
-            inputMode="numeric"
-          />
-          <button
-            type="button"
-            disabled={otpBusy || code.length !== 6}
-            onClick={confirmCode}
-            className="h-10 px-4 border border-border text-sm disabled:opacity-50"
-          >
-            Confirm
-          </button>
-        </div>
-        {otpNotice ? (
-          <p
-            role="status"
-            className={
-              otpNotice.tone === "warn"
-                ? "text-sm text-amber-800 bg-amber-50 border border-amber-200 px-3 py-2"
-                : "text-sm text-muted"
-            }
-          >
-            {otpNotice.text}
-          </p>
+        {!form.phone_verified ? (
+          <>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={otpBusy || !form.phone}
+                onClick={requestCode}
+                className="h-10 px-4 border border-border text-sm disabled:opacity-50"
+              >
+                {otpBusy ? "Sending…" : "Send code"}
+              </button>
+              <input
+                value={code}
+                onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                className="h-10 w-28 px-3 border border-border bg-surface text-center tracking-widest"
+                placeholder="000000"
+                inputMode="numeric"
+              />
+              <button
+                type="button"
+                disabled={otpBusy || code.length !== 6}
+                onClick={confirmCode}
+                className="h-10 px-4 border border-border text-sm disabled:opacity-50"
+              >
+                Confirm
+              </button>
+            </div>
+            {otpNotice ? (
+              <p
+                role="status"
+                className={
+                  otpNotice.tone === "warn"
+                    ? "text-sm text-amber-800 bg-amber-50 border border-amber-200 px-3 py-2"
+                    : "text-sm text-muted"
+                }
+              >
+                {otpNotice.text}
+              </p>
+            ) : null}
+          </>
         ) : null}
 
         <button
