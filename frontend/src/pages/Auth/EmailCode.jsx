@@ -6,14 +6,17 @@ import Cookies from "js-cookie";
 import { completeAuthSession, safeRedirectPath } from "../../utils/factory";
 import AuthLayout, { AuthField, authButtonClass, fieldInputClass } from "../../components/AuthLayout";
 
+const EMAIL_COOKIE_OPTS = { path: "/", sameSite: "Lax" };
+
 const EmailCode = () => {
   const [token, setToken] = useState("");
+  const [email, setEmail] = useState(() => Cookies.get("email") || "");
+  const [showEmailField] = useState(() => !Cookies.get("email"));
   const [isDisabled, setIsDisabled] = useState(false);
   const [resendBusy, setResendBusy] = useState(false);
   const [statusMessage, setStatusMessage] = useState("");
   const [statusKind, setStatusKind] = useState("");
   const navigate = useNavigate();
-  const email = Cookies.get("email") || "";
   const params = new URLSearchParams(window.location.search);
   const storedRedirect =
     typeof sessionStorage !== "undefined"
@@ -24,11 +27,20 @@ const EmailCode = () => {
     "/onboarding"
   );
 
+  const rememberEmail = (value) => {
+    const normalized = String(value || "").trim().toLowerCase();
+    if (!normalized) return "";
+    Cookies.set("email", normalized, EMAIL_COOKIE_OPTS);
+    setEmail(normalized);
+    return normalized;
+  };
+
   const handleSubmit = async (event) => {
     event.preventDefault();
-    if (!email) {
+    const resolvedEmail = rememberEmail(email);
+    if (!resolvedEmail) {
       setStatusKind("error");
-      setStatusMessage("We do not have an email on this device. Resend a code first.");
+      setStatusMessage("Enter the email you signed up with, then confirm the code.");
       return;
     }
     try {
@@ -36,7 +48,7 @@ const EmailCode = () => {
       const response = await client.run(
         "post",
         endpoints.emailcode,
-        { email, otp: token.trim() },
+        { email: resolvedEmail, otp: token.trim() },
         false,
         {
           info: "Confirming email...",
@@ -59,7 +71,8 @@ const EmailCode = () => {
   };
 
   const handleResend = async () => {
-    if (!email) {
+    const resolvedEmail = rememberEmail(email);
+    if (!resolvedEmail) {
       navigate("/verifymail");
       return;
     }
@@ -69,7 +82,7 @@ const EmailCode = () => {
       const result = await client.run(
         "post",
         endpoints.resendVerification,
-        { email },
+        { email: resolvedEmail },
         false,
         false,
         false,
@@ -94,9 +107,9 @@ const EmailCode = () => {
     <AuthLayout
       title="Verify your email"
       subtitle={
-        email
-          ? `Enter the 6-digit code we sent to ${email}. Check spam if it is not in the inbox.`
-          : "Enter the 6-digit code from your email. If you did not get one, resend it."
+        showEmailField
+          ? "Enter the email you signed up with and the 6-digit code from that inbox."
+          : `Enter the 6-digit code we sent to ${email}. Check spam if it is not in the inbox.`
       }
       panelTitle="Confirm it is you"
       panelBody="Verification keeps fake accounts out of community alerts."
@@ -109,6 +122,20 @@ const EmailCode = () => {
       ]}
     >
       <form onSubmit={handleSubmit} noValidate>
+        {showEmailField ? (
+          <AuthField id="email" label="Email">
+            <input
+              id="email"
+              type="email"
+              inputMode="email"
+              autoComplete="email"
+              required
+              className={fieldInputClass(false)}
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+            />
+          </AuthField>
+        ) : null}
         <AuthField id="otp" label="Verification code">
           <input
             id="otp"

@@ -257,8 +257,11 @@ class Client {
         }
       }
 
-      if (mail) {
-        Cookies.set("email", data.email);
+      if (mail && data?.email) {
+        Cookies.set("email", String(data.email).trim().toLowerCase(), {
+          path: "/",
+          sameSite: "Lax",
+        });
       }
       if (toastMsg) {
         toast.dismiss();

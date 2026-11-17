@@ -38,7 +38,7 @@ const VerifyMail = () => {
         false,
         true
       );
-      Cookies.set("email", value);
+      Cookies.set("email", value, { path: "/", sameSite: "Lax" });
       if (typeof sessionStorage !== "undefined") {
         sessionStorage.setItem("authRedirect", redirectTo);
       }

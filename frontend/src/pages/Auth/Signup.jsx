@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
+import Cookies from "js-cookie";
 import { client } from "../../api";
 import { endpoints } from "../../utils/endpoints";
 import { validationRules } from "../../utils/validation";
@@ -72,6 +73,10 @@ const Signup = () => {
         false,
         true
       );
+      const signupEmail = String(payload.email || "").trim().toLowerCase();
+      if (signupEmail) {
+        Cookies.set("email", signupEmail, { path: "/", sameSite: "Lax" });
+      }
       if (typeof sessionStorage !== "undefined") {
         sessionStorage.setItem("authRedirect", redirectTo);
       }

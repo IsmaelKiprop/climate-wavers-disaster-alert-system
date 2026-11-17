@@ -38,7 +38,7 @@ const Signin = () => {
       const detail = String(error?.response?.data?.detail || "");
       if (detail.toLowerCase().includes("email is not verified")) {
         const email = String(data?.email || "").trim().toLowerCase();
-        if (email) Cookies.set("email", email);
+        if (email) Cookies.set("email", email, { path: "/", sameSite: "Lax" });
         if (typeof sessionStorage !== "undefined") {
           sessionStorage.setItem("authRedirect", redirectTo);
         }
