@@ -57,16 +57,28 @@ function speciesLabel(species) {
     .trim();
 }
 
+function speciesDisplay(species) {
+  const label = speciesLabel(species);
+  if (!label) return "";
+  return label.charAt(0).toUpperCase() + label.slice(1).toLowerCase();
+}
+
 function articleFor(word) {
   return /^[aeiou]/i.test(String(word || "").trim()) ? "an" : "a";
 }
 
 function giftTitle({ species, displayName }) {
-  const label = speciesLabel(species);
+  const label = speciesDisplay(species);
+  // Named recipient → "Buy a … tree for Name" (not "Buy me … for Name").
+  if (displayName) {
+    const phrase = label
+      ? `Buy ${articleFor(label)} ${label} tree`
+      : "Buy a tree";
+    return `${phrase} for ${displayName} · Climate Wavers`;
+  }
   const phrase = label
-    ? `Buy me ${articleFor(label)} ${label.toLowerCase()} tree`
+    ? `Buy me ${articleFor(label)} ${label} tree`
     : "Buy me a tree";
-  if (displayName) return `${phrase} for ${displayName} · Climate Wavers`;
   return `${phrase} · Climate Wavers`;
 }
 
@@ -204,9 +216,10 @@ export default async function handler(request) {
 
     const title = giftTitle({ species, displayName });
     const projectBit = project?.name ? ` via ${project.name}` : "";
+    const speciesName = speciesDisplay(species);
     const description = (
-      species
-        ? `Gift ${articleFor(speciesLabel(species))} ${speciesLabel(species).toLowerCase()} tree to ${displayName} on Climate Wavers${projectBit}.`
+      speciesName
+        ? `Gift ${articleFor(speciesName)} ${speciesName} tree to ${displayName} on Climate Wavers${projectBit}.`
         : `Gift a tree to ${displayName} on Climate Wavers${projectBit}. Plant verified trees across Africa.`
     ).slice(0, 200);
 

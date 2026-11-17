@@ -153,16 +153,24 @@ function indefiniteArticle(word) {
 
 /**
  * e.g. "Buy me a mangrove tree on Climate Wavers!"
+ * With a name: "Buy a mangrove tree for Ismael Kiprop on Climate Wavers!"
+ * (never "Buy me a tree for Name" — that mixes first- and third-person).
  */
 export function buyMeTreeShareText(species, displayName = "") {
-  const label = speciesShareLabel(species);
+  const raw = speciesShareLabel(species);
+  const label = raw
+    ? raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase()
+    : "";
   const isGeneric = !species || label.toLowerCase() === "tree";
-  const phrase = isGeneric
-    ? "Buy me a tree"
-    : `Buy me ${indefiniteArticle(label)} ${label.toLowerCase()} tree`;
   if (displayName) {
+    const phrase = isGeneric
+      ? "Buy a tree"
+      : `Buy ${indefiniteArticle(label)} ${label} tree`;
     return `${phrase} for ${displayName} on Climate Wavers! 🌱`;
   }
+  const phrase = isGeneric
+    ? "Buy me a tree"
+    : `Buy me ${indefiniteArticle(label)} ${label} tree`;
   return `${phrase} on Climate Wavers! 🌱`;
 }
 

@@ -61,9 +61,20 @@ const BuyMeATreeQrModal = ({
   );
   const headline =
     shareHeadline ||
-    (species
-      ? `Buy me a ${String(species).replace(/\s*trees?\s*$/i, "").trim().toLowerCase()} tree`
-      : "Buy me a tree");
+    (() => {
+      const raw = String(species || "")
+        .replace(/\s*trees?\s*$/i, "")
+        .trim();
+      const label = raw
+        ? raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase()
+        : "";
+      if (displayName) {
+        return label
+          ? `Buy a ${label} tree for ${displayName}`
+          : `Buy a tree for ${displayName}`;
+      }
+      return label ? `Buy me a ${label} tree` : "Buy me a tree";
+    })();
 
   const copyLink = async () => {
     try {

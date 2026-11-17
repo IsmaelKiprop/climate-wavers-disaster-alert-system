@@ -151,7 +151,11 @@ const BuyMeATreeShareModal = ({ user, onClose }) => {
 
   const shareText = useMemo(() => {
     if (selected?.projectOnly) {
-      return `Buy me a tree for “${selected.projectName}” on Climate Wavers! 🌱`;
+      const project = selected.projectName || "this project";
+      if (displayName) {
+        return `Buy a tree for ${displayName} with “${project}” on Climate Wavers! 🌱`;
+      }
+      return `Buy me a tree with “${project}” on Climate Wavers! 🌱`;
     }
     return buyMeTreeShareText(selected?.species, displayName);
   }, [selected, displayName]);
