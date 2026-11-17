@@ -13,9 +13,29 @@ FLOWOPS_SUPERADMIN_EMAIL = "hello@flowops.africa"
 
 
 class Command(BaseCommand):
-    help = "Create or refresh staff admins from fixtures/admins.yaml"
+    help = (
+        "Create staff admins from fixtures/admins.yaml. "
+        "By default only creates missing accounts (never recreates deleted users "
+        "as an update). Use --force-update to refresh flags/password on existing."
+    )
 
-    def handle(self, *args, **kwargs):
+    def add_arguments(self, parser):
+        parser.add_argument(
+            "--only-missing",
+            action="store_true",
+            help="Create missing fixture admins only; skip existing (default behavior).",
+        )
+        parser.add_argument(
+            "--force-update",
+            action="store_true",
+            help="Also refresh flags + password on accounts that already exist.",
+        )
+
+    def handle(self, *args, **options):
+        force_update = bool(options.get("force_update"))
+        # --only-missing is the safe default; kept as an explicit flag for entrypoint docs.
+        only_missing = bool(options.get("only_missing")) or not force_update
+
         file_path = os.path.join(settings.BASE_DIR, "fixtures", "admins.yaml")
         password = (
             os.environ.get("ADMIN_DEFAULT_PASSWORD")
@@ -28,6 +48,7 @@ class Command(BaseCommand):
 
         created = 0
         updated = 0
+        skipped = 0
         skip_m2m = {"groups", "user_permissions"}
 
         for item in data:
@@ -56,22 +77,24 @@ class Command(BaseCommand):
             if fields.get("default_avatar"):
                 defaults["default_avatar"] = fields["default_avatar"]
 
-            user, was_created = User.objects.get_or_create(
-                email=email,
-                defaults=defaults,
-            )
-            # Always keep staff flags + known login password in sync for fixture admins
-            for key, value in defaults.items():
-                setattr(user, key, value)
+            existing = User.objects.filter(email__iexact=email).first()
+            if existing:
+                if only_missing and not force_update:
+                    skipped += 1
+                    continue
+                for key, value in defaults.items():
+                    setattr(existing, key, value)
+                existing.set_password(password)
+                existing.save()
+                updated += 1
+                continue
+
+            user = User.objects.create(email=email, **defaults)
             user.set_password(password)
             user.save()
+            created += 1
 
-            if was_created:
-                created += 1
-            else:
-                updated += 1
-
-        # Always ensure FlowOps primary superadmin exists with the same password.
+        # Primary FlowOps superadmin — create only if missing unless --force-update.
         flowops_defaults = {
             "username": "flowops",
             "first_name": "FlowOps",
@@ -85,28 +108,28 @@ class Command(BaseCommand):
             "is_verified": True,
             "is_onboarded": True,
         }
-        flowops, flowops_created = User.objects.get_or_create(
-            email=FLOWOPS_SUPERADMIN_EMAIL,
-            defaults=flowops_defaults,
-        )
-        for key, value in flowops_defaults.items():
-            setattr(flowops, key, value)
-        # Same known password as fixture admins unless FLOWOPS_SUPERADMIN_PASSWORD is set.
-        flowops_password = (
-            os.environ.get("FLOWOPS_SUPERADMIN_PASSWORD")
-            or password
-        )
-        flowops.set_password(flowops_password)
-        flowops.save()
-        if flowops_created:
-            created += 1
+        flowops_password = os.environ.get("FLOWOPS_SUPERADMIN_PASSWORD") or password
+        flowops = User.objects.filter(email__iexact=FLOWOPS_SUPERADMIN_EMAIL).first()
+        if flowops:
+            if force_update:
+                for key, value in flowops_defaults.items():
+                    setattr(flowops, key, value)
+                flowops.set_password(flowops_password)
+                flowops.save()
+                updated += 1
+            else:
+                skipped += 1
         else:
-            updated += 1
+            flowops = User.objects.create(
+                email=FLOWOPS_SUPERADMIN_EMAIL, **flowops_defaults
+            )
+            flowops.set_password(flowops_password)
+            flowops.save()
+            created += 1
 
         self.stdout.write(
             self.style.SUCCESS(
-                f"Admins ready. created={created} updated={updated} "
-                f"(password from ADMIN_DEFAULT_PASSWORD / default admin123); "
-                f"superadmin={FLOWOPS_SUPERADMIN_EMAIL}"
+                f"Admins ready. created={created} updated={updated} skipped={skipped} "
+                f"(force_update={force_update}); superadmin={FLOWOPS_SUPERADMIN_EMAIL}"
             )
         )

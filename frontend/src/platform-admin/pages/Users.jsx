@@ -83,7 +83,7 @@ const Users = () => {
         { action, value },
         true
       );
-      toast.success("Updated");
+      toast.success(action === "delete" ? "User deleted" : "Updated");
       setOffset(0);
       await load();
       refreshCounts?.();
@@ -215,6 +215,13 @@ const Users = () => {
             variant={r.is_active ? "danger" : "primary"}
             busy={busyId === r.id}
             onConfirm={() => moderate(r.id, "set_active", !r.is_active)}
+          />
+          <ConfirmAction
+            label="Delete"
+            variant="danger"
+            confirmLabel="Delete forever"
+            busy={busyId === r.id}
+            onConfirm={() => moderate(r.id, "delete")}
           />
         </div>
       ),

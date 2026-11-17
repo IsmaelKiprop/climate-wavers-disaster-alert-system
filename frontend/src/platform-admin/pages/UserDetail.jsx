@@ -105,6 +105,32 @@ const UserDetail = () => {
             onConfirm={() => moderate("set_staff", !user.is_staff)}
           />
         ) : null}
+        {me?.id !== user.id ? (
+          <ConfirmAction
+            label="Delete forever"
+            variant="danger"
+            confirmLabel="Delete forever"
+            busy={busy}
+            onConfirm={async () => {
+              setBusy(true);
+              try {
+                await client.run(
+                  "post",
+                  endpoints.platformAdminUserModerate(id),
+                  { action: "delete" },
+                  true
+                );
+                toast.success("User deleted");
+                refreshCounts?.();
+                navigate("/app/platform-admin/users");
+              } catch (err) {
+                toast.error(err?.response?.data?.detail || "Delete failed");
+              } finally {
+                setBusy(false);
+              }
+            }}
+          />
+        ) : null}
       </div>
       <form
         className="mt-6 border border-border bg-surface p-4 space-y-3 max-w-xl"

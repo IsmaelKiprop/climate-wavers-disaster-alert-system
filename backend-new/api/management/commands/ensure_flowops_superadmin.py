@@ -1,4 +1,4 @@
-"""Ensure hello@flowops.africa is the Platform superadmin with a known password."""
+"""Ensure hello@flowops.africa is the Platform superadmin (bootstrap only)."""
 
 import os
 
@@ -11,7 +11,10 @@ DEFAULT_PASSWORD = "admin123"
 
 
 class Command(BaseCommand):
-    help = "Create/update hello@flowops.africa as superuser + staff"
+    help = (
+        "Create hello@flowops.africa as superuser + staff if missing. "
+        "Does not recreate after delete unless --force-update."
+    )
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -22,11 +25,24 @@ class Command(BaseCommand):
                 or os.environ.get("DJANGO_SUPERUSER_PASSWORD")
                 or DEFAULT_PASSWORD
             ),
-            help="Password to set (default: env or admin123)",
+            help="Password to set when creating / force-updating",
+        )
+        parser.add_argument(
+            "--only-missing",
+            action="store_true",
+            help="Create only if the account does not exist (default).",
+        )
+        parser.add_argument(
+            "--force-update",
+            action="store_true",
+            help="Refresh flags + password even if the account already exists.",
         )
 
     def handle(self, *args, **options):
         password = options["password"]
+        force_update = bool(options.get("force_update"))
+        only_missing = bool(options.get("only_missing")) or not force_update
+
         defaults = {
             "username": "flowops",
             "first_name": "FlowOps",
@@ -40,20 +56,31 @@ class Command(BaseCommand):
             "is_verified": True,
             "is_onboarded": True,
         }
-        user, created = User.objects.get_or_create(email=EMAIL, defaults=defaults)
-        for key, value in defaults.items():
-            setattr(user, key, value)
+        user = User.objects.filter(email__iexact=EMAIL).first()
+        if user:
+            if only_missing and not force_update:
+                self.stdout.write(
+                    self.style.SUCCESS(
+                        f"Skipped {EMAIL} (already exists; use --force-update to refresh)"
+                    )
+                )
+                return
+            for key, value in defaults.items():
+                setattr(user, key, value)
+            user.set_password(password)
+            user.save()
+            self.stdout.write(
+                self.style.SUCCESS(
+                    f"Updated {EMAIL} (superuser={user.is_superuser}, staff={user.is_staff})"
+                )
+            )
+            return
+
+        user = User.objects.create(email=EMAIL, **defaults)
         user.set_password(password)
         user.save()
         self.stdout.write(
             self.style.SUCCESS(
-                f"{'Created' if created else 'Updated'} {EMAIL} "
-                f"(superuser={user.is_superuser}, staff={user.is_staff})"
-            )
-        )
-        self.stdout.write(
-            self.style.WARNING(
-                "Password set from --password / FLOWOPS_SUPERADMIN_PASSWORD / "
-                "ADMIN_DEFAULT_PASSWORD (change after login)."
+                f"Created {EMAIL} (superuser={user.is_superuser}, staff={user.is_staff})"
             )
         )

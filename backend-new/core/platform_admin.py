@@ -676,6 +676,18 @@ class PlatformAdminUserModerateView(APIView):
                 TreeAdminOrganization.objects.filter(
                     memberships__user=u, memberships__role="owner"
                 ).update(contact_email=new_email)
+        elif action == "delete":
+            if u.id == request.user.id:
+                return Response({"detail": "Cannot delete your own account"}, status=400)
+            if u.is_superuser and not request.user.is_superuser:
+                return Response(
+                    {"detail": "Only a superuser can delete another superuser"},
+                    status=403,
+                )
+            email = u.email
+            with transaction.atomic():
+                u.delete()
+            return Response({"deleted": True, "email": email})
         else:
             return Response({"detail": "Unknown action"}, status=400)
         return Response({"user": serialize_user(u, detail=True)})
