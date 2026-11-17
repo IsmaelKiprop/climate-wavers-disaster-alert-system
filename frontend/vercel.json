@@ -74,7 +74,7 @@
         {
           "type": "header",
           "key": "user-agent",
-          "value": "(?i).*(whatsapp|facebookexternalhit|facebot|twitterbot|linkedinbot|slackbot|discordbot|telegrambot|embedly|pinterest|quora|bot|crawler|spider|preview).*"
+          "value": "(?i).*(facebookexternalhit|facebot|twitterbot|linkedinbot|slackbot|discordbot|telegrambot|embedly|pinterest|quora link preview|googlebot|bingbot|applebot|yandexbot|duckduckbot).*"
         }
       ],
       "destination": "/api/share-profile?id=:id"
@@ -85,7 +85,7 @@
         {
           "type": "header",
           "key": "user-agent",
-          "value": "(?i).*(whatsapp|facebookexternalhit|facebot|twitterbot|linkedinbot|slackbot|discordbot|telegrambot|embedly|pinterest|quora|bot|crawler|spider|preview).*"
+          "value": "(?i).*(facebookexternalhit|facebot|twitterbot|linkedinbot|slackbot|discordbot|telegrambot|embedly|pinterest|quora link preview|googlebot|bingbot|applebot|yandexbot|duckduckbot).*"
         }
       ],
       "destination": "/api/share-project?id=:id"
@@ -96,7 +96,7 @@
         {
           "type": "header",
           "key": "user-agent",
-          "value": "(?i).*(whatsapp|facebookexternalhit|facebot|twitterbot|linkedinbot|slackbot|discordbot|telegrambot|embedly|pinterest|quora|bot|crawler|spider|preview).*"
+          "value": "(?i).*(facebookexternalhit|facebot|twitterbot|linkedinbot|slackbot|discordbot|telegrambot|embedly|pinterest|quora link preview|googlebot|bingbot|applebot|yandexbot|duckduckbot).*"
         }
       ],
       "destination": "/api/share-gift?id=:id"

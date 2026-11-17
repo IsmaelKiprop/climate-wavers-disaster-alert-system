@@ -160,6 +160,16 @@ function htmlResponse(body, status = 200) {
   });
 }
 
+/** Link-preview bots only — not real browsers (incl. WhatsApp in-app). */
+function isLinkPreviewBot(request) {
+  const ua = String(request.headers.get("user-agent") || "");
+  // In-app / mobile browsers send a full Mozilla UA. Scrapers usually do not.
+  if (/Mozilla\//i.test(ua)) return false;
+  return /(whatsapp|facebookexternalhit|facebot|twitterbot|linkedinbot|slackbot|discordbot|telegrambot|embedly|pinterest|googlebot|bingbot|applebot|yandexbot|duckduckbot|bot|crawler|spider)/i.test(
+    ua
+  );
+}
+
 async function fetchJson(path) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 8000);
@@ -233,20 +243,17 @@ export default async function handler(request) {
       appParams.toString() ? `?${appParams}` : ""
     }`;
 
+    // Humans (incl. WhatsApp in-app browser) go straight to the public gift page.
+    // Only crawlers need the OG HTML shell.
+    if (!isLinkPreviewBot(request)) {
+      return Response.redirect(appUrl, 302);
+    }
+
     return htmlResponse(
       buildHtml({ userId, title, description, image, appUrl }),
       profile || project ? 200 : 404
     );
   } catch {
-    return htmlResponse(
-      buildHtml({
-        userId: "0",
-        title: "Buy me a tree · Climate Wavers",
-        description: "Gift a verified tree on Climate Wavers.",
-        image: `${SITE}/og-image.jpg`,
-        appUrl: `${SITE}/app/plant-tree`,
-      }),
-      500
-    );
+    return Response.redirect(`${SITE}/`, 302);
   }
 }

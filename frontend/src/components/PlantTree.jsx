@@ -279,10 +279,15 @@ const PlantTree = () => {
       user.username ||
       "";
     const params = new URLSearchParams();
-    params.set("for", String(user.id));
     if (name) params.set("name", name);
-    // Stay on plant-tree so project browsing continues with a selected recipient
-    navigate(`/app/plant-tree?${params.toString()}`, { replace: false });
+    if (giftProjectId) params.set("project", giftProjectId);
+    if (giftSpecies) params.set("species", giftSpecies);
+    if (climateEventId) params.set("event", climateEventId);
+    // Always stay on the public /gift route so guests are not bounced to login.
+    navigate(
+      `/gift/${user.id}${params.toString() ? `?${params}` : ""}`,
+      { replace: false }
+    );
     setGiftProfile({
       ...user,
       display_name: name || "Climate Wavers member",
@@ -291,7 +296,15 @@ const PlantTree = () => {
   };
 
   const clearGiftRecipient = () => {
-    navigate("/app/plant-tree", { replace: false });
+    if (giftUserIdParam) {
+      navigate("/", { replace: false });
+    } else {
+      const params = new URLSearchParams(searchParams);
+      params.delete("for");
+      params.delete("name");
+      const query = params.toString();
+      navigate(`/app/plant-tree${query ? `?${query}` : ""}`, { replace: false });
+    }
     setGiftProfile(null);
   };
 
