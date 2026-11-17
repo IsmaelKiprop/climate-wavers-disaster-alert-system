@@ -13,11 +13,14 @@ const UserDetail = () => {
   const me = getUser();
   const [user, setUser] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [emailDraft, setEmailDraft] = useState("");
 
   const load = async () => {
     try {
       const data = await client.run("get", endpoints.platformAdminUser(id), {}, true);
-      setUser(data?.user || null);
+      const next = data?.user || null;
+      setUser(next);
+      setEmailDraft(next?.email || "");
     } catch {
       toast.error("User not found");
       navigate("/app/platform-admin/users");
@@ -103,6 +106,41 @@ const UserDetail = () => {
           />
         ) : null}
       </div>
+      <form
+        className="mt-6 border border-border bg-surface p-4 space-y-3 max-w-xl"
+        onSubmit={(e) => {
+          e.preventDefault();
+          const next = emailDraft.trim().toLowerCase();
+          if (!next || next === (user.email || "").toLowerCase()) return;
+          moderate("set_email", next);
+        }}
+      >
+        <h2 className="text-sm font-semibold">Change login email</h2>
+        <p className="text-xs text-muted">
+          Updates account login and owned org contact emails (Responder / Tree Admin).
+        </p>
+        <label className="block text-sm">
+          <span className="font-medium">Email</span>
+          <input
+            type="email"
+            required
+            className="mt-1 h-10 w-full px-3 border border-border bg-background"
+            value={emailDraft}
+            onChange={(e) => setEmailDraft(e.target.value)}
+          />
+        </label>
+        <button
+          type="submit"
+          disabled={
+            busy ||
+            !emailDraft.trim() ||
+            emailDraft.trim().toLowerCase() === (user.email || "").toLowerCase()
+          }
+          className="h-10 px-4 bg-primary text-primary-foreground text-sm font-medium disabled:opacity-60"
+        >
+          {busy ? "Saving…" : "Save email"}
+        </button>
+      </form>
     </div>
   );
 };

@@ -653,6 +653,29 @@ class PlatformAdminUserModerateView(APIView):
                 return Response({"detail": "Cannot change your own staff flag"}, status=400)
             u.is_staff = bool(request.data.get("value", False))
             u.save(update_fields=["is_staff"])
+        elif action == "set_email":
+            new_email = str(request.data.get("value") or "").strip().lower()
+            if not new_email or "@" not in new_email:
+                return Response({"detail": "A valid email is required"}, status=400)
+            taken = (
+                User.objects.filter(email__iexact=new_email).exclude(id=u.id).exists()
+            )
+            if taken:
+                return Response(
+                    {"detail": "That email is already used by another account"},
+                    status=400,
+                )
+            with transaction.atomic():
+                u.email = new_email
+                u.is_verified = True
+                u.save(update_fields=["email", "is_verified"])
+                # Keep owned org contact emails in sync for alerts / desk.
+                ResponderOrganization.objects.filter(
+                    memberships__user=u, memberships__role="owner"
+                ).update(contact_email=new_email)
+                TreeAdminOrganization.objects.filter(
+                    memberships__user=u, memberships__role="owner"
+                ).update(contact_email=new_email)
         else:
             return Response({"detail": "Unknown action"}, status=400)
         return Response({"user": serialize_user(u, detail=True)})
