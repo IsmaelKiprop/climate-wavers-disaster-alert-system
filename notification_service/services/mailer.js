@@ -229,7 +229,12 @@ class Mailer{
     }
 
     async sendCustom(email, data){
-        return this.sendMail(email,await this.loadTemplate(getPath(mailTypes.custom), data))
+        const subject = (data && data.subject) || "Climate Wavers"
+        return this.sendMail(
+            email,
+            await this.loadTemplate(getPath(mailTypes.custom), data || {}),
+            subject
+        )
     }
 
     async sendDisasterAlert(email, data, subject="Disaster Alert"){

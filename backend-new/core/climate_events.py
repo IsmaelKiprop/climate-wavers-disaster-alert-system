@@ -176,9 +176,29 @@ def _send_climate_event_mail(
     email = str(to_email or "").strip()
     if not email or "@" not in email or email.endswith("@example.com"):
         return False
+    from django.conf import settings as dj_settings
+
+    site = (
+        getattr(dj_settings, "FRONTEND_URL", None)
+        or getattr(dj_settings, "SITE_URL", None)
+        or "https://alerts.flowops.africa"
+    ).rstrip("/")
+    join_url = _event_join_url(event)
     payload = {
         "email": email,
-        "data": {"subject": subject, "content": body},
+        "data": {
+            "subject": subject,
+            "headline": subject,
+            "content": body,
+            "cta_text": "Open event",
+            "cta_url": join_url,
+            "link": join_url,
+            "hero_image": f"{site}/climate-action-network.jpg",
+            "reply_hint": (
+                "Prefer some help with this event? Reply to this email "
+                "and we'll set everything up with you."
+            ),
+        },
     }
     try:
         from api.tasks import _send_resend

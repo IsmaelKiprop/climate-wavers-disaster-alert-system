@@ -67,29 +67,35 @@ def _ssl_context():
 
 
 def _mail_copy(queue_name, payload):
+    """Return (subject, text_body, html_body_or_None)."""
     data = payload.get("data") or {}
     if queue_name == "verification":
-        return (
-            "Your Climate Wavers verification code",
-            (
-                f"Your Climate Wavers verification code is {data.get('code')}.\n\n"
-                "Enter this code on the verify email page. It replaces any earlier code."
-            ),
+        code = data.get("code")
+        text = (
+            f"Your Climate Wavers verification code is {code}.\n\n"
+            "Enter this code on the verify email page. It replaces any earlier code."
         )
+        return ("Your Climate Wavers verification code", text, None)
     if queue_name == "forget_password":
         reset_url = data.get("url") or ""
-        return (
-            "Reset your Climate Wavers password",
-            (
-                "Use this link to choose a new Climate Wavers password:\n\n"
-                f"{reset_url}\n\n"
-                "If you did not ask for a reset, you can ignore this email."
-            ),
+        text = (
+            "Use this link to choose a new Climate Wavers password:\n\n"
+            f"{reset_url}\n\n"
+            "If you did not ask for a reset, you can ignore this email."
         )
+        return ("Reset your Climate Wavers password", text, None)
     if queue_name == "onboarding":
-        return ("Welcome Aboard", "Welcome to Climate Wavers. Verify first. Send second.")
+        return ("Welcome Aboard", "Welcome to Climate Wavers. Verify first. Send second.", None)
     subject = (data.get("subject") or "").strip() or "Climate Wavers"
-    return (subject, data.get("content") or "A message from Climate Wavers.")
+    text = data.get("content") or "A message from Climate Wavers."
+    html = None
+    try:
+        from core.email_html import html_for_custom_mail
+
+        html = html_for_custom_mail(data)
+    except Exception as exc:
+        logger.warning("Community email HTML render failed: %s", exc)
+    return (subject, text, html)
 
 
 def _is_cloudflare_block(status_code, body=""):
@@ -210,19 +216,20 @@ def _send_resend(queue_name, payload):
     if not key:
         raise RuntimeError("RESEND_API_KEY is not set")
     email = payload.get("email")
-    subject, body = _mail_copy(queue_name, payload)
+    subject, body, html = _mail_copy(queue_name, payload)
     last_error = None
     for from_email in _resend_from_addresses():
+        message = {
+            "from": from_email,
+            "to": [email],
+            "subject": subject,
+            "text": body,
+        }
+        if html:
+            message["html"] = html
         request = urllib.request.Request(
             "https://api.resend.com/emails",
-            data=json.dumps(
-                {
-                    "from": from_email,
-                    "to": [email],
-                    "subject": subject,
-                    "text": body,
-                }
-            ).encode("utf-8"),
+            data=json.dumps(message).encode("utf-8"),
             headers={
                 "Content-Type": "application/json",
                 "Authorization": f"Bearer {key}",
@@ -263,7 +270,7 @@ def _send_smtp(queue_name, payload):
     if not settings.EMAIL_HOST_USER or not settings.EMAIL_HOST_PASSWORD:
         raise RuntimeError("SMTP is not configured")
     email = payload.get("email")
-    subject, body = _mail_copy(queue_name, payload)
+    subject, body, html = _mail_copy(queue_name, payload)
     last_error = None
     attempts = [
         {"port": 465, "use_ssl": True, "use_tls": False},
@@ -281,13 +288,16 @@ def _send_smtp(queue_name, payload):
                     use_ssl=attempt["use_ssl"],
                     timeout=12,
                 )
-                EmailMessage(
+                msg = EmailMessage(
                     subject=subject,
-                    body=body,
+                    body=html or body,
                     from_email=settings.DEFAULT_FROM_EMAIL or settings.EMAIL_HOST_USER,
                     to=[email],
                     connection=connection,
-                ).send(fail_silently=False)
+                )
+                if html:
+                    msg.content_subtype = "html"
+                msg.send(fail_silently=False)
             return
         except Exception as exc:
             last_error = exc

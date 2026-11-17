@@ -20,8 +20,20 @@ class MailValidation{
     }
     validateCustomEmailData(data){
         return Joi.object({
-            content: Joi.string().required()
-        }).validate(data)
+            content: Joi.string().required(),
+            subject: Joi.string().allow("", null),
+            headline: Joi.string().allow("", null),
+            name: Joi.string().allow("", null),
+            first_name: Joi.string().allow("", null),
+            cta_text: Joi.string().allow("", null),
+            cta_url: Joi.string().allow("", null),
+            link: Joi.string().allow("", null),
+            hero_image: Joi.string().allow("", null),
+            reply_hint: Joi.string().allow("", null),
+            preheader: Joi.string().allow("", null),
+            date: Joi.string().allow("", null),
+            time: Joi.string().allow("", null),
+        }).unknown(true).validate(data)
     }
     validateVerificationEmailData(data){
         return Joi.object({

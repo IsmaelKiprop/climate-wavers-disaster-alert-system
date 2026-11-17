@@ -1,6 +1,7 @@
 """
 Email for social activity (follow, like, repost, comment, new post).
 Uses Resend first; falls back to notification service HTTP.
+Renders as branded community card HTML (Tree-Nation-style layout).
 """
 import logging
 
@@ -31,7 +32,18 @@ def profile_url(user_id):
     return f"{frontend_base()}/app/{user_id}/profile"
 
 
-def send_social_email(user, *, subject, message, link=None):
+def _display_name(user):
+    first = (getattr(user, "first_name", None) or "").strip()
+    if first:
+        return first
+    username = (getattr(user, "username", None) or "").strip()
+    if username:
+        return username
+    email = getattr(user, "email", None) or ""
+    return email.split("@")[0] if email else ""
+
+
+def send_social_email(user, *, subject, message, link=None, headline=None):
     """Best-effort social email; never raise into the request/signal path."""
     email = getattr(user, "email", None) or ""
     if not email or "@" not in email:
@@ -40,16 +52,30 @@ def send_social_email(user, *, subject, message, link=None):
     if email.endswith("@example.com"):
         return False
 
+    dest = link or notifications_url()
+    name = _display_name(user)
+    title = (headline or subject or "Activity on Climate Wavers").strip()
     body = (
         f"{message}\n\n"
-        f"Open Climate Wavers: {link or notifications_url()}\n\n"
+        f"Open Climate Wavers: {dest}\n\n"
         "You’re receiving this because of activity on your Climate Wavers account."
     )
     payload = {
         "email": email,
         "data": {
             "subject": subject,
+            "headline": title,
+            "name": name,
             "content": body,
+            "cta_text": "Open Climate Wavers",
+            "cta_url": dest,
+            "link": dest,
+            "hero_image": f"{frontend_base()}/community-respond.jpg",
+            "reply_hint": (
+                "You’re getting this because of activity in your Climate Wavers "
+                "community. Manage alerts anytime in Email preferences."
+            ),
+            "preheader": message,
         },
     }
     try:

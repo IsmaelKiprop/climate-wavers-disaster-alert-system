@@ -140,19 +140,31 @@ def _send_admin_invite_email(*, to_email: str, invite_url: str, invited_by_name:
         return False
     subject = "You're invited to Climate Wavers Platform Admin"
     body = (
-        f"Hi,\n\n"
         f"{invited_by_name} invited you to become a Platform Admin on Climate Wavers.\n\n"
         f"Accept the invite (sign in with this email first if needed):\n"
         f"{invite_url}\n\n"
-        f"This link expires in 7 days.\n\n"
-        f"— Climate Wavers\n"
+        f"This link expires in 7 days."
     )
     try:
         from api.tasks import _send_resend
 
         _send_resend(
             "custom_mail",
-            {"email": email, "data": {"subject": subject, "content": body}},
+            {
+                "email": email,
+                "data": {
+                    "subject": subject,
+                    "headline": "You're invited to Platform Admin.",
+                    "content": body,
+                    "cta_text": "Accept invite",
+                    "cta_url": invite_url,
+                    "link": invite_url,
+                    "reply_hint": (
+                        "Prefer some help getting set up? Reply to this email "
+                        "and we'll walk you through it."
+                    ),
+                },
+            },
         )
         return True
     except Exception:

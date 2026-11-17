@@ -136,10 +136,16 @@ class AlertPhoneVerifyRequestView(APIView):
                 {
                     "email": request.user.email,
                     "data": {
+                        "subject": "Your Climate Wavers verification code",
+                        "headline": "Your verification code.",
                         "content": (
-                            f"Your Climate Wavers phone verification code is {code}. "
+                            f"Your Climate Wavers phone verification code is {code}.\n\n"
                             "It expires in 15 minutes."
-                        )
+                        ),
+                        "cta_text": "Open Climate Wavers",
+                        "reply_hint": (
+                            "Didn’t request this code? You can ignore this email."
+                        ),
                     },
                 },
             )
@@ -153,10 +159,16 @@ class AlertPhoneVerifyRequestView(APIView):
                         "type": "custom_mail",
                         "email": request.user.email,
                         "data": {
+                            "subject": "Your Climate Wavers verification code",
+                            "headline": "Your verification code.",
                             "content": (
-                                f"Your Climate Wavers phone verification code is {code}. "
+                                f"Your Climate Wavers phone verification code is {code}.\n\n"
                                 "It expires in 15 minutes."
-                            )
+                            ),
+                            "cta_text": "Open Climate Wavers",
+                            "reply_hint": (
+                                "Didn’t request this code? You can ignore this email."
+                            ),
                         },
                     }
                 )

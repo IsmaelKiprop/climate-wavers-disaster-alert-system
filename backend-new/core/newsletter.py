@@ -72,10 +72,21 @@ class NewsletterSubscribeView(APIView):
                         "email": email,
                         "data": {
                             **stamp,
+                            "subject": "You're on the Climate Wavers update list",
+                            "headline": "You're on the list — updates that keep growing.",
+                            "name": email.split("@")[0],
                             "content": (
-                                "You are subscribed to Climate Wavers updates. "
-                                "We send live USGS and NASA alert notes and campaign news. "
-                                "This is not a government siren."
+                                "You are subscribed to Climate Wavers updates.\n\n"
+                                "We send live USGS and NASA alert notes, community tips, "
+                                "and campaign news — so you stay ready without the noise.\n\n"
+                                "This is not a government siren. Follow local authorities for emergencies."
+                            ),
+                            "cta_text": "Open Climate Wavers",
+                            "cta_url": getattr(settings, "FRONTEND_URL", "https://alerts.flowops.africa"),
+                            "hero_image": f"{(getattr(settings, 'FRONTEND_URL', None) or 'https://alerts.flowops.africa').rstrip('/')}/environment.jpg",
+                            "reply_hint": (
+                                "Prefer some help with alerts or campaigns? "
+                                "Reply to this email and we'll set everything up with you."
                             ),
                         },
                     }
