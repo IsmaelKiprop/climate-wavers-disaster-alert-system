@@ -127,8 +127,8 @@ export function giftTreesPath(userId, displayName = "", opts = {}) {
  */
 export function giftOgSharePath(userId, displayName = "", opts = {}) {
   const params = giftQuery(displayName, opts);
-  // Cache-buster so WhatsApp re-scrapes after OG / logo-blend updates.
-  params.set("v", "gift1");
+  // Cache-buster so WhatsApp re-scrapes after OG / copy updates.
+  params.set("v", "gift2");
   const query = params.toString();
   return `/share/gift/${userId}${query ? `?${query}` : ""}`;
 }
@@ -152,26 +152,28 @@ function indefiniteArticle(word) {
 }
 
 /**
- * e.g. "Buy me a mangrove tree on Climate Wavers!"
- * With a name: "Buy a mangrove tree for Ismael Kiprop on Climate Wavers!"
- * (never "Buy me a tree for Name" — that mixes first- and third-person).
+ * Own ask (first person): "Buy me a Bruguiera tree on Climate Wavers!"
+ * Someone else (third person): "Buy a Bruguiera tree for Ismael Kiprop on Climate Wavers!"
+ * Never mixes "Buy me … for Name".
  */
-export function buyMeTreeShareText(species, displayName = "") {
+export function buyMeTreeShareText(species, displayName = "", { firstPerson = false } = {}) {
+  const name = String(displayName || "").trim();
+  const useFirstPerson = firstPerson || !name;
   const raw = speciesShareLabel(species);
   const label = raw
     ? raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase()
     : "";
   const isGeneric = !species || label.toLowerCase() === "tree";
-  if (displayName) {
+  if (useFirstPerson) {
     const phrase = isGeneric
-      ? "Buy a tree"
-      : `Buy ${indefiniteArticle(label)} ${label} tree`;
-    return `${phrase} for ${displayName} on Climate Wavers! 🌱`;
+      ? "Buy me a tree"
+      : `Buy me ${indefiniteArticle(label)} ${label} tree`;
+    return `${phrase} on Climate Wavers! 🌱`;
   }
   const phrase = isGeneric
-    ? "Buy me a tree"
-    : `Buy me ${indefiniteArticle(label)} ${label} tree`;
-  return `${phrase} on Climate Wavers! 🌱`;
+    ? "Buy a tree"
+    : `Buy ${indefiniteArticle(label)} ${label} tree`;
+  return `${phrase} for ${name} on Climate Wavers! 🌱`;
 }
 
 /**

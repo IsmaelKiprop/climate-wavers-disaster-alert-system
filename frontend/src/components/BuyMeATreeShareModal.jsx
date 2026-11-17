@@ -23,7 +23,7 @@ import {
   profileOgPreviewImage,
   stashChatShareDraft,
 } from "../utils/profileCompleteness";
-import { secureMediaUrl } from "../utils/factory";
+import { getUser, secureMediaUrl } from "../utils/factory";
 import { apiUrl } from "../config/env";
 import { endpoints } from "../utils/endpoints";
 import { unwrapList } from "../utils/apiData";
@@ -68,6 +68,9 @@ const BuyMeATreeShareModal = ({ user, onClose }) => {
   const [projectGroups, setProjectGroups] = useState([]);
   const [selectedKey, setSelectedKey] = useState("");
   const [showQr, setShowQr] = useState(false);
+
+  const me = getUser();
+  const isOwnAsk = String(me?.id || "") === String(user?.id || "");
 
   const displayName =
     [user?.first_name, user?.last_name].filter(Boolean).join(" ") ||
@@ -150,15 +153,18 @@ const BuyMeATreeShareModal = ({ user, onClose }) => {
   );
 
   const shareText = useMemo(() => {
+    // Own ask → first person ("Buy me…"). Someone else's gift → "Buy a… for Name".
     if (selected?.projectOnly) {
       const project = selected.projectName || "this project";
-      if (displayName) {
-        return `Buy a tree for ${displayName} with “${project}” on Climate Wavers! 🌱`;
+      if (isOwnAsk) {
+        return `Buy me a tree with “${project}” on Climate Wavers! 🌱`;
       }
-      return `Buy me a tree with “${project}” on Climate Wavers! 🌱`;
+      return `Buy a tree for ${displayName} with “${project}” on Climate Wavers! 🌱`;
     }
-    return buyMeTreeShareText(selected?.species, displayName);
-  }, [selected, displayName]);
+    return buyMeTreeShareText(selected?.species, displayName, {
+      firstPerson: isOwnAsk,
+    });
+  }, [selected, displayName, isOwnAsk]);
 
   const copy = async () => {
     const payload = `${shareText}\n${giftUrl}`;

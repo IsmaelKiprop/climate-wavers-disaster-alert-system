@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import { FaCheck, FaCopy, FaDownload, FaTree, FaWhatsapp } from "react-icons/fa";
-import { giftTreesUrl } from "../utils/profileCompleteness";
-import { secureMediaUrl } from "../utils/factory";
+import { buyMeTreeShareText, giftTreesUrl } from "../utils/profileCompleteness";
+import { getUser, secureMediaUrl } from "../utils/factory";
 
 function qrImageUrl(text, size = 640) {
   // High error correction so a center tree mark still scans.
@@ -41,6 +41,8 @@ const BuyMeATreeQrModal = ({
   const [copied, setCopied] = useState(false);
   const [saving, setSaving] = useState(false);
   const qrFrameRef = useRef(null);
+  const me = getUser();
+  const isOwnAsk = String(me?.id || "") === String(user?.id || "");
   const displayName =
     [user?.first_name, user?.last_name].filter(Boolean).join(" ") ||
     user?.display_name ||
@@ -61,20 +63,7 @@ const BuyMeATreeQrModal = ({
   );
   const headline =
     shareHeadline ||
-    (() => {
-      const raw = String(species || "")
-        .replace(/\s*trees?\s*$/i, "")
-        .trim();
-      const label = raw
-        ? raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase()
-        : "";
-      if (displayName) {
-        return label
-          ? `Buy a ${label} tree for ${displayName}`
-          : `Buy a tree for ${displayName}`;
-      }
-      return label ? `Buy me a ${label} tree` : "Buy me a tree";
-    })();
+    buyMeTreeShareText(species, displayName, { firstPerson: isOwnAsk });
 
   const copyLink = async () => {
     try {
