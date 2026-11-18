@@ -421,6 +421,25 @@ const TreeProjectAdmin = () => {
         return;
       }
 
+      const speciesPrices = speciesList
+        .map((s) => (s.price != null ? Number(s.price) : null))
+        .filter((n) => n != null && Number.isFinite(n) && n >= 0);
+      const allSpeciesPriced =
+        speciesList.length > 0 && speciesPrices.length === speciesList.length;
+      let resolvedTreePrice = parseFloat(formData.tree_price);
+      if (!Number.isFinite(resolvedTreePrice) || resolvedTreePrice < 0) {
+        if (allSpeciesPriced) {
+          // Default unused at checkout — store the lowest species price as fallback.
+          resolvedTreePrice = Math.min(...speciesPrices);
+        } else {
+          toast.error(
+            'Set a default tree price, or give every species its own USD price'
+          );
+          setLoading(false);
+          return;
+        }
+      }
+
       const cover = isUsableMediaUrl(formData.cover_image)
         ? String(formData.cover_image).trim()
         : "";
@@ -448,7 +467,7 @@ const TreeProjectAdmin = () => {
         project_type: formData.project_type,
         target_trees: targetTrees,
         tree_species: speciesList,
-        tree_price: parseFloat(formData.tree_price) || 0,
+        tree_price: Number(resolvedTreePrice.toFixed(2)),
         co2_absorption_per_tree: parseFloat(formData.co2_absorption_per_tree) || 22.0,
         biodiversity_impact: formData.biodiversity_impact || "",
         soil_improvement: formData.soil_improvement || "",
@@ -1187,7 +1206,14 @@ Thank you for your understanding! 🌱
                       </div>
                       <div>
                         <label className={labelClass}>
-                          Default tree price (USD) *
+                          Default tree price (USD)
+                          {normalizeTreeSpecies(formData.tree_species).length >
+                            0 &&
+                          normalizeTreeSpecies(formData.tree_species).every(
+                            (s) => s.price != null
+                          )
+                            ? ""
+                            : " *"}
                         </label>
                         <input
                           type="number"
@@ -1196,13 +1222,35 @@ Thank you for your understanding! 🌱
                           onChange={handleInputChange}
                           step="0.01"
                           min="0"
+                          placeholder={
+                            normalizeTreeSpecies(formData.tree_species).every(
+                              (s) => s.price != null
+                            ) &&
+                            normalizeTreeSpecies(formData.tree_species).length >
+                              0
+                              ? `Optional — e.g. ${Math.min(
+                                  ...normalizeTreeSpecies(
+                                    formData.tree_species
+                                  ).map((s) => Number(s.price))
+                                ).toFixed(2)}`
+                              : "e.g. 2.00"
+                          }
                           className={`${fieldClass} ${
                             editingProject?.is_verified && !canVerifyProjects
                               ? "opacity-70 cursor-not-allowed"
                               : ""
                           }`}
                           required={
-                            !(editingProject?.is_verified && !canVerifyProjects)
+                            !(
+                              editingProject?.is_verified && !canVerifyProjects
+                            ) &&
+                            !(
+                              normalizeTreeSpecies(formData.tree_species)
+                                .length > 0 &&
+                              normalizeTreeSpecies(formData.tree_species).every(
+                                (s) => s.price != null
+                              )
+                            )
                           }
                           disabled={
                             Boolean(editingProject?.is_verified) &&
@@ -1214,8 +1262,9 @@ Thank you for your understanding! 🌱
                           }
                         />
                         <p className="text-xs text-muted mt-1.5">
-                          Fallback when a species has no own price. Set prices
-                          per species below when they differ.
+                          Optional if every species below has its own USD price
+                          (yours do). Used only as a fallback for unpriced
+                          species.
                         </p>
                         {editingProject?.is_verified && !canVerifyProjects ? (
                           <p className="text-xs text-muted mt-1.5">
