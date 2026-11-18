@@ -19,6 +19,7 @@ class Notification(models.Model):
         ("follow", "Follow"),
         ("disaster", "Disaster"),
         ("mention", "Mention"),
+        ("chat_message", "Chat Message"),
         ("climate_event", "Climate Event"),
         ("champion", "Community Champion"),
         ("proximity_alert", "Proximity Alert"),

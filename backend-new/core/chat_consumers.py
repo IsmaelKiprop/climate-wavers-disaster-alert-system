@@ -371,7 +371,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
         from .chat import (
             _normalize_mentions,
             message_dict,
-            notify_chat_mentions,
+            notify_after_chat_message,
             user_can_access,
         )
         from .models import ChatMessage, Conversation, ConversationMember
@@ -415,7 +415,9 @@ class ChatConsumer(AsyncWebsocketConsumer):
         ConversationMember.objects.filter(
             conversation=conv, user=self.user
         ).update(last_read_at=timezone.now(), last_read_message_id=msg.id)
-        notify_chat_mentions(msg, sender=self.user)
+        # Attach conversation for notify helpers (avoids extra lookup).
+        msg.conversation = conv
+        notify_after_chat_message(msg, sender=self.user)
         return message_dict(msg, self.user_id)
 
     @database_sync_to_async

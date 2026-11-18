@@ -79,8 +79,62 @@ def _normalize_mentions(raw):
     return out
 
 
+def _chat_preview(msg):
+    preview = (msg.body or "").strip()
+    if not preview and msg.media_url:
+        kind = (msg.media_type or "file").lower()
+        if kind == "image":
+            preview = "Sent a photo"
+        elif kind == "video":
+            preview = "Sent a video"
+        elif kind == "audio":
+            preview = "Sent an audio message"
+        else:
+            preview = "Sent an attachment"
+    if len(preview) > 120:
+        preview = f"{preview[:117]}..."
+    return preview or "New message"
+
+
+def _sender_display(sender):
+    return (
+        f"{getattr(sender, 'first_name', '') or ''} {getattr(sender, 'last_name', '') or ''}".strip()
+        or getattr(sender, "username", None)
+        or "Someone"
+    )
+
+
+def _user_is_chat_online(user_id):
+    presence = UserChatPresence.objects.filter(user_id=user_id).first()
+    return bool(presence and presence.is_online)
+
+
+def _email_chat_notice(recipient, *, subject, message, conversation_id):
+    """Throttle email so rapid back-to-back messages don't spam the inbox."""
+    try:
+        from django.core.cache import cache
+
+        from . import social_email
+
+        key = f"chat_email:{conversation_id}:{recipient.id}"
+        if cache.get(key):
+            return False
+        sent = social_email.send_social_email(
+            recipient,
+            subject=subject,
+            message=message,
+            link=social_email.chat_url(conversation_id),
+            headline="New Climate Wavers message",
+        )
+        if sent:
+            cache.set(key, 1, 300)  # 5 minutes
+        return sent
+    except Exception:
+        return False
+
+
 def notify_chat_mentions(msg, sender=None):
-    """Create in-app (+ websocket) notifications for @mentioned users."""
+    """Create in-app (+ websocket + email) notifications for @mentioned users."""
     try:
         mentions = msg.mentions or []
         if not mentions:
@@ -112,13 +166,8 @@ def notify_chat_mentions(msg, sender=None):
         if not recipients:
             return
 
-        display = (
-            f"{sender.first_name or ''} {sender.last_name or ''}".strip()
-            or sender.username
-        )
-        preview = (msg.body or "").strip()
-        if len(preview) > 120:
-            preview = f"{preview[:117]}..."
+        display = _sender_display(sender)
+        preview = _chat_preview(msg)
 
         content_payload = {
             "conversation_id": msg.conversation_id,
@@ -145,9 +194,112 @@ def notify_chat_mentions(msg, sender=None):
                 "mention",
                 content=content_payload,
             )
+            _email_chat_notice(
+                recipient,
+                subject=f"{display} mentioned you on Climate Wavers",
+                message=f"{notice_text}: {preview}",
+                conversation_id=msg.conversation_id,
+            )
     except Exception:
         # Never break chat send if notification delivery fails.
         return
+
+
+def notify_chat_message_recipients(msg, sender=None):
+    """
+    Notify DM (and small group) recipients about a new chat message.
+
+    - Always creates an in-app + websocket notification for DMs.
+    - Emails when the recipient is offline (or presence unknown), throttled.
+    - Skips muted members and large community rooms.
+    """
+    try:
+        sender = sender or msg.sender
+        if not sender or not msg.conversation_id:
+            return
+
+        conv = getattr(msg, "conversation", None)
+        if conv is None:
+            conv = Conversation.objects.filter(id=msg.conversation_id).first()
+        if not conv:
+            return
+
+        # Community feed would spam thousands — mentions only (handled separately).
+        if conv.conversation_type == "community":
+            return
+
+        memberships = list(
+            ConversationMember.objects.filter(conversation_id=conv.id)
+            .exclude(user_id=sender.id)
+            .select_related("user")
+        )
+        if not memberships:
+            return
+
+        # Cap group emails; DMs are always 1 peer.
+        if conv.conversation_type != "dm" and len(memberships) > 12:
+            return
+
+        from django.contrib.contenttypes.models import ContentType
+
+        from .models import Notification
+        from .signals import send_to_websocket
+
+        display = _sender_display(sender)
+        preview = _chat_preview(msg)
+        ct = ContentType.objects.get_for_model(ChatMessage)
+        notice_text = (
+            f"{display} sent you a message"
+            if conv.conversation_type == "dm"
+            else f"{display} messaged in {conv.name or 'chat'}"
+        )
+        content_payload = {
+            "conversation_id": msg.conversation_id,
+            "message_id": msg.id,
+            "content": preview,
+            "actor": user_public_dict(sender),
+            "conversation_type": conv.conversation_type,
+        }
+
+        for membership in memberships:
+            if membership.muted:
+                continue
+            recipient = membership.user
+            if not recipient:
+                continue
+
+            notification = Notification.objects.create(
+                user=recipient,
+                notification_type="chat_message",
+                object_id=msg.id,
+                content_type=ct,
+                message=notice_text,
+            )
+            send_to_websocket(
+                notification.id,
+                recipient.username,
+                notice_text,
+                sender,
+                "chat_message",
+                content=content_payload,
+            )
+
+            # Email when they are not actively online in chat.
+            if not _user_is_chat_online(recipient.id):
+                _email_chat_notice(
+                    recipient,
+                    subject=f"New message from {display} · Climate Wavers",
+                    message=f"{notice_text}: {preview}",
+                    conversation_id=msg.conversation_id,
+                )
+    except Exception:
+        return
+
+
+def notify_after_chat_message(msg, sender=None):
+    """Mentions + DM/group message alerts. Safe to call from REST or Channels."""
+    notify_chat_mentions(msg, sender=sender)
+    notify_chat_message_recipients(msg, sender=sender)
 
 
 def message_dict(msg, current_user_id=None):
@@ -378,14 +530,21 @@ def conversation_dict(conv, current_user, *, last_message=None, unread=0, member
     members = members or list(conv.memberships.select_related("user").all())
     peer = None
     if conv.conversation_type == "dm":
-        peer_user = next((m.user for m in members if m.user_id != current_user.id), None)
+        peer_member = next((m for m in members if m.user_id != current_user.id), None)
+        peer_user = peer_member.user if peer_member else None
         peer = user_public_dict(peer_user)
-        if peer and online_ids is not None:
-            peer["is_online"] = peer_user.id in online_ids if peer_user else False
-            presence = getattr(peer_user, "chat_presence", None) if peer_user else None
-            peer["last_seen"] = (
-                presence.last_seen.isoformat() if presence and presence.last_seen else None
+        if peer:
+            peer["last_read_message_id"] = getattr(
+                peer_member, "last_read_message_id", None
             )
+            if online_ids is not None:
+                peer["is_online"] = peer_user.id in online_ids if peer_user else False
+                presence = getattr(peer_user, "chat_presence", None) if peer_user else None
+                peer["last_seen"] = (
+                    presence.last_seen.isoformat()
+                    if presence and presence.last_seen
+                    else None
+                )
 
     online_members = []
     if online_ids is not None and conv.conversation_type != "dm":
@@ -709,7 +868,7 @@ class ChatMessageListCreateView(APIView):
             conversation=conv, user=request.user
         ).update(last_read_at=timezone.now(), last_read_message_id=msg.id)
 
-        notify_chat_mentions(msg, sender=request.user)
+        notify_after_chat_message(msg, sender=request.user)
 
         payload = message_dict(msg, request.user.id)
         broadcast_chat_event(conv.id, "message", payload)
@@ -733,6 +892,12 @@ class ChatConversationMembersView(APIView):
 
         online = set(online_user_ids())
         members = []
+        read_by_user = {
+            row.user_id: row.last_read_message_id
+            for row in ConversationMember.objects.filter(conversation=conv).only(
+                "user_id", "last_read_message_id"
+            )
+        }
 
         if conv.conversation_type == "group" and conv.social_group_id:
             rows = (
@@ -748,6 +913,7 @@ class ChatConversationMembersView(APIView):
                     continue
                 person["role"] = row.role
                 person["is_online"] = row.user_id in online
+                person["last_read_message_id"] = read_by_user.get(row.user_id)
                 members.append(person)
             group = conv.social_group
             return Response(
@@ -783,6 +949,9 @@ class ChatConversationMembersView(APIView):
             else:
                 person["role"] = "member"
             person["is_online"] = row.user_id in online
+            person["last_read_message_id"] = row.last_read_message_id or read_by_user.get(
+                row.user_id
+            )
             members.append(person)
 
         profile = None

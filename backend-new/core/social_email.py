@@ -32,6 +32,13 @@ def profile_url(user_id):
     return f"{frontend_base()}/app/{user_id}/profile"
 
 
+def chat_url(conversation_id=None):
+    base = f"{frontend_base()}/app/chat"
+    if conversation_id:
+        return f"{base}?c={conversation_id}"
+    return base
+
+
 def _display_name(user):
     first = (getattr(user, "first_name", None) or "").strip()
     if first:

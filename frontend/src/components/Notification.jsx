@@ -15,7 +15,10 @@ const noticeUrl = (notice) => {
       ? `/app/calendar/events/${eventId}`
       : "/app/calendar";
   }
-  if (notice?.notification_type === "mention") {
+  if (
+    notice?.notification_type === "mention" ||
+    notice?.notification_type === "chat_message"
+  ) {
     const conversationId =
       notice?.content?.conversation_id || notice?.content?.conversationId;
     return conversationId ? `/app/chat?c=${conversationId}` : "/app/chat";

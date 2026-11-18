@@ -5,6 +5,7 @@ import {
   IoArrowBack,
   IoAttachOutline,
   IoChatbubblesOutline,
+  IoCheckmark,
   IoCheckmarkDone,
   IoChevronForward,
   IoClose,
@@ -86,6 +87,44 @@ function formatLastSeen(iso, isOnline) {
   if (diff < 3_600_000) return `last seen ${Math.floor(diff / 60_000)}m ago`;
   if (diff < 86_400_000) return `last seen ${Math.floor(diff / 3_600_000)}h ago`;
   return `last seen ${d.toLocaleDateString()}`;
+}
+
+function TypingDots({ className = "" }) {
+  return (
+    <span className={`inline-flex items-center gap-0.5 ${className}`} aria-hidden>
+      {[0, 1, 2].map((i) => (
+        <span
+          key={i}
+          className="h-1.5 w-1.5 rounded-full bg-current opacity-70 animate-bounce"
+          style={{ animationDelay: `${i * 120}ms`, animationDuration: "0.9s" }}
+        />
+      ))}
+    </span>
+  );
+}
+
+function MessageReceipt({ pending, read }) {
+  if (pending) {
+    return <IoCheckmark size={13} className="opacity-50" aria-label="Sending" title="Sending" />;
+  }
+  if (read) {
+    return (
+      <IoCheckmarkDone
+        size={13}
+        className="text-sky-200"
+        aria-label="Read"
+        title="Read"
+      />
+    );
+  }
+  return (
+    <IoCheckmarkDone
+      size={13}
+      className="opacity-70"
+      aria-label="Sent"
+      title="Sent"
+    />
+  );
 }
 
 function roomIcon(type) {
@@ -201,6 +240,7 @@ const CommunityChat = () => {
   const [sending, setSending] = useState(false);
   const [query, setQuery] = useState("");
   const [typingUsers, setTypingUsers] = useState({});
+  const [readUpToByUser, setReadUpToByUser] = useState({});
   const [directory, setDirectory] = useState([]);
   const [showNewChat, setShowNewChat] = useState(false);
   const [dirQuery, setDirQuery] = useState("");
@@ -481,6 +521,18 @@ const CommunityChat = () => {
   }, [activeId, joinConversation, leaveConversation, loadMessages, setSearchParams]);
 
   useEffect(() => {
+    setTypingUsers({});
+    const seed = {};
+    const peer = activeConversation?.peer;
+    if (peer?.id && peer.last_read_message_id) {
+      seed[Number(peer.id)] = Number(peer.last_read_message_id);
+    }
+    setReadUpToByUser(seed);
+    // Reset when switching threads; peer last_read is re-applied from members next.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeId]);
+
+  useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, typingUsers, activeId]);
 
@@ -551,13 +603,24 @@ const CommunityChat = () => {
         false,
         false
       );
-      setRoomMembers(res?.members || []);
+      const members = res?.members || [];
+      setRoomMembers(members);
+      setReadUpToByUser((prev) => {
+        const next = { ...prev };
+        members.forEach((person) => {
+          const uid = Number(person?.id);
+          const mid = Number(person?.last_read_message_id || 0);
+          if (!uid || uid === Number(me?.id) || !mid) return;
+          if (mid > Number(next[uid] || 0)) next[uid] = mid;
+        });
+        return next;
+      });
       return res;
     } catch {
       setRoomMembers([]);
       return null;
     }
-  }, []);
+  }, [me?.id]);
 
   useEffect(() => {
     if (!activeId) return;
@@ -716,6 +779,31 @@ const CommunityChat = () => {
         }
       }
 
+      if (event === "read" && payload) {
+        const convId = Number(payload.conversation_id);
+        if (Number(activeIdRef.current) !== convId) return;
+        const uid = Number(payload.user_id);
+        const mid = Number(payload.message_id || 0);
+        if (!uid || uid === Number(me?.id) || !mid) return;
+        setReadUpToByUser((prev) => {
+          if (mid <= Number(prev[uid] || 0)) return prev;
+          return { ...prev, [uid]: mid };
+        });
+        setConversations((prev) =>
+          prev.map((c) => {
+            if (Number(c.id) !== convId) return c;
+            if (c.conversation_type !== "dm" || Number(c.peer?.id) !== uid) return c;
+            return {
+              ...c,
+              peer: {
+                ...c.peer,
+                last_read_message_id: mid,
+              },
+            };
+          })
+        );
+      }
+
       if (event === "presence" && payload?.user_id) {
         setConversations((prev) =>
           prev.map((c) => {
@@ -763,8 +851,25 @@ const CommunityChat = () => {
     return "Several people are typing…";
   }, [typingUsers]);
 
+  const peerReadUpTo = useMemo(() => {
+    if (!me?.id) return 0;
+    const others = Object.entries(readUpToByUser)
+      .filter(([uid]) => Number(uid) !== Number(me.id))
+      .map(([, mid]) => Number(mid) || 0);
+    if (activeConversation?.conversation_type === "dm") {
+      const peerId = Number(activeConversation.peer?.id);
+      return Number(
+        readUpToByUser[peerId] ||
+          activeConversation.peer?.last_read_message_id ||
+          0
+      );
+    }
+    return others.length ? Math.max(...others) : 0;
+  }, [activeConversation, me?.id, readUpToByUser]);
+
   const headerSubtitle = useMemo(() => {
     if (!activeConversation) return "";
+    if (typingLabel) return typingLabel;
     if (activeConversation.conversation_type === "dm" && activeConversation.peer) {
       const online = isOnline?.(activeConversation.peer.id) || activeConversation.peer.is_online;
       const seen =
@@ -792,7 +897,7 @@ const CommunityChat = () => {
     }
     const n = activeConversation.online_count || 0;
     return n > 0 ? `${n} online in community` : "Community chat";
-  }, [activeConversation, isOnline, lastSeenMap]);
+  }, [activeConversation, isOnline, lastSeenMap, typingLabel]);
 
   const mentionCandidates = useMemo(() => {
     if (!mentionOpen) return [];
@@ -1402,7 +1507,13 @@ const CommunityChat = () => {
                     <IoChevronForward size={14} className="shrink-0 text-muted" />
                   ) : null}
                 </p>
-                <p className="text-xs text-muted truncate">{headerSubtitle}</p>
+                <p
+                  className={`text-xs truncate ${
+                    typingLabel ? "text-primary italic" : "text-muted"
+                  }`}
+                >
+                  {headerSubtitle}
+                </p>
               </button>
               <button
                 type="button"
@@ -1639,9 +1750,13 @@ const CommunityChat = () => {
                           >
                             <span>{formatClock(msg.created_at)}</span>
                             {mine ? (
-                              <IoCheckmarkDone
-                                size={12}
-                                className={msg.pending ? "opacity-50" : ""}
+                              <MessageReceipt
+                                pending={Boolean(msg.pending)}
+                                read={
+                                  !msg.pending &&
+                                  Number(msg.id) > 0 &&
+                                  Number(msg.id) <= Number(peerReadUpTo || 0)
+                                }
                               />
                             ) : null}
                           </p>
@@ -1653,7 +1768,15 @@ const CommunityChat = () => {
               ))}
 
               {typingLabel ? (
-                <p className="text-xs text-muted italic px-1">{typingLabel}</p>
+                <div className="flex items-center gap-2 px-1 py-1 text-xs text-primary italic">
+                  <span
+                    className="inline-flex items-center justify-center min-h-8 min-w-[3.25rem] px-2.5 bg-muted border border-border"
+                    style={{ borderRadius: 5 }}
+                  >
+                    <TypingDots className="text-muted" />
+                  </span>
+                  <span className="truncate">{typingLabel}</span>
+                </div>
               ) : null}
               <div ref={bottomRef} />
             </div>
