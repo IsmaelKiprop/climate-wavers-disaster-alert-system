@@ -506,9 +506,14 @@ class TreeProject(models.Model):
     target_trees = models.PositiveIntegerField()
     trees_planted = models.PositiveIntegerField(default=0)
     # Species inventory: legacy ["Mango"] or
-    # [{"name": "Rhizophora", "target": 20000, "planted": 120}, ...]
+    # [{"name": "Rhizophora", "target": 20000, "planted": 120, "price": 2.31}, ...]
+    # Optional per-species "price" (USD) overrides tree_price at checkout.
     tree_species = models.JSONField(default=list, blank=True)
-    tree_price = models.DecimalField(max_digits=10, decimal_places=2, help_text="Price in USD")
+    tree_price = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        help_text="Default price in USD (used when a species has no own price)",
+    )
     
     # Environmental Impact
     co2_absorption_per_tree = models.DecimalField(max_digits=8, decimal_places=2, default=22.0)

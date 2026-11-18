@@ -67,6 +67,7 @@ const TreeProjectAdmin = () => {
   const [plantingDayProject, setPlantingDayProject] = useState(null);
   const [speciesDraft, setSpeciesDraft] = useState('');
   const [speciesQtyDraft, setSpeciesQtyDraft] = useState('');
+  const [speciesPriceDraft, setSpeciesPriceDraft] = useState('');
   const [stats, setStats] = useState({
     total_projects: 0,
     active_projects: 0,
@@ -527,6 +528,8 @@ const TreeProjectAdmin = () => {
   const addTreeSpecies = () => {
     const name = String(speciesDraft || '').trim();
     const target = parseInt(String(speciesQtyDraft || '').replace(/,/g, ''), 10);
+    const priceRaw = String(speciesPriceDraft || '').trim();
+    const price = priceRaw === '' ? null : Number(priceRaw);
     if (!name) {
       toast.error('Enter a species name');
       return;
@@ -535,12 +538,24 @@ const TreeProjectAdmin = () => {
       toast.error('Enter how many seedlings for this species');
       return;
     }
+    if (priceRaw !== '' && (!Number.isFinite(price) || price < 0)) {
+      toast.error('Enter a valid USD price for this species (or leave blank)');
+      return;
+    }
     const existing = normalizeTreeSpecies(formData.tree_species);
     if (existing.some((s) => s.name.toLowerCase() === name.toLowerCase())) {
       toast.error('That species is already on this project');
       return;
     }
-    const next = [...existing, { name, target, planted: 0 }];
+    const next = [
+      ...existing,
+      {
+        name,
+        target,
+        planted: 0,
+        price: priceRaw === '' ? null : Number(price.toFixed(2)),
+      },
+    ];
     const sum = speciesTargetSum(next);
     setFormData((prev) => ({
       ...prev,
@@ -549,6 +564,7 @@ const TreeProjectAdmin = () => {
     }));
     setSpeciesDraft('');
     setSpeciesQtyDraft('');
+    setSpeciesPriceDraft('');
   };
 
   const updateSpeciesTarget = (index, value) => {
@@ -563,6 +579,22 @@ const TreeProjectAdmin = () => {
         tree_species: next,
         target_trees: Math.max(parseInt(prev.target_trees, 10) || 0, sum),
       };
+    });
+  };
+
+  const updateSpeciesPrice = (index, value) => {
+    const raw = String(value || '').trim();
+    const price =
+      raw === ''
+        ? null
+        : Number.isFinite(Number(raw)) && Number(raw) >= 0
+          ? Number(Number(raw).toFixed(2))
+          : null;
+    setFormData((prev) => {
+      const next = normalizeTreeSpecies(prev.tree_species).map((s, i) =>
+        i === index ? { ...s, price } : s
+      );
+      return { ...prev, tree_species: next };
     });
   };
 
@@ -582,6 +614,7 @@ const TreeProjectAdmin = () => {
     setEditingProject(project);
     setSpeciesDraft('');
     setSpeciesQtyDraft('');
+    setSpeciesPriceDraft('');
     const species = normalizeTreeSpecies(project.tree_species);
     const sum = speciesTargetSum(species);
     setFormData({
@@ -714,6 +747,7 @@ Thank you for your understanding! 🌱
     });
     setSpeciesDraft('');
     setSpeciesQtyDraft('');
+    setSpeciesPriceDraft('');
     setUploading({
       organization_logo: false,
       cover_image: false,
@@ -1153,13 +1187,15 @@ Thank you for your understanding! 🌱
                       </div>
                       <div>
                         <label className={labelClass}>
-                          Tree Price (USD) *
+                          Default tree price (USD) *
                         </label>
                         <input
                           type="number"
                           name="tree_price"
                           value={formData.tree_price}
                           onChange={handleInputChange}
+                          step="0.01"
+                          min="0"
                           className={`${fieldClass} ${
                             editingProject?.is_verified && !canVerifyProjects
                               ? "opacity-70 cursor-not-allowed"
@@ -1177,10 +1213,14 @@ Thank you for your understanding! 🌱
                             !canVerifyProjects
                           }
                         />
+                        <p className="text-xs text-muted mt-1.5">
+                          Fallback when a species has no own price. Set prices
+                          per species below when they differ.
+                        </p>
                         {editingProject?.is_verified && !canVerifyProjects ? (
                           <p className="text-xs text-muted mt-1.5">
-                            Pricing is locked after project approval. Contact
-                            Climate Wavers to change the tree price.
+                            Default pricing is locked after project approval.
+                            Contact Climate Wavers to change it.
                           </p>
                         ) : null}
                       </div>
@@ -1201,12 +1241,13 @@ Thank you for your understanding! 🌱
 
                     <div className="mt-6">
                       <label className={labelClass}>
-                        Tree species & seedling targets *
+                        Tree species, prices & seedling targets *
                       </label>
                       <p className="text-xs text-muted mb-2">
-                        One project can include multiple species with different
-                        seedling targets — e.g. Rhizophora 20,000 and Bruguiera
-                        30,000. Gifts decrement remaining inventory automatically.
+                        Add each species with its seedling count and optional USD
+                        price (e.g. Mangifera indica $2.31, Avocado $1.92). Leave
+                        price blank to use the default tree price. Gifts decrement
+                        remaining inventory automatically.
                       </p>
                       <div className="flex flex-col sm:flex-row gap-2">
                         <input
@@ -1219,7 +1260,7 @@ Thank you for your understanding! 🌱
                               addTreeSpecies();
                             }
                           }}
-                          placeholder="Species name (e.g. Rhizophora)"
+                          placeholder="Species name (e.g. Mangifera indica)"
                           className={`${fieldClass} sm:flex-1`}
                         />
                         <input
@@ -1234,7 +1275,23 @@ Thank you for your understanding! 🌱
                             }
                           }}
                           placeholder="Seedlings"
-                          className={`${fieldClass} sm:w-36`}
+                          className={`${fieldClass} sm:w-28`}
+                        />
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={speciesPriceDraft}
+                          onChange={(e) => setSpeciesPriceDraft(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              addTreeSpecies();
+                            }
+                          }}
+                          placeholder="USD $"
+                          className={`${fieldClass} sm:w-28`}
+                          title="Optional — leave blank to use default tree price"
                         />
                         <button
                           type="button"
@@ -1249,46 +1306,65 @@ Thank you for your understanding! 🌱
                         <ul className="mt-3 space-y-2">
                           {normalizeTreeSpecies(formData.tree_species).map((species, index) => {
                             const rem = speciesRemaining(species);
+                            const fallback = Number(formData.tree_price) || 0;
                             return (
                             <li
                               key={`${species.name}-${index}`}
-                              className="border border-border bg-background p-3 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3"
+                              className="border border-border bg-background p-3 flex flex-col gap-2"
                             >
-                              <div className="flex-1 min-w-0">
-                                <span className="text-sm font-medium text-foreground truncate block">
-                                  {species.name}
-                                </span>
-                                <span className="text-xs text-muted">
-                                  {(species.planted || 0).toLocaleString()} planted
-                                  {rem != null
-                                    ? ` · ${rem.toLocaleString()} remaining`
-                                    : ''}
-                                </span>
+                              <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+                                <div className="flex-1 min-w-0">
+                                  <span className="text-sm font-medium text-foreground truncate block">
+                                    {species.name}
+                                  </span>
+                                  <span className="text-xs text-muted">
+                                    {(species.planted || 0).toLocaleString()} planted
+                                    {rem != null
+                                      ? ` · ${rem.toLocaleString()} remaining`
+                                      : ''}
+                                  </span>
+                                </div>
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <label className="text-xs text-muted shrink-0">Target</label>
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    value={species.target || ''}
+                                    onChange={(e) => updateSpeciesTarget(index, e.target.value)}
+                                    className="h-9 w-24 px-2 border border-border bg-surface text-sm text-foreground"
+                                  />
+                                  <label className="text-xs text-muted shrink-0">USD</label>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    value={species.price != null ? species.price : ''}
+                                    onChange={(e) => updateSpeciesPrice(index, e.target.value)}
+                                    placeholder={fallback ? String(fallback) : '0'}
+                                    className="h-9 w-24 px-2 border border-border bg-surface text-sm text-foreground"
+                                    title="Blank = use default project price"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => removeTreeSpecies(index)}
+                                    className="h-9 w-9 inline-flex items-center justify-center text-muted hover:text-foreground border border-border"
+                                    aria-label={`Remove ${species.name}`}
+                                    disabled={(species.planted || 0) > 0}
+                                    title={
+                                      (species.planted || 0) > 0
+                                        ? 'Cannot remove — seedlings already gifted'
+                                        : 'Remove species'
+                                    }
+                                  >
+                                    <FaTimesCircle />
+                                  </button>
+                                </div>
                               </div>
-                              <div className="flex items-center gap-2">
-                                <label className="text-xs text-muted shrink-0">Target</label>
-                                <input
-                                  type="number"
-                                  min="1"
-                                  value={species.target || ''}
-                                  onChange={(e) => updateSpeciesTarget(index, e.target.value)}
-                                  className="h-9 w-28 px-2 border border-border bg-surface text-sm text-foreground"
-                                />
-                                <button
-                                  type="button"
-                                  onClick={() => removeTreeSpecies(index)}
-                                  className="h-9 w-9 inline-flex items-center justify-center text-muted hover:text-foreground border border-border"
-                                  aria-label={`Remove ${species.name}`}
-                                  disabled={(species.planted || 0) > 0}
-                                  title={
-                                    (species.planted || 0) > 0
-                                      ? 'Cannot remove — seedlings already gifted'
-                                      : 'Remove species'
-                                  }
-                                >
-                                  <FaTimesCircle />
-                                </button>
-                              </div>
+                              <p className="text-[11px] text-muted">
+                                {species.price != null
+                                  ? `Checkout price: $${Number(species.price).toFixed(2)} / tree`
+                                  : `Uses default: $${Number(fallback).toFixed(2)} / tree`}
+                              </p>
                             </li>
                             );
                           })}
@@ -1611,6 +1687,8 @@ Thank you for your understanding! 🌱
                             >
                               {formatSpeciesList(project.tree_species, {
                                 withRemaining: true,
+                                withPrice: true,
+                                fallbackPrice: project.tree_price,
                               })}
                             </div>
                           ) : (

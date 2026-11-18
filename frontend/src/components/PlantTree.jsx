@@ -16,7 +16,7 @@ import TreeAnalyticsPanel from './TreeAnalyticsPanel';
 import { client } from '../api';
 import { apiUrl } from '../config/env';
 import { unwrapList } from '../utils/apiData';
-import { normalizeTreeSpecies } from '../utils/treeSpecies';
+import { normalizeTreeSpecies, speciesUnitPrice } from '../utils/treeSpecies';
 
 const PlantTree = () => {
   const navigate = useNavigate();
@@ -875,9 +875,12 @@ const PlantTree = () => {
                       </h3>
                       <div className="space-y-2 text-sm text-muted">
                         <div className="flex justify-between gap-3">
-                          <span>Price per tree</span>
+                          <span>Default price / tree</span>
                           <span className="font-medium text-foreground tabular-nums">
-                            ${Number(selectedProject.tree_price || 0).toLocaleString()}
+                            ${Number(selectedProject.tree_price || 0).toLocaleString(undefined, {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
+                            })}
                           </span>
                         </div>
                         <div>
@@ -891,9 +894,16 @@ const PlantTree = () => {
                                     : s.target > 0
                                       ? Math.max(0, s.target - (s.planted || 0))
                                       : null;
+                                const unit = speciesUnitPrice(s, selectedProject.tree_price);
                                 return (
                                   <li key={s.name} className="flex justify-between gap-2">
-                                    <span>{s.name}</span>
+                                    <span className="min-w-0 truncate">
+                                      {s.name}
+                                      <span className="text-muted">
+                                        {" "}
+                                        · ${unit.toFixed(2)}
+                                      </span>
+                                    </span>
                                     {s.target > 0 ? (
                                       <span className="tabular-nums shrink-0">
                                         {(s.planted || 0).toLocaleString()}/

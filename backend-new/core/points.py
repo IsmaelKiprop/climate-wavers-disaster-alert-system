@@ -87,6 +87,7 @@ def account_payload(user, project: TreeProject | None = None):
     redeem_cost = None
     trees_until_free = None
     if project is not None:
+        # Default / typical redeem uses project price; checkout uses species mix.
         redeem_cost = redeem_cost_points(project.tree_price, 1)
         earn_one = gift_earn_points(1, project.tree_price)
         if earn_one > 0:
@@ -122,7 +123,23 @@ def credit_gift_points(donation: TreeProjectDonation):
         return 0
 
     project = donation.project
-    points = gift_earn_points(donation.trees_purchased, project.tree_price)
+    # Prefer actual paid USD (already species-aware). Else price the selection.
+    paid = _as_money(donation.amount)
+    if paid > 0:
+        points = points_for_usd(paid * GIFT_EARN_RATE)
+    else:
+        try:
+            from .tree_inventory import selection_total_usd
+
+            cart_usd, _ = selection_total_usd(
+                project, getattr(donation, "selected_species", None) or {}
+            )
+            if cart_usd > 0:
+                points = points_for_usd(cart_usd * GIFT_EARN_RATE)
+            else:
+                points = gift_earn_points(donation.trees_purchased, project.tree_price)
+        except Exception:
+            points = gift_earn_points(donation.trees_purchased, project.tree_price)
     if points <= 0:
         return 0
 
@@ -154,7 +171,11 @@ def redeem_trees_with_points(
     selected_species=None,
     climate_event=None,
 ):
-    from .tree_inventory import apply_species_purchase, validate_species_purchase
+    from .tree_inventory import (
+        apply_species_purchase,
+        selection_total_usd,
+        validate_species_purchase,
+    )
 
     locked = TreeProject.objects.select_for_update().get(pk=project.pk)
     cleaned_species, species_total = validate_species_purchase(
@@ -170,7 +191,11 @@ def redeem_trees_with_points(
         )
         trees = species_total
 
-    cost = redeem_cost_points(locked.tree_price, trees)
+    if cleaned_species:
+        cart_usd, _ = selection_total_usd(locked, cleaned_species)
+        cost = points_for_usd(cart_usd)
+    else:
+        cost = redeem_cost_points(locked.tree_price, trees)
     account = get_or_create_account(user)
     if account.balance < cost:
         raise ValueError(

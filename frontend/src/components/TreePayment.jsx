@@ -10,8 +10,10 @@ import { fetchUsdToKesRate } from '../utils/exchangeRate';
 import { getAuthToken, getUser } from '../utils/factory';
 import {
   normalizeTreeSpecies,
+  selectionTotalUsd,
   speciesNames,
   speciesRemaining,
+  speciesUnitPrice,
 } from '../utils/treeSpecies';
 
 const TreePayment = ({
@@ -61,13 +63,16 @@ const TreePayment = ({
   // To switch to other currencies for production, change to: currencyConfig.NGN, currencyConfig.USD, etc.
   const selectedCurrency = currencyConfig.KES;
 
-  // Calculate total quantity and amount
+  // Calculate total quantity and amount (per-species prices when set)
   useEffect(() => {
-    const quantities = Object.values(selectedSpecies);
-    const total = quantities.reduce((sum, qty) => sum + (qty || 0), 0);
-    setTotalQuantity(total);
-    setTotalAmount(total * treeData.price);
-  }, [selectedSpecies, treeData.price]);
+    const { total, quantity } = selectionTotalUsd(
+      selectedSpecies,
+      treeData?.tree_species,
+      treeData?.price
+    );
+    setTotalQuantity(quantity);
+    setTotalAmount(Number(total.toFixed(2)));
+  }, [selectedSpecies, treeData?.price, treeData?.tree_species]);
 
   // Recalculate exchange rate when total amount changes
   useEffect(() => {
@@ -140,10 +145,11 @@ const TreePayment = ({
     };
   }, [treeData?.id]);
 
-  const pointsNeeded = (pointsPerTree || 0) * Math.max(totalQuantity, 1);
+  // Points redeem = 100 pts per USD of the selected species cart.
+  const pointsNeeded = Math.max(0, Math.ceil(totalAmount * 100));
   const canRedeem =
     Boolean(getAuthToken()) &&
-    pointsPerTree > 0 &&
+    pointsNeeded > 0 &&
     totalQuantity > 0 &&
     pointsBalance >= pointsNeeded;
 
@@ -643,7 +649,10 @@ const TreePayment = ({
                             ) : null}
                           </h4>
                           <p className="text-sm text-gray-600">
-                            ${treeData.price} per tree
+                            ${speciesUnitPrice(entry, treeData.price).toFixed(2)} per tree
+                            {entry.price == null
+                              ? " (project default)"
+                              : ""}
                             {planned > 0
                               ? ` · ${planted.toLocaleString()}/${planned.toLocaleString()} planted`
                               : ""}
@@ -756,15 +765,17 @@ const TreePayment = ({
               </p>
             </div>
 
-            {getAuthToken() && pointsPerTree ? (
+            {getAuthToken() ? (
               <div className="border border-border bg-background p-3 text-sm">
                 <p className="font-medium text-foreground">
                   Your Wavers Points: {pointsBalance.toLocaleString()}
                 </p>
                 <p className="text-muted mt-1">
                   {totalQuantity > 0
-                    ? `Redeem cost: ${pointsNeeded.toLocaleString()} pts for ${totalQuantity} tree${totalQuantity > 1 ? "s" : ""}`
-                    : `1 tree = ${pointsPerTree.toLocaleString()} pts`}
+                    ? `Redeem cost: ${pointsNeeded.toLocaleString()} pts for ${totalQuantity} tree${totalQuantity > 1 ? "s" : ""} ($${totalAmount.toFixed(2)})`
+                    : pointsPerTree
+                      ? `Typical 1 tree ≈ ${pointsPerTree.toLocaleString()} pts (project default)`
+                      : "Select trees to see redeem cost"}
                 </p>
               </div>
             ) : null}

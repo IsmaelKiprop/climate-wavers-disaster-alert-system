@@ -1,7 +1,12 @@
+import { useMemo } from 'react';
 import { FaMapMarkerAlt, FaUsers, FaShare } from 'react-icons/fa';
 import { useExchangeRate } from '../hooks/useExchangeRate';
 import { projectCoverImage } from '../utils/apiData';
-import { formatSpeciesList, normalizeTreeSpecies } from '../utils/treeSpecies';
+import {
+  formatSpeciesList,
+  normalizeTreeSpecies,
+  speciesUnitPrice,
+} from '../utils/treeSpecies';
 
 const ProjectCard = ({ 
   project, 
@@ -9,7 +14,18 @@ const ProjectCard = ({
   onShare, 
   onPlantTree 
 }) => {
-  const { exchangeRate, convertedAmount, loading: loadingExchangeRate } = useExchangeRate(project.tree_price);
+  const priceRange = useMemo(() => {
+    const catalog = normalizeTreeSpecies(project.tree_species);
+    const fallback = Number(project.tree_price) || 0;
+    if (!catalog.length) return { min: fallback, max: fallback, varied: false };
+    const prices = catalog.map((s) => speciesUnitPrice(s, fallback));
+    const min = Math.min(...prices);
+    const max = Math.max(...prices);
+    return { min, max, varied: max - min > 0.001 };
+  }, [project.tree_price, project.tree_species]);
+
+  const displayPrice = priceRange.varied ? priceRange.min : priceRange.min || project.tree_price;
+  const { exchangeRate, convertedAmount, loading: loadingExchangeRate } = useExchangeRate(displayPrice);
   const cover = projectCoverImage(project);
 
   return (
@@ -54,7 +70,11 @@ const ProjectCard = ({
             title={formatSpeciesList(project.tree_species, { withRemaining: true })}
           >
             Species:{" "}
-            {formatSpeciesList(project.tree_species, { withRemaining: true })}
+            {formatSpeciesList(project.tree_species, {
+              withRemaining: true,
+              withPrice: true,
+              fallbackPrice: project.tree_price,
+            })}
           </p>
         ) : null}
         
@@ -75,7 +95,9 @@ const ProjectCard = ({
           <div className="mb-1 sm:mb-0">
             <div className="flex items-center">
               <span className="text-lg sm:text-2xl font-bold text-green-600">
-                ${project.tree_price.toLocaleString()}
+                {priceRange.varied
+                  ? `$${priceRange.min.toFixed(2)}–$${priceRange.max.toFixed(2)}`
+                  : `$${Number(displayPrice || 0).toFixed(2)}`}
               </span>
               <span className="text-xs sm:text-sm text-gray-500 ml-1">per tree</span>
             </div>
