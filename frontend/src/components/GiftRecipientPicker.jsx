@@ -1,7 +1,13 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import PropTypes from "prop-types";
 import { Link } from "react-router-dom";
-import { FaTree, FaMapMarkerAlt, FaCheck } from "react-icons/fa";
+import {
+  FaTree,
+  FaMapMarkerAlt,
+  FaCheck,
+  FaChevronLeft,
+  FaChevronRight,
+} from "react-icons/fa";
 import { client } from "../api";
 import { endpoints } from "../utils/endpoints";
 import { avatarUrl, getUser } from "../utils/factory";
@@ -18,10 +24,14 @@ const displayName = (user) => {
 };
 
 const placeLabel = (user) =>
-  [user?.location, user?.state, user?.country].filter(Boolean).filter((v, i, arr) => {
-    const lower = String(v).toLowerCase();
-    return arr.findIndex((x) => String(x).toLowerCase() === lower) === i;
-  }).slice(0, 2).join(", ");
+  [user?.location, user?.state, user?.country]
+    .filter(Boolean)
+    .filter((v, i, arr) => {
+      const lower = String(v).toLowerCase();
+      return arr.findIndex((x) => String(x).toLowerCase() === lower) === i;
+    })
+    .slice(0, 2)
+    .join(", ");
 
 const profilePhoto = (user) => {
   const src = avatarUrl(user);
@@ -69,7 +79,7 @@ const hydrateProfiles = async (users) => {
 };
 
 const ProfileSkeleton = () => (
-  <div className="border border-border bg-background p-4 animate-pulse">
+  <div className="shrink-0 w-[240px] sm:w-[260px] snap-start border border-border bg-background p-4 animate-pulse">
     <div className="flex flex-col items-center text-center gap-3">
       <div className="h-20 w-20 rounded-full bg-border" />
       <div className="h-4 w-28 bg-border" />
@@ -83,7 +93,7 @@ const ProfileSkeleton = () => (
 const GiftRecipientPicker = ({ selectedId, onSelect, onClear }) => {
   const me = getUser();
   const { data: suggested = [], isLoading: loadingSuggested } = usePopularUsers({
-    limit: 12,
+    limit: 24,
   });
   const [query, setQuery] = useState("");
   const [results, setResults] = useState([]);
@@ -91,6 +101,29 @@ const GiftRecipientPicker = ({ selectedId, onSelect, onClear }) => {
   const [hydratedSuggested, setHydratedSuggested] = useState([]);
   const [hydratingSuggested, setHydratingSuggested] = useState(false);
   const [hydratingSearch, setHydratingSearch] = useState(false);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+  const scrollerRef = useRef(null);
+
+  const updateScrollState = useCallback(() => {
+    const el = scrollerRef.current;
+    if (!el) {
+      setCanScrollLeft(false);
+      setCanScrollRight(false);
+      return;
+    }
+    const max = el.scrollWidth - el.clientWidth;
+    setCanScrollLeft(el.scrollLeft > 8);
+    setCanScrollRight(max > 8 && el.scrollLeft < max - 8);
+  }, []);
+
+  const scrollByCard = (direction) => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    const card = el.querySelector("[data-gift-card]");
+    const step = card ? card.getBoundingClientRect().width + 16 : el.clientWidth * 0.8;
+    el.scrollBy({ left: direction * step, behavior: "smooth" });
+  };
 
   useEffect(() => {
     let alive = true;
@@ -137,7 +170,7 @@ const GiftRecipientPicker = ({ selectedId, onSelect, onClear }) => {
         const list = (Array.isArray(data?.results) ? data.results : [])
           .filter((user) => user?.id != null)
           .filter((user) => !me?.id || String(user.id) !== String(me.id))
-          .slice(0, 12);
+          .slice(0, 24);
         const profiles = await hydrateProfiles(list);
         if (!alive) return;
         setResults(profiles);
@@ -166,6 +199,24 @@ const GiftRecipientPicker = ({ selectedId, onSelect, onClear }) => {
     (isSearching && (searching || hydratingSearch)) ||
     (!isSearching && (loadingSuggested || hydratingSuggested));
 
+  useEffect(() => {
+    const el = scrollerRef.current;
+    if (!el) return undefined;
+    updateScrollState();
+    const onScroll = () => updateScrollState();
+    el.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", updateScrollState);
+    return () => {
+      el.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", updateScrollState);
+    };
+  }, [people.length, loadingList, updateScrollState]);
+
+  useEffect(() => {
+    const el = scrollerRef.current;
+    if (el) el.scrollTo({ left: 0 });
+  }, [isSearching, query]);
+
   return (
     <section className="mb-6 md:mb-8 border border-border bg-surface">
       <div className="p-4 sm:p-6 border-b border-border">
@@ -183,6 +234,7 @@ const GiftRecipientPicker = ({ selectedId, onSelect, onClear }) => {
               type="button"
               onClick={onClear}
               className="min-h-11 px-4 text-sm font-medium border border-border bg-background hover:bg-background/80 self-start"
+              style={{ borderRadius: 5 }}
             >
               Plant for myself instead
             </button>
@@ -198,6 +250,7 @@ const GiftRecipientPicker = ({ selectedId, onSelect, onClear }) => {
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search by name or @username"
               className="h-12 w-full px-4 border border-border bg-background text-foreground placeholder:text-muted"
+              style={{ borderRadius: 5 }}
               aria-label="Search people to gift"
             />
             {loadingList ? (
@@ -211,22 +264,59 @@ const GiftRecipientPicker = ({ selectedId, onSelect, onClear }) => {
 
       <div className="p-4 sm:p-6">
         <div className="flex items-center justify-between gap-3 mb-4">
-          <p className="text-sm font-medium text-foreground">
-            {isSearching ? "Matching profiles" : "People you can gift"}
-          </p>
-          <p className="text-xs text-muted">
-            {loadingList ? "Fetching profiles…" : `${people.length} shown`}
-          </p>
+          <div>
+            <p className="text-sm font-medium text-foreground">
+              {isSearching ? "Matching profiles" : "People you can gift"}
+            </p>
+            <p className="text-xs text-muted mt-0.5">
+              {loadingList
+                ? "Fetching profiles…"
+                : people.length
+                  ? `${people.length} people · swipe or use arrows`
+                  : "No people yet"}
+            </p>
+          </div>
+          {people.length > 0 || loadingList ? (
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => scrollByCard(-1)}
+                disabled={!canScrollLeft}
+                className="h-10 w-10 inline-flex items-center justify-center border border-border bg-background text-foreground disabled:opacity-35 disabled:cursor-not-allowed hover:bg-surface"
+                style={{ borderRadius: 5 }}
+                aria-label="Previous people"
+              >
+                <FaChevronLeft size={14} aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                onClick={() => scrollByCard(1)}
+                disabled={!canScrollRight && !loadingList}
+                className="h-10 w-10 inline-flex items-center justify-center border border-border bg-background text-foreground disabled:opacity-35 disabled:cursor-not-allowed hover:bg-surface"
+                style={{ borderRadius: 5 }}
+                aria-label="Next people"
+              >
+                <FaChevronRight size={14} aria-hidden="true" />
+              </button>
+            </div>
+          ) : null}
         </div>
 
         {loadingList && people.length === 0 ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {[0, 1, 2, 3].map((i) => (
+          <div
+            ref={scrollerRef}
+            className="flex gap-4 overflow-x-auto pb-2 -mx-1 px-1 snap-x snap-mandatory scroll-smooth"
+            style={{ scrollbarWidth: "thin" }}
+          >
+            {[0, 1, 2, 3, 4].map((i) => (
               <ProfileSkeleton key={i} />
             ))}
           </div>
         ) : people.length === 0 ? (
-          <div className="border border-dashed border-border px-4 py-10 text-center">
+          <div
+            className="border border-dashed border-border px-4 py-10 text-center"
+            style={{ borderRadius: 5 }}
+          >
             <p className="text-sm text-muted">
               {isSearching
                 ? "No matching profiles. Try another name or username."
@@ -234,7 +324,13 @@ const GiftRecipientPicker = ({ selectedId, onSelect, onClear }) => {
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          <div
+            ref={scrollerRef}
+            className="flex gap-4 overflow-x-auto pb-2 -mx-1 px-1 snap-x snap-mandatory scroll-smooth"
+            style={{ scrollbarWidth: "thin" }}
+            role="list"
+            aria-label={isSearching ? "Matching profiles" : "People you can gift"}
+          >
             {people.map((user) => {
               const name = displayName(user);
               const place = placeLabel(user);
@@ -245,14 +341,20 @@ const GiftRecipientPicker = ({ selectedId, onSelect, onClear }) => {
               return (
                 <article
                   key={user.id}
-                  className={`relative flex flex-col border bg-background transition-colors ${
+                  data-gift-card
+                  role="listitem"
+                  className={`relative shrink-0 w-[240px] sm:w-[260px] snap-start flex flex-col border bg-background transition-colors ${
                     active
                       ? "border-primary ring-1 ring-primary"
                       : "border-border hover:border-foreground/30"
                   }`}
+                  style={{ borderRadius: 5 }}
                 >
                   {active ? (
-                    <span className="absolute top-3 right-3 inline-flex items-center gap-1 px-2 py-1 text-[11px] font-semibold uppercase tracking-wide bg-primary text-primary-foreground">
+                    <span
+                      className="absolute top-3 right-3 inline-flex items-center gap-1 px-2 py-1 text-[11px] font-semibold uppercase tracking-wide bg-primary text-primary-foreground"
+                      style={{ borderRadius: 5 }}
+                    >
                       <FaCheck size={10} aria-hidden="true" />
                       Selected
                     </span>
@@ -268,15 +370,17 @@ const GiftRecipientPicker = ({ selectedId, onSelect, onClear }) => {
                         e.target.src = "/avatar.png";
                       }}
                     />
-                    <h3 className="mt-3 text-base font-semibold text-foreground leading-snug px-1">
+                    <h3 className="mt-3 text-base font-semibold text-foreground leading-snug px-1 line-clamp-2">
                       {name}
                     </h3>
                     {user.username ? (
-                      <p className="mt-0.5 text-sm text-muted">@{user.username}</p>
+                      <p className="mt-0.5 text-sm text-muted truncate max-w-full">
+                        @{user.username}
+                      </p>
                     ) : null}
                     {place ? (
                       <p className="mt-2 inline-flex items-center gap-1.5 text-xs text-muted">
-                        <FaMapMarkerAlt className="opacity-70" aria-hidden="true" />
+                        <FaMapMarkerAlt className="opacity-70 shrink-0" aria-hidden="true" />
                         <span className="truncate max-w-[12rem]">{place}</span>
                       </p>
                     ) : null}
