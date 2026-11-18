@@ -152,11 +152,53 @@ def _draw_cw_mark(img: Image.Image, cx: int, cy: int, size: int = 72) -> None:
     )
 
 
+def _draw_planted_tree(
+    draw: ImageDraw.ImageDraw,
+    cx: int,
+    cy: int,
+    *,
+    trees: int = 1,
+    size: int = 88,
+) -> None:
+    """Stylized tree mark for footer (replaces duplicate CW logo)."""
+    s = size
+    # Soft ground oval
+    draw.ellipse(
+        [cx - int(s * 0.42), cy + int(s * 0.28), cx + int(s * 0.42), cy + int(s * 0.48)],
+        fill=(226, 232, 228),
+    )
+    # Trunk
+    trunk_w = max(6, s // 10)
+    draw.rectangle(
+        [cx - trunk_w // 2, cy - int(s * 0.02), cx + trunk_w // 2, cy + int(s * 0.36)],
+        fill=(120, 82, 48),
+    )
+    # Layered canopy
+    canopy = [
+        (cx, cy - int(s * 0.48), int(s * 0.34), TEAL_DARK),
+        (cx - int(s * 0.18), cy - int(s * 0.22), int(s * 0.28), TEAL),
+        (cx + int(s * 0.18), cy - int(s * 0.22), int(s * 0.28), TEAL),
+        (cx, cy - int(s * 0.08), int(s * 0.30), (8, 145, 148)),
+    ]
+    for tx, ty, r, color in canopy:
+        draw.ellipse([tx - r, ty - r, tx + r, ty + r], fill=color)
+    # Gold ring frame
+    ring = int(s * 0.52)
+    draw.ellipse(
+        [cx - ring, cy - ring + 6, cx + ring, cy + ring + 6],
+        outline=GOLD,
+        width=2,
+    )
+    label = _load_font(11, bold=True)
+    text = "TREE PLANTED" if trees == 1 else f"{trees} TREES PLANTED"
+    tw = _text_width(draw, text, label)
+    draw.text((cx - tw // 2, cy + int(s * 0.52)), text, fill=TEAL, font=label)
+
+
 def _draw_seal(draw: ImageDraw.ImageDraw, cx: int, cy: int, radius: int = 78) -> None:
-    """Gold-and-teal recognition seal with ribbon tails (A2SV-style)."""
-    # Ribbon tails behind the seal
+    """Gold-and-navy seal: tree mark + VERIFIED (fits small radius)."""
     ribbon_w = int(radius * 0.55)
-    ribbon_h = int(radius * 1.15)
+    ribbon_h = int(radius * 1.05)
     left = [
         (cx - ribbon_w - 4, cy + 8),
         (cx - 6, cy + 8),
@@ -173,38 +215,43 @@ def _draw_seal(draw: ImageDraw.ImageDraw, cx: int, cy: int, radius: int = 78) ->
     ]
     draw.polygon(left, fill=TEAL_DARK)
     draw.polygon(right, fill=TEAL)
-    # Outer gold ring
     draw.ellipse(
         [cx - radius, cy - radius, cx + radius, cy + radius],
         fill=GOLD,
         outline=NAVY,
         width=2,
     )
-    # Inner navy disc
-    inner = radius - 10
+    inner = radius - 8
     draw.ellipse(
         [cx - inner, cy - inner, cx + inner, cy + inner],
         fill=NAVY,
         outline=GOLD_LIGHT,
         width=2,
     )
-    # Thin teal ring
-    mid = radius - 22
-    draw.ellipse(
-        [cx - mid, cy - mid, cx + mid, cy + mid],
-        outline=TEAL,
-        width=2,
+    # Compact tree inside seal
+    trunk_w = max(3, radius // 14)
+    draw.rectangle(
+        [cx - trunk_w // 2, cy - 2, cx + trunk_w // 2, cy + int(radius * 0.28)],
+        fill=(184, 148, 60),
     )
-    seal_font = _load_font(15, bold=True)
-    seal_small = _load_font(11, bold=True)
-    for text, font, dy, color in (
-        ("CLIMATE", seal_font, -28, GOLD_LIGHT),
-        ("WAVERS", seal_font, -8, GOLD_LIGHT),
-        ("VERIFIED", seal_small, 16, (200, 220, 218)),
-        ("PLANTING", seal_small, 32, (200, 220, 218)),
+    for tx, ty, r in (
+        (cx, cy - int(radius * 0.38), int(radius * 0.22)),
+        (cx - int(radius * 0.16), cy - int(radius * 0.18), int(radius * 0.18)),
+        (cx + int(radius * 0.16), cy - int(radius * 0.18), int(radius * 0.18)),
+        (cx, cy - int(radius * 0.08), int(radius * 0.20)),
     ):
-        tw = _text_width(draw, text, font)
-        draw.text((cx - tw // 2, cy + dy), text, fill=color, font=font)
+        draw.ellipse([tx - r, ty - r, tx + r, ty + r], fill=TEAL)
+    # Single clear label — sized to radius so it never clips the ring
+    label_size = max(10, min(14, radius // 4))
+    seal_font = _load_font(label_size, bold=True)
+    label = "VERIFIED"
+    tw = _text_width(draw, label, seal_font)
+    draw.text(
+        (cx - tw // 2, cy + int(radius * 0.32)),
+        label,
+        fill=GOLD_LIGHT,
+        font=seal_font,
+    )
 
 
 def _load_font(size: int, bold: bool = False, serif: bool = False):
@@ -612,21 +659,24 @@ def render_certificate_png(donation) -> bytes:
     tree_word = "tree" if ctx["trees"] == 1 else "trees"
     if ctx["gifted_to"]:
         prose = (
-            f"Congratulations on funding {ctx['trees']} {tree_word} gifted to "
-            f"{ctx['gifted_to']}, supporting {ctx['project_name']} in {ctx['location']} "
-            f"({ctx['species']}). Your dedication restores ecosystems and advances "
-            f"climate action across Africa. Estimated CO₂ absorption ~{ctx['co2']:.0f} kg/year."
+            f"In honour of your generosity, {ctx['trees']} {tree_word} "
+            f"will be planted as a gift for {ctx['gifted_to']}, supporting "
+            f"{ctx['project_name']} in {ctx['location']}. "
+            f"Your kindness helps restore living landscapes and strengthens "
+            f"climate resilience across Africa — with an estimated "
+            f"{ctx['co2']:.0f} kg of CO₂ absorbed each year."
         )
     else:
         prose = (
-            f"Congratulations on funding the planting of {ctx['trees']} {tree_word} "
-            f"with Climate Wavers — {ctx['species']} for {ctx['project_name']} in "
-            f"{ctx['location']}. Your outstanding dedication restores ecosystems and "
-            f"supports local climate action across Africa. "
-            f"Estimated CO₂ absorption ~{ctx['co2']:.0f} kg/year."
+            f"In recognition of your commitment to a greener future, "
+            f"{ctx['trees']} {tree_word} will be planted through Climate Wavers "
+            f"for {ctx['project_name']} in {ctx['location']}. "
+            f"Your contribution nurtures ecosystems, uplifts local communities, "
+            f"and advances climate action across Africa — absorbing an estimated "
+            f"{ctx['co2']:.0f} kg of CO₂ each year."
         )
     if ctx["organization_name"]:
-        prose += f" Hosted by {ctx['organization_name']}."
+        prose += f" This planting is hosted by {ctx['organization_name']}."
 
     for line in _wrap_text(draw, prose, body_font, w - 360):
         _center_text(draw, y, line, body_font, INK, w)
@@ -652,26 +702,23 @@ def render_certificate_png(donation) -> bytes:
         id_bits += f"   ·   Ref  {ctx['payment_reference']}"
     _center_text(draw, y, id_bits[:90], tiny_font, MUTED, w)
 
-    # Footer directly under content: CW | QR | seal | Founder & CEO
-    y += 22
+    # Footer: planted tree | QR | seal | Founder & CEO (CW logo only at top)
+    y += 18
     footer_y = y
-    cw_foot = _cw_logo(max_w=100, max_h=70)
-    qr_img = _make_qr_image(ctx["verify_url"], box=100)
+    qr_img = _make_qr_image(ctx["verify_url"], box=96)
 
-    if cw_foot:
-        lx = 120
-        fy = footer_y + 18
-        draw.rounded_rectangle(
-            [lx - 6, fy - 4, lx + cw_foot.width + 6, fy + cw_foot.height + 4],
-            radius=6,
-            fill=(10, 10, 10),
-        )
-        _paste_logo(img, cw_foot, lx, fy)
+    _draw_planted_tree(
+        draw,
+        175,
+        footer_y + 48,
+        trees=int(ctx["trees"] or 1),
+        size=86,
+    )
 
     # QR left of seal
     if qr_img:
-        qx = w // 2 - 210
-        qy = footer_y + 8
+        qx = w // 2 - 200
+        qy = footer_y + 6
         draw.rectangle(
             [qx - 4, qy - 4, qx + qr_img.width + 4, qy + qr_img.height + 4],
             fill=WHITE,
@@ -689,12 +736,12 @@ def render_certificate_png(donation) -> bytes:
             font=scan_font,
         )
 
-    seal_cy = footer_y + 52
-    _draw_seal(draw, w // 2 + 30, seal_cy, radius=54)
+    seal_cy = footer_y + 50
+    _draw_seal(draw, w // 2 + 36, seal_cy, radius=52)
 
     # Founder & CEO (right) — A2SV-style signatory, no handwritten signature
     sign_x = w - 130
-    sign_y = footer_y + 16
+    sign_y = footer_y + 14
     sn = ctx.get("founder_name") or FOUNDER_NAME
     st = ctx.get("founder_title") or FOUNDER_TITLE
     sn_w = _text_width(draw, sn, sign_font)
@@ -710,7 +757,7 @@ def render_certificate_png(donation) -> bytes:
     if fo_mini:
         _paste_logo(img, fo_mini, sign_x - fo_mini.width, sign_y + 68)
 
-    tagline_y = footer_y + 145
+    tagline_y = footer_y + 140
     _center_text(
         draw,
         min(tagline_y, h - 72),

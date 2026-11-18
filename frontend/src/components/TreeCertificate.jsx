@@ -61,8 +61,8 @@ const TreeCertificate = ({
 
   const treeWord = trees === 1 ? 'tree' : 'trees';
   const prose = giftedTo
-    ? `Congratulations on funding ${trees} ${treeWord} gifted to ${giftedTo}, supporting ${projectName} in ${location} (${species}). Your dedication restores ecosystems and advances climate action across Africa. Estimated CO₂ absorption ~${co2} kg/year.${orgName ? ` Hosted by ${orgName}.` : ''}`
-    : `Congratulations on funding the planting of ${trees} ${treeWord} with Climate Wavers — ${species} for ${projectName} in ${location}. Your outstanding dedication restores ecosystems and supports local climate action across Africa. Estimated CO₂ absorption ~${co2} kg/year.${orgName ? ` Hosted by ${orgName}.` : ''}`;
+    ? `In honour of your generosity, ${trees} ${treeWord} will be planted as a gift for ${giftedTo}, supporting ${projectName} in ${location}. Your kindness helps restore living landscapes and strengthens climate resilience across Africa — with an estimated ${co2} kg of CO₂ absorbed each year.${orgName ? ` This planting is hosted by ${orgName}.` : ''}`
+    : `In recognition of your commitment to a greener future, ${trees} ${treeWord} will be planted through Climate Wavers for ${projectName} in ${location}. Your contribution nurtures ecosystems, uplifts local communities, and advances climate action across Africa — absorbing an estimated ${co2} kg of CO₂ each year.${orgName ? ` This planting is hosted by ${orgName}.` : ''}`;
 
   const handleDownload = async () => {
     if (downloading || !certificateRef.current) return;
@@ -207,8 +207,20 @@ const TreeCertificate = ({
               </p>
 
               <div className="mt-4 flex items-end justify-between gap-2 sm:gap-3">
-                <div className="bg-black p-1 shrink-0">
-                  <img src="/logo.jpg" alt="" className="h-9 sm:h-11 w-auto object-contain" />
+                <div className="shrink-0 text-center w-[72px] sm:w-[88px]">
+                  <div className="relative mx-auto h-16 w-16 sm:h-[4.5rem] sm:w-[4.5rem] rounded-full border-2 border-[#b8943c] flex items-end justify-center pb-1 overflow-hidden bg-[#f4f7f5]">
+                    <svg viewBox="0 0 64 64" className="h-14 w-14" aria-hidden>
+                      <ellipse cx="32" cy="54" rx="18" ry="5" fill="#e2e8e4" />
+                      <rect x="29" y="34" width="6" height="18" rx="1.5" fill="#785230" />
+                      <circle cx="32" cy="18" r="12" fill="#055a5f" />
+                      <circle cx="22" cy="26" r="10" fill="#067d83" />
+                      <circle cx="42" cy="26" r="10" fill="#067d83" />
+                      <circle cx="32" cy="30" r="11" fill="#089194" />
+                    </svg>
+                  </div>
+                  <p className="mt-1 text-[8px] uppercase tracking-wide text-[#067d83] font-sans font-semibold">
+                    {trees === 1 ? 'Tree planted' : `${trees} trees planted`}
+                  </p>
                 </div>
 
                 <div className="flex items-end gap-3 sm:gap-5 shrink-0">
@@ -230,10 +242,16 @@ const TreeCertificate = ({
                     <div className="absolute left-1/2 top-[55%] -translate-x-[110%] w-4 h-8 bg-[#055a5f] origin-top -rotate-[18deg]" />
                     <div className="absolute left-1/2 top-[55%] translate-x-[10%] w-4 h-8 bg-[#067d83] origin-top rotate-[18deg]" />
                     <div className="relative h-full w-full rounded-full bg-[#b8943c] border-2 border-[#0c303a] flex items-center justify-center">
-                      <div className="h-[78%] w-[78%] rounded-full bg-[#0c303a] border border-[#d4b462] flex flex-col items-center justify-center font-sans">
-                        <p className="text-[7px] sm:text-[8px] font-bold text-[#d4b462] leading-tight">CLIMATE</p>
-                        <p className="text-[7px] sm:text-[8px] font-bold text-[#d4b462] leading-tight">WAVERS</p>
-                        <p className="text-[6px] text-slate-300 mt-0.5">VERIFIED</p>
+                      <div className="h-[78%] w-[78%] rounded-full bg-[#0c303a] border border-[#d4b462] flex flex-col items-center justify-center font-sans px-1">
+                        <svg viewBox="0 0 40 36" className="h-6 w-6 sm:h-7 sm:w-7" aria-hidden>
+                          <rect x="18" y="20" width="4" height="12" rx="1" fill="#b8943c" />
+                          <circle cx="20" cy="10" r="7" fill="#067d83" />
+                          <circle cx="13" cy="16" r="6" fill="#089194" />
+                          <circle cx="27" cy="16" r="6" fill="#089194" />
+                        </svg>
+                        <p className="text-[8px] sm:text-[9px] font-bold text-[#d4b462] leading-none mt-0.5 tracking-wide">
+                          VERIFIED
+                        </p>
                       </div>
                     </div>
                   </div>
