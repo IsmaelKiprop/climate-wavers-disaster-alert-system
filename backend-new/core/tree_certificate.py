@@ -74,7 +74,14 @@ def donor_label(donation) -> str:
 def gifted_label(donation) -> str:
     if not donation.gifted_to_id:
         return ""
-    return _display_name(donation.gifted_to) or f"Member #{donation.gifted_to_id}"
+    # Self-gift / same person — show as a planting, not a gift line
+    if donation.donor_id and donation.gifted_to_id == donation.donor_id:
+        return ""
+    label = _display_name(donation.gifted_to) or f"Member #{donation.gifted_to_id}"
+    donor = donor_label(donation)
+    if label and donor and label.strip().lower() == donor.strip().lower():
+        return ""
+    return label
 
 
 def species_summary(donation) -> str:
@@ -88,6 +95,73 @@ def species_summary(donation) -> str:
         if parts:
             return ", ".join(parts)
     return "Verified seedling"
+
+
+def _text_width(draw: ImageDraw.ImageDraw, text: str, font) -> int:
+    try:
+        box = draw.textbbox((0, 0), text, font=font)
+        return max(0, box[2] - box[0])
+    except Exception:
+        return int(len(text) * (getattr(font, "size", 16) * 0.55))
+
+
+def _center_text(draw, y, text, font, fill, canvas_w, x0=0, x1=None):
+    x1 = canvas_w if x1 is None else x1
+    tw = _text_width(draw, text, font)
+    x = x0 + max(0, ((x1 - x0) - tw) // 2)
+    draw.text((x, y), text, fill=fill, font=font)
+    return y
+
+
+def _draw_cw_mark(img: Image.Image, cx: int, cy: int, size: int = 72) -> None:
+    """Drawn Climate Wavers mark (leaf + wave) so branding works offline."""
+    draw = ImageDraw.Draw(img)
+    r = size // 2
+    draw.ellipse([cx - r, cy - r, cx + r, cy + r], fill=WHITE)
+    # Leaf
+    leaf = [
+        (cx, cy - int(r * 0.62)),
+        (cx + int(r * 0.48), cy + int(r * 0.08)),
+        (cx, cy + int(r * 0.55)),
+        (cx - int(r * 0.48), cy + int(r * 0.08)),
+    ]
+    draw.polygon(leaf, fill=TEAL)
+    draw.line(
+        [(cx, cy - int(r * 0.45)), (cx, cy + int(r * 0.42))],
+        fill=WHITE,
+        width=max(2, size // 28),
+    )
+    # Soft wave under mark
+    draw.arc(
+        [cx - int(r * 0.7), cy + int(r * 0.15), cx + int(r * 0.7), cy + int(r * 0.95)],
+        start=200,
+        end=340,
+        fill=TEAL_DARK,
+        width=max(2, size // 26),
+    )
+
+
+def _draw_seal(draw: ImageDraw.ImageDraw, cx: int, cy: int, radius: int = 78) -> None:
+    draw.ellipse(
+        [cx - radius, cy - radius, cx + radius, cy + radius],
+        outline=TEAL,
+        width=3,
+    )
+    draw.ellipse(
+        [cx - radius + 10, cy - radius + 10, cx + radius - 10, cy + radius - 10],
+        outline=(153, 246, 228),
+        width=2,
+    )
+    seal_font = _load_font(18, bold=True)
+    seal_small = _load_font(13)
+    for text, font, dy, color in (
+        ("CLIMATE", seal_font, -26, TEAL),
+        ("WAVERS", seal_font, -4, TEAL),
+        ("VERIFIED", seal_small, 22, MUTED),
+        ("PLANTING", seal_small, 40, MUTED),
+    ):
+        tw = _text_width(draw, text, font)
+        draw.text((cx - tw // 2, cy + dy), text, fill=color, font=font)
 
 
 def _load_font(size: int, bold: bool = False):
@@ -136,24 +210,32 @@ def _fetch_logo(url: str, max_w: int = 220, max_h: int = 72) -> Optional[Image.I
         return None
 
 
+def _load_local_logo(max_w: int = 220, max_h: int = 72) -> Optional[Image.Image]:
+    """Prefer bundled Climate Wavers logo.jpg when running beside the monorepo."""
+    here = os.path.abspath(os.path.dirname(__file__))
+    candidates = [
+        os.path.join(here, "..", "..", "frontend", "public", "logo.jpg"),
+        os.path.join(here, "..", "..", "frontend", "dist", "logo.jpg"),
+        os.path.join(here, "static", "logo.jpg"),
+    ]
+    for path in candidates:
+        try:
+            if not os.path.exists(path):
+                continue
+            img = Image.open(path).convert("RGBA")
+            img.thumbnail((max_w, max_h), Image.Resampling.LANCZOS)
+            return img
+        except Exception:
+            continue
+    return None
+
+
 def _cw_logo() -> Optional[Image.Image]:
-    base = frontend_base()
-    for path in ("/Vector.png", "/logo.jpg", "/og-image.jpg"):
-        logo = _fetch_logo(f"{base}{path}")
-        if logo:
-            return logo
-    return None
-
-
-def _flowops_logo() -> Optional[Image.Image]:
-    for url in (
-        "https://www.flowops.africa/favicon.ico",
-        f"{frontend_base()}/Vector.png",
-    ):
-        logo = _fetch_logo(url, max_w=160, max_h=56)
-        if logo:
-            return logo
-    return None
+    local = _load_local_logo()
+    if local:
+        return local
+    # Only the real brand mark — avoid og-image / favicons that look wrong on teal
+    return _fetch_logo(f"{frontend_base()}/logo.jpg", max_w=200, max_h=64)
 
 
 def build_certificate_context(donation) -> Dict[str, Any]:
@@ -188,127 +270,132 @@ def build_certificate_context(donation) -> Dict[str, Any]:
 
 
 def render_certificate_png(donation) -> bytes:
-    """Landscape branded certificate as PNG bytes."""
+    """Landscape branded Climate Wavers certificate as PNG bytes."""
     ctx = build_certificate_context(donation)
-    w, h = 1600, 1132
-    img = Image.new("RGB", (w, h), CREAM)
+    w, h = 1600, 920
+    img = Image.new("RGB", (w, h), (247, 250, 250))
     draw = ImageDraw.Draw(img)
 
-    # Outer brand frame
-    draw.rectangle([36, 36, w - 36, h - 36], outline=BORDER, width=4)
-    draw.rectangle([52, 52, w - 52, h - 52], outline=(204, 251, 241), width=2)
+    # Frame
+    draw.rectangle([24, 24, w - 24, h - 24], outline=TEAL, width=5)
+    draw.rectangle([38, 38, w - 38, h - 38], outline=(167, 243, 208), width=2)
 
-    # Header bar
-    draw.rectangle([52, 52, w - 52, 168], fill=TEAL)
+    # Brand header
+    draw.rectangle([38, 38, w - 38, 148], fill=TEAL)
+    _draw_cw_mark(img, 108, 93, size=84)
 
-    title_font = _load_font(42, bold=True)
-    sub_font = _load_font(22, bold=True)
-    body_font = _load_font(28)
-    small_font = _load_font(20)
-    tiny_font = _load_font(16)
-    name_font = _load_font(48, bold=True)
+    brand_font = _load_font(36, bold=True)
+    brand_sub = _load_font(16)
+    eyebrow = _load_font(15, bold=True)
+    name_font = _load_font(54, bold=True)
+    body_font = _load_font(23)
+    label_font = _load_font(13, bold=True)
+    value_font = _load_font(19, bold=True)
+    small_font = _load_font(17)
+    tiny_font = _load_font(14)
 
-    draw.text((80, 78), "CLIMATE WAVERS", fill=WHITE, font=sub_font)
-    draw.text((80, 112), "Tree Planting Certificate", fill=WHITE, font=title_font)
+    draw.text((170, 68), "CLIMATE WAVERS", fill=WHITE, font=brand_font)
+    draw.text(
+        (170, 110),
+        "Growing hope across Africa  ·  alerts.flowops.africa",
+        fill=(204, 251, 241),
+        font=brand_sub,
+    )
 
-    cw = _cw_logo()
-    fo = _flowops_logo()
-    if cw:
-        img.paste(cw, (w - 80 - cw.width, 74), cw if cw.mode == "RGBA" else None)
-    if fo:
-        img.paste(fo, (w - 80 - (cw.width if cw else 0) - 24 - fo.width, 90), fo if fo.mode == "RGBA" else None)
+    # Wordmark plate on the right (no third-party / OG art)
+    plate = "CLIMATE WAVERS"
+    plate_font = _load_font(18, bold=True)
+    pw = _text_width(draw, plate, plate_font) + 36
+    px, py = w - 70 - pw, 72
+    draw.rounded_rectangle([px, py, px + pw, py + 44], radius=6, fill=WHITE)
+    draw.text((px + 18, py + 12), plate, fill=TEAL, font=plate_font)
 
-    y = 210
-    draw.text((80, y), "This certifies that", fill=MUTED, font=small_font)
-    y += 48
-    draw.text((80, y), ctx["donor_name"], fill=INK, font=name_font)
-    y += 70
+    # Centered certificate body — tight rhythm
+    _center_text(draw, 175, "CERTIFICATE OF PLANTATION", eyebrow, TEAL, w)
+    _center_text(draw, 202, "This certifies that", small_font, MUTED, w)
+    donor = (ctx["donor_name"] or "Climate Wavers supporter").strip()
+    _center_text(draw, 238, donor[:48], name_font, INK, w)
 
     if ctx["gifted_to"]:
-        draw.text(
-            (80, y),
-            f"gifted tree(s) to {ctx['gifted_to']}",
-            fill=TEAL_DARK,
-            font=body_font,
-        )
-        y += 44
+        action = f"gifted {ctx['trees']} tree{'s' if ctx['trees'] != 1 else ''} to {ctx['gifted_to']}"
     else:
-        draw.text((80, y), "planted tree(s) with Climate Wavers", fill=TEAL_DARK, font=body_font)
-        y += 44
-
-    draw.text(
-        (80, y),
-        f"{ctx['trees']} tree{'s' if ctx['trees'] != 1 else ''} · {ctx['species']}",
-        fill=INK,
-        font=body_font,
-    )
-    y += 40
-    draw.text(
-        (80, y),
-        f"Project: {ctx['project_name']}",
-        fill=INK,
-        font=small_font,
-    )
-    y += 32
-    if ctx["organization_name"]:
-        draw.text(
-            (80, y),
-            f"Hosted by {ctx['organization_name']}",
-            fill=MUTED,
-            font=small_font,
+        action = (
+            f"funded the planting of {ctx['trees']} tree"
+            f"{'s' if ctx['trees'] != 1 else ''} with Climate Wavers"
         )
-        y += 32
-    draw.text((80, y), f"Location: {ctx['location']}", fill=MUTED, font=small_font)
-    y += 32
-    draw.text(
-        (80, y),
-        f"Estimated CO₂ absorption: ~{ctx['co2']:.0f} kg/year",
-        fill=MUTED,
-        font=small_font,
-    )
+    _center_text(draw, 312, action[:90], body_font, TEAL_DARK, w)
 
-    # Right meta card
-    card_x0, card_y0 = 980, 210
-    card_x1, card_y1 = w - 80, 520
-    draw.rounded_rectangle(
-        [card_x0, card_y0, card_x1, card_y1],
-        radius=16,
-        fill=WHITE,
-        outline=(226, 232, 240),
-        width=2,
-    )
-    draw.text((card_x0 + 28, card_y0 + 28), "Certificate details", fill=TEAL, font=sub_font)
-    meta_lines = [
-        ("ID", ctx["certificate_id"]),
-        ("Issued", ctx["issued_on"]),
-        ("Reference", ctx["payment_reference"]),
-        ("Amount", f"{ctx['currency']} {ctx['amount']:,.2f}"),
+    # Impact strip
+    strip_y0, strip_y1 = 370, 520
+    draw.rectangle([64, strip_y0, w - 64, strip_y1], fill=(236, 253, 245))
+    draw.rectangle([64, strip_y0, w - 64, strip_y1], outline=(167, 243, 208), width=2)
+
+    org = (ctx["organization_name"] or "").strip()
+    cells = [
+        ("TREES", f"{ctx['trees']}"),
+        ("SPECIES", (ctx["species"] or "Seedling")[:28]),
+        ("PROJECT", (ctx["project_name"] or "—")[:32]),
+        ("LOCATION", (ctx["location"] or "—")[:28]),
+        ("CO₂ / YEAR", f"~{ctx['co2']:.0f} kg"),
     ]
-    my = card_y0 + 80
-    for label, value in meta_lines:
-        draw.text((card_x0 + 28, my), label, fill=MUTED, font=tiny_font)
-        draw.text((card_x0 + 28, my + 22), str(value)[:42], fill=INK, font=small_font)
-        my += 64
+    cell_w = (w - 128) // len(cells)
+    for i, (label, value) in enumerate(cells):
+        cx0 = 64 + i * cell_w
+        if i > 0:
+            draw.line(
+                [(cx0, strip_y0 + 16), (cx0, strip_y1 - 16)],
+                fill=(167, 243, 208),
+                width=1,
+            )
+        tw = _text_width(draw, label, label_font)
+        draw.text((cx0 + (cell_w - tw) // 2, strip_y0 + 28), label, fill=TEAL, font=label_font)
+        val = value
+        if _text_width(draw, val, value_font) > cell_w - 24 and len(val) > 8:
+            val = val[: max(8, len(val) - 4)] + "…"
+        vw = _text_width(draw, val, value_font)
+        draw.text((cx0 + (cell_w - vw) // 2, strip_y0 + 64), val, fill=INK, font=value_font)
+        if i == 2 and org:
+            ow = _text_width(draw, org[:30], tiny_font)
+            draw.text(
+                (cx0 + (cell_w - ow) // 2, strip_y0 + 98),
+                org[:30],
+                fill=MUTED,
+                font=tiny_font,
+            )
 
-    # Footer brands
-    draw.rectangle([52, h - 150, w - 52, h - 52], fill=WHITE)
-    draw.line([(80, h - 150), (w - 80, h - 150)], fill=(226, 232, 240), width=2)
+    # Signature + meta + seal
+    sig_y = 560
+    draw.text((84, sig_y), "Authorized by", fill=MUTED, font=tiny_font)
     draw.text(
-        (80, h - 120),
-        "Issued by Climate Wavers  ·  Powered by FlowOps Africa",
-        fill=TEAL_DARK,
+        (84, sig_y + 26),
+        "Kipkoech Ismael Kiprop",
+        fill=INK,
+        font=_load_font(23, bold=True),
+    )
+    draw.text((84, sig_y + 56), "Founder, Climate Wavers", fill=MUTED, font=small_font)
+    draw.line([(84, sig_y + 92), (400, sig_y + 92)], fill=TEAL, width=2)
+    draw.text((84, sig_y + 102), "Digital signature", fill=MUTED, font=tiny_font)
+
+    meta_x = 500
+    draw.text((meta_x, sig_y), "CERTIFICATE ID", fill=MUTED, font=label_font)
+    draw.text((meta_x, sig_y + 22), ctx["certificate_id"][:42], fill=INK, font=small_font)
+    draw.text((meta_x, sig_y + 56), "ISSUED", fill=MUTED, font=label_font)
+    draw.text((meta_x, sig_y + 78), ctx["issued_on"], fill=INK, font=small_font)
+    draw.text((meta_x, sig_y + 112), "PAYMENT REF", fill=MUTED, font=label_font)
+    draw.text(
+        (meta_x, sig_y + 134),
+        (ctx["payment_reference"] or "—")[:28],
+        fill=INK,
         font=small_font,
     )
+
+    _draw_seal(draw, w - 160, sig_y + 70, radius=78)
+
+    draw.rectangle([38, h - 78, w - 38, h - 38], fill=TEAL)
     draw.text(
-        (80, h - 88),
-        "Digitally verified on alerts.flowops.africa  ·  Every tree supports local climate action.",
-        fill=MUTED,
-        font=tiny_font,
-    )
-    draw.text(
-        (80, h - 62),
-        "Kipkoech Ismael Kiprop  ·  Founder, Climate Wavers / FlowOps Africa",
-        fill=MUTED,
+        (64, h - 64),
+        "Climate Wavers  ·  Powered by FlowOps Africa  ·  Digitally issued — re-download anytime from your dashboard",
+        fill=WHITE,
         font=tiny_font,
     )
 

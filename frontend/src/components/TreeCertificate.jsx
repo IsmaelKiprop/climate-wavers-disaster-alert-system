@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { IoDownload, IoShare, IoClose, IoLeaf, IoCheckmarkCircle } from 'react-icons/io5';
+import { IoDownload, IoShare, IoClose, IoCheckmarkCircle } from 'react-icons/io5';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 
@@ -25,7 +25,11 @@ const TreeCertificate = ({
     certificateData?.user_name ||
     certificateData?.donor_name ||
     'Climate Wavers supporter';
-  const giftedTo = certificateData?.gifted_to || certificateData?.giftedTo || '';
+  const giftedRaw = certificateData?.gifted_to || certificateData?.giftedTo || '';
+  const giftedTo =
+    giftedRaw && giftedRaw.trim().toLowerCase() !== String(donorName).trim().toLowerCase()
+      ? giftedRaw
+      : '';
   const species =
     certificateData?.species ||
     certificateData?.treeType ||
@@ -37,7 +41,12 @@ const TreeCertificate = ({
     certificateData?.planting_date ||
     new Date().toLocaleDateString();
   const co2 = certificateData?.co2Absorption || certificateData?.co2_absorption || '22';
-  const projectName = certificateData?.project_name || certificateData?.treeType || species;
+  const projectName =
+    certificateData?.project_name || certificateData?.projectName || '';
+  const orgName =
+    certificateData?.organization_name || certificateData?.organizationName || '';
+  const paymentRef =
+    certificateData?.payment_reference || certificateData?.paymentReference || '';
 
   const handleDownload = async () => {
     if (downloading || !certificateRef.current) return;
@@ -48,7 +57,7 @@ const TreeCertificate = ({
         scale: 2,
         useCORS: true,
         allowTaint: true,
-        backgroundColor: '#f8fafc',
+        backgroundColor: '#f7fafa',
       });
 
       const imgData = canvas.toDataURL('image/png');
@@ -82,9 +91,13 @@ const TreeCertificate = ({
 
   if (!isOpen) return null;
 
+  const action = giftedTo
+    ? `gifted ${trees} tree${trees > 1 ? 's' : ''} to ${giftedTo}`
+    : `funded the planting of ${trees} tree${trees > 1 ? 's' : ''} with Climate Wavers`;
+
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-3 sm:p-4">
-      <div className="bg-white max-w-4xl w-full max-h-[92vh] overflow-y-auto shadow-2xl">
+      <div className="bg-white w-full max-w-4xl max-h-[92vh] overflow-y-auto shadow-2xl">
         <div className="flex justify-between items-center px-5 py-4 border-b border-slate-200">
           <div>
             <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Climate Wavers</p>
@@ -103,85 +116,129 @@ const TreeCertificate = ({
         <div className="p-4 sm:p-6">
           <div
             ref={certificateRef}
-            className="relative overflow-hidden border border-[#0d9488]/40"
-            style={{
-              minHeight: '420px',
-              background:
-                'linear-gradient(145deg, #f8fafc 0%, #ecfdf5 45%, #f0fdfa 100%)',
-            }}
+            className="relative overflow-hidden border-[5px] border-[#067d83] bg-[#f7fafa]"
           >
-            <div
-              className="absolute inset-3 pointer-events-none border border-[#067d83]/35"
-              aria-hidden
-            />
-            <div className="relative px-6 sm:px-10 py-8 sm:py-10 text-center">
-              <div className="flex items-center justify-center gap-3 mb-5">
-                <div className="h-11 w-11 rounded-full bg-[#067d83] flex items-center justify-center">
-                  <IoLeaf className="w-6 h-6 text-white" />
-                </div>
-                <div className="text-left">
-                  <p className="text-lg font-semibold tracking-tight text-[#054f54]">Climate Wavers</p>
-                  <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
-                    Powered by FlowOps Africa
-                  </p>
-                </div>
-              </div>
+            <div className="absolute inset-[10px] border-2 border-emerald-200 pointer-events-none" aria-hidden />
 
-              <p className="text-[11px] uppercase tracking-[0.2em] text-[#067d83] mb-2">
+            <div className="relative bg-[#067d83] px-6 sm:px-8 py-5 flex items-center gap-4">
+              <div className="h-14 w-14 rounded-full bg-white flex items-center justify-center shrink-0">
+                <svg viewBox="0 0 64 64" className="h-9 w-9" aria-hidden>
+                  <path
+                    d="M32 10 L46 34 L32 50 L18 34 Z"
+                    fill="#067d83"
+                  />
+                  <path d="M32 16 V46" stroke="#fff" strokeWidth="2.5" />
+                </svg>
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-white text-xl sm:text-2xl font-semibold tracking-tight">
+                  CLIMATE WAVERS
+                </p>
+                <p className="text-emerald-100 text-xs sm:text-sm mt-0.5">
+                  Growing hope across Africa · alerts.flowops.africa
+                </p>
+              </div>
+              <div className="hidden sm:block bg-white p-1.5 border border-white/40 shrink-0">
+                <img
+                  src="/logo.jpg"
+                  alt="Climate Wavers"
+                  className="h-10 w-auto object-contain"
+                  onError={(e) => {
+                    e.currentTarget.style.display = 'none';
+                  }}
+                />
+              </div>
+            </div>
+
+            <div className="relative px-6 sm:px-10 py-8 text-center">
+              <p className="text-[11px] uppercase tracking-[0.2em] text-[#067d83] font-semibold">
                 Certificate of plantation
               </p>
-              <h1 className="text-2xl sm:text-3xl font-semibold text-slate-900 mb-2">
-                Thank you for growing hope
+              <p className="text-sm text-slate-500 mt-3">This certifies that</p>
+              <h1 className="text-3xl sm:text-4xl font-semibold text-slate-900 mt-2 tracking-tight">
+                {donorName}
               </h1>
-              <p className="text-slate-600 max-w-xl mx-auto text-sm sm:text-base mb-6">
-                This certifies that{' '}
-                <span className="font-semibold text-slate-900">{donorName}</span>
-                {giftedTo ? (
-                  <>
-                    {' '}gifted trees to{' '}
-                    <span className="font-semibold text-slate-900">{giftedTo}</span>
-                  </>
-                ) : null}{' '}
-                funded{' '}
-                <span className="font-semibold text-[#067d83]">
-                  {trees} tree{trees > 1 ? 's' : ''}
-                </span>{' '}
-                through Climate Wavers.
+              <p className="text-base sm:text-lg text-[#054f54] mt-4 max-w-2xl mx-auto">
+                {action}
               </p>
+              <p className="text-sm font-medium text-slate-800 mt-2">{species}</p>
 
-              <div className="grid sm:grid-cols-3 gap-3 max-w-2xl mx-auto mb-6 text-left">
-                <div className="bg-white/80 border border-slate-200 px-4 py-3">
-                  <p className="text-[10px] uppercase tracking-wide text-slate-500">Species / project</p>
-                  <p className="text-sm font-medium text-slate-900 mt-1 line-clamp-2">
-                    {species}
-                    {projectName && projectName !== species ? (
-                      <span className="block text-xs text-slate-500 font-normal mt-0.5">
-                        {projectName}
-                      </span>
-                    ) : null}
-                  </p>
-                </div>
-                <div className="bg-white/80 border border-slate-200 px-4 py-3">
-                  <p className="text-[10px] uppercase tracking-wide text-slate-500">Location</p>
-                  <p className="text-sm font-medium text-slate-900 mt-1">{location}</p>
-                  <p className="text-xs text-slate-500 mt-0.5">{plantingDate}</p>
-                </div>
-                <div className="bg-white/80 border border-slate-200 px-4 py-3">
-                  <p className="text-[10px] uppercase tracking-wide text-slate-500">Impact</p>
-                  <p className="text-sm font-medium text-[#067d83] mt-1">
-                    ~{co2} kg CO₂ / tree / year
-                  </p>
-                  {amount > 0 ? (
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      KES {amount.toLocaleString()}
+              <div className="mt-8 grid grid-cols-2 sm:grid-cols-5 border-2 border-emerald-200 bg-emerald-50 text-left">
+                {[
+                  { label: 'Trees', value: String(trees) },
+                  { label: 'Species', value: species },
+                  {
+                    label: 'Project',
+                    value: projectName || 'Climate Wavers project',
+                    sub: orgName,
+                  },
+                  { label: 'Location', value: location },
+                  { label: 'CO₂ / year', value: `~${co2} kg` },
+                ].map((cell) => (
+                  <div
+                    key={cell.label}
+                    className="px-3 py-4 border-t sm:border-t-0 sm:border-l border-emerald-200 first:border-l-0 first:border-t-0"
+                  >
+                    <p className="text-[10px] uppercase tracking-wide text-[#067d83] font-semibold">
+                      {cell.label}
                     </p>
-                  ) : null}
-                </div>
+                    <p className="text-sm font-semibold text-slate-900 mt-1 line-clamp-2">
+                      {cell.value}
+                    </p>
+                    {cell.sub ? (
+                      <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-1">{cell.sub}</p>
+                    ) : null}
+                  </div>
+                ))}
               </div>
 
-              <p className="font-mono text-xs text-slate-500 mb-1">ID {certId}</p>
-              <p className="text-[11px] text-slate-400">
-                Digitally issued by Climate Wavers · FlowOps Africa
+              <div className="mt-8 grid sm:grid-cols-[1.1fr_1fr_auto] gap-6 text-left items-end">
+                <div>
+                  <p className="text-[11px] text-slate-500">Authorized by</p>
+                  <p className="text-base font-semibold text-slate-900 mt-1">
+                    Kipkoech Ismael Kiprop
+                  </p>
+                  <p className="text-sm text-slate-500">Founder, Climate Wavers</p>
+                  <div className="mt-3 h-0.5 w-40 bg-[#067d83]" />
+                  <p className="text-[11px] text-slate-400 mt-1">Digital signature</p>
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase tracking-wide text-slate-500 font-semibold">
+                    Certificate ID
+                  </p>
+                  <p className="font-mono text-xs text-slate-800 mt-1 break-all">{certId}</p>
+                  <p className="text-[10px] uppercase tracking-wide text-slate-500 font-semibold mt-3">
+                    Issued
+                  </p>
+                  <p className="text-sm text-slate-800 mt-1">{plantingDate}</p>
+                  {paymentRef ? (
+                    <>
+                      <p className="text-[10px] uppercase tracking-wide text-slate-500 font-semibold mt-3">
+                        Payment ref
+                      </p>
+                      <p className="font-mono text-xs text-slate-800 mt-1">{paymentRef}</p>
+                    </>
+                  ) : null}
+                  {amount > 0 ? (
+                    <p className="text-xs text-slate-500 mt-3">KES {amount.toLocaleString()}</p>
+                  ) : null}
+                </div>
+                <div className="justify-self-center sm:justify-self-end">
+                  <div className="h-28 w-28 rounded-full border-[3px] border-[#067d83] flex flex-col items-center justify-center text-center">
+                    <div className="h-[5.5rem] w-[5.5rem] rounded-full border-2 border-emerald-200 flex flex-col items-center justify-center">
+                      <p className="text-[10px] font-bold text-[#067d83] leading-tight">CLIMATE</p>
+                      <p className="text-[10px] font-bold text-[#067d83] leading-tight">WAVERS</p>
+                      <p className="text-[9px] text-slate-500 mt-1">VERIFIED</p>
+                      <p className="text-[9px] text-slate-500">PLANTING</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-[#067d83] px-6 py-3">
+              <p className="text-[11px] text-white/95">
+                Climate Wavers · Powered by FlowOps Africa · Digitally issued — re-download anytime from your dashboard
               </p>
             </div>
           </div>
