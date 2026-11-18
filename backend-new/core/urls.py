@@ -42,6 +42,7 @@ from .tree_admin import (
     TreeAdminMeView,
     TreeAdminDonationsView,
 )
+from .tree_certificate import TreeCertificateVerifyView
 from .groups import (
     SocialGroupListCreateView,
     SocialGroupDetailView,
@@ -373,6 +374,16 @@ urlpatterns = [
         "champions/certificate/verify/<str:code>/",
         ChampionCertificateVerifyView.as_view(),
         name="champions-certificate-verify",
+    ),
+    path(
+        "trees/certificate/verify/",
+        TreeCertificateVerifyView.as_view(),
+        name="trees-certificate-verify-query",
+    ),
+    path(
+        "trees/certificate/verify/<path:code>/",
+        TreeCertificateVerifyView.as_view(),
+        name="trees-certificate-verify",
     ),
     path(
         "champions/cameras/nearby/",

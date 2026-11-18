@@ -86,6 +86,8 @@ export const endpoints = {
     "championsCertificate": "/api/v1/champions/certificate/",
     "championsCertificateVerify": (code) =>
       `/api/v1/champions/certificate/verify/${encodeURIComponent(code)}/`,
+    "treesCertificateVerify": (code) =>
+      `/api/v1/trees/certificate/verify/${encodeURIComponent(code)}/`,
     "championsCamerasNearby": "/api/v1/champions/cameras/nearby/",
     "championsCameras": "/api/v1/champions/cameras/",
     "championsPushToken": "/api/v1/champions/devices/push-token/",

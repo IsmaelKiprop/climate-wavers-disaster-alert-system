@@ -1,7 +1,13 @@
-import React, { useRef, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { IoDownload, IoShare, IoClose, IoCheckmarkCircle } from 'react-icons/io5';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
+import { SITE } from '../config/site';
+
+const qrImageUrl = (text, size = 160) =>
+  `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&margin=6&ecc=M&data=${encodeURIComponent(
+    text
+  )}`;
 
 const TreeCertificate = ({
   isOpen,
@@ -48,6 +54,11 @@ const TreeCertificate = ({
   const paymentRef =
     certificateData?.payment_reference || certificateData?.paymentReference || '';
 
+  const verifyUrl = useMemo(() => {
+    const base = (SITE.url || window.location.origin || '').replace(/\/$/, '');
+    return `${base}/verify/tree/${encodeURIComponent(certId)}`;
+  }, [certId]);
+
   const treeWord = trees === 1 ? 'tree' : 'trees';
   const prose = giftedTo
     ? `Congratulations on funding ${trees} ${treeWord} gifted to ${giftedTo}, supporting ${projectName} in ${location} (${species}). Your dedication restores ecosystems and advances climate action across Africa. Estimated CO₂ absorption ~${co2} kg/year.${orgName ? ` Hosted by ${orgName}.` : ''}`
@@ -81,9 +92,9 @@ const TreeCertificate = ({
   };
 
   const handleShare = () => {
-    const text = `I planted ${trees} tree${trees > 1 ? 's' : ''} with Climate Wavers (${certId}). Join me: https://alerts.flowops.africa`;
+    const text = `I planted ${trees} tree${trees > 1 ? 's' : ''} with Climate Wavers (${certId}). Verify: ${verifyUrl}`;
     if (navigator.share) {
-      navigator.share({ title: 'Climate Wavers tree certificate', text, url: window.location.href });
+      navigator.share({ title: 'Climate Wavers tree certificate', text, url: verifyUrl });
     } else {
       navigator.clipboard.writeText(text);
     }
@@ -108,7 +119,7 @@ const TreeCertificate = ({
         <div className="p-4 sm:p-6">
           <div
             ref={certificateRef}
-            className="relative mx-auto w-full max-w-[860px] aspect-[16/11.3] bg-[#fcfbf8] text-center overflow-hidden"
+            className="relative mx-auto w-full max-w-[860px] aspect-[16/9] bg-[#fcfbf8] text-center overflow-hidden"
             style={{
               border: '10px solid #0c303a',
               boxShadow: 'inset 0 0 0 3px #b8943c, inset 0 0 0 5px #067d83',
@@ -117,32 +128,28 @@ const TreeCertificate = ({
                 'repeating-linear-gradient(135deg, rgba(240,238,232,0.55) 0 1px, transparent 1px 14px)',
             }}
           >
-            {/* Geometric corner L-brackets */}
             <div className="pointer-events-none absolute inset-0" aria-hidden>
               <div className="absolute top-0 left-0 w-[72px] h-[14px] bg-[#067d83]" />
               <div className="absolute top-0 left-0 w-[14px] h-[72px] bg-[#067d83]" />
               <div className="absolute top-[7px] left-[7px] w-[52px] h-[4px] bg-[#b8943c]" />
               <div className="absolute top-[7px] left-[7px] w-[4px] h-[52px] bg-[#b8943c]" />
-
               <div className="absolute top-0 right-0 w-[84px] h-[16px] bg-[#0c303a]" />
               <div className="absolute top-0 right-0 w-[16px] h-[84px] bg-[#0c303a]" />
               <div className="absolute top-[8px] right-[8px] w-[60px] h-[4px] bg-[#b8943c]" />
               <div className="absolute top-[8px] right-[8px] w-[4px] h-[60px] bg-[#b8943c]" />
-
               <div className="absolute bottom-0 left-0 w-[84px] h-[16px] bg-[#0c303a]" />
               <div className="absolute bottom-0 left-0 w-[16px] h-[84px] bg-[#0c303a]" />
               <div className="absolute bottom-[8px] left-[8px] w-[60px] h-[4px] bg-[#b8943c]" />
               <div className="absolute bottom-[8px] left-[8px] w-[4px] h-[60px] bg-[#b8943c]" />
-
               <div className="absolute bottom-0 right-0 w-[72px] h-[14px] bg-[#067d83]" />
               <div className="absolute bottom-0 right-0 w-[14px] h-[72px] bg-[#067d83]" />
               <div className="absolute bottom-[7px] right-[7px] w-[52px] h-[4px] bg-[#b8943c]" />
               <div className="absolute bottom-[7px] right-[7px] w-[4px] h-[52px] bg-[#b8943c]" />
             </div>
 
-            <div className="relative h-full flex flex-col px-8 sm:px-12 pt-7 pb-5">
-              <div className="inline-block bg-black p-1.5 mx-auto mb-4">
-                <img src="/logo.jpg" alt="Climate Wavers" className="h-12 sm:h-14 w-auto object-contain" />
+            <div className="relative h-full flex flex-col px-8 sm:px-12 pt-6 pb-4">
+              <div className="inline-block bg-black p-1.5 mx-auto mb-3">
+                <img src="/logo.jpg" alt="Climate Wavers" className="h-11 sm:h-12 w-auto object-contain" />
               </div>
 
               <h1
@@ -152,7 +159,7 @@ const TreeCertificate = ({
                 Certificate of Plantation
               </h1>
 
-              <div className="flex items-center justify-center gap-3 my-3 sm:my-4">
+              <div className="flex items-center justify-center gap-3 my-3">
                 <div className="h-0.5 flex-1 max-w-[140px] bg-[#b8943c]" />
                 <div className="w-2.5 h-2.5 rotate-45 bg-[#b8943c]" />
                 <div className="h-0.5 flex-1 max-w-[140px] bg-[#b8943c]" />
@@ -170,13 +177,13 @@ const TreeCertificate = ({
               <div className="mx-auto mt-2 h-0.5 w-44 sm:w-56 bg-[#b8943c]" />
 
               <p
-                className="mt-4 text-xs sm:text-[15px] leading-relaxed text-slate-700 max-w-2xl mx-auto"
+                className="mt-3 text-xs sm:text-[15px] leading-relaxed text-slate-700 max-w-2xl mx-auto"
                 style={{ fontFamily: 'Georgia, serif' }}
               >
                 {prose}
               </p>
 
-              <div className="mt-4 grid grid-cols-3 gap-2 sm:gap-4 text-center font-sans max-w-xl mx-auto w-full">
+              <div className="mt-3 grid grid-cols-3 gap-2 sm:gap-4 text-center font-sans max-w-xl mx-auto w-full">
                 {[
                   { label: 'Trees', value: String(trees) },
                   { label: 'Species', value: species },
@@ -193,36 +200,61 @@ const TreeCertificate = ({
                 ))}
               </div>
 
-              <p className="mt-3 font-mono text-[9px] text-slate-500">
+              <p className="mt-2 font-mono text-[9px] text-slate-500">
                 ID {certId}
                 {paymentRef ? ` · Ref ${paymentRef}` : ''}
                 {amount > 0 ? ` · KES ${amount.toLocaleString()}` : ''}
               </p>
 
-              <div className="mt-auto pt-3 flex items-end justify-between gap-3">
+              <div className="mt-4 flex items-end justify-between gap-2 sm:gap-3">
                 <div className="bg-black p-1 shrink-0">
-                  <img src="/logo.jpg" alt="" className="h-10 sm:h-12 w-auto object-contain" />
+                  <img src="/logo.jpg" alt="" className="h-9 sm:h-11 w-auto object-contain" />
                 </div>
 
-                <div className="relative h-[4.5rem] w-[4.5rem] sm:h-20 sm:w-20 shrink-0">
-                  <div className="absolute left-1/2 top-[55%] -translate-x-[110%] w-5 h-10 bg-[#055a5f] origin-top -rotate-[18deg]" />
-                  <div className="absolute left-1/2 top-[55%] translate-x-[10%] w-5 h-10 bg-[#067d83] origin-top rotate-[18deg]" />
-                  <div className="relative h-full w-full rounded-full bg-[#b8943c] border-2 border-[#0c303a] flex items-center justify-center">
-                    <div className="h-[78%] w-[78%] rounded-full bg-[#0c303a] border border-[#d4b462] flex flex-col items-center justify-center font-sans">
-                      <p className="text-[8px] sm:text-[9px] font-bold text-[#d4b462] leading-tight">CLIMATE</p>
-                      <p className="text-[8px] sm:text-[9px] font-bold text-[#d4b462] leading-tight">WAVERS</p>
-                      <p className="text-[7px] text-slate-300 mt-0.5">VERIFIED</p>
+                <div className="flex items-end gap-3 sm:gap-5 shrink-0">
+                  <div className="text-center">
+                    <div className="border-2 border-[#b8943c] bg-white p-0.5 inline-block">
+                      <img
+                        src={qrImageUrl(verifyUrl)}
+                        alt="Scan to verify certificate"
+                        className="h-16 w-16 sm:h-[4.5rem] sm:w-[4.5rem]"
+                        crossOrigin="anonymous"
+                      />
+                    </div>
+                    <p className="text-[8px] uppercase tracking-wide text-[#067d83] font-sans font-semibold mt-1">
+                      Scan to verify
+                    </p>
+                  </div>
+
+                  <div className="relative h-16 w-16 sm:h-[4.5rem] sm:w-[4.5rem]">
+                    <div className="absolute left-1/2 top-[55%] -translate-x-[110%] w-4 h-8 bg-[#055a5f] origin-top -rotate-[18deg]" />
+                    <div className="absolute left-1/2 top-[55%] translate-x-[10%] w-4 h-8 bg-[#067d83] origin-top rotate-[18deg]" />
+                    <div className="relative h-full w-full rounded-full bg-[#b8943c] border-2 border-[#0c303a] flex items-center justify-center">
+                      <div className="h-[78%] w-[78%] rounded-full bg-[#0c303a] border border-[#d4b462] flex flex-col items-center justify-center font-sans">
+                        <p className="text-[7px] sm:text-[8px] font-bold text-[#d4b462] leading-tight">CLIMATE</p>
+                        <p className="text-[7px] sm:text-[8px] font-bold text-[#d4b462] leading-tight">WAVERS</p>
+                        <p className="text-[6px] text-slate-300 mt-0.5">VERIFIED</p>
+                      </div>
                     </div>
                   </div>
                 </div>
 
-                <div className="text-center shrink-0">
-                  <p className="text-[8px] sm:text-[9px] uppercase tracking-wide text-slate-400 font-sans mb-1">
-                    Powered by
+                <div className="text-right shrink-0 max-w-[140px] sm:max-w-[180px]">
+                  <p
+                    className="text-sm sm:text-base font-bold text-slate-900 leading-tight"
+                    style={{ fontFamily: 'Georgia, serif' }}
+                  >
+                    {SITE.org.lead}
                   </p>
-                  <div className="bg-white border border-slate-200 p-1 inline-block">
-                    <img src="/flowops-logo.png" alt="FlowOps" className="h-10 sm:h-12 w-auto object-contain" />
-                  </div>
+                  <div className="ml-auto mt-1 h-0.5 w-28 sm:w-36 bg-[#b8943c]" />
+                  <p className="mt-1 text-[9px] sm:text-[10px] text-slate-500 font-sans leading-snug">
+                    Founder &amp; CEO of {SITE.org.name}
+                  </p>
+                  <img
+                    src="/flowops-logo.png"
+                    alt="FlowOps"
+                    className="h-8 sm:h-9 w-auto object-contain ml-auto mt-1"
+                  />
                 </div>
               </div>
 

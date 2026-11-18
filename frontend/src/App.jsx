@@ -34,6 +34,7 @@ const PublicTreeAdminApply = lazy(() => import("./pages/PublicTreeAdminApply"));
 const PublicChampionApply = lazy(() => import("./pages/PublicChampionApply"));
 const ChampionDirectoryPage = lazy(() => import("./pages/ChampionDirectoryPage"));
 const VerifyChampionCertificate = lazy(() => import("./pages/VerifyChampionCertificate"));
+const VerifyTreeCertificate = lazy(() => import("./pages/VerifyTreeCertificate"));
 const DisasterPage = lazy(() => import("./pages/DisasterPage"));
 const Donations = lazy(() => import("./components/Donations"));
 const PlantTree = lazy(() => import("./components/PlantTree"));
@@ -227,6 +228,8 @@ function App() {
                 path="/verify/champion/:code"
                 element={<VerifyChampionCertificate />}
               />
+              <Route path="/verify/tree" element={<VerifyTreeCertificate />} />
+              <Route path="/verify/tree/:code" element={<VerifyTreeCertificate />} />
               <Route path="/project" element={<PublicProjectView />} />
               <Route path="/p/:projectId" element={<PublicProjectView />} />
               <Route path="/u/:userId" element={<SharedProfilePage />} />

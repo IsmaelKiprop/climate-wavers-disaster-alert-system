@@ -12,6 +12,7 @@ import io
 import json
 import logging
 import os
+import urllib.parse
 import urllib.request
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
@@ -20,6 +21,9 @@ from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 from PIL import Image, ImageDraw, ImageFont
+from rest_framework.permissions import AllowAny
+from rest_framework.response import Response
+from rest_framework.views import APIView
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +38,9 @@ CREAM = (250, 249, 246)
 PAPER = (252, 251, 248)
 WHITE = (255, 255, 255)
 BORDER = (13, 148, 136)
+
+FOUNDER_NAME = "Ismael Kiprop"
+FOUNDER_TITLE = "Founder & CEO of FlowOps Africa"
 
 
 def frontend_base() -> str:
@@ -498,30 +505,72 @@ def build_certificate_context(donation) -> Dict[str, Any]:
         "co2": float(getattr(project, "co2_absorption_per_tree", 22) or 22)
         * int(donation.trees_purchased or 1),
         "issued_on": issued_local.strftime("%d %B %Y"),
-        "verify_url": f"{frontend_base()}/plant-tree",
+        "verify_url": (
+            f"{frontend_base()}/verify/tree/"
+            f"{urllib.parse.quote(certificate_id_for(donation), safe='')}"
+        ),
+        "founder_name": FOUNDER_NAME,
+        "founder_title": FOUNDER_TITLE,
     }
+
+
+def _make_qr_image(data: str, box: int = 120) -> Optional[Image.Image]:
+    """QR for certificate verification — local qrcode lib, else public API."""
+    if not data:
+        return None
+    try:
+        import qrcode
+
+        qr = qrcode.QRCode(
+            version=None,
+            error_correction=qrcode.constants.ERROR_CORRECT_M,
+            box_size=4,
+            border=1,
+        )
+        qr.add_data(data)
+        qr.make(fit=True)
+        img = qr.make_image(fill_color=NAVY, back_color="white").convert("RGBA")
+        img = img.resize((box, box), Image.Resampling.NEAREST)
+        return img
+    except Exception:
+        pass
+    try:
+        url = (
+            "https://api.qrserver.com/v1/create-qr-code/"
+            f"?size={box}x{box}&margin=4&ecc=M&data={urllib.parse.quote(data, safe='')}"
+        )
+        req = urllib.request.Request(
+            url, headers={"User-Agent": "ClimateWavers-Certificate/1.0"}
+        )
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            return Image.open(io.BytesIO(resp.read())).convert("RGBA")
+    except Exception as exc:
+        logger.warning("Certificate QR generation failed: %s", exc)
+        return None
 
 
 def render_certificate_png(donation) -> bytes:
     """Formal landscape Climate Wavers certificate (A2SV recognition-style)."""
     ctx = build_certificate_context(donation)
-    w, h = 1600, 1130
+    w, h = 1600, 900
     img = Image.new("RGB", (w, h), PAPER)
     draw = ImageDraw.Draw(img)
     _draw_paper_texture(draw, w, h)
     _draw_formal_frame(draw, w, h)
 
-    title_font = _load_font(48, bold=True, serif=True)
-    name_font = _load_font(56, bold=True, serif=True)
-    body_font = _load_font(22, serif=True)
-    lead_font = _load_font(15, bold=True)
-    tiny_font = _load_font(13)
+    title_font = _load_font(46, bold=True, serif=True)
+    name_font = _load_font(52, bold=True, serif=True)
+    body_font = _load_font(21, serif=True)
+    lead_font = _load_font(14, bold=True)
+    tiny_font = _load_font(12)
     meta_font = _load_font(14)
     label_font = _load_font(12, bold=True)
+    sign_font = _load_font(24, bold=True, serif=True)
+    sign_title_font = _load_font(15)
 
     # Top centered Climate Wavers logo
-    cw_logo = _cw_logo(max_w=180, max_h=110)
-    y = 88
+    cw_logo = _cw_logo(max_w=160, max_h=96)
+    y = 78
     if cw_logo:
         lx = (w - cw_logo.width) // 2
         draw.rounded_rectangle(
@@ -530,15 +579,15 @@ def render_certificate_png(donation) -> bytes:
             fill=(10, 10, 10),
         )
         _paste_logo(img, cw_logo, lx, y)
-        y += cw_logo.height + 28
+        y += cw_logo.height + 20
     else:
-        _draw_cw_mark(img, w // 2, y + 36, size=78)
-        y += 96
+        _draw_cw_mark(img, w // 2, y + 32, size=70)
+        y += 84
 
     _center_text(draw, y, "CERTIFICATE OF PLANTATION", title_font, NAVY, w)
-    y += 58
+    y += 52
     _draw_gold_divider(draw, y, w, margin=280)
-    y += 32
+    y += 26
 
     _center_text(
         draw,
@@ -548,17 +597,17 @@ def render_certificate_png(donation) -> bytes:
         MUTED,
         w,
     )
-    y += 36
+    y += 30
 
     donor = (ctx["donor_name"] or "Climate Wavers supporter").strip()[:48]
     _center_text(draw, y, donor, name_font, INK, w)
     nw = _text_width(draw, donor, name_font)
     draw.line(
-        [(w // 2 - nw // 2 - 12, y + 66), (w // 2 + nw // 2 + 12, y + 66)],
+        [(w // 2 - nw // 2 - 12, y + 60), (w // 2 + nw // 2 + 12, y + 60)],
         fill=GOLD,
         width=2,
     )
-    y += 90
+    y += 78
 
     tree_word = "tree" if ctx["trees"] == 1 else "trees"
     if ctx["gifted_to"]:
@@ -581,10 +630,9 @@ def render_certificate_png(donation) -> bytes:
 
     for line in _wrap_text(draw, prose, body_font, w - 360):
         _center_text(draw, y, line, body_font, INK, w)
-        y += 30
+        y += 28
 
-    y += 22
-    # Compact meta strip (trees · species · issued)
+    y += 18
     details = [
         ("TREES", str(ctx["trees"])),
         ("SPECIES", (ctx["species"] or "—")[:28]),
@@ -596,22 +644,23 @@ def render_certificate_png(donation) -> bytes:
         lw = _text_width(draw, label, label_font)
         draw.text((cx - lw // 2, y), label, fill=TEAL, font=label_font)
         vw = _text_width(draw, value, meta_font)
-        draw.text((cx - vw // 2, y + 20), value, fill=INK, font=meta_font)
+        draw.text((cx - vw // 2, y + 18), value, fill=INK, font=meta_font)
 
-    y += 52
+    y += 48
     id_bits = f"ID  {ctx['certificate_id']}"
     if ctx["payment_reference"]:
         id_bits += f"   ·   Ref  {ctx['payment_reference']}"
     _center_text(draw, y, id_bits[:90], tiny_font, MUTED, w)
 
-    # Footer band: CW | seal | FlowOps — recognition sample layout
-    footer_y = h - 240
-    cw_foot = _cw_logo(max_w=130, max_h=90)
-    fo_foot = _flowops_logo(max_w=110, max_h=110)
+    # Footer directly under content: CW | QR | seal | Founder & CEO
+    y += 22
+    footer_y = y
+    cw_foot = _cw_logo(max_w=100, max_h=70)
+    qr_img = _make_qr_image(ctx["verify_url"], box=100)
 
     if cw_foot:
-        lx = 160
-        fy = footer_y + 36
+        lx = 120
+        fy = footer_y + 18
         draw.rounded_rectangle(
             [lx - 6, fy - 4, lx + cw_foot.width + 6, fy + cw_foot.height + 4],
             radius=6,
@@ -619,28 +668,52 @@ def render_certificate_png(donation) -> bytes:
         )
         _paste_logo(img, cw_foot, lx, fy)
 
-    seal_cy = footer_y + 58
-    _draw_seal(draw, w // 2, seal_cy, radius=66)
-
-    if fo_foot:
-        fx = w - 160 - fo_foot.width
-        fy = footer_y + 28
-        powered = _load_font(11, bold=True)
-        pl = "POWERED BY"
-        pw = _text_width(draw, pl, powered)
-        draw.text((fx + (fo_foot.width - pw) // 2, fy - 18), pl, fill=MUTED, font=powered)
-        draw.rounded_rectangle(
-            [fx - 8, fy - 2, fx + fo_foot.width + 8, fy + fo_foot.height + 6],
-            radius=8,
+    # QR left of seal
+    if qr_img:
+        qx = w // 2 - 210
+        qy = footer_y + 8
+        draw.rectangle(
+            [qx - 4, qy - 4, qx + qr_img.width + 4, qy + qr_img.height + 4],
             fill=WHITE,
-            outline=(226, 232, 240),
-            width=1,
+            outline=GOLD,
+            width=2,
         )
-        _paste_logo(img, fo_foot, fx, fy)
+        _paste_logo(img, qr_img, qx, qy)
+        scan_font = _load_font(10, bold=True)
+        sl = "SCAN TO VERIFY"
+        sw = _text_width(draw, sl, scan_font)
+        draw.text(
+            (qx + (qr_img.width - sw) // 2, qy + qr_img.height + 5),
+            sl,
+            fill=TEAL,
+            font=scan_font,
+        )
 
+    seal_cy = footer_y + 52
+    _draw_seal(draw, w // 2 + 30, seal_cy, radius=54)
+
+    # Founder & CEO (right) — A2SV-style signatory, no handwritten signature
+    sign_x = w - 130
+    sign_y = footer_y + 16
+    sn = ctx.get("founder_name") or FOUNDER_NAME
+    st = ctx.get("founder_title") or FOUNDER_TITLE
+    sn_w = _text_width(draw, sn, sign_font)
+    draw.text((sign_x - sn_w, sign_y), sn, fill=INK, font=sign_font)
+    draw.line(
+        [(sign_x - max(sn_w, 210), sign_y + 34), (sign_x, sign_y + 34)],
+        fill=GOLD,
+        width=2,
+    )
+    st_w = _text_width(draw, st, sign_title_font)
+    draw.text((sign_x - st_w, sign_y + 42), st, fill=NAVY, font=sign_title_font)
+    fo_mini = _flowops_logo(max_w=68, max_h=68)
+    if fo_mini:
+        _paste_logo(img, fo_mini, sign_x - fo_mini.width, sign_y + 68)
+
+    tagline_y = footer_y + 145
     _center_text(
         draw,
-        h - 88,
+        min(tagline_y, h - 72),
         "Climate Wavers  ·  Powered by FlowOps Africa  ·  Digitally issued",
         tiny_font,
         MUTED,
@@ -915,3 +988,69 @@ def serialize_donation_rich(d) -> Dict[str, Any]:
         "admin_share": float(getattr(d, "admin_share", 0) or 0),
         "platform_fee": float(getattr(d, "platform_fee", 0) or 0),
     }
+
+
+class TreeCertificateVerifyView(APIView):
+    """Public lookup — anyone can verify a tree plantation certificate ID."""
+
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    def get(self, request, code=None):
+        from .models import TreeProjectDonation
+
+        raw = (code or request.query_params.get("code") or "").strip()
+        if not raw:
+            return Response(
+                {"valid": False, "detail": "Provide a certificate ID."},
+                status=400,
+            )
+        donation = (
+            TreeProjectDonation.objects.filter(certificate_id__iexact=raw)
+            .select_related("project", "donor", "gifted_to")
+            .first()
+        )
+        if not donation and raw.upper().startswith("CW-"):
+            # Also allow lookup by payment reference suffix
+            ref = raw.split("-", 1)[-1].rsplit("-", 1)[0]
+            donation = (
+                TreeProjectDonation.objects.filter(
+                    payment_reference__iexact=ref,
+                    payment_status="completed",
+                )
+                .select_related("project", "donor", "gifted_to")
+                .first()
+            )
+        if not donation or (donation.payment_status or "") != "completed":
+            return Response(
+                {
+                    "valid": False,
+                    "detail": "No tree certificate matches that ID.",
+                    "certificate_id": raw,
+                },
+                status=404,
+            )
+        cert_id = certificate_id_for(donation)
+        if (donation.certificate_id or "") != cert_id:
+            donation.certificate_id = cert_id
+            donation.save(update_fields=["certificate_id"])
+        ctx = build_certificate_context(donation)
+        return Response(
+            {
+                "valid": True,
+                "certificate": {
+                    "certificate_id": ctx["certificate_id"],
+                    "donor_name": ctx["donor_name"],
+                    "gifted_to": ctx["gifted_to"],
+                    "project_name": ctx["project_name"],
+                    "organization_name": ctx["organization_name"],
+                    "location": ctx["location"],
+                    "species": ctx["species"],
+                    "trees": ctx["trees"],
+                    "co2_kg_year": ctx["co2"],
+                    "issued_on": ctx["issued_on"],
+                    "payment_reference": ctx["payment_reference"],
+                    "verify_url": ctx["verify_url"],
+                },
+            }
+        )

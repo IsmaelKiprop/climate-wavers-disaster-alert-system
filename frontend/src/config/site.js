@@ -29,6 +29,7 @@ export const FOOTER_INFORMATION = [
   { to: "/traffic-report", label: "Traffic Report" },
   { to: "/transparency-report", label: "Transparency Report" },
   { to: "/verify/champion", label: "Verify Champion Certificate" },
+  { to: "/verify/tree", label: "Verify Tree Certificate" },
   { to: "/faq", label: "FAQ" },
   { to: "/privacy-policy", label: "Privacy Policy" },
 ];
