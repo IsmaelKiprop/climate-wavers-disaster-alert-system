@@ -1598,9 +1598,21 @@ class TreeProjectViewSet(viewsets.ModelViewSet):
         total_trees_planted = base.aggregate(
             total=models.Sum('trees_planted')
         )['total'] or 0
-        total_funds_raised = base.aggregate(
-            total=models.Sum('funds_raised')
-        )['total'] or 0
+        # Prefer live USD from donations (Paystack stores KES; funds_raised is USD).
+        from decimal import Decimal
+
+        from .tree_pricing import project_funds_raised_usd, recompute_project_funds_raised
+
+        total_funds_raised = Decimal("0.00")
+        for project in base.only("id", "tree_price", "tree_species", "funds_raised"):
+            try:
+                usd = project_funds_raised_usd(project)
+                total_funds_raised += usd
+                # Heal stale KES-as-USD balances when they diverge
+                if abs(Decimal(str(project.funds_raised or 0)) - usd) >= Decimal("0.50"):
+                    recompute_project_funds_raised(project)
+            except Exception:
+                total_funds_raised += Decimal(str(project.funds_raised or 0))
         
         # Country breakdown
         country_stats = base.values('country').annotate(
@@ -1613,7 +1625,7 @@ class TreeProjectViewSet(viewsets.ModelViewSet):
             'active_projects': active_projects,
             'verified_projects': verified_projects,
             'total_trees_planted': total_trees_planted,
-            'total_funds_raised': total_funds_raised,
+            'total_funds_raised': float(total_funds_raised),
             'country_breakdown': list(country_stats)
         })
 

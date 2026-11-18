@@ -304,6 +304,13 @@ def record_tree_payment(reference, request_user=None, client_data=None):
             updates.append("payer_email")
         if updates:
             existing.save(update_fields=updates)
+        try:
+            from .tree_pricing import recompute_project_funds_raised
+
+            if existing.project_id:
+                recompute_project_funds_raised(existing.project)
+        except Exception as exc:
+            logger.warning("funds_raised recompute skipped: %s", exc)
         payload = _donation_payload(existing, payer_email)
         return _attach_points(payload, existing)
 
@@ -369,14 +376,30 @@ def record_tree_payment(reference, request_user=None, client_data=None):
         if raw_gift not in (None, ""):
             dedication = f"{dedication}\n\nGifted to user id: {raw_gift}".strip()
 
-    from .tree_pricing import split_tree_payment
+    from .tree_pricing import (
+        donation_amount_usd,
+        recompute_project_funds_raised,
+        split_tree_payment,
+    )
 
-    platform_fee, admin_share, fee_rate = split_tree_payment(amount)
+    # Paystack amount is KES; funds_raised / fee split for project totals use USD.
+    usd_meta = dict(metadata) if isinstance(metadata, dict) else {}
+    for key in ("amount_usd", "original_usd", "usd_amount", "usd_kes_rate", "exchange_rate"):
+        if client_data.get(key) not in (None, ""):
+            usd_meta[key] = client_data.get(key)
+    amount_usd = donation_amount_usd(
+        None,
+        project,
+        metadata=usd_meta,
+        kes_amount=amount,
+    )
+    platform_fee, admin_share, fee_rate = split_tree_payment(amount_usd)
 
     create_kwargs = {
         "project": project,
         "donor": donor,
         "payer_email": payer_email,
+        # Keep charged KES for Paystack reconciliation; fee fields are USD shares.
         "amount": amount,
         "platform_fee": platform_fee,
         "admin_share": admin_share,
@@ -408,9 +431,9 @@ def record_tree_payment(reference, request_user=None, client_data=None):
             create_kwargs["project"] = locked
             donation = TreeProjectDonation.objects.create(**create_kwargs)
             locked.trees_planted += trees_purchased
-            # Attribute only the Tree Admin share to project funds
-            locked.funds_raised += admin_share
-            locked.save(update_fields=["trees_planted", "funds_raised", "tree_species"])
+            locked.save(update_fields=["trees_planted", "tree_species"])
+            # Rebuild USD funds from donations (avoids KES-as-USD drift)
+            recompute_project_funds_raised(locked)
             project = locked
     except ValueError as exc:
         raise PaymentRecordError(str(exc), 400) from exc
@@ -431,8 +454,12 @@ def record_tree_payment(reference, request_user=None, client_data=None):
             create_kwargs["project"] = locked
             donation = TreeProjectDonation.objects.create(**create_kwargs)
             locked.trees_planted += trees_purchased
-            locked.funds_raised += admin_share
-            locked.save(update_fields=["trees_planted", "funds_raised", "tree_species"])
+            locked.save(update_fields=["trees_planted", "tree_species"])
+            try:
+                recompute_project_funds_raised(locked)
+            except Exception:
+                locked.funds_raised += admin_share
+                locked.save(update_fields=["funds_raised"])
             project = locked
 
     payload = _donation_payload(donation, payer_email)

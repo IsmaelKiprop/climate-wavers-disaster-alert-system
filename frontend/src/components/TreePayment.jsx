@@ -466,6 +466,9 @@ const TreePayment = ({
       donor_name: donorName,
       dedication_message: dedicationMessage,
       selected_species: selectedSpecies,
+      amount_usd: totalAmount,
+      original_usd: totalAmount,
+      usd_kes_rate: exchangeRate || undefined,
       ...(giftForUser?.id ? { gifted_to: Number(giftForUser.id) } : {}),
       ...(climateEventId ? { climate_event_id: Number(climateEventId) } : {}),
     };
@@ -484,6 +487,9 @@ const TreePayment = ({
         donor_name: donorName,
         dedication_message: dedicationMessage,
         selected_species: JSON.stringify(selectedSpecies),
+        amount_usd: String(totalAmount),
+        original_usd: String(totalAmount),
+        usd_kes_rate: exchangeRate ? String(exchangeRate) : "",
         ...(giftForUser?.id
           ? {
               gifted_to: String(giftForUser.id),
@@ -498,6 +504,16 @@ const TreePayment = ({
           : {}),
         custom_fields: [
           ...config.metadata.custom_fields,
+          {
+            display_name: "Amount USD",
+            variable_name: "amount_usd",
+            value: String(totalAmount),
+          },
+          {
+            display_name: "USD KES Rate",
+            variable_name: "usd_kes_rate",
+            value: exchangeRate ? String(exchangeRate) : "",
+          },
           {
             display_name: "Project Id",
             variable_name: "project_id",

@@ -121,3 +121,108 @@ def split_tree_payment(amount) -> Tuple[Decimal, Decimal, Decimal]:
     platform_fee = (gross * rate).quantize(Decimal("0.01"))
     admin_share = (gross - platform_fee).quantize(Decimal("0.01"))
     return platform_fee, admin_share, rate
+
+
+# Paystack charges KES; project.funds_raised is tracked in USD.
+DEFAULT_USD_KES = Decimal("150")
+
+
+def _as_decimal(value, default: Optional[Decimal] = None) -> Optional[Decimal]:
+    if value is None or value == "":
+        return default
+    try:
+        return Decimal(str(value))
+    except Exception:
+        return default
+
+
+def kes_to_usd(amount_kes, rate=None) -> Decimal:
+    kes = _as_decimal(amount_kes, Decimal("0")) or Decimal("0")
+    usd_kes = _as_decimal(rate, DEFAULT_USD_KES) or DEFAULT_USD_KES
+    if usd_kes <= 0:
+        usd_kes = DEFAULT_USD_KES
+    return (kes / usd_kes).quantize(Decimal("0.01"))
+
+
+def donation_amount_usd(donation, project=None, *, metadata=None, kes_amount=None) -> Decimal:
+    """
+    Best-effort USD gross for a tree donation.
+    Prefer explicit USD from checkout metadata, then species×prices, then KES÷rate.
+    """
+    meta = metadata if isinstance(metadata, dict) else {}
+    for key in ("amount_usd", "original_usd", "usd_amount", "price_usd"):
+        raw = meta.get(key)
+        if raw is None and donation is not None and hasattr(donation, key):
+            raw = getattr(donation, key, None)
+        parsed = _as_decimal(raw)
+        if parsed is not None and parsed > 0:
+            return parsed.quantize(Decimal("0.01"))
+
+    proj = project or (getattr(donation, "project", None) if donation is not None else None)
+    selected = (
+        (getattr(donation, "selected_species", None) if donation is not None else None)
+        or meta.get("selected_species")
+        or {}
+    )
+    if isinstance(selected, str):
+        try:
+            import json
+
+            selected = json.loads(selected)
+        except Exception:
+            selected = {}
+    if proj is not None and isinstance(selected, dict) and selected:
+        try:
+            from .tree_inventory import normalize_tree_species
+
+            catalog = {
+                str(s.get("name") or "").strip().lower(): s
+                for s in normalize_tree_species(getattr(proj, "tree_species", None))
+            }
+            fallback = _as_decimal(getattr(proj, "tree_price", 0), Decimal("0")) or Decimal("0")
+            total = Decimal("0")
+            for name, qty in selected.items():
+                try:
+                    q = int(qty or 0)
+                except (TypeError, ValueError):
+                    q = 0
+                if q <= 0:
+                    continue
+                row = catalog.get(str(name or "").strip().lower()) or {}
+                unit = _as_decimal(row.get("price"), fallback) or fallback
+                total += unit * Decimal(q)
+            if total > 0:
+                return total.quantize(Decimal("0.01"))
+        except Exception:
+            pass
+
+    rate = _as_decimal(meta.get("usd_kes_rate") or meta.get("exchange_rate"), DEFAULT_USD_KES)
+    kes = _as_decimal(
+        kes_amount
+        if kes_amount is not None
+        else getattr(donation, "amount", None),
+        Decimal("0"),
+    ) or Decimal("0")
+    return kes_to_usd(kes, rate)
+
+
+def project_funds_raised_usd(project) -> Decimal:
+    """Sum Tree Admin USD share from completed donations (does not save)."""
+    from .models import TreeProjectDonation
+
+    total = Decimal("0.00")
+    qs = TreeProjectDonation.objects.filter(
+        project_id=project.pk, payment_status="completed"
+    ).only("amount", "admin_share", "selected_species", "trees_purchased")
+    for donation in qs:
+        usd_gross = donation_amount_usd(donation, project)
+        _fee, admin_share_usd, _rate = split_tree_payment(usd_gross)
+        total += admin_share_usd
+    return total.quantize(Decimal("0.01"))
+
+
+def recompute_project_funds_raised(project) -> Decimal:
+    """Persist funds_raised (USD) from completed donations — Tree Admin share only."""
+    project.funds_raised = project_funds_raised_usd(project)
+    project.save(update_fields=["funds_raised"])
+    return project.funds_raised
