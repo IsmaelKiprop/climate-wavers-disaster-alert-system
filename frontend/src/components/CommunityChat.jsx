@@ -210,10 +210,15 @@ const CommunityChat = () => {
   const typingTimeoutRef = useRef(null);
   const typingActiveRef = useRef(false);
   const activeIdRef = useRef(null);
+  const messagesRef = useRef([]);
 
   useEffect(() => {
     activeIdRef.current = activeId;
   }, [activeId]);
+
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
 
   const activeConversation = useMemo(
     () => conversations.find((c) => Number(c.id) === Number(activeId)) || null,
@@ -547,28 +552,24 @@ const CommunityChat = () => {
         });
 
         if (Number(activeIdRef.current) === convId) {
+          const prevMessages = messagesRef.current || [];
+          const isAck =
+            Boolean(payload.client_id) &&
+            prevMessages.some((m) => m.client_id === payload.client_id);
+          const isDup = prevMessages.some((m) => m.id === payload.id);
           setMessages((prev) => {
             if (payload.client_id && prev.some((m) => m.client_id === payload.client_id)) {
-              const wasPending = prev.some(
-                (m) => m.client_id === payload.client_id && m.pending
-              );
-              // Optimistic send already shown — still play outgoing once on ack.
-              if (wasPending && shouldSound) playOutgoingChatSound();
-              else shouldSound = false;
               return prev.map((m) =>
                 m.client_id === payload.client_id ? { ...payload, pending: false } : m
               );
             }
-            if (prev.some((m) => m.id === payload.id)) {
-              shouldSound = false;
-              return prev;
-            }
-            if (shouldSound) {
-              if (mine) playOutgoingChatSound();
-              else playIncomingChatSound();
-            }
+            if (prev.some((m) => m.id === payload.id)) return prev;
             return [...prev, payload];
           });
+          // Outgoing already played on send; only alert for new inbound messages.
+          if (shouldSound && !isAck && !isDup && !mine) {
+            playIncomingChatSound();
+          }
           if (!mine && markRead) {
             markRead(convId, payload.id);
           }
@@ -920,6 +921,7 @@ const CommunityChat = () => {
       pending: true,
     };
     setMessages((prev) => [...prev, optimistic]);
+    playOutgoingChatSound();
     setDraft("");
     setPendingMentions([]);
     clearPendingMedia();
