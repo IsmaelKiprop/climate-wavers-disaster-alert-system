@@ -9,6 +9,7 @@ import {
   IoChevronForward,
   IoClose,
   IoCallOutline,
+  IoDownloadOutline,
   IoGiftOutline,
   IoHappyOutline,
   IoLeafOutline,
@@ -34,9 +35,11 @@ import {
 } from "../utils/notificationSound";
 import ChatGroupInfo from "./ChatGroupInfo";
 import ChatTreeGiftSheet from "./ChatTreeGiftSheet";
+import ChatLinkPreview from "./ChatLinkPreview";
 import LinkifiedText from "./LinkifiedText";
 import ImageLightbox from "./ImageLightbox";
 import { profilePath } from "../utils/linkify";
+import { downloadMedia } from "../utils/downloadMedia";
 import {
   CHAT_SHARE_DRAFT_KEY,
   giftTreesPath,
@@ -1405,7 +1408,7 @@ const CommunityChat = () => {
                           ) : null}
                           {msg.media_url ? (
                             <div
-                              className={`overflow-hidden ${
+                              className={`relative overflow-hidden group/media ${
                                 msg.body ? "-mx-3 mb-1.5" : ""
                               }`}
                             >
@@ -1447,31 +1450,84 @@ const CommunityChat = () => {
                                   />
                                 </button>
                               ) : msg.media_type === "audio" ? (
-                                <audio
-                                  src={secureMediaUrl(msg.media_url)}
-                                  controls
-                                  className="w-full px-3 py-2"
-                                />
+                                <div className="flex items-center gap-2 px-3 py-2">
+                                  <audio
+                                    src={secureMediaUrl(msg.media_url)}
+                                    controls
+                                    className="w-full min-w-0"
+                                  />
+                                  <button
+                                    type="button"
+                                    className="shrink-0 min-h-9 min-w-9 inline-flex items-center justify-center border border-border bg-background text-foreground"
+                                    style={{ borderRadius: 5 }}
+                                    aria-label="Download audio"
+                                    title="Download"
+                                    onClick={() =>
+                                      downloadMedia(
+                                        secureMediaUrl(msg.media_url),
+                                        "climate-wavers-audio.mp3"
+                                      )
+                                    }
+                                  >
+                                    <IoDownloadOutline size={16} />
+                                  </button>
+                                </div>
                               ) : (
-                                <a
-                                  href={secureMediaUrl(msg.media_url)}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="text-sm underline px-3 py-2 inline-block"
-                                >
-                                  Open attachment
-                                </a>
+                                <div className="flex items-center justify-between gap-2 px-3 py-2">
+                                  <a
+                                    href={secureMediaUrl(msg.media_url)}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="text-sm underline"
+                                  >
+                                    Open attachment
+                                  </a>
+                                  <button
+                                    type="button"
+                                    className="shrink-0 min-h-9 min-w-9 inline-flex items-center justify-center border border-border bg-background text-foreground"
+                                    style={{ borderRadius: 5 }}
+                                    aria-label="Download attachment"
+                                    title="Download"
+                                    onClick={() =>
+                                      downloadMedia(secureMediaUrl(msg.media_url))
+                                    }
+                                  >
+                                    <IoDownloadOutline size={16} />
+                                  </button>
+                                </div>
                               )}
+                              {msg.media_type === "image" || msg.media_type === "video" ? (
+                                <button
+                                  type="button"
+                                  className="absolute top-2 right-2 z-[1] min-h-9 min-w-9 inline-flex items-center justify-center bg-black/65 text-white hover:bg-black/80 opacity-100 sm:opacity-0 sm:group-hover/media:opacity-100 transition-opacity"
+                                  style={{ borderRadius: 5 }}
+                                  aria-label="Download media"
+                                  title="Download"
+                                  onClick={(event) => {
+                                    event.preventDefault();
+                                    event.stopPropagation();
+                                    downloadMedia(
+                                      secureMediaUrl(msg.media_url),
+                                      msg.media_type === "video"
+                                        ? "climate-wavers-video.mp4"
+                                        : "climate-wavers-photo.jpg"
+                                    );
+                                  }}
+                                >
+                                  <IoDownloadOutline size={16} />
+                                </button>
+                              ) : null}
                             </div>
                           ) : null}
                           {msg.body ? (
-                            <p className={`text-sm ${msg.media_url ? "px-3" : ""}`}>
+                            <div className={`text-sm ${msg.media_url ? "px-3" : ""}`}>
                               {renderMessageBody(
                                 msg.body,
                                 mergeMentions(msg.mentions, roomMembers),
                                 mine
                               )}
-                            </p>
+                              <ChatLinkPreview text={msg.body} mine={mine} />
+                            </div>
                           ) : null}
                           <p
                             className={`mt-1 flex items-center justify-end gap-1 text-[10px] ${

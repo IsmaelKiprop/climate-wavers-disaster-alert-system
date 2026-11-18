@@ -1,7 +1,8 @@
 import { useEffect, useCallback, useState } from "react";
 import ReactDOM from "react-dom";
 import PropTypes from "prop-types";
-import { IoCloseSharp, IoAdd, IoRemove } from "react-icons/io5";
+import { IoCloseSharp, IoAdd, IoRemove, IoDownloadOutline } from "react-icons/io5";
+import { downloadMedia } from "../utils/downloadMedia";
 
 const MIN_SCALE = 1;
 const MAX_SCALE = 3;
@@ -9,12 +10,26 @@ const STEP = 0.5;
 
 const ImageLightbox = ({ src, alt = "", type = "image", onClose }) => {
   const [scale, setScale] = useState(1);
+  const [downloading, setDownloading] = useState(false);
   const isVideo = type === "video";
 
   const close = useCallback(() => {
     setScale(1);
     onClose?.();
   }, [onClose]);
+
+  const handleDownload = async () => {
+    if (!src || downloading) return;
+    setDownloading(true);
+    try {
+      await downloadMedia(
+        src,
+        isVideo ? "climate-wavers-video.mp4" : "climate-wavers-photo.jpg"
+      );
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   useEffect(() => {
     const prevOverflow = document.body.style.overflow;
@@ -86,6 +101,16 @@ const ImageLightbox = ({ src, alt = "", type = "image", onClose }) => {
               </button>
             </>
           ) : null}
+          <button
+            type="button"
+            className="p-2 text-white/90 hover:bg-white/10 disabled:opacity-40"
+            onClick={handleDownload}
+            disabled={downloading}
+            aria-label="Download media"
+            title="Download"
+          >
+            <IoDownloadOutline size={22} />
+          </button>
           <button
             type="button"
             className="p-2 text-white/90 hover:bg-white/10"
