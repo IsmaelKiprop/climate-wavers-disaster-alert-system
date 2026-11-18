@@ -24,6 +24,68 @@ const TreesPayments = () => {
   const [loading, setLoading] = useState(false);
   const [busyId, setBusyId] = useState(null);
   const [selectedId, setSelectedId] = useState(null);
+  const [certBusy, setCertBusy] = useState(null);
+  const [certPreview, setCertPreview] = useState(null);
+
+  const fetchCertificatePng = async (donationId) => {
+    const data = await client.run(
+      "get",
+      `${endpoints.platformAdminTreeDonationCertificate(donationId)}?format=json`,
+      {},
+      true
+    );
+    if (!data?.png_base64) {
+      throw new Error("Certificate image missing");
+    }
+    return {
+      certificateId: data.certificate_id || "",
+      filename: data.filename || `ClimateWavers_Certificate_${donationId}.png`,
+      dataUrl: `data:image/png;base64,${data.png_base64}`,
+      donation: data.donation || null,
+    };
+  };
+
+  const downloadCertificate = async (donationId) => {
+    setCertBusy(`dl-${donationId}`);
+    try {
+      const cert = certPreview?.donationId === donationId
+        ? certPreview
+        : await fetchCertificatePng(donationId);
+      const link = document.createElement("a");
+      link.href = cert.dataUrl;
+      link.download = cert.filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      toast.success("Certificate downloaded");
+      if (cert.donation) {
+        setRows((prev) =>
+          prev.map((r) => (r.id === donationId ? { ...r, ...cert.donation } : r))
+        );
+      }
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || err?.message || "Download failed");
+    } finally {
+      setCertBusy(null);
+    }
+  };
+
+  const previewCertificate = async (donationId) => {
+    setCertBusy(`pv-${donationId}`);
+    try {
+      const cert = await fetchCertificatePng(donationId);
+      setCertPreview({ donationId, ...cert });
+      if (cert.donation) {
+        setRows((prev) =>
+          prev.map((r) => (r.id === donationId ? { ...r, ...cert.donation } : r))
+        );
+      }
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || err?.message || "Preview failed");
+    } finally {
+      setCertBusy(null);
+    }
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -395,32 +457,51 @@ const TreesPayments = () => {
       </DetailPanel>
     );
   } else if (selected && tab === "donations") {
+    const certReady = selected.payment_status === "completed";
     detail = (
       <DetailPanel
         title={selected.project_name || `Project #${selected.project_id}`}
         subtitle={`Donation #${selected.id}`}
         actions={
-          <ConfirmAction
-            label={selected.certificate_emailed_at ? "Re-send certificate" : "Issue & email certificate"}
-            busy={busyId === selected.id}
-            onConfirm={async () => {
-              setBusyId(selected.id);
-              try {
-                await client.run(
-                  "post",
-                  endpoints.platformAdminTreeDonationCertificate(selected.id),
-                  { resend: true },
-                  true
-                );
-                toast.success("Certificate emailed");
-                await load();
-              } catch (err) {
-                toast.error(err?.response?.data?.detail || "Certificate send failed");
-              } finally {
-                setBusyId(null);
-              }
-            }}
-          />
+          <>
+            <button
+              type="button"
+              disabled={!certReady || certBusy === `pv-${selected.id}`}
+              onClick={() => previewCertificate(selected.id)}
+              className="h-9 px-3 text-sm border border-border disabled:opacity-50"
+            >
+              {certBusy === `pv-${selected.id}` ? "Loading…" : "Preview certificate"}
+            </button>
+            <button
+              type="button"
+              disabled={!certReady || certBusy === `dl-${selected.id}`}
+              onClick={() => downloadCertificate(selected.id)}
+              className="h-9 px-3 text-sm border border-border disabled:opacity-50"
+            >
+              {certBusy === `dl-${selected.id}` ? "Downloading…" : "Download PNG"}
+            </button>
+            <ConfirmAction
+              label={selected.certificate_emailed_at ? "Re-send certificate" : "Issue & email certificate"}
+              busy={busyId === selected.id}
+              onConfirm={async () => {
+                setBusyId(selected.id);
+                try {
+                  await client.run(
+                    "post",
+                    endpoints.platformAdminTreeDonationCertificate(selected.id),
+                    { resend: true },
+                    true
+                  );
+                  toast.success("Certificate emailed");
+                  await load();
+                } catch (err) {
+                  toast.error(err?.response?.data?.detail || "Certificate send failed");
+                } finally {
+                  setBusyId(null);
+                }
+              }}
+            />
+          </>
         }
       >
         <div className="grid sm:grid-cols-2 gap-3">
@@ -446,6 +527,9 @@ const TreesPayments = () => {
           </DetailField>
           <DetailField label="Created">{selected.created_at ? new Date(selected.created_at).toLocaleString() : "—"}</DetailField>
         </div>
+        {!certReady ? (
+          <p className="text-xs text-muted">Preview / download unlock after payment status is completed.</p>
+        ) : null}
       </DetailPanel>
     );
   } else if (selected && tab === "payments") {
@@ -520,6 +604,54 @@ const TreesPayments = () => {
         <AdminTable columns={columns} rows={rows} empty={loading ? "Loading…" : "No rows"} />
         {detail}
       </div>
+
+      {certPreview ? (
+        <div
+          className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-3 sm:p-6"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Certificate preview"
+          onClick={() => setCertPreview(null)}
+        >
+          <div
+            className="bg-surface border border-border w-full max-w-4xl max-h-[92vh] overflow-hidden flex flex-col shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3 px-4 py-3 border-b border-border">
+              <div className="min-w-0">
+                <p className="text-[11px] uppercase tracking-wide text-muted">Certificate preview</p>
+                <p className="text-sm font-medium text-foreground truncate">
+                  {certPreview.certificateId || certPreview.filename}
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2 shrink-0">
+                <button
+                  type="button"
+                  disabled={certBusy === `dl-${certPreview.donationId}`}
+                  onClick={() => downloadCertificate(certPreview.donationId)}
+                  className="h-9 px-3 text-sm bg-primary text-primary-foreground disabled:opacity-50"
+                >
+                  {certBusy === `dl-${certPreview.donationId}` ? "Downloading…" : "Download PNG"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCertPreview(null)}
+                  className="h-9 px-3 text-sm border border-border"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+            <div className="overflow-auto p-3 sm:p-4 bg-background">
+              <img
+                src={certPreview.dataUrl}
+                alt={`Certificate ${certPreview.certificateId || ""}`}
+                className="w-full h-auto border border-border bg-white"
+              />
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 };

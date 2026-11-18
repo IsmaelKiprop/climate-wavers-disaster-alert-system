@@ -889,18 +889,84 @@ class PlatformAdminTreeDonationsView(APIView):
 
 
 class PlatformAdminTreeDonationCertificateView(APIView):
-    """Issue / re-email a branded tree certificate (staff)."""
+    """Preview / download / re-email a branded tree certificate (staff)."""
 
     permission_classes = [IsAuthenticated, IsPlatformStaff]
 
-    def post(self, request, donation_id):
-        from .tree_certificate import issue_and_email_certificate, render_certificate_png
-
-        donation = (
+    def _get_donation(self, donation_id):
+        return (
             TreeProjectDonation.objects.select_related("project", "donor", "gifted_to")
             .filter(id=donation_id)
             .first()
         )
+
+    def get(self, request, donation_id):
+        """Preview or download PNG without emailing."""
+        import base64
+
+        from django.http import HttpResponse
+
+        from .tree_certificate import (
+            certificate_id_for,
+            donor_label,
+            render_certificate_png,
+        )
+
+        donation = self._get_donation(donation_id)
+        if not donation:
+            return Response({"detail": "Not found"}, status=404)
+        if getattr(donation, "payment_status", "") != "completed":
+            return Response(
+                {"detail": "Certificate available only for completed payments"},
+                status=400,
+            )
+
+        # Persist id/display name on first preview so admin + emails stay aligned
+        updates = []
+        cert_id = certificate_id_for(donation)
+        if (donation.certificate_id or "") != cert_id:
+            donation.certificate_id = cert_id
+            updates.append("certificate_id")
+        if not donation.certificate_issued_at:
+            from django.utils import timezone
+
+            donation.certificate_issued_at = timezone.now()
+            updates.append("certificate_issued_at")
+        if not (donation.donor_display_name or "").strip():
+            donation.donor_display_name = donor_label(donation)[:200]
+            updates.append("donor_display_name")
+        if updates:
+            donation.save(update_fields=updates)
+
+        png = render_certificate_png(donation)
+        filename = f"ClimateWavers_Certificate_{cert_id}.png"
+        as_download = (request.query_params.get("download") or "").strip() in (
+            "1",
+            "true",
+            "yes",
+        )
+        want_json = (request.query_params.get("format") or "").strip().lower() == "json"
+
+        if want_json:
+            return Response(
+                {
+                    "donation": serialize_donation(donation),
+                    "certificate_id": cert_id,
+                    "filename": filename,
+                    "png_base64": base64.b64encode(png).decode("ascii"),
+                }
+            )
+
+        response = HttpResponse(png, content_type="image/png")
+        disposition = "attachment" if as_download else "inline"
+        response["Content-Disposition"] = f'{disposition}; filename="{filename}"'
+        response["Cache-Control"] = "private, max-age=60"
+        return response
+
+    def post(self, request, donation_id):
+        from .tree_certificate import issue_and_email_certificate, render_certificate_png
+
+        donation = self._get_donation(donation_id)
         if not donation:
             return Response({"detail": "Not found"}, status=404)
         force = bool(request.data.get("resend") or request.data.get("force"))
