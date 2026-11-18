@@ -140,7 +140,7 @@ const PricingPage = () => {
         </p>
         <div className="mt-4 flex flex-wrap gap-3">
           <Link
-            to="/app/plant-tree"
+            to="/plant-tree"
             className="inline-flex min-h-11 items-center px-5 bg-primary text-primary-foreground text-sm font-medium"
           >
             Plant a tree

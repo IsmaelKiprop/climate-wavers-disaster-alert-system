@@ -315,6 +315,8 @@ export const isGuestPublicPath = (pathname = "") => {
     "";
   return (
     path.startsWith("/gift/") ||
+    path === "/plant-tree" ||
+    path.startsWith("/plant-tree/") ||
     path.startsWith("/u/") ||
     path.startsWith("/p/") ||
     path.startsWith("/project") ||

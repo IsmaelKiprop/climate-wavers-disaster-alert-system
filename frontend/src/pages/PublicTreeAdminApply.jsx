@@ -144,7 +144,7 @@ const PublicTreeAdminApply = () => {
         links={[
           { to: "/login?redirect=/app/admin/tree-projects?apply=1", label: "Already have an account? Sign in" },
           { to: "/pricing", label: "Tree Admin pricing" },
-          { to: "/app/plant-tree", label: "Plant a tree" },
+          { to: "/plant-tree", label: "Plant a tree" },
           { to: "/responders/apply", label: "Apply as responder instead" },
         ]}
       />

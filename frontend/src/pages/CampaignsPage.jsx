@@ -106,7 +106,7 @@ const CampaignsPage = () => {
                 <p className="mt-2 text-sm text-muted">
                   Live tree projects will appear here once they are published.
                 </p>
-                <Link to="/app/plant-tree" className="inline-flex mt-4 h-10 px-4 items-center bg-primary text-primary-foreground">
+                <Link to="/plant-tree" className="inline-flex mt-4 h-10 px-4 items-center bg-primary text-primary-foreground">
                   Plant a tree
                 </Link>
               </div>

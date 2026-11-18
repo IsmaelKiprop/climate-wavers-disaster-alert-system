@@ -239,9 +239,9 @@ const LandingPage = () => {
                 Support
               </button>
 
-              {/* Plant Tree Button */}
+              {/* Plant Tree Button — public checkout, no sign-in required */}
               <Link
-                to="/app/plant-tree"
+                to="/plant-tree"
                 className="hidden md:flex items-center px-3 py-1.5 bg-[#067d83] text-white rounded-md hover:bg-[#055a5f] transition-colors text-sm font-medium"
               >
                 <svg className="w-3 h-3 mr-1.5" fill="currentColor" viewBox="0 0 20 20">
@@ -329,9 +329,9 @@ const LandingPage = () => {
                 Support
               </button>
 
-              {/* Plant Tree Button for Mobile */}
+              {/* Plant Tree Button for Mobile — public checkout, no sign-in required */}
               <Link 
-                to="/app/plant-tree"
+                to="/plant-tree"
                 className="w-full flex items-center justify-center px-4 py-2 bg-[#067d83] text-white rounded-lg hover:bg-[#055a5f] transition-colors duration-200 text-sm font-medium"
                 onClick={() => setIsMobileMenuOpen(false)}
               >

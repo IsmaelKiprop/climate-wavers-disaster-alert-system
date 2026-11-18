@@ -303,7 +303,13 @@ const PlantTree = () => {
       params.delete("for");
       params.delete("name");
       const query = params.toString();
-      navigate(`/app/plant-tree${query ? `?${query}` : ""}`, { replace: false });
+      // Stay on the public plant page when opened from the marketing site.
+      const base =
+        typeof window !== "undefined" &&
+        window.location.pathname.startsWith("/plant-tree")
+          ? "/plant-tree"
+          : "/app/plant-tree";
+      navigate(`${base}${query ? `?${query}` : ""}`, { replace: false });
     }
     setGiftProfile(null);
   };

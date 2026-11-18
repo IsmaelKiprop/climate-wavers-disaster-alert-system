@@ -231,6 +231,8 @@ function App() {
               <Route path="/p/:projectId" element={<PublicProjectView />} />
               <Route path="/u/:userId" element={<SharedProfilePage />} />
               <Route path="/gift/:userId" element={<PlantTree />} />
+              {/* Public plant checkout — no account required (same as /gift/:userId). */}
+              <Route path="/plant-tree" element={<PlantTree />} />
               <Route
                 path="/app/platform-admin"
                 element={
