@@ -31,6 +31,8 @@ import {
   bindNotificationSoundUnlock,
   playIncomingChatSound,
   playOutgoingChatSound,
+  playCallRingSound,
+  stopCallRingSound,
   unlockNotificationSound,
 } from "../utils/notificationSound";
 import ChatGroupInfo from "./ChatGroupInfo";
@@ -121,6 +123,20 @@ function previewLabel(msg) {
   return "Say hello";
 }
 
+/** Extract Climate Call event id from system chat text. */
+function climateCallEventId(body = "") {
+  const text = String(body || "");
+  const tagged = text.match(/(?:^|\s)event:(\d+)\b/i);
+  if (tagged?.[1]) return tagged[1];
+  const path = text.match(/\/app\/calendar\/events\/(\d+)\/join/i);
+  if (path?.[1]) return path[1];
+  if (/climate call/i.test(text) && /join/i.test(text)) {
+    const anyId = text.match(/events\/(\d+)/i);
+    if (anyId?.[1]) return anyId[1];
+  }
+  return null;
+}
+
 function mergeMentions(mentions = [], roomMembers = []) {
   const byHandle = new Map();
   [...(mentions || []), ...(roomMembers || [])].forEach((person) => {
@@ -203,6 +219,7 @@ const CommunityChat = () => {
   const [giftNudgeOpen, setGiftNudgeOpen] = useState(false);
   const [climateCall, setClimateCall] = useState(null);
   const [startingCall, setStartingCall] = useState(false);
+  const [incomingCall, setIncomingCall] = useState(null);
 
   const bottomRef = useRef(null);
   const draftRef = useRef(null);
@@ -280,6 +297,74 @@ const CommunityChat = () => {
       setLoadingMessages(false);
     }
   }, [markRead]);
+
+  const joinClimateCall = useCallback(
+    async (eventId, { ring = false } = {}) => {
+      if (!eventId || startingCall) return;
+      unlockNotificationSound();
+      setStartingCall(true);
+      if (ring) playCallRingSound({ loops: 2 });
+      try {
+        const join = await client.run(
+          "post",
+          `${endpoints.climateEvents}${eventId}/join/`,
+          {},
+          true
+        );
+        stopCallRingSound();
+        setIncomingCall(null);
+        setClimateCall({
+          roomName: join.roomName,
+          displayName: join.displayName,
+          subject: join.title || "Climate Call",
+          domain: join.domain || env.jitsiDomain,
+          eventId: join.event_id || eventId,
+        });
+      } catch (err) {
+        stopCallRingSound();
+        toast.error(err?.response?.data?.detail || "Could not join Climate Call");
+      } finally {
+        setStartingCall(false);
+      }
+    },
+    [startingCall]
+  );
+
+  const startOrRejoinClimateCall = useCallback(async () => {
+    if (!activeConversation?.id || startingCall) return;
+    unlockNotificationSound();
+    setStartingCall(true);
+    playCallRingSound({ loops: 3 });
+    try {
+      const event = await client.run(
+        "post",
+        endpoints.climateEventFromChat,
+        { conversation_id: activeConversation.id },
+        true
+      );
+      const join = await client.run(
+        "post",
+        `${endpoints.climateEvents}${event.id}/join/`,
+        {},
+        true
+      );
+      stopCallRingSound();
+      setIncomingCall(null);
+      setClimateCall({
+        roomName: join.roomName,
+        displayName: join.displayName,
+        subject: event.title || join.title || "Climate Call",
+        domain: join.domain || env.jitsiDomain,
+        eventId: event.id,
+      });
+      loadMessages(activeConversation.id);
+    } catch (err) {
+      stopCallRingSound();
+      toast.error(err?.response?.data?.detail || "Could not start Climate Call");
+    } finally {
+      setStartingCall(false);
+    }
+  }, [activeConversation?.id, loadMessages, startingCall]);
 
   const openDmWithUser = useCallback(
     async (dmUserId) => {
@@ -399,7 +484,13 @@ const CommunityChat = () => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, typingUsers, activeId]);
 
-  useEffect(() => bindNotificationSoundUnlock(), []);
+  useEffect(() => {
+    const unbind = bindNotificationSoundUnlock();
+    return () => {
+      unbind?.();
+      stopCallRingSound();
+    };
+  }, []);
 
   useEffect(() => {
     setShowEmoji(false);
@@ -568,7 +659,17 @@ const CommunityChat = () => {
           });
           // Outgoing already played on send; only alert for new inbound messages.
           if (shouldSound && !isAck && !isDup && !mine) {
-            playIncomingChatSound();
+            const callEventId = climateCallEventId(payload.body);
+            if (callEventId) {
+              playCallRingSound({ loops: 10 });
+              setIncomingCall({
+                eventId: callEventId,
+                title: payload.body?.split("\n")?.[0] || "Incoming Climate Call",
+                conversationId: convId,
+              });
+            } else {
+              playIncomingChatSound();
+            }
           }
           if (!mine && markRead) {
             markRead(convId, payload.id);
@@ -579,7 +680,17 @@ const CommunityChat = () => {
             return copy;
           });
         } else if (shouldSound && !mine) {
-          playIncomingChatSound();
+          const callEventId = climateCallEventId(payload.body);
+          if (callEventId) {
+            playCallRingSound({ loops: 10 });
+            setIncomingCall({
+              eventId: callEventId,
+              title: payload.body?.split("\n")?.[0] || "Incoming Climate Call",
+              conversationId: convId,
+            });
+          } else {
+            playIncomingChatSound();
+          }
         }
       }
 
@@ -1296,40 +1407,10 @@ const CommunityChat = () => {
               <button
                 type="button"
                 disabled={startingCall}
-                onClick={async () => {
-                  if (!activeConversation?.id || startingCall) return;
-                  setStartingCall(true);
-                  try {
-                    const event = await client.run(
-                      "post",
-                      endpoints.climateEventFromChat,
-                      { conversation_id: activeConversation.id },
-                      true
-                    );
-                    const join = await client.run(
-                      "post",
-                      `${endpoints.climateEvents}${event.id}/join/`,
-                      {},
-                      true
-                    );
-                    setClimateCall({
-                      roomName: join.roomName,
-                      displayName: join.displayName,
-                      subject: event.title,
-                      domain: join.domain || env.jitsiDomain,
-                    });
-                    loadMessages(activeConversation.id);
-                  } catch (err) {
-                    toast.error(
-                      err?.response?.data?.detail || "Could not start Climate Call"
-                    );
-                  } finally {
-                    setStartingCall(false);
-                  }
-                }}
+                onClick={startOrRejoinClimateCall}
                 className="min-h-10 min-w-10 flex items-center justify-center text-primary hover:bg-primary/10 disabled:opacity-50"
                 aria-label="Start Climate Call"
-                title="Start Climate Call"
+                title="Start or rejoin Climate Call"
               >
                 <IoCallOutline size={20} />
               </button>
@@ -1528,6 +1609,26 @@ const CommunityChat = () => {
                                 mergeMentions(msg.mentions, roomMembers),
                                 mine
                               )}
+                              {climateCallEventId(msg.body) ? (
+                                <button
+                                  type="button"
+                                  disabled={startingCall}
+                                  onClick={() =>
+                                    joinClimateCall(climateCallEventId(msg.body), {
+                                      ring: false,
+                                    })
+                                  }
+                                  className={`mt-2 min-h-10 w-full inline-flex items-center justify-center gap-2 px-3 text-sm font-semibold ${
+                                    mine
+                                      ? "bg-primary-foreground text-primary"
+                                      : "bg-primary text-primary-foreground"
+                                  }`}
+                                  style={{ borderRadius: 5 }}
+                                >
+                                  <IoCallOutline size={16} />
+                                  {startingCall ? "Joining…" : "Join Climate Call"}
+                                </button>
+                              ) : null}
                               <ChatLinkPreview text={msg.body} mine={mine} />
                             </div>
                           ) : null}
@@ -1556,6 +1657,41 @@ const CommunityChat = () => {
               ) : null}
               <div ref={bottomRef} />
             </div>
+
+            {incomingCall?.eventId ? (
+              <div className="shrink-0 mx-3 mb-2 border border-primary bg-primary/10 px-3 py-3 flex items-center gap-3">
+                <span className="h-10 w-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center shrink-0 animate-pulse">
+                  <IoCallOutline size={18} />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold truncate">
+                    {incomingCall.title || "Incoming Climate Call"}
+                  </p>
+                  <p className="text-xs text-muted">Tap answer to enter the same room</p>
+                </div>
+                <button
+                  type="button"
+                  disabled={startingCall}
+                  onClick={() => joinClimateCall(incomingCall.eventId)}
+                  className="min-h-10 px-3 text-sm font-semibold bg-primary text-primary-foreground"
+                  style={{ borderRadius: 5 }}
+                >
+                  Answer
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    stopCallRingSound();
+                    setIncomingCall(null);
+                  }}
+                  className="min-h-10 min-w-10 inline-flex items-center justify-center border border-border bg-background"
+                  style={{ borderRadius: 5 }}
+                  aria-label="Decline call"
+                >
+                  <IoClose size={16} />
+                </button>
+              </div>
+            ) : null}
 
             {giftNudgeOpen && giftNudgePerson ? (
               <div className="shrink-0 mx-3 mb-2 border border-primary/30 bg-primary/5 px-3 py-3 flex items-start gap-3 animate-[fadeIn_280ms_ease-out]">
@@ -1770,7 +1906,10 @@ const CommunityChat = () => {
           displayName={climateCall.displayName}
           subject={climateCall.subject}
           domain={climateCall.domain}
-          onClose={() => setClimateCall(null)}
+          onClose={() => {
+            stopCallRingSound();
+            setClimateCall(null);
+          }}
         />
       ) : null}
 

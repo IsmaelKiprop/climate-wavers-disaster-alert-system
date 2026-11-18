@@ -135,6 +135,42 @@ export function playOutgoingChatSound() {
   );
 }
 
+let callRingTimer = null;
+let callRingStopAt = 0;
+
+/** Hard repeating ringtone while a Climate Call is ringing. */
+export function playCallRingSound({ loops = 8 } = {}) {
+  stopCallRingSound();
+  if (typeof window === "undefined") return;
+  unlockNotificationSound();
+  callRingStopAt = Date.now() + loops * 1800;
+  const ringOnce = () => {
+    if (Date.now() > callRingStopAt) {
+      stopCallRingSound();
+      return;
+    }
+    playToneSequence(
+      [
+        { freq: 480, at: 0, duration: 0.28, type: "square", gain: 0.5 },
+        { freq: 620, at: 0.3, duration: 0.28, type: "square", gain: 0.52 },
+        { freq: 480, at: 0.62, duration: 0.28, type: "square", gain: 0.5 },
+        { freq: 620, at: 0.92, duration: 0.28, type: "square", gain: 0.52 },
+      ],
+      { volume: 0.72, minGapMs: 0 }
+    );
+  };
+  ringOnce();
+  callRingTimer = window.setInterval(ringOnce, 1800);
+}
+
+export function stopCallRingSound() {
+  if (callRingTimer) {
+    window.clearInterval(callRingTimer);
+    callRingTimer = null;
+  }
+  callRingStopAt = 0;
+}
+
 /**
  * Keep listening for gestures until AudioContext is actually running.
  * `once: true` was too brittle — first tap sometimes failed to resume.

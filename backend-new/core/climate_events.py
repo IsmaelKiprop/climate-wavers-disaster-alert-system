@@ -1210,7 +1210,11 @@ class ClimateEventViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=["post"], url_path="from-chat")
     def from_chat(self, request):
-        """Start a Climate Call huddle from a conversation (Phase 2)."""
+        """Start or rejoin a Climate Call huddle for a conversation.
+
+        Reuses an active live huddle for the same chat so both people land in
+        the same Jitsi room instead of creating parallel empty rooms.
+        """
         conv_id = request.data.get("conversation_id") or request.data.get("conversation")
         conv = Conversation.objects.filter(id=conv_id).first()
         if not conv:
@@ -1229,6 +1233,31 @@ class ClimateEventViewSet(viewsets.ModelViewSet):
             f"Climate call — {conv.name or 'Chat'}"
         )[:200]
         now = timezone.now()
+
+        existing = (
+            ClimateEvent.objects.filter(
+                conversation=conv,
+                event_type="huddle",
+                status="live",
+                ends_at__gte=now,
+            )
+            .order_by("-starts_at")
+            .first()
+        )
+        if existing:
+            ensure_host_invite(existing)
+            invite_users(
+                existing, [uid for uid in member_ids if uid != request.user.id]
+            )
+            # Keep the room open a bit longer when someone re-enters.
+            if existing.ends_at < now + timedelta(minutes=30):
+                existing.ends_at = now + timedelta(hours=1)
+                existing.save(update_fields=["ends_at", "updated_at"])
+            return Response(
+                ClimateEventSerializer(existing, context={"request": request}).data,
+                status=200,
+            )
+
         with transaction.atomic():
             event = ClimateEvent.objects.create(
                 title=title,
@@ -1249,7 +1278,11 @@ class ClimateEventViewSet(viewsets.ModelViewSet):
             invite_users(event, [uid for uid in member_ids if uid != request.user.id])
             post_event_chat_link(
                 event,
-                f"📞 Climate Call started: {event.title}\nJoin: /app/calendar/events/{event.id}/join",
+                (
+                    f"📞 Climate Call started: {event.title}\n"
+                    f"Join now: https://alerts.flowops.africa/app/calendar/events/{event.id}/join\n"
+                    f"event:{event.id}"
+                ),
             )
         return Response(
             ClimateEventSerializer(event, context={"request": request}).data,

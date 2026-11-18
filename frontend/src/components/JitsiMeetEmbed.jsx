@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { IoClose, IoLeafOutline } from "react-icons/io5";
 import { env } from "../config/env";
+import { stopCallRingSound, unlockNotificationSound } from "../utils/notificationSound";
 
 function loadJitsiScript(domain) {
   const src = `https://${domain}/external_api.js`;
@@ -63,8 +64,9 @@ const JitsiMeetEmbed = ({
           userInfo: { displayName },
           configOverwrite: {
             subject,
-            prejoinConfig: { enabled: true },
-            prejoinPageEnabled: true,
+            // Skip lobby so both people land in the same room immediately.
+            prejoinConfig: { enabled: false },
+            prejoinPageEnabled: false,
             startWithAudioMuted: false,
             startWithVideoMuted: true,
             disableDeepLinking: true,
@@ -78,9 +80,6 @@ const JitsiMeetEmbed = ({
             disabledNotifications: [
               "dialog.grantModerator",
               "notify.disconnected",
-              "notify.connectedOneMember",
-              "notify.connectedTwoMembers",
-              "notify.connectedThreePlusMembers",
             ],
             toolbarButtons: [
               "microphone",
@@ -123,11 +122,13 @@ const JitsiMeetEmbed = ({
             ],
           },
         });
+        unlockNotificationSound();
+        stopCallRingSound();
         apiRef.current.addListener("videoConferenceJoined", () => {
           if (!cancelled) setPhase("ready");
+          stopCallRingSound();
         });
         apiRef.current.addListener("readyToClose", () => onClose?.());
-        // Prejoin still counts as usable UI
         window.setTimeout(() => {
           if (!cancelled) setPhase((p) => (p === "loading" ? "ready" : p));
         }, 1200);

@@ -173,16 +173,47 @@ const ClimateCalendar = () => {
   }, [loadObservances]);
 
   useEffect(() => {
-    if (!eventId || !events.length) return;
+    if (!eventId) return undefined;
+    let alive = true;
     const found = events.find((e) => String(e.id) === String(eventId));
-    if (found) {
-      setSelected(found);
-      const when = new Date(found.starts_at);
+    const applySelected = (event) => {
+      if (!alive || !event) return;
+      setSelected(event);
+      const when = new Date(event.starts_at);
       if (!Number.isNaN(when.getTime())) {
         setSelectedDay(when);
         setCursorMonth(startOfMonth(when));
       }
+    };
+    if (found) {
+      applySelected(found);
+      return () => {
+        alive = false;
+      };
     }
+    // Deep-link / join from chat: fetch the event even if it is not in "mine" yet.
+    (async () => {
+      try {
+        const event = await client.run(
+          "get",
+          `${endpoints.climateEvents}${eventId}/`,
+          {},
+          true
+        );
+        if (!alive || !event?.id) return;
+        setEvents((prev) =>
+          prev.some((e) => String(e.id) === String(event.id))
+            ? prev
+            : [event, ...prev]
+        );
+        applySelected(event);
+      } catch {
+        // Keep calendar usable; join CTA will show the error.
+      }
+    })();
+    return () => {
+      alive = false;
+    };
   }, [eventId, events]);
 
   const filtered = useMemo(() => {
@@ -310,10 +341,11 @@ const ClimateCalendar = () => {
   };
 
   useEffect(() => {
-    if (!autoJoin || !selected || callSession) return;
+    if (!autoJoin || !selected || callSession || joining) return;
+    if (String(selected.id) !== String(eventId)) return;
     joinEvent(selected);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoJoin, selected?.id]);
+  }, [autoJoin, selected?.id, eventId]);
 
   const rsvp = async (choice) => {
     if (!selected?.id) return;
