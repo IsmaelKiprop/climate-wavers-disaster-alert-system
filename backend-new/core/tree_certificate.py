@@ -99,13 +99,40 @@ def species_summary(donation) -> str:
     selected = getattr(donation, "selected_species", None) or {}
     if isinstance(selected, dict) and selected:
         parts = [
-            f"{name} × {int(qty)}"
+            f"{name} x {int(qty)}"
             for name, qty in selected.items()
             if int(qty or 0) > 0
         ]
         if parts:
             return ", ".join(parts)
     return "Verified seedling"
+
+
+def _cert_text(text: str) -> str:
+    """Normalize fancy punctuation so certificate fonts never show tofu boxes."""
+    if not text:
+        return ""
+    replacements = {
+        "\u2014": "-",  # em dash
+        "\u2013": "-",  # en dash
+        "\u2212": "-",  # minus
+        "\u00d7": "x",  # multiply
+        "\u2022": "*",
+        "\u00b7": "-",  # middle dot
+        "\u2026": "...",
+        "\u2018": "'",
+        "\u2019": "'",
+        "\u201c": '"',
+        "\u201d": '"',
+        "\u00a0": " ",
+        "\u202f": " ",
+        "CO\u2082": "CO2",
+        "\u2082": "2",
+    }
+    out = str(text)
+    for src, dst in replacements.items():
+        out = out.replace(src, dst)
+    return out
 
 
 def _text_width(draw: ImageDraw.ImageDraw, text: str, font) -> int:
@@ -117,6 +144,7 @@ def _text_width(draw: ImageDraw.ImageDraw, text: str, font) -> int:
 
 
 def _center_text(draw, y, text, font, fill, canvas_w, x0=0, x1=None):
+    text = _cert_text(text)
     x1 = canvas_w if x1 is None else x1
     tw = _text_width(draw, text, font)
     x = x0 + max(0, ((x1 - x0) - tw) // 2)
@@ -162,37 +190,38 @@ def _draw_planted_tree(
 ) -> None:
     """Stylized tree mark for footer (replaces duplicate CW logo)."""
     s = size
-    # Soft ground oval
+    ring = int(s * 0.48)
+    # Gold ring first so tree sits inside cleanly
     draw.ellipse(
-        [cx - int(s * 0.42), cy + int(s * 0.28), cx + int(s * 0.42), cy + int(s * 0.48)],
-        fill=(226, 232, 228),
-    )
-    # Trunk
-    trunk_w = max(6, s // 10)
-    draw.rectangle(
-        [cx - trunk_w // 2, cy - int(s * 0.02), cx + trunk_w // 2, cy + int(s * 0.36)],
-        fill=(120, 82, 48),
-    )
-    # Layered canopy
-    canopy = [
-        (cx, cy - int(s * 0.48), int(s * 0.34), TEAL_DARK),
-        (cx - int(s * 0.18), cy - int(s * 0.22), int(s * 0.28), TEAL),
-        (cx + int(s * 0.18), cy - int(s * 0.22), int(s * 0.28), TEAL),
-        (cx, cy - int(s * 0.08), int(s * 0.30), (8, 145, 148)),
-    ]
-    for tx, ty, r, color in canopy:
-        draw.ellipse([tx - r, ty - r, tx + r, ty + r], fill=color)
-    # Gold ring frame
-    ring = int(s * 0.52)
-    draw.ellipse(
-        [cx - ring, cy - ring + 6, cx + ring, cy + ring + 6],
+        [cx - ring, cy - ring, cx + ring, cy + ring],
         outline=GOLD,
         width=2,
     )
+    # Soft ground oval (inside ring)
+    draw.ellipse(
+        [cx - int(s * 0.34), cy + int(s * 0.18), cx + int(s * 0.34), cy + int(s * 0.34)],
+        fill=(226, 232, 228),
+    )
+    # Trunk
+    trunk_w = max(5, s // 12)
+    draw.rectangle(
+        [cx - trunk_w // 2, cy - int(s * 0.02), cx + trunk_w // 2, cy + int(s * 0.28)],
+        fill=(120, 82, 48),
+    )
+    # Layered canopy (kept inside the ring)
+    canopy = [
+        (cx, cy - int(s * 0.28), int(s * 0.22), TEAL_DARK),
+        (cx - int(s * 0.14), cy - int(s * 0.12), int(s * 0.18), TEAL),
+        (cx + int(s * 0.14), cy - int(s * 0.12), int(s * 0.18), TEAL),
+        (cx, cy - int(s * 0.02), int(s * 0.20), (8, 145, 148)),
+    ]
+    for tx, ty, r, color in canopy:
+        draw.ellipse([tx - r, ty - r, tx + r, ty + r], fill=color)
+    # Label clearly below the ring (no overlap)
     label = _load_font(11, bold=True)
     text = "TREE PLANTED" if trees == 1 else f"{trees} TREES PLANTED"
     tw = _text_width(draw, text, label)
-    draw.text((cx - tw // 2, cy + int(s * 0.52)), text, fill=TEAL, font=label)
+    draw.text((cx - tw // 2, cy + ring + 8), text, fill=TEAL, font=label)
 
 
 def _draw_seal(draw: ImageDraw.ImageDraw, cx: int, cy: int, radius: int = 78) -> None:
@@ -663,8 +692,8 @@ def render_certificate_png(donation) -> bytes:
             f"will be planted as a gift for {ctx['gifted_to']}, supporting "
             f"{ctx['project_name']} in {ctx['location']}. "
             f"Your kindness helps restore living landscapes and strengthens "
-            f"climate resilience across Africa — with an estimated "
-            f"{ctx['co2']:.0f} kg of CO₂ absorbed each year."
+            f"climate resilience across Africa, with an estimated "
+            f"{ctx['co2']:.0f} kg of CO2 absorbed each year."
         )
     else:
         prose = (
@@ -672,11 +701,12 @@ def render_certificate_png(donation) -> bytes:
             f"{ctx['trees']} {tree_word} will be planted through Climate Wavers "
             f"for {ctx['project_name']} in {ctx['location']}. "
             f"Your contribution nurtures ecosystems, uplifts local communities, "
-            f"and advances climate action across Africa — absorbing an estimated "
-            f"{ctx['co2']:.0f} kg of CO₂ each year."
+            f"and advances climate action across Africa, absorbing an estimated "
+            f"{ctx['co2']:.0f} kg of CO2 each year."
         )
     if ctx["organization_name"]:
         prose += f" This planting is hosted by {ctx['organization_name']}."
+    prose = _cert_text(prose)
 
     for line in _wrap_text(draw, prose, body_font, w - 360):
         _center_text(draw, y, line, body_font, INK, w)
@@ -685,12 +715,13 @@ def render_certificate_png(donation) -> bytes:
     y += 18
     details = [
         ("TREES", str(ctx["trees"])),
-        ("SPECIES", (ctx["species"] or "—")[:28]),
-        ("ISSUED", ctx["issued_on"]),
+        ("SPECIES", _cert_text(ctx["species"] or "-")[:28]),
+        ("ISSUED", _cert_text(ctx["issued_on"])),
     ]
     col_w = (w - 420) // len(details)
     for i, (label, value) in enumerate(details):
         cx = 210 + i * col_w + col_w // 2
+        value = _cert_text(value)
         lw = _text_width(draw, label, label_font)
         draw.text((cx - lw // 2, y), label, fill=TEAL, font=label_font)
         vw = _text_width(draw, value, meta_font)
@@ -742,8 +773,8 @@ def render_certificate_png(donation) -> bytes:
     # Founder & CEO (right) — A2SV-style signatory, no handwritten signature
     sign_x = w - 130
     sign_y = footer_y + 14
-    sn = ctx.get("founder_name") or FOUNDER_NAME
-    st = ctx.get("founder_title") or FOUNDER_TITLE
+    sn = _cert_text(ctx.get("founder_name") or FOUNDER_NAME)
+    st = _cert_text(ctx.get("founder_title") or FOUNDER_TITLE)
     sn_w = _text_width(draw, sn, sign_font)
     draw.text((sign_x - sn_w, sign_y), sn, fill=INK, font=sign_font)
     draw.line(
@@ -761,7 +792,7 @@ def render_certificate_png(donation) -> bytes:
     _center_text(
         draw,
         min(tagline_y, h - 72),
-        "Climate Wavers  ·  Powered by FlowOps Africa  ·  Digitally issued",
+        "Climate Wavers  -  Powered by FlowOps Africa  -  Digitally issued",
         tiny_font,
         MUTED,
         w,

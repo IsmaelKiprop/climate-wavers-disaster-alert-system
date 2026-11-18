@@ -36,11 +36,12 @@ const TreeCertificate = ({
     giftedRaw && giftedRaw.trim().toLowerCase() !== String(donorName).trim().toLowerCase()
       ? giftedRaw
       : '';
-  const species =
+  const species = String(
     certificateData?.species ||
-    certificateData?.treeType ||
-    certificateData?.tree_type ||
-    'Verified seedling';
+      certificateData?.treeType ||
+      certificateData?.tree_type ||
+      'Verified seedling'
+  ).replace(/×/g, 'x');
   const location = certificateData?.location || 'Africa';
   const plantingDate =
     certificateData?.plantingDate ||
@@ -61,8 +62,8 @@ const TreeCertificate = ({
 
   const treeWord = trees === 1 ? 'tree' : 'trees';
   const prose = giftedTo
-    ? `In honour of your generosity, ${trees} ${treeWord} will be planted as a gift for ${giftedTo}, supporting ${projectName} in ${location}. Your kindness helps restore living landscapes and strengthens climate resilience across Africa — with an estimated ${co2} kg of CO₂ absorbed each year.${orgName ? ` This planting is hosted by ${orgName}.` : ''}`
-    : `In recognition of your commitment to a greener future, ${trees} ${treeWord} will be planted through Climate Wavers for ${projectName} in ${location}. Your contribution nurtures ecosystems, uplifts local communities, and advances climate action across Africa — absorbing an estimated ${co2} kg of CO₂ each year.${orgName ? ` This planting is hosted by ${orgName}.` : ''}`;
+    ? `In honour of your generosity, ${trees} ${treeWord} will be planted as a gift for ${giftedTo}, supporting ${projectName} in ${location}. Your kindness helps restore living landscapes and strengthens climate resilience across Africa, with an estimated ${co2} kg of CO2 absorbed each year.${orgName ? ` This planting is hosted by ${orgName}.` : ''}`
+    : `In recognition of your commitment to a greener future, ${trees} ${treeWord} will be planted through Climate Wavers for ${projectName} in ${location}. Your contribution nurtures ecosystems, uplifts local communities, and advances climate action across Africa, absorbing an estimated ${co2} kg of CO2 each year.${orgName ? ` This planting is hosted by ${orgName}.` : ''}`;
 
   const handleDownload = async () => {
     if (downloading || !certificateRef.current) return;
@@ -207,18 +208,18 @@ const TreeCertificate = ({
               </p>
 
               <div className="mt-4 flex items-end justify-between gap-2 sm:gap-3">
-                <div className="shrink-0 text-center w-[72px] sm:w-[88px]">
-                  <div className="relative mx-auto h-16 w-16 sm:h-[4.5rem] sm:w-[4.5rem] rounded-full border-2 border-[#b8943c] flex items-end justify-center pb-1 overflow-hidden bg-[#f4f7f5]">
-                    <svg viewBox="0 0 64 64" className="h-14 w-14" aria-hidden>
-                      <ellipse cx="32" cy="54" rx="18" ry="5" fill="#e2e8e4" />
-                      <rect x="29" y="34" width="6" height="18" rx="1.5" fill="#785230" />
-                      <circle cx="32" cy="18" r="12" fill="#055a5f" />
-                      <circle cx="22" cy="26" r="10" fill="#067d83" />
-                      <circle cx="42" cy="26" r="10" fill="#067d83" />
-                      <circle cx="32" cy="30" r="11" fill="#089194" />
+                <div className="shrink-0 text-center w-[76px] sm:w-[92px]">
+                  <div className="relative mx-auto h-14 w-14 sm:h-16 sm:w-16 rounded-full border-2 border-[#b8943c] flex items-center justify-center bg-[#f4f7f5]">
+                    <svg viewBox="0 0 64 64" className="h-10 w-10 sm:h-11 sm:w-11" aria-hidden>
+                      <ellipse cx="32" cy="50" rx="14" ry="4" fill="#e2e8e4" />
+                      <rect x="29" y="32" width="6" height="16" rx="1.5" fill="#785230" />
+                      <circle cx="32" cy="18" r="10" fill="#055a5f" />
+                      <circle cx="23" cy="25" r="8" fill="#067d83" />
+                      <circle cx="41" cy="25" r="8" fill="#067d83" />
+                      <circle cx="32" cy="28" r="9" fill="#089194" />
                     </svg>
                   </div>
-                  <p className="mt-1 text-[8px] uppercase tracking-wide text-[#067d83] font-sans font-semibold">
+                  <p className="mt-1.5 text-[8px] uppercase tracking-wide text-[#067d83] font-sans font-semibold leading-none">
                     {trees === 1 ? 'Tree planted' : `${trees} trees planted`}
                   </p>
                 </div>
@@ -277,7 +278,7 @@ const TreeCertificate = ({
               </div>
 
               <p className="mt-3 text-[9px] sm:text-[10px] text-slate-400 font-sans">
-                Climate Wavers · Powered by FlowOps Africa · Digitally issued
+                Climate Wavers - Powered by FlowOps Africa - Digitally issued
               </p>
             </div>
           </div>
