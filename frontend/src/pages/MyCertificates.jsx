@@ -14,6 +14,46 @@ import { getUser } from "../utils/factory";
 import { client } from "../api";
 import { endpoints } from "../utils/endpoints";
 
+const mapDonationToCert = (donation) => {
+  const species =
+    donation.selected_species && typeof donation.selected_species === "object"
+      ? Object.entries(donation.selected_species)
+          .filter(([, qty]) => Number(qty) > 0)
+          .map(([name, qty]) => `${name} × ${qty}`)
+          .join(", ")
+      : "";
+  return {
+    certificate_id:
+      donation.certificate_id ||
+      `CW-${donation.payment_reference}-${donation.id}`,
+    tree_type: species || donation.project_name || "Tree Planting",
+    project_name: donation.project_name || "",
+    species,
+    co2_absorption: Number(donation.co2_absorption_per_tree || 0),
+    location: `${donation.project_city || "Unknown"}, ${
+      donation.project_country || "Unknown"
+    }`,
+    planting_date: donation.created_at
+      ? new Date(donation.created_at).toLocaleDateString()
+      : "",
+    user_name:
+      donation.donor_display_name || donation.donor_name || "Anonymous",
+    gifted_to: donation.gifted_to_name || "",
+    trees_planted: donation.trees_purchased || 0,
+    amount: donation.amount || 0,
+    payment_reference: donation.payment_reference || "",
+    is_downloaded: donation.is_downloaded || false,
+    certificate_emailed_at: donation.certificate_emailed_at || null,
+    kind: "tree",
+  };
+};
+
+const unwrapList = (payload) => {
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload?.results)) return payload.results;
+  return [];
+};
+
 const MyCertificates = () => {
   const [treeCerts, setTreeCerts] = useState([]);
   const [championCert, setChampionCert] = useState(null);
@@ -22,82 +62,85 @@ const MyCertificates = () => {
   const [showChampion, setShowChampion] = useState(false);
   const [downloaded, setDownloaded] = useState(new Set());
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [reloadKey, setReloadKey] = useState(0);
   const me = getUser();
+  const userId = me?.id || null;
 
   useEffect(() => {
+    let cancelled = false;
     const load = async () => {
-      if (!me?.id) {
+      if (!userId) {
         setLoading(false);
+        setLoadError("");
         return;
       }
       setLoading(true);
+      setLoadError("");
       try {
+        const timed = (promise, ms = 20000) =>
+          Promise.race([
+            promise,
+            new Promise((_, reject) =>
+              setTimeout(() => reject(new Error("Request timed out")), ms)
+            ),
+          ]);
+
         const [treeRes, champRes] = await Promise.allSettled([
-          client.run(
-            "get",
-            `${endpoints.treeProjectDonations}?donor=${me.id}`,
-            null,
-            true
+          timed(
+            client.run(
+              "get",
+              `${endpoints.treeProjectDonations}?donor=${userId}`,
+              null,
+              true
+            )
           ),
-          client.run("get", endpoints.championsCertificate, {}, true),
+          timed(client.run("get", endpoints.championsCertificate, {}, true)),
         ]);
 
-        if (treeRes.status === "fulfilled" && treeRes.value?.results) {
-          setTreeCerts(
-            treeRes.value.results
-              .filter((d) => (d.payment_status || "completed") === "completed")
-              .map((donation) => {
-                const species =
-                  donation.selected_species &&
-                  typeof donation.selected_species === "object"
-                    ? Object.entries(donation.selected_species)
-                        .filter(([, qty]) => Number(qty) > 0)
-                        .map(([name, qty]) => `${name} × ${qty}`)
-                        .join(", ")
-                    : "";
-                return {
-                  certificate_id:
-                    donation.certificate_id ||
-                    `CW-${donation.payment_reference}-${donation.id}`,
-                  tree_type: species || donation.project_name || "Tree Planting",
-                  project_name: donation.project_name || "",
-                  species,
-                  co2_absorption: donation.co2_absorption_per_tree || 0,
-                  location: `${donation.project_city || "Unknown"}, ${
-                    donation.project_country || "Unknown"
-                  }`,
-                  planting_date: new Date(donation.created_at).toLocaleDateString(),
-                  user_name:
-                    donation.donor_display_name ||
-                    donation.donor_name ||
-                    "Anonymous",
-                  gifted_to: donation.gifted_to_name || "",
-                  trees_planted: donation.trees_purchased || 0,
-                  amount: donation.amount || 0,
-                  is_downloaded: donation.is_downloaded || false,
-                  certificate_emailed_at: donation.certificate_emailed_at || null,
-                  kind: "tree",
-                };
-              })
-          );
+        if (cancelled) return;
+
+        if (treeRes.status === "fulfilled") {
+          const rows = unwrapList(treeRes.value)
+            .filter((d) => (d.payment_status || "completed") === "completed")
+            .map(mapDonationToCert);
+          setTreeCerts(rows);
         } else {
           setTreeCerts([]);
+          console.error("Tree certificates load failed:", treeRes.reason);
         }
 
         if (champRes.status === "fulfilled" && champRes.value?.certificate) {
           setChampionCert(champRes.value.certificate);
         } else {
           setChampionCert(null);
+          if (champRes.status === "rejected") {
+            console.error("Champion certificate load failed:", champRes.reason);
+          }
+        }
+
+        if (treeRes.status === "rejected" && champRes.status === "rejected") {
+          setLoadError(
+            "Could not load certificates. The server may be waking up — try again."
+          );
+          toast.error("Failed to load certificates");
         }
       } catch (err) {
+        if (cancelled) return;
         console.error(err);
+        setTreeCerts([]);
+        setChampionCert(null);
+        setLoadError(err?.message || "Failed to load certificates");
         toast.error("Failed to load certificates");
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
     load();
-  }, [me]);
+    return () => {
+      cancelled = true;
+    };
+  }, [userId, reloadKey]);
 
   const markTreeDownloaded = async (certificateId) => {
     try {
@@ -128,16 +171,37 @@ const MyCertificates = () => {
 
   if (loading) {
     return (
-      <div className="min-h-[60vh] flex items-center justify-center bg-background">
+      <div className="min-h-[60vh] flex flex-col items-center justify-center gap-3 bg-background px-4">
         <p className="text-sm text-muted">Loading certificates…</p>
+        <p className="text-xs text-muted">This can take a moment if the API is waking up.</p>
       </div>
     );
   }
 
-  if (!me?.id) {
+  if (!userId) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center bg-background px-4">
         <p className="text-sm text-muted">Sign in to view your certificates.</p>
+      </div>
+    );
+  }
+
+  if (loadError && totalCount === 0) {
+    return (
+      <div className="min-h-[60vh] bg-background flex items-center justify-center px-4">
+        <div className="text-center max-w-md space-y-4">
+          <h1 className="text-2xl font-semibold text-foreground">
+            Certificates unavailable
+          </h1>
+          <p className="text-sm text-muted">{loadError}</p>
+          <button
+            type="button"
+            onClick={() => setReloadKey((k) => k + 1)}
+            className="h-11 px-4 inline-flex items-center justify-center bg-primary text-primary-foreground text-sm font-semibold"
+          >
+            Try again
+          </button>
+        </div>
       </div>
     );
   }
