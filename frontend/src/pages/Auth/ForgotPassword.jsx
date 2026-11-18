@@ -10,12 +10,16 @@ const ForgotPassword = () => {
 
   const handleSubmit = async (event) => {
     event.preventDefault();
+    const normalized = String(email || "").trim().toLowerCase();
+    if (!normalized.includes("@")) {
+      return;
+    }
     try {
       setIsDisabled(true);
       await client.run(
         "post",
         endpoints.forgotpassword,
-        { email: String(email || "").trim().toLowerCase() },
+        { email: normalized },
         false,
         {
           info: "Sending reset link...",

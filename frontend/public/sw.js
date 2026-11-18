@@ -1,5 +1,5 @@
 /* Climate Wavers offline shell — works without mobile data after first visit. */
-const VERSION = "cw-offline-v1";
+const VERSION = "cw-offline-v2";
 const SHELL = [
   "/",
   "/offline.html",
@@ -9,6 +9,21 @@ const SHELL = [
   "/environment-sm.jpg",
   "/community-respond-sm.jpg",
 ];
+
+function offlineResponse() {
+  return new Response("Offline", {
+    status: 503,
+    statusText: "Service Unavailable",
+    headers: { "Content-Type": "text/plain; charset=utf-8" },
+  });
+}
+
+async function matchOrOffline(request) {
+  const cached = await caches.match(request);
+  if (cached) return cached;
+  const shell = await caches.match("/offline.html");
+  return shell || offlineResponse();
+}
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -51,10 +66,7 @@ self.addEventListener("fetch", (event) => {
           caches.open(VERSION).then((cache) => cache.put(request, copy));
           return response;
         })
-        .catch(async () => {
-          const cached = await caches.match(request);
-          return cached || caches.match("/offline.html");
-        })
+        .catch(async () => matchOrOffline(request))
     );
     return;
   }
@@ -69,7 +81,10 @@ self.addEventListener("fetch", (event) => {
           }
           return response;
         })
-        .catch(() => caches.match(request))
+        .catch(async () => {
+          const cached = await caches.match(request);
+          return cached || offlineResponse();
+        })
     );
     return;
   }
@@ -84,7 +99,7 @@ self.addEventListener("fetch", (event) => {
           }
           return response;
         })
-        .catch(() => cached);
+        .catch(async () => cached || offlineResponse());
       return cached || network;
     })
   );
