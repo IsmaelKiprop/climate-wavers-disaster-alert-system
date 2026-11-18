@@ -98,7 +98,7 @@ export function projectAppUrl(projectId) {
  * Bots are rewritten on Vercel to /api/share-project (cover + logo OG).
  */
 export function projectOgShareUrl(projectId) {
-  return `${siteOrigin()}/p/${projectId}?v=og1`;
+  return `${siteOrigin()}/p/${projectId}?v=og2`;
 }
 
 /**
