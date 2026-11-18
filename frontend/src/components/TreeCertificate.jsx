@@ -120,33 +120,33 @@ const TreeCertificate = ({
           >
             <div className="absolute inset-[10px] border-2 border-emerald-200 pointer-events-none" aria-hidden />
 
-            <div className="relative bg-[#067d83] px-6 sm:px-8 py-5 flex items-center gap-4">
-              <div className="h-14 w-14 rounded-full bg-white flex items-center justify-center shrink-0">
-                <svg viewBox="0 0 64 64" className="h-9 w-9" aria-hidden>
-                  <path
-                    d="M32 10 L46 34 L32 50 L18 34 Z"
-                    fill="#067d83"
-                  />
-                  <path d="M32 16 V46" stroke="#fff" strokeWidth="2.5" />
-                </svg>
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-white text-xl sm:text-2xl font-semibold tracking-tight">
-                  CLIMATE WAVERS
-                </p>
-                <p className="text-emerald-100 text-xs sm:text-sm mt-0.5">
-                  Growing hope across Africa · alerts.flowops.africa
-                </p>
-              </div>
-              <div className="hidden sm:block bg-white p-1.5 border border-white/40 shrink-0">
+            <div className="relative bg-[#067d83] px-5 sm:px-8 py-4 flex items-center gap-3 sm:gap-5">
+              <div className="bg-black p-1.5 shrink-0 border border-black/40">
                 <img
                   src="/logo.jpg"
                   alt="Climate Wavers"
-                  className="h-10 w-auto object-contain"
-                  onError={(e) => {
-                    e.currentTarget.style.display = 'none';
-                  }}
+                  className="h-14 sm:h-16 w-auto object-contain"
                 />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-white text-lg sm:text-2xl font-semibold tracking-tight">
+                  CLIMATE WAVERS
+                </p>
+                <p className="text-emerald-100 text-xs sm:text-sm mt-0.5">
+                  Tree planting certificate · alerts.flowops.africa
+                </p>
+              </div>
+              <div className="shrink-0 text-center">
+                <p className="hidden sm:block text-[10px] uppercase tracking-wide text-emerald-100 mb-1">
+                  Powered by
+                </p>
+                <div className="bg-white p-1.5 sm:p-2">
+                  <img
+                    src="/flowops-logo.png"
+                    alt="FlowOps Africa"
+                    className="h-10 sm:h-12 w-auto object-contain"
+                  />
+                </div>
               </div>
             </div>
 
@@ -236,9 +236,15 @@ const TreeCertificate = ({
               </div>
             </div>
 
-            <div className="bg-[#067d83] px-6 py-3">
+            <div className="bg-[#067d83] px-5 sm:px-6 py-3 flex items-center gap-3 flex-wrap">
+              <div className="bg-black p-0.5">
+                <img src="/logo.jpg" alt="" className="h-7 w-auto object-contain" />
+              </div>
+              <div className="bg-white p-0.5">
+                <img src="/flowops-logo.png" alt="" className="h-7 w-auto object-contain" />
+              </div>
               <p className="text-[11px] text-white/95">
-                Climate Wavers · Powered by FlowOps Africa · Digitally issued — re-download anytime from your dashboard
+                Climate Wavers · Powered by FlowOps Africa · Digitally issued
               </p>
             </div>
           </div>

@@ -210,32 +210,61 @@ def _fetch_logo(url: str, max_w: int = 220, max_h: int = 72) -> Optional[Image.I
         return None
 
 
-def _load_local_logo(max_w: int = 220, max_h: int = 72) -> Optional[Image.Image]:
-    """Prefer bundled Climate Wavers logo.jpg when running beside the monorepo."""
+def _certificates_static_dir() -> str:
+    return os.path.join(os.path.abspath(os.path.dirname(__file__)), "static", "certificates")
+
+
+def _load_image_file(path: str, max_w: int, max_h: int) -> Optional[Image.Image]:
+    try:
+        if not path or not os.path.exists(path):
+            return None
+        img = Image.open(path).convert("RGBA")
+        img.thumbnail((max_w, max_h), Image.Resampling.LANCZOS)
+        return img
+    except Exception:
+        return None
+
+
+def _cw_logo(max_w: int = 220, max_h: int = 120) -> Optional[Image.Image]:
+    """Real Climate Wavers logo (bundled first, then CDN)."""
+    static_dir = _certificates_static_dir()
     here = os.path.abspath(os.path.dirname(__file__))
     candidates = [
+        os.path.join(static_dir, "climate_wavers_logo.png"),
+        os.path.join(static_dir, "climate_wavers_logo.jpg"),
         os.path.join(here, "..", "..", "frontend", "public", "logo.jpg"),
         os.path.join(here, "..", "..", "frontend", "dist", "logo.jpg"),
-        os.path.join(here, "static", "logo.jpg"),
     ]
     for path in candidates:
-        try:
-            if not os.path.exists(path):
-                continue
-            img = Image.open(path).convert("RGBA")
-            img.thumbnail((max_w, max_h), Image.Resampling.LANCZOS)
-            return img
-        except Exception:
-            continue
-    return None
+        logo = _load_image_file(path, max_w, max_h)
+        if logo:
+            return logo
+    return _fetch_logo(f"{frontend_base()}/logo.jpg", max_w=max_w, max_h=max_h)
 
 
-def _cw_logo() -> Optional[Image.Image]:
-    local = _load_local_logo()
-    if local:
-        return local
-    # Only the real brand mark — avoid og-image / favicons that look wrong on teal
-    return _fetch_logo(f"{frontend_base()}/logo.jpg", max_w=200, max_h=64)
+def _flowops_logo(max_w: int = 160, max_h: int = 160) -> Optional[Image.Image]:
+    """Real FlowOps Africa logo (bundled first, then CDN)."""
+    static_dir = _certificates_static_dir()
+    here = os.path.abspath(os.path.dirname(__file__))
+    candidates = [
+        os.path.join(static_dir, "flowops_logo.png"),
+        os.path.join(here, "..", "..", "frontend", "public", "flowops-logo.png"),
+        os.path.join(here, "..", "..", "frontend", "dist", "flowops-logo.png"),
+    ]
+    for path in candidates:
+        logo = _load_image_file(path, max_w, max_h)
+        if logo:
+            return logo
+    return _fetch_logo(
+        "https://www.flowops.africa/assets/Logo.png", max_w=max_w, max_h=max_h
+    )
+
+
+def _paste_logo(canvas: Image.Image, logo: Optional[Image.Image], x: int, y: int) -> Tuple[int, int]:
+    if not logo:
+        return 0, 0
+    canvas.paste(logo, (x, y), logo if logo.mode == "RGBA" else None)
+    return logo.size
 
 
 def build_certificate_context(donation) -> Dict[str, Any]:
@@ -280,12 +309,12 @@ def render_certificate_png(donation) -> bytes:
     draw.rectangle([24, 24, w - 24, h - 24], outline=TEAL, width=5)
     draw.rectangle([38, 38, w - 38, h - 38], outline=(167, 243, 208), width=2)
 
-    # Brand header
-    draw.rectangle([38, 38, w - 38, 148], fill=TEAL)
-    _draw_cw_mark(img, 108, 93, size=84)
+    # Brand header with real logos
+    header_h = 168
+    draw.rectangle([38, 38, w - 38, 38 + header_h], fill=TEAL)
 
-    brand_font = _load_font(36, bold=True)
-    brand_sub = _load_font(16)
+    brand_font = _load_font(32, bold=True)
+    brand_sub = _load_font(15)
     eyebrow = _load_font(15, bold=True)
     name_font = _load_font(54, bold=True)
     body_font = _load_font(23)
@@ -294,27 +323,54 @@ def render_certificate_png(donation) -> bytes:
     small_font = _load_font(17)
     tiny_font = _load_font(14)
 
-    draw.text((170, 68), "CLIMATE WAVERS", fill=WHITE, font=brand_font)
+    cw_logo = _cw_logo(max_w=210, max_h=130)
+    fo_logo = _flowops_logo(max_w=118, max_h=118)
+
+    # Climate Wavers logo plate (logo has dark bg + white wordmark)
+    if cw_logo:
+        pad = 8
+        lx, ly = 58, 54
+        draw.rounded_rectangle(
+            [lx - pad, ly - pad, lx + cw_logo.width + pad, ly + cw_logo.height + pad],
+            radius=8,
+            fill=(10, 10, 10),
+        )
+        _paste_logo(img, cw_logo, lx, ly)
+        text_x = lx + cw_logo.width + 28
+    else:
+        _draw_cw_mark(img, 110, 110, size=84)
+        text_x = 170
+
+    draw.text((text_x, 72), "CLIMATE WAVERS", fill=WHITE, font=brand_font)
     draw.text(
-        (170, 110),
-        "Growing hope across Africa  ·  alerts.flowops.africa",
+        (text_x, 114),
+        "Tree planting certificate  ·  alerts.flowops.africa",
         fill=(204, 251, 241),
         font=brand_sub,
     )
 
-    # Wordmark plate on the right (no third-party / OG art)
-    plate = "CLIMATE WAVERS"
-    plate_font = _load_font(18, bold=True)
-    pw = _text_width(draw, plate, plate_font) + 36
-    px, py = w - 70 - pw, 72
-    draw.rounded_rectangle([px, py, px + pw, py + 44], radius=6, fill=WHITE)
-    draw.text((px + 18, py + 12), plate, fill=TEAL, font=plate_font)
+    # FlowOps logo plate on the right
+    if fo_logo:
+        pad = 10
+        fx = w - 70 - fo_logo.width
+        fy = 54 + max(0, (130 - fo_logo.height) // 2)
+        draw.rounded_rectangle(
+            [fx - pad, fy - pad, fx + fo_logo.width + pad, fy + fo_logo.height + pad],
+            radius=10,
+            fill=WHITE,
+        )
+        _paste_logo(img, fo_logo, fx, fy)
+        powered = _load_font(12, bold=True)
+        label = "POWERED BY"
+        lw = _text_width(draw, label, powered)
+        draw.text((fx + (fo_logo.width - lw) // 2, fy - 22), label, fill=(204, 251, 241), font=powered)
 
+    body_top = 38 + header_h + 22
     # Centered certificate body — tight rhythm
-    _center_text(draw, 175, "CERTIFICATE OF PLANTATION", eyebrow, TEAL, w)
-    _center_text(draw, 202, "This certifies that", small_font, MUTED, w)
+    _center_text(draw, body_top, "CERTIFICATE OF PLANTATION", eyebrow, TEAL, w)
+    _center_text(draw, body_top + 28, "This certifies that", small_font, MUTED, w)
     donor = (ctx["donor_name"] or "Climate Wavers supporter").strip()
-    _center_text(draw, 238, donor[:48], name_font, INK, w)
+    _center_text(draw, body_top + 64, donor[:48], name_font, INK, w)
 
     if ctx["gifted_to"]:
         action = f"gifted {ctx['trees']} tree{'s' if ctx['trees'] != 1 else ''} to {ctx['gifted_to']}"
@@ -323,10 +379,10 @@ def render_certificate_png(donation) -> bytes:
             f"funded the planting of {ctx['trees']} tree"
             f"{'s' if ctx['trees'] != 1 else ''} with Climate Wavers"
         )
-    _center_text(draw, 312, action[:90], body_font, TEAL_DARK, w)
+    _center_text(draw, body_top + 136, action[:90], body_font, TEAL_DARK, w)
 
     # Impact strip
-    strip_y0, strip_y1 = 370, 520
+    strip_y0, strip_y1 = body_top + 190, body_top + 340
     draw.rectangle([64, strip_y0, w - 64, strip_y1], fill=(236, 253, 245))
     draw.rectangle([64, strip_y0, w - 64, strip_y1], outline=(167, 243, 208), width=2)
 
@@ -364,7 +420,7 @@ def render_certificate_png(donation) -> bytes:
             )
 
     # Signature + meta + seal
-    sig_y = 560
+    sig_y = strip_y1 + 36
     draw.text((84, sig_y), "Authorized by", fill=MUTED, font=tiny_font)
     draw.text(
         (84, sig_y + 26),
@@ -391,10 +447,31 @@ def render_certificate_png(donation) -> bytes:
 
     _draw_seal(draw, w - 160, sig_y + 70, radius=78)
 
-    draw.rectangle([38, h - 78, w - 38, h - 38], fill=TEAL)
+    # Footer brand strip with both logos
+    footer_top = h - 100
+    draw.rectangle([38, footer_top, w - 38, h - 38], fill=TEAL)
+    cw_foot = _cw_logo(max_w=70, max_h=48)
+    fo_foot = _flowops_logo(max_w=52, max_h=52)
+    fx = 58
+    if cw_foot:
+        draw.rounded_rectangle(
+            [fx, footer_top + 18, fx + cw_foot.width + 8, footer_top + 18 + cw_foot.height + 4],
+            radius=4,
+            fill=(10, 10, 10),
+        )
+        _paste_logo(img, cw_foot, fx + 4, footer_top + 20)
+        fx += cw_foot.width + 24
+    if fo_foot:
+        draw.rounded_rectangle(
+            [fx, footer_top + 16, fx + fo_foot.width + 10, footer_top + 16 + fo_foot.height + 6],
+            radius=6,
+            fill=WHITE,
+        )
+        _paste_logo(img, fo_foot, fx + 5, footer_top + 19)
+        fx += fo_foot.width + 24
     draw.text(
-        (64, h - 64),
-        "Climate Wavers  ·  Powered by FlowOps Africa  ·  Digitally issued — re-download anytime from your dashboard",
+        (fx, footer_top + 34),
+        "Climate Wavers  ·  Powered by FlowOps Africa  ·  Digitally issued",
         fill=WHITE,
         font=tiny_font,
     )
