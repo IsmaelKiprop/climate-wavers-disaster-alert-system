@@ -1694,10 +1694,13 @@ class TreeProjectDonationViewSet(viewsets.ModelViewSet):
         claim_tree_donations(self.request.user)
         project_id = self.request.query_params.get('project_id')
         donor_id = self.request.query_params.get('donor')
+        gifted_to_id = self.request.query_params.get('gifted_to')
         
         if project_id:
             return TreeProjectDonation.objects.filter(project_id=project_id)
-        elif donor_id:
+        if gifted_to_id:
+            return TreeProjectDonation.objects.filter(gifted_to_id=gifted_to_id)
+        if donor_id:
             return TreeProjectDonation.objects.filter(donor_id=donor_id)
         return TreeProjectDonation.objects.filter(donor=self.request.user)
 

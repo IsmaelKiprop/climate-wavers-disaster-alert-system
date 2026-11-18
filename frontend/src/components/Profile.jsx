@@ -672,13 +672,15 @@ const Profile = () => {
         <ProfileImpactPanel profile={viewUser} feed={feed} />
       </div>
 
-      <Feed
-        feeds={profileFeeds}
-        feedData={feed}
-        trendingData={trendingData}
-        trendingLoading={trendingLoading}
-        trendingError={trendingError}
-      />
+      <div id="profile-feed">
+        <Feed
+          feeds={profileFeeds}
+          feedData={feed}
+          trendingData={trendingData}
+          trendingLoading={trendingLoading}
+          trendingError={trendingError}
+        />
+      </div>
       
       {/* Profile Edit Modal */}
       <ProfileEditModal

@@ -81,22 +81,34 @@ def profile_is_complete(user):
 
 
 def trees_for_user(user):
+    from django.db.models import Q
+
     bought = (
         TreeProjectDonation.objects.filter(donor=user, payment_status="completed").aggregate(
             total=Sum("trees_purchased")
         )["total"]
         or 0
     )
+    # Gifts received from others only — avoid double-counting self-gifts
+    # (donor=user AND gifted_to=user on the same donation).
     gifted = (
-        TreeProjectDonation.objects.filter(gifted_to=user, payment_status="completed").aggregate(
-            total=Sum("trees_purchased")
-        )["total"]
+        TreeProjectDonation.objects.filter(gifted_to=user, payment_status="completed")
+        .exclude(donor=user)
+        .aggregate(total=Sum("trees_purchased"))["total"]
+        or 0
+    )
+    # Unique ledger: every completed donation where this user paid or received
+    unique_total = (
+        TreeProjectDonation.objects.filter(
+            Q(donor=user) | Q(gifted_to=user),
+            payment_status="completed",
+        ).aggregate(total=Sum("trees_purchased"))["total"]
         or 0
     )
     return {
         "trees_bought": bought,
         "trees_gifted_to_them": gifted,
-        "trees_total": bought + gifted,
+        "trees_total": unique_total,
     }
 
 

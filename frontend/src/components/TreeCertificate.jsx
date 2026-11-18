@@ -192,36 +192,31 @@ const TreeCertificate = ({
                 ))}
               </div>
 
-              <div className="mt-8 grid sm:grid-cols-[1.1fr_1fr_auto] gap-6 text-left items-end">
-                <div>
-                  <p className="text-[11px] text-slate-500">Authorized by</p>
-                  <p className="text-base font-semibold text-slate-900 mt-1">
-                    Kipkoech Ismael Kiprop
-                  </p>
-                  <p className="text-sm text-slate-500">Founder, Climate Wavers</p>
-                  <div className="mt-3 h-0.5 w-40 bg-[#067d83]" />
-                  <p className="text-[11px] text-slate-400 mt-1">Digital signature</p>
-                </div>
-                <div>
-                  <p className="text-[10px] uppercase tracking-wide text-slate-500 font-semibold">
-                    Certificate ID
-                  </p>
-                  <p className="font-mono text-xs text-slate-800 mt-1 break-all">{certId}</p>
-                  <p className="text-[10px] uppercase tracking-wide text-slate-500 font-semibold mt-3">
-                    Issued
-                  </p>
-                  <p className="text-sm text-slate-800 mt-1">{plantingDate}</p>
-                  {paymentRef ? (
-                    <>
-                      <p className="text-[10px] uppercase tracking-wide text-slate-500 font-semibold mt-3">
-                        Payment ref
-                      </p>
-                      <p className="font-mono text-xs text-slate-800 mt-1">{paymentRef}</p>
-                    </>
-                  ) : null}
-                  {amount > 0 ? (
-                    <p className="text-xs text-slate-500 mt-3">KES {amount.toLocaleString()}</p>
-                  ) : null}
+              <div className="mt-8 grid sm:grid-cols-[1fr_auto] gap-6 text-left items-center">
+                <div className="grid sm:grid-cols-3 gap-4">
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wide text-slate-500 font-semibold">
+                      Certificate ID
+                    </p>
+                    <p className="font-mono text-xs text-slate-800 mt-1 break-all">{certId}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wide text-slate-500 font-semibold">
+                      Issued
+                    </p>
+                    <p className="text-sm text-slate-800 mt-1">{plantingDate}</p>
+                    {amount > 0 ? (
+                      <p className="text-xs text-slate-500 mt-1">KES {amount.toLocaleString()}</p>
+                    ) : null}
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wide text-slate-500 font-semibold">
+                      Payment ref
+                    </p>
+                    <p className="font-mono text-xs text-slate-800 mt-1">
+                      {paymentRef || "—"}
+                    </p>
+                  </div>
                 </div>
                 <div className="justify-self-center sm:justify-self-end">
                   <div className="h-28 w-28 rounded-full border-[3px] border-[#067d83] flex flex-col items-center justify-center text-center">

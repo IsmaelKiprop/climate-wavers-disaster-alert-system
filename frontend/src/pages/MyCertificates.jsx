@@ -86,11 +86,19 @@ const MyCertificates = () => {
             ),
           ]);
 
-        const [treeRes, champRes] = await Promise.allSettled([
+        const [treeRes, giftedRes, champRes] = await Promise.allSettled([
           timed(
             client.run(
               "get",
               `${endpoints.treeProjectDonations}?donor=${userId}`,
+              null,
+              true
+            )
+          ),
+          timed(
+            client.run(
+              "get",
+              `${endpoints.treeProjectDonations}?gifted_to=${userId}`,
               null,
               true
             )
@@ -100,15 +108,20 @@ const MyCertificates = () => {
 
         if (cancelled) return;
 
-        if (treeRes.status === "fulfilled") {
-          const rows = unwrapList(treeRes.value)
+        const byId = new Map();
+        const ingest = (payload) => {
+          unwrapList(payload)
             .filter((d) => (d.payment_status || "completed") === "completed")
-            .map(mapDonationToCert);
-          setTreeCerts(rows);
-        } else {
-          setTreeCerts([]);
-          console.error("Tree certificates load failed:", treeRes.reason);
-        }
+            .forEach((d) => {
+              if (d?.id != null) byId.set(d.id, mapDonationToCert(d));
+            });
+        };
+        if (treeRes.status === "fulfilled") ingest(treeRes.value);
+        else console.error("Tree certificates load failed:", treeRes.reason);
+        if (giftedRes.status === "fulfilled") ingest(giftedRes.value);
+        else console.error("Gifted certificates load failed:", giftedRes.reason);
+
+        setTreeCerts([...byId.values()]);
 
         if (champRes.status === "fulfilled" && champRes.value?.certificate) {
           setChampionCert(champRes.value.certificate);
@@ -119,7 +132,11 @@ const MyCertificates = () => {
           }
         }
 
-        if (treeRes.status === "rejected" && champRes.status === "rejected") {
+        if (
+          treeRes.status === "rejected" &&
+          giftedRes.status === "rejected" &&
+          champRes.status === "rejected"
+        ) {
           setLoadError(
             "Could not load certificates. The server may be waking up — try again."
           );

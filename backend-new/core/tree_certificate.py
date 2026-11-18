@@ -419,33 +419,22 @@ def render_certificate_png(donation) -> bytes:
                 font=tiny_font,
             )
 
-    # Signature + meta + seal
-    sig_y = strip_y1 + 36
-    draw.text((84, sig_y), "Authorized by", fill=MUTED, font=tiny_font)
+    # Meta + seal (no handwritten / digital signature block)
+    meta_y = strip_y1 + 40
+    meta_x = 84
+    draw.text((meta_x, meta_y), "CERTIFICATE ID", fill=MUTED, font=label_font)
+    draw.text((meta_x, meta_y + 22), ctx["certificate_id"][:48], fill=INK, font=small_font)
+    draw.text((meta_x, meta_y + 58), "ISSUED", fill=MUTED, font=label_font)
+    draw.text((meta_x, meta_y + 80), ctx["issued_on"], fill=INK, font=small_font)
+    draw.text((meta_x + 280, meta_y), "PAYMENT REF", fill=MUTED, font=label_font)
     draw.text(
-        (84, sig_y + 26),
-        "Kipkoech Ismael Kiprop",
-        fill=INK,
-        font=_load_font(23, bold=True),
-    )
-    draw.text((84, sig_y + 56), "Founder, Climate Wavers", fill=MUTED, font=small_font)
-    draw.line([(84, sig_y + 92), (400, sig_y + 92)], fill=TEAL, width=2)
-    draw.text((84, sig_y + 102), "Digital signature", fill=MUTED, font=tiny_font)
-
-    meta_x = 500
-    draw.text((meta_x, sig_y), "CERTIFICATE ID", fill=MUTED, font=label_font)
-    draw.text((meta_x, sig_y + 22), ctx["certificate_id"][:42], fill=INK, font=small_font)
-    draw.text((meta_x, sig_y + 56), "ISSUED", fill=MUTED, font=label_font)
-    draw.text((meta_x, sig_y + 78), ctx["issued_on"], fill=INK, font=small_font)
-    draw.text((meta_x, sig_y + 112), "PAYMENT REF", fill=MUTED, font=label_font)
-    draw.text(
-        (meta_x, sig_y + 134),
+        (meta_x + 280, meta_y + 22),
         (ctx["payment_reference"] or "—")[:28],
         fill=INK,
         font=small_font,
     )
 
-    _draw_seal(draw, w - 160, sig_y + 70, radius=78)
+    _draw_seal(draw, w - 160, meta_y + 55, radius=78)
 
     # Footer brand strip with both logos
     footer_top = h - 100

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -30,6 +31,7 @@ import {
 } from "../utils/profileImpactAnalytics";
 import { exportElementToPdf, sanitizeAiBrief } from "../utils/exportPdf";
 import { useTheme } from "../context/ThemeContext";
+import { getUser } from "../utils/factory";
 
 ChartJS.register(
   CategoryScale,
@@ -72,6 +74,7 @@ function clampPct(n) {
  * Compact strip by default; expand for charts and AI brief.
  */
 const ProfileImpactPanel = ({ profile, feed = {}, className = "" }) => {
+  const navigate = useNavigate();
   const reportRef = useRef(null);
   const aiForProfileRef = useRef(null);
   const { isDark } = useTheme();
@@ -87,6 +90,8 @@ const ProfileImpactPanel = ({ profile, feed = {}, className = "" }) => {
   const [expanded, setExpanded] = useState(false);
   const accent = isDark ? TEAL_DARK : TEAL;
   const { muted, ink, grid } = chartTheme(isDark);
+  const me = getUser();
+  const isOwnProfile = Boolean(me?.id && profile?.id && Number(me.id) === Number(profile.id));
 
   useEffect(() => {
     let alive = true;
@@ -167,11 +172,70 @@ const ProfileImpactPanel = ({ profile, feed = {}, className = "" }) => {
   const summary = report?.summary || {};
   const resilience = summary.resilience_index ?? 0;
 
+  const focusSection = (sectionId) => {
+    setExpanded(true);
+    window.setTimeout(() => {
+      const el = reportRef.current?.querySelector(`[data-impact-section="${sectionId}"]`);
+      el?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 80);
+  };
+
+  const handleStatClick = (stat) => {
+    if (stat.key === "posts") {
+      const feed = document.getElementById("profile-feed");
+      if (feed) {
+        feed.scrollIntoView({ behavior: "smooth", block: "start" });
+        return;
+      }
+      if (stat.route) {
+        navigate(stat.route);
+        return;
+      }
+    }
+    if (stat.action === "expand") {
+      setExpanded(true);
+      focusSection(stat.section || "radar");
+      return;
+    }
+    if (stat.route) {
+      navigate(stat.route);
+      return;
+    }
+    if (stat.section) focusSection(stat.section);
+  };
+
   const compactStats = [
-    { label: "Trees", value: summary.trees_total ?? 0 },
-    { label: "Posts", value: summary.posts ?? 0 },
-    { label: "Nearby", value: summary.nearby_signals ?? 0 },
-    { label: "High / critical", value: summary.high_nearby ?? 0 },
+    {
+      key: "trees",
+      label: "Trees",
+      value: summary.trees_total ?? 0,
+      hint: isOwnProfile ? "View certificates" : "Open plant-a-tree",
+      route: isOwnProfile ? "/app/my-certificates" : "/app/plant-tree",
+    },
+    {
+      key: "posts",
+      label: "Posts",
+      value: summary.posts ?? 0,
+      hint: "Jump to posts",
+      route: profile?.id ? `/app/${profile.id}/profile#profile-feed` : undefined,
+      section: "briefing",
+    },
+    {
+      key: "nearby",
+      label: "Nearby",
+      value: summary.nearby_signals ?? 0,
+      hint: "Live hazard signals",
+      section: "briefing",
+      action: "expand",
+    },
+    {
+      key: "high",
+      label: "High / critical",
+      value: summary.high_nearby ?? 0,
+      hint: "High severity nearby",
+      section: "hazards",
+      action: "expand",
+    },
   ];
 
   const radarData = useMemo(
@@ -349,8 +413,11 @@ const ProfileImpactPanel = ({ profile, feed = {}, className = "" }) => {
       <div ref={reportRef} className="p-4 sm:p-5 space-y-4 bg-surface text-foreground">
         {/* Compact strip: always visible */}
         <div className="grid grid-cols-1 sm:grid-cols-[140px_1fr] gap-3 items-stretch">
-          <div
-            className="border border-border bg-surface-muted px-3 py-3 flex flex-col items-center justify-center text-center"
+          <button
+            type="button"
+            title="Open resilience radar"
+            onClick={() => handleStatClick({ action: "expand", section: "radar" })}
+            className="border border-border bg-surface-muted px-3 py-3 flex flex-col items-center justify-center text-center transition hover:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             style={{ borderRadius: 5, breakInside: "avoid" }}
           >
             <p className="text-[11px] uppercase tracking-wide text-muted">Resilience</p>
@@ -370,20 +437,25 @@ const ProfileImpactPanel = ({ profile, feed = {}, className = "" }) => {
                 style={{ width: `${clampPct(resilience)}%`, background: accent }}
               />
             </div>
-          </div>
+            <p className="text-[10px] text-primary/80 mt-2">Tap for radar</p>
+          </button>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             {compactStats.map((stat) => (
-              <div
-                key={stat.label}
-                className="border border-border bg-surface-muted px-3 py-2.5 min-w-0"
+              <button
+                key={stat.key}
+                type="button"
+                title={stat.hint}
+                onClick={() => handleStatClick(stat)}
+                className="border border-border bg-surface-muted px-3 py-2.5 min-w-0 text-left transition hover:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                 style={{ borderRadius: 5, breakInside: "avoid" }}
               >
                 <p className="text-[11px] text-muted truncate">{stat.label}</p>
                 <p className="text-base sm:text-lg font-semibold mt-0.5 truncate tabular-nums">
                   {stat.value}
                 </p>
-              </div>
+                <p className="text-[10px] text-primary/80 mt-1 truncate">{stat.hint}</p>
+              </button>
             ))}
           </div>
         </div>
@@ -413,6 +485,7 @@ const ProfileImpactPanel = ({ profile, feed = {}, className = "" }) => {
             </div>
 
             <div
+              data-impact-section="briefing"
               className="border border-border bg-surface-muted p-4"
               style={{ borderRadius: 5, breakInside: "avoid" }}
             >
@@ -431,6 +504,7 @@ const ProfileImpactPanel = ({ profile, feed = {}, className = "" }) => {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div
+                data-impact-section="radar"
                 className="border border-border p-3"
                 style={{ borderRadius: 5, breakInside: "avoid" }}
               >
@@ -469,6 +543,7 @@ const ProfileImpactPanel = ({ profile, feed = {}, className = "" }) => {
                 </div>
               </div>
               <div
+                data-impact-section="hazards"
                 className="border border-border p-3 md:col-span-2"
                 style={{ borderRadius: 5, breakInside: "avoid" }}
               >
