@@ -44,10 +44,21 @@ const PaymentSuccess = () => {
       reference,
       amount: Number(details.amount || 0),
       trees: Number(details.trees_planted || 1),
+      certificateId: details.certificate_id || result.certificate_id || '',
+      certificateEmailed: Boolean(
+        result.certificate_emailed_at || details.emailed
+      ),
+      donorEmail: details.payer_email || '',
+      species: details.species || details.tree_type || '',
+      giftedTo: details.gifted_to || '',
     });
     setError('');
     sessionStorage.removeItem(`cw-pay-${reference}`);
-    toast.success('Payment saved. Your trees are on your dashboard.');
+    toast.success(
+      result.certificate_emailed_at || details.emailed
+        ? 'Payment saved. Your tree certificate is on its way by email.'
+        : 'Payment saved. Your trees are on your dashboard.'
+    );
   };
 
   useEffect(() => {
@@ -179,25 +190,71 @@ const PaymentSuccess = () => {
                   </span>
                 </div>
                 
-                <div className="flex justify-between items-center py-2">
+                <div className="flex justify-between items-center py-2 border-b border-gray-100">
                   <span className="text-gray-600">Amount:</span>
                   <span className="font-semibold">
                     KSh {paymentData.amount.toLocaleString()}
                   </span>
                 </div>
+                {paymentData.species ? (
+                  <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                    <span className="text-gray-600">Species:</span>
+                    <span className="font-medium text-right max-w-[60%]">
+                      {paymentData.species}
+                    </span>
+                  </div>
+                ) : null}
+                {paymentData.certificateId ? (
+                  <div className="flex justify-between items-center py-2">
+                    <span className="text-gray-600">Certificate ID:</span>
+                    <span className="font-mono text-xs bg-gray-100 px-2 py-1 rounded">
+                      {paymentData.certificateId}
+                    </span>
+                  </div>
+                ) : null}
               </div>
             </div>
           )}
 
           {paymentData && (<>
-          {/* Impact Message */}
-          <div className="bg-[#067d83] rounded-xl text-white p-6 mb-8">
+          <div className="bg-white border border-[#067d83]/30 p-6 mb-8">
+            <h3 className="text-lg font-semibold text-gray-900 mb-2 flex items-center">
+              <IoLeaf className="w-5 h-5 text-[#067d83] mr-2" />
+              Your branded certificate
+            </h3>
+            {paymentData.certificateEmailed ? (
+              <p className="text-gray-600 text-sm">
+                A Climate Wavers certificate PDF was emailed
+                {paymentData.donorEmail ? (
+                  <>
+                    {' '}to <span className="font-medium">{paymentData.donorEmail}</span>
+                  </>
+                ) : (
+                  ' to you'
+                )}
+                . Check inbox and spam — you can also re-download from your dashboard when signed in.
+              </p>
+            ) : (
+              <p className="text-gray-600 text-sm">
+                Your certificate is being prepared and will arrive by email shortly
+                {paymentData.donorEmail ? (
+                  <>
+                    {' '}at <span className="font-medium">{paymentData.donorEmail}</span>
+                  </>
+                ) : null}
+                . ID: <span className="font-mono text-xs">{paymentData.certificateId || 'pending'}</span>
+              </p>
+            )}
+          </div>
+
+          <div className="bg-[#067d83] text-white p-6 mb-8">
             <h3 className="text-xl font-semibold mb-3 flex items-center">
               <IoLeaf className="w-6 h-6 mr-2" />
               Your Impact
             </h3>
             <p className="text-white/90 mb-4">
-              By planting {paymentData?.trees || 1} tree{paymentData?.trees > 1 ? 's' : ''}, you're helping to:
+              By planting {paymentData?.trees || 1} tree{paymentData?.trees > 1 ? 's' : ''}
+              {paymentData.giftedTo ? ` for ${paymentData.giftedTo}` : ''}, you help:
             </p>
             <ul className="space-y-2 text-white/90">
               <li className="flex items-center">
@@ -212,24 +269,19 @@ const PaymentSuccess = () => {
                 <IoCheckmarkCircle className="w-4 h-4 mr-2 text-white" />
                 Support local communities
               </li>
-              <li className="flex items-center">
-                <IoCheckmarkCircle className="w-4 h-4 mr-2 text-white" />
-                Combat climate change
-              </li>
             </ul>
           </div>
 
-          {/* Next Steps */}
           <div className="bg-white rounded-xl shadow-lg p-6 mb-8">
             <h3 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
-              <IoTime className="w-5 h-5 text-blue-600 mr-2" />
-              What's Next?
+              <IoTime className="w-5 h-5 text-[#067d83] mr-2" />
+              What&apos;s next?
             </h3>
             <div className="space-y-3 text-gray-600">
-              <p>• You'll receive a confirmation email shortly</p>
-              <p>• Your trees will be planted within 30 days</p>
-              <p>• You'll get updates on your tree's growth</p>
-              <p>• Track your environmental impact in your profile</p>
+              <p>• Certificate email with PNG attachment (Climate Wavers + FlowOps)</p>
+              <p>• Trees planted with the project team — typically within 30 days</p>
+              <p>• Tree Admin org gets a payment notice for their project</p>
+              <p>• Track impact from your Climate Wavers dashboard</p>
             </div>
           </div>
           </>)}

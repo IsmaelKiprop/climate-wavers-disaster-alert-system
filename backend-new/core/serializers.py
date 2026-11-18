@@ -682,11 +682,18 @@ class TreeProjectDonationSerializer(serializers.ModelSerializer):
         fields = ['id', 'amount', 'platform_fee', 'admin_share', 'fee_rate',
                  'trees_purchased', 'payment_reference', 'payment_status', 
                  'dedication_message', 'selected_species', 'is_anonymous', 'created_at', 'donor_name',
-                 'gifted_to', 'gifted_to_name', 'climate_event',
+                 'donor_display_name', 'gifted_to', 'gifted_to_name', 'climate_event',
+                 'certificate_id', 'certificate_issued_at', 'certificate_emailed_at',
                  'project_name', 'project_city', 'project_country', 'co2_absorption_per_tree']
-        read_only_fields = ['payment_reference', 'platform_fee', 'admin_share', 'fee_rate', 'created_at']
+        read_only_fields = [
+            'payment_reference', 'platform_fee', 'admin_share', 'fee_rate', 'created_at',
+            'certificate_id', 'certificate_issued_at', 'certificate_emailed_at', 'donor_display_name',
+        ]
     
     def get_donor_name(self, obj):
+        stored = (getattr(obj, "donor_display_name", "") or "").strip()
+        if stored:
+            return stored
         if obj.is_anonymous or not obj.donor_id:
             return "Anonymous"
         return f"{obj.donor.first_name} {obj.donor.last_name}".strip() or obj.donor.username

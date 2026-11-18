@@ -125,6 +125,8 @@ const TreeProjectAdmin = () => {
   /** Climate Wavers platform admin — only they can verify projects */
   const [canVerifyProjects, setCanVerifyProjects] = useState(false);
   const [treeAdminMe, setTreeAdminMe] = useState(null);
+  const [donations, setDonations] = useState([]);
+  const [donationsLoading, setDonationsLoading] = useState(false);
 
   // Debug admin status
   useEffect(() => {
@@ -160,6 +162,7 @@ const TreeProjectAdmin = () => {
     
     fetchProjects();
     fetchStats();
+    fetchDonations();
     checkAdminStatus();
   }, []);
 
@@ -378,6 +381,34 @@ const TreeProjectAdmin = () => {
       }
     } catch (error) {
       console.error('Failed to fetch stats:', error);
+    }
+  };
+
+  const fetchDonations = async () => {
+    setDonationsLoading(true);
+    try {
+      const token = getAuthToken() || localStorage.getItem('token');
+      if (!token) {
+        setDonations([]);
+        return;
+      }
+      const response = await fetch(apiUrl(`${endpoints.treeAdminDonations}?limit=40`), {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      if (!response.ok) {
+        setDonations([]);
+        return;
+      }
+      const data = await response.json();
+      setDonations(Array.isArray(data?.results) ? data.results : []);
+    } catch (error) {
+      console.error('Failed to fetch donations:', error);
+      setDonations([]);
+    } finally {
+      setDonationsLoading(false);
     }
   };
 
@@ -976,6 +1007,101 @@ Thank you for your understanding! 🌱
           variant="admin"
           projects={Array.isArray(projects) ? projects : []}
         />
+
+        {/* Payments & certificates */}
+        <div className="border border-border bg-surface">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-4 sm:px-5 py-4 border-b border-border">
+            <div>
+              <p className="text-xs uppercase tracking-wide text-muted">Funding</p>
+              <h2 className="text-lg font-semibold text-foreground">Payments &amp; certificates</h2>
+              <p className="text-sm text-muted mt-0.5">
+                Payers who funded your projects. Certificates are emailed automatically after payment.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={fetchDonations}
+              className="h-10 px-3 border border-border text-sm text-foreground hover:border-primary"
+            >
+              Refresh
+            </button>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted">
+                  <th className="px-4 py-3 font-medium">Payer</th>
+                  <th className="px-4 py-3 font-medium">Project</th>
+                  <th className="px-4 py-3 font-medium">Trees</th>
+                  <th className="px-4 py-3 font-medium">Amount</th>
+                  <th className="px-4 py-3 font-medium">Certificate</th>
+                  <th className="px-4 py-3 font-medium">When</th>
+                </tr>
+              </thead>
+              <tbody>
+                {donationsLoading && donations.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-8 text-center text-muted">
+                      Loading payments…
+                    </td>
+                  </tr>
+                ) : donations.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-8 text-center text-muted">
+                      No payments yet. When someone plants or gifts a tree on your project, they appear here.
+                    </td>
+                  </tr>
+                ) : (
+                  donations.map((d) => {
+                    const species =
+                      d.selected_species && typeof d.selected_species === 'object'
+                        ? Object.entries(d.selected_species)
+                            .filter(([, qty]) => Number(qty) > 0)
+                            .map(([name, qty]) => `${name} × ${qty}`)
+                            .join(', ')
+                        : '';
+                    return (
+                      <tr key={d.id} className="border-b border-border last:border-0">
+                        <td className="px-4 py-3">
+                          <p className="font-medium text-foreground">{d.donor_name || '—'}</p>
+                          <p className="text-xs text-muted">{d.donor_email || ''}</p>
+                          {d.gifted_to ? (
+                            <p className="text-xs text-primary mt-0.5">Gifted to {d.gifted_to}</p>
+                          ) : null}
+                        </td>
+                        <td className="px-4 py-3 text-foreground">{d.project_name || `Project #${d.project_id}`}</td>
+                        <td className="px-4 py-3">
+                          <p className="text-foreground">{d.trees_purchased ?? 0}</p>
+                          {species ? <p className="text-xs text-muted max-w-[12rem] truncate">{species}</p> : null}
+                        </td>
+                        <td className="px-4 py-3 text-foreground">
+                          {Number(d.amount || 0).toLocaleString()} {d.currency || 'KES'}
+                        </td>
+                        <td className="px-4 py-3">
+                          {d.certificate_emailed_at ? (
+                            <span className="text-primary text-xs font-medium">Emailed</span>
+                          ) : d.certificate_id ? (
+                            <span className="text-muted text-xs">Issued</span>
+                          ) : (
+                            <span className="text-muted text-xs">Pending</span>
+                          )}
+                          {d.certificate_id ? (
+                            <p className="font-mono text-[10px] text-muted mt-0.5 truncate max-w-[9rem]">
+                              {d.certificate_id}
+                            </p>
+                          ) : null}
+                        </td>
+                        <td className="px-4 py-3 text-muted whitespace-nowrap">
+                          {d.created_at ? new Date(d.created_at).toLocaleString() : '—'}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
 
         {/* Create/Edit Form Modal */}
         {showCreateForm && (

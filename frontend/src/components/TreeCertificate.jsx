@@ -3,42 +3,62 @@ import { IoDownload, IoShare, IoClose, IoLeaf, IoCheckmarkCircle } from 'react-i
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 
-const TreeCertificate = ({ 
-  isOpen, 
-  onClose, 
-  certificateData, 
-  onDownload, 
+const TreeCertificate = ({
+  isOpen,
+  onClose,
+  certificateData,
+  onDownload,
   onShare,
-  isDownloaded = false 
+  isDownloaded = false,
 }) => {
   const certificateRef = useRef(null);
   const [downloading, setDownloading] = useState(false);
 
+  const trees = Number(certificateData?.treesPlanted || certificateData?.trees_planted || 1);
+  const amount = Number(certificateData?.amount || 0);
+  const certId =
+    certificateData?.certificateId ||
+    certificateData?.certificate_id ||
+    'CW-pending';
+  const donorName =
+    certificateData?.userName ||
+    certificateData?.user_name ||
+    certificateData?.donor_name ||
+    'Climate Wavers supporter';
+  const giftedTo = certificateData?.gifted_to || certificateData?.giftedTo || '';
+  const species =
+    certificateData?.species ||
+    certificateData?.treeType ||
+    certificateData?.tree_type ||
+    'Verified seedling';
+  const location = certificateData?.location || 'Africa';
+  const plantingDate =
+    certificateData?.plantingDate ||
+    certificateData?.planting_date ||
+    new Date().toLocaleDateString();
+  const co2 = certificateData?.co2Absorption || certificateData?.co2_absorption || '22';
+  const projectName = certificateData?.project_name || certificateData?.treeType || species;
+
   const handleDownload = async () => {
-    if (downloading) return;
-    
+    if (downloading || !certificateRef.current) return;
+
     setDownloading(true);
     try {
       const canvas = await html2canvas(certificateRef.current, {
         scale: 2,
         useCORS: true,
         allowTaint: true,
-        backgroundColor: '#ffffff'
+        backgroundColor: '#f8fafc',
       });
-      
+
       const imgData = canvas.toDataURL('image/png');
       const pdf = new jsPDF('landscape', 'mm', 'a4');
-      
-      const imgWidth = 297; // A4 landscape width in mm
+      const imgWidth = 297;
       const imgHeight = (canvas.height * imgWidth) / canvas.width;
-      
-      pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
-      pdf.save(`Tree_Certificate_${certificateData?.certificateId || 'tree'}.pdf`);
-      
-      // Notify parent component that certificate was downloaded
-      if (onDownload) {
-        onDownload(certificateData?.certificateId);
-      }
+      pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, Math.min(imgHeight, 210));
+      pdf.save(`ClimateWavers_Certificate_${certId}.pdf`);
+
+      if (onDownload) onDownload(certId);
     } catch (error) {
       console.error('Error generating certificate:', error);
     } finally {
@@ -47,205 +67,159 @@ const TreeCertificate = ({
   };
 
   const handleShare = () => {
+    const text = `I planted ${trees} tree${trees > 1 ? 's' : ''} with Climate Wavers (${certId}). Join me: https://alerts.flowops.africa`;
     if (navigator.share) {
       navigator.share({
-        title: 'Tree Planting Certificate',
-        text: `I just planted a tree and received a certificate! 🌳`,
-        url: window.location.href
+        title: 'Climate Wavers tree certificate',
+        text,
+        url: window.location.href,
       });
     } else {
-      // Fallback to copying to clipboard
-      navigator.clipboard.writeText(`I just planted a tree and received a certificate! 🌳 ${window.location.href}`);
+      navigator.clipboard.writeText(text);
     }
-    
-    if (onShare) {
-      onShare();
-    }
+    if (onShare) onShare();
   };
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-        {/* Header */}
-        <div className="flex justify-between items-center p-6 border-b border-gray-200">
-          <h2 className="text-2xl font-bold text-gray-900 flex items-center">
-            <IoLeaf className="w-8 h-8 text-green-600 mr-3" />
-            Tree Planting Certificate
-          </h2>
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-3 sm:p-4">
+      <div className="bg-white max-w-4xl w-full max-h-[92vh] overflow-y-auto shadow-2xl">
+        <div className="flex justify-between items-center px-5 py-4 border-b border-slate-200">
+          <div>
+            <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Climate Wavers</p>
+            <h2 className="text-lg font-semibold text-slate-900">Tree planting certificate</h2>
+          </div>
           <button
+            type="button"
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 transition-colors"
+            className="text-slate-400 hover:text-slate-700 transition-colors p-1"
+            aria-label="Close"
           >
             <IoClose className="w-6 h-6" />
           </button>
         </div>
 
-        {/* Certificate Content */}
-        <div className="p-6">
-          <div 
+        <div className="p-4 sm:p-6">
+          <div
             ref={certificateRef}
-            className="bg-gradient-to-br from-green-50 to-blue-50 border-4 border-green-200 rounded-2xl p-8 shadow-lg"
-            style={{ minHeight: '600px' }}
+            className="relative overflow-hidden border border-[#0d9488]/40"
+            style={{
+              minHeight: '420px',
+              background:
+                'linear-gradient(145deg, #f8fafc 0%, #ecfdf5 45%, #f0fdfa 100%)',
+            }}
           >
-            {/* Certificate Header */}
-          <div className="text-center mb-8">
-              <div className="inline-flex items-center justify-center w-20 h-20 bg-green-100 rounded-full mb-4">
-                <IoLeaf className="w-12 h-12 text-green-600" />
+            <div
+              className="absolute inset-3 pointer-events-none border border-[#067d83]/35"
+              aria-hidden
+            />
+            <div className="relative px-6 sm:px-10 py-8 sm:py-10 text-center">
+              <div className="flex items-center justify-center gap-3 mb-5">
+                <div className="h-11 w-11 rounded-full bg-[#067d83] flex items-center justify-center">
+                  <IoLeaf className="w-6 h-6 text-white" />
+                </div>
+                <div className="text-left">
+                  <p className="text-lg font-semibold tracking-tight text-[#054f54]">Climate Wavers</p>
+                  <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
+                    Powered by FlowOps Africa
+                  </p>
+                </div>
               </div>
-              <h1 className="text-4xl font-bold text-gray-900 mb-2">
-                Tree Planting Certificate
+
+              <p className="text-[11px] uppercase tracking-[0.2em] text-[#067d83] mb-2">
+                Certificate of plantation
+              </p>
+              <h1 className="text-2xl sm:text-3xl font-semibold text-slate-900 mb-2">
+                Thank you for growing hope
               </h1>
-              <p className="text-xl text-gray-600">
-                Climate Action Achievement
-            </p>
-          </div>
-
-            {/* Certificate Body */}
-            <div className="grid md:grid-cols-2 gap-8 mb-8">
-              {/* Left Column - Tree Details */}
-              <div className="space-y-6">
-                <div className="bg-white rounded-xl p-6 shadow-sm">
-                  <h3 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
-                    <IoCheckmarkCircle className="w-6 h-6 text-green-600 mr-2" />
-              Tree Details
-            </h3>
-                  <div className="space-y-3">
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Tree Type:</span>
-                      <span className="font-semibold">{certificateData?.treeType || 'Community Tree'}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">CO₂ Absorption:</span>
-                      <span className="font-semibold text-green-600">
-                        {certificateData?.co2Absorption || '15.00'}kg per year
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Location:</span>
-                      <span className="font-semibold">{certificateData?.location || 'Cape Town, South Africa'}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Planting Date:</span>
-                      <span className="font-semibold">{certificateData?.plantingDate || '9/27/2025'}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-blue-50 rounded-xl p-6">
-                  <h4 className="text-lg font-semibold text-blue-900 mb-3">
-                    Environmental Impact
-                  </h4>
-                  <p className="text-blue-800">
-                    Your tree will absorb approximately <strong>{certificateData?.co2Absorption || '15.00'}kg of CO₂</strong> per year, 
-                    contributing to climate change mitigation and providing habitat for wildlife.
-                  </p>
-                  <p className="text-blue-800 mt-2">
-                    🌿 Thank you for making a difference!
-                  </p>
-                </div>
-              </div>
-
-              {/* Right Column - Certificate Info */}
-              <div className="space-y-6">
-                <div className="bg-white rounded-xl p-6 shadow-sm">
-                  <h3 className="text-xl font-semibold text-gray-900 mb-4">
-                    Certificate Information
-                  </h3>
-                  <div className="space-y-3">
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Certificate ID:</span>
-                      <span className="font-mono text-sm bg-gray-100 px-2 py-1 rounded">
-                        {certificateData?.certificateId || '1758951352343'}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Issued To:</span>
-                      <span className="font-semibold">{certificateData?.userName || 'Anonymous'}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Trees Planted:</span>
-                      <span className="font-semibold text-green-600">
-                        {certificateData?.treesPlanted || 1} tree{(certificateData?.treesPlanted || 1) > 1 ? 's' : ''}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Amount Donated:</span>
-                      <span className="font-semibold">
-                        KSh {(certificateData?.amount || 258).toLocaleString()}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-gradient-to-r from-green-500 to-blue-500 rounded-xl p-6 text-white">
-                  <h4 className="text-lg font-semibold mb-3">
-                    Founder's Message
-                  </h4>
-                  <p className="text-green-100 mb-4">
-                    "Every tree planted is a step towards a sustainable future. 
-                    Thank you for joining our mission to combat climate change."
-                  </p>
-                  <div className="flex items-center">
-                    <div className="w-12 h-12 bg-white bg-opacity-20 rounded-full flex items-center justify-center mr-3">
-                      <span className="text-lg font-bold text-white">IK</span>
-              </div>
-              <div>
-                      <p className="font-semibold">Kipkoech Ismael Kiprop</p>
-                      <p className="text-green-100 text-sm">Founder, Climate Wavers</p>
-                    </div>
-                  </div>
-              </div>
-            </div>
-          </div>
-
-            {/* Certificate Footer */}
-            <div className="text-center border-t border-gray-200 pt-6">
-              <p className="text-gray-600 text-sm">
-                This certificate is digitally verified and stored on the Climate Wavers platform.
+              <p className="text-slate-600 max-w-xl mx-auto text-sm sm:text-base mb-6">
+                This certifies that{' '}
+                <span className="font-semibold text-slate-900">{donorName}</span>
+                {giftedTo ? (
+                  <>
+                    {' '}gifted trees to{' '}
+                    <span className="font-semibold text-slate-900">{giftedTo}</span>
+                  </>
+                ) : null}{' '}
+                funded{' '}
+                <span className="font-semibold text-[#067d83]">
+                  {trees} tree{trees > 1 ? 's' : ''}
+                </span>{' '}
+                through Climate Wavers.
               </p>
-              <p className="text-gray-500 text-xs mt-2">
-                Issued on {new Date().toLocaleDateString()} • Climate Wavers Climate Action Platform
+
+              <div className="grid sm:grid-cols-3 gap-3 max-w-2xl mx-auto mb-6 text-left">
+                <div className="bg-white/80 border border-slate-200 px-4 py-3">
+                  <p className="text-[10px] uppercase tracking-wide text-slate-500">Species / project</p>
+                  <p className="text-sm font-medium text-slate-900 mt-1 line-clamp-2">
+                    {species}
+                    {projectName && projectName !== species ? (
+                      <span className="block text-xs text-slate-500 font-normal mt-0.5">
+                        {projectName}
+                      </span>
+                    ) : null}
+                  </p>
+                </div>
+                <div className="bg-white/80 border border-slate-200 px-4 py-3">
+                  <p className="text-[10px] uppercase tracking-wide text-slate-500">Location</p>
+                  <p className="text-sm font-medium text-slate-900 mt-1">{location}</p>
+                  <p className="text-xs text-slate-500 mt-0.5">{plantingDate}</p>
+                </div>
+                <div className="bg-white/80 border border-slate-200 px-4 py-3">
+                  <p className="text-[10px] uppercase tracking-wide text-slate-500">Impact</p>
+                  <p className="text-sm font-medium text-[#067d83] mt-1">
+                    ~{co2} kg CO₂ / tree / year
+                  </p>
+                  {amount > 0 ? (
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      KES {amount.toLocaleString()}
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+
+              <p className="font-mono text-xs text-slate-500 mb-1">ID {certId}</p>
+              <p className="text-[11px] text-slate-400">
+                Digitally issued by Climate Wavers · FlowOps Africa
               </p>
             </div>
           </div>
 
-          {/* Action Buttons */}
-          <div className="flex flex-col sm:flex-row gap-4 mt-6">
-            {!isDownloaded && (
-            <button
-              onClick={handleDownload}
+          <div className="flex flex-col sm:flex-row gap-3 mt-5">
+            {!isDownloaded ? (
+              <button
+                type="button"
+                onClick={handleDownload}
                 disabled={downloading}
-                className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200 flex items-center justify-center"
+                className="flex-1 bg-[#067d83] hover:bg-[#056a6f] disabled:opacity-60 text-white font-medium py-3 px-5 flex items-center justify-center gap-2"
               >
                 {downloading ? (
                   <>
-                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
-                    Generating...
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white" />
+                    Generating…
                   </>
                 ) : (
                   <>
-                    <IoDownload className="w-5 h-5 mr-2" />
-              Download Certificate
+                    <IoDownload className="w-5 h-5" />
+                    Download PDF
                   </>
                 )}
-            </button>
-            )}
-            
-            {isDownloaded && (
-              <div className="flex-1 bg-gray-100 text-gray-600 font-semibold py-3 px-6 rounded-lg flex items-center justify-center">
-                <IoCheckmarkCircle className="w-5 h-5 mr-2 text-green-600" />
-                Certificate Downloaded
+              </button>
+            ) : (
+              <div className="flex-1 bg-slate-100 text-slate-600 font-medium py-3 px-5 flex items-center justify-center gap-2">
+                <IoCheckmarkCircle className="w-5 h-5 text-[#067d83]" />
+                Downloaded
               </div>
             )}
-            
+
             <button
+              type="button"
               onClick={handleShare}
-              className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200 flex items-center justify-center"
+              className="flex-1 border border-slate-300 hover:border-[#067d83] text-slate-800 font-medium py-3 px-5 flex items-center justify-center gap-2"
             >
-              <IoShare className="w-5 h-5 mr-2" />
-              Share Achievement
+              <IoShare className="w-5 h-5" />
+              Share
             </button>
           </div>
         </div>

@@ -40,6 +40,7 @@ from .tree_admin import (
     TreeAdminPublicApplyView,
     TreeAdminEnsureView,
     TreeAdminMeView,
+    TreeAdminDonationsView,
 )
 from .groups import (
     SocialGroupListCreateView,
@@ -104,6 +105,7 @@ from .platform_admin import (
     PlatformAdminTreeProjectsView,
     PlatformAdminTreeProjectVerifyView,
     PlatformAdminTreeDonationsView,
+    PlatformAdminTreeDonationCertificateView,
     PlatformAdminTreeOrgsView,
     PlatformAdminTreeOrgModerateView,
     PlatformAdminResponderPaymentsView,
@@ -224,6 +226,11 @@ urlpatterns = [
         name="tree-admin-ensure",
     ),
     path("tree-admin/me/", TreeAdminMeView.as_view(), name="tree-admin-me"),
+    path(
+        "tree-admin/donations/",
+        TreeAdminDonationsView.as_view(),
+        name="tree-admin-donations",
+    ),
     path("groups/", SocialGroupListCreateView.as_view(), name="social-groups"),
     path(
         "groups/<int:group_id>/",
@@ -434,6 +441,11 @@ urlpatterns = [
     path("platform-admin/tree-projects/", PlatformAdminTreeProjectsView.as_view(), name="platform-admin-tree-projects"),
     path("platform-admin/tree-projects/<int:project_id>/verify/", PlatformAdminTreeProjectVerifyView.as_view(), name="platform-admin-tree-verify"),
     path("platform-admin/tree-donations/", PlatformAdminTreeDonationsView.as_view(), name="platform-admin-tree-donations"),
+    path(
+        "platform-admin/tree-donations/<int:donation_id>/certificate/",
+        PlatformAdminTreeDonationCertificateView.as_view(),
+        name="platform-admin-tree-donation-certificate",
+    ),
     path("platform-admin/tree-admin-orgs/", PlatformAdminTreeOrgsView.as_view(), name="platform-admin-tree-orgs"),
     path("platform-admin/tree-admin-orgs/<int:org_id>/moderate/", PlatformAdminTreeOrgModerateView.as_view(), name="platform-admin-tree-org-moderate"),
     path("platform-admin/responder-payments/", PlatformAdminResponderPaymentsView.as_view(), name="platform-admin-responder-payments"),

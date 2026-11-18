@@ -213,11 +213,30 @@ const TreesPayments = () => {
       ),
     },
     {
+      key: "payer",
+      label: "Payer",
+      render: (r) => (
+        <div>
+          <p className="text-sm">{r.donor_name || "—"}</p>
+          <p className="text-xs text-muted">{r.donor_email || ""}</p>
+        </div>
+      ),
+    },
+    {
       key: "amt",
       label: "Amount",
       render: (r) => (
         <span>
           {r.amount} {r.currency} · {r.trees_purchased} trees
+        </span>
+      ),
+    },
+    {
+      key: "cert",
+      label: "Certificate",
+      render: (r) => (
+        <span className="text-xs">
+          {r.certificate_emailed_at ? "Emailed" : r.certificate_id ? "Issued" : "Pending"}
         </span>
       ),
     },
@@ -377,13 +396,54 @@ const TreesPayments = () => {
     );
   } else if (selected && tab === "donations") {
     detail = (
-      <DetailPanel title={selected.project_name || `Project #${selected.project_id}`} subtitle={`Donation #${selected.id}`}>
+      <DetailPanel
+        title={selected.project_name || `Project #${selected.project_id}`}
+        subtitle={`Donation #${selected.id}`}
+        actions={
+          <ConfirmAction
+            label={selected.certificate_emailed_at ? "Re-send certificate" : "Issue & email certificate"}
+            busy={busyId === selected.id}
+            onConfirm={async () => {
+              setBusyId(selected.id);
+              try {
+                await client.run(
+                  "post",
+                  endpoints.platformAdminTreeDonationCertificate(selected.id),
+                  { resend: true },
+                  true
+                );
+                toast.success("Certificate emailed");
+                await load();
+              } catch (err) {
+                toast.error(err?.response?.data?.detail || "Certificate send failed");
+              } finally {
+                setBusyId(null);
+              }
+            }}
+          />
+        }
+      >
         <div className="grid sm:grid-cols-2 gap-3">
           <DetailField label="Amount">{`${selected.amount} ${selected.currency}`}</DetailField>
           <DetailField label="Trees">{selected.trees_purchased}</DetailField>
+          <DetailField label="Species">
+            {selected.selected_species && Object.keys(selected.selected_species).length
+              ? Object.entries(selected.selected_species)
+                  .map(([name, qty]) => `${name} × ${qty}`)
+                  .join(", ")
+              : "—"}
+          </DetailField>
           <DetailField label="Status">{selected.payment_status}</DetailField>
           <DetailField label="Reference"><span className="font-mono text-xs">{selected.payment_reference || "—"}</span></DetailField>
-          <DetailField label="Donor">{selected.donor_email || "—"}</DetailField>
+          <DetailField label="Payer">{selected.donor_name || selected.donor_email || "—"}</DetailField>
+          <DetailField label="Email">{selected.donor_email || "—"}</DetailField>
+          <DetailField label="Gifted to">{selected.gifted_to || "—"}</DetailField>
+          <DetailField label="Certificate ID"><span className="font-mono text-xs">{selected.certificate_id || "—"}</span></DetailField>
+          <DetailField label="Certificate emailed">
+            {selected.certificate_emailed_at
+              ? new Date(selected.certificate_emailed_at).toLocaleString()
+              : "Not yet"}
+          </DetailField>
           <DetailField label="Created">{selected.created_at ? new Date(selected.created_at).toLocaleString() : "—"}</DetailField>
         </div>
       </DetailPanel>

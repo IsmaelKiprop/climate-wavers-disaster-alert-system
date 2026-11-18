@@ -437,8 +437,24 @@ const PlantTree = () => {
         {/* Global Impact - Removed dummy data */}
 
         {showCertificate ? (
-          <TreeCertificate 
-            treeData={userTrees[userTrees.length - 1]}
+          <TreeCertificate
+            isOpen={showCertificate}
+            certificateData={{
+              ...(userTrees[userTrees.length - 1] || {}),
+              userName:
+                userTrees[userTrees.length - 1]?.donorName ||
+                userTrees[userTrees.length - 1]?.userName,
+              treesPlanted:
+                userTrees[userTrees.length - 1]?.quantity ||
+                userTrees[userTrees.length - 1]?.treesPlanted ||
+                1,
+              location:
+                userTrees[userTrees.length - 1]?.plantingLocation ||
+                userTrees[userTrees.length - 1]?.location,
+              treeType:
+                userTrees[userTrees.length - 1]?.name ||
+                userTrees[userTrees.length - 1]?.treeType,
+            }}
             onClose={() => setShowCertificate(false)}
           />
         ) : selectedTree ? (

@@ -231,20 +231,23 @@ def _donation_payload(donation, payer_email):
             TreeProjectDonation.objects.filter(donor=user).aggregate(total=Sum("trees_purchased"))["total"]
             or 0
         )
-    certificate_id = f"CW{donation.payment_reference}{donation.id}"
-    donor_name = "Anonymous"
-    if user is not None:
-        donor_name = f"{user.first_name} {user.last_name}".strip() or user.username
+    from .tree_certificate import certificate_id_for, donor_label, species_summary
+
+    certificate_id = getattr(donation, "certificate_id", "") or certificate_id_for(donation)
+    donor_name = donor_label(donation)
+    emailed_at = getattr(donation, "certificate_emailed_at", None)
     return {
         "success": True,
         "message": "Payment verified successfully",
         "donation_id": donation.id,
         "payment_reference": donation.payment_reference,
         "certificate_id": certificate_id,
+        "certificate_emailed_at": emailed_at.isoformat() if emailed_at else None,
         "user_total_trees": user_total_trees,
         "certificate_data": {
             "certificate_id": certificate_id,
             "tree_type": project.name,
+            "project_name": project.name,
             "co2_absorption": float(project.co2_absorption_per_tree),
             "location": f"{project.city}, {project.country}",
             "planting_date": donation.created_at.strftime("%m/%d/%Y"),
@@ -252,6 +255,8 @@ def _donation_payload(donation, payer_email):
             "trees_planted": donation.trees_purchased,
             "amount": float(donation.amount),
             "payer_email": payer_email,
+            "species": species_summary(donation),
+            "emailed": bool(emailed_at),
         },
     }
 
@@ -453,6 +458,32 @@ def _attach_points(payload, donation):
         points_earned = 0
     payload["points_earned"] = points_earned
     payload["points_balance"] = points_balance
+    try:
+        from .tree_certificate import maybe_issue_certificate, build_certificate_context
+
+        maybe_issue_certificate(donation)
+        donation.refresh_from_db()
+        payload["certificate_id"] = getattr(donation, "certificate_id", "") or ""
+        payload["certificate_emailed_at"] = (
+            donation.certificate_emailed_at.isoformat()
+            if getattr(donation, "certificate_emailed_at", None)
+            else None
+        )
+        # Enrich certificate_data for clients / emails
+        cert = payload.get("certificate_data") or {}
+        ctx = build_certificate_context(donation)
+        cert.update(
+            {
+                "certificate_id": ctx["certificate_id"],
+                "user_name": ctx["donor_name"],
+                "gifted_to": ctx["gifted_to"],
+                "species": ctx["species"],
+                "emailed": bool(donation.certificate_emailed_at),
+            }
+        )
+        payload["certificate_data"] = cert
+    except Exception as exc:
+        logger.warning("Certificate hook skipped: %s", exc)
     return payload
 
 

@@ -1967,6 +1967,10 @@ def wavers_points_redeem(request):
         return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
     donation = result["donation"]
+    try:
+        donation.refresh_from_db()
+    except Exception:
+        pass
     payload = _donation_payload(donation, getattr(request.user, "email", "") or "")
     payload.update(
         {
@@ -1974,6 +1978,11 @@ def wavers_points_redeem(request):
             "points_balance": result["balance"],
             "redeemed_with_points": True,
             "selected_species": result.get("selected_species") or {},
+            "certificate_id": result.get("certificate_id")
+            or payload.get("certificate_id")
+            or "",
+            "certificate_emailed_at": result.get("certificate_emailed_at")
+            or payload.get("certificate_emailed_at"),
             "message": f"Redeemed {result['trees']} tree(s) with {result['points_spent']} points.",
         }
     )

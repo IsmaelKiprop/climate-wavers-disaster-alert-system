@@ -247,22 +247,44 @@ const TreePayment = ({
             : '🌱 Payment verified! Your tree will be planted soon.'
         );
         
-        // Set payment success data
+        const cert = result.certificate_data || {};
+        const speciesLabel =
+          cert.species ||
+          Object.entries(selectedSpecies || {})
+            .filter(([, qty]) => Number(qty) > 0)
+            .map(([name, qty]) => `${name} × ${qty}`)
+            .join(', ');
         const successData = {
           project_name: treeData.name,
-          project_location: treeData.plantingLocation,
+          project_location: treeData.plantingLocation || cert.location,
           trees_planted: totalQuantity,
+          treesPlanted: totalQuantity,
           amount: totalAmount,
-          date: new Date().toLocaleDateString('en-US', { 
-            year: 'numeric', 
-            month: 'long', 
-            day: 'numeric' 
+          date: new Date().toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
           }),
           dedication_message: dedicationMessage || '',
-          donor_name: donorName || 'Anonymous',
-          selected_species: selectedSpecies
+          donor_name: donorName || cert.user_name || 'Anonymous',
+          userName: donorName || cert.user_name || 'Anonymous',
+          user_name: donorName || cert.user_name || 'Anonymous',
+          selected_species: selectedSpecies,
+          species: speciesLabel,
+          certificate_id: cert.certificate_id || result.certificate_id || '',
+          certificateId: cert.certificate_id || result.certificate_id || '',
+          certificate_emailed: Boolean(result.certificate_emailed_at || cert.emailed),
+          co2_absorption: cert.co2_absorption,
+          co2Absorption: cert.co2_absorption,
+          location: cert.location || treeData.plantingLocation,
+          planting_date: cert.planting_date,
+          plantingDate: cert.planting_date,
+          gifted_to: cert.gifted_to || giftForUser?.name || '',
+          tree_type: speciesLabel || treeData.name,
+          treeType: speciesLabel || treeData.name,
         };
-        
+
+        setCertificateData(successData);
         setPaymentSuccessData(successData);
         setShowPaymentSuccess(true);
         
@@ -338,10 +360,18 @@ const TreePayment = ({
           })
         );
       }
-      setPaymentSuccessData({
+      const cert = result?.certificate_data || {};
+      const speciesLabel =
+        cert.species ||
+        Object.entries(selectedSpecies || {})
+          .filter(([, qty]) => Number(qty) > 0)
+          .map(([name, qty]) => `${name} × ${qty}`)
+          .join(", ");
+      const successData = {
         project_name: treeData.name,
-        project_location: treeData.plantingLocation,
+        project_location: treeData.plantingLocation || cert.location,
         trees_planted: totalQuantity,
+        treesPlanted: totalQuantity,
         amount: 0,
         date: new Date().toLocaleDateString("en-US", {
           year: "numeric",
@@ -349,9 +379,25 @@ const TreePayment = ({
           day: "numeric",
         }),
         dedication_message: dedicationMessage || "Redeemed with Wavers Points",
-        donor_name: donorName || "Anonymous",
+        donor_name: donorName || cert.user_name || "Anonymous",
+        userName: donorName || cert.user_name || "Anonymous",
+        user_name: donorName || cert.user_name || "Anonymous",
         selected_species: selectedSpecies,
-      });
+        species: speciesLabel,
+        certificate_id: cert.certificate_id || result?.certificate_id || "",
+        certificateId: cert.certificate_id || result?.certificate_id || "",
+        certificate_emailed: Boolean(result?.certificate_emailed_at || cert.emailed),
+        co2_absorption: cert.co2_absorption,
+        co2Absorption: cert.co2_absorption,
+        location: cert.location || treeData.plantingLocation,
+        planting_date: cert.planting_date,
+        plantingDate: cert.planting_date,
+        gifted_to: cert.gifted_to || giftForUser?.name || "",
+        tree_type: speciesLabel || treeData.name,
+        treeType: speciesLabel || treeData.name,
+      };
+      setCertificateData(successData);
+      setPaymentSuccessData(successData);
       setShowPaymentSuccess(true);
       onSuccess?.(
         {
@@ -866,7 +912,13 @@ const TreePayment = ({
         onShare={() => {
           toast.success('Achievement shared! 🌳');
         }}
-        isDownloaded={certificateData ? downloadedCertificates.has(certificateData.certificate_id) : false}
+        isDownloaded={
+          certificateData
+            ? downloadedCertificates.has(
+                certificateData.certificateId || certificateData.certificate_id
+              )
+            : false
+        }
       />
     </div>
   );

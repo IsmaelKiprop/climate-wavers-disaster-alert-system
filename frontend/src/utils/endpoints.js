@@ -51,6 +51,7 @@ export const endpoints = {
     "treeAdminApplyPublic": "/api/v1/tree-admin/apply-public/",
     "treeAdminEnsure": "/api/v1/tree-admin/ensure/",
     "treeAdminMe": "/api/v1/tree-admin/me/",
+    "treeAdminDonations": "/api/v1/tree-admin/donations/",
     "pointsRates": "/api/v1/points/rates/",
     "pointsBalance": "/api/v1/points/balance/",
     "pointsLedger": "/api/v1/points/ledger/",
@@ -111,6 +112,8 @@ export const endpoints = {
     "platformAdminTreeProjects": "/api/v1/platform-admin/tree-projects/",
     "platformAdminTreeVerify": (id) => `/api/v1/platform-admin/tree-projects/${id}/verify/`,
     "platformAdminTreeDonations": "/api/v1/platform-admin/tree-donations/",
+    "platformAdminTreeDonationCertificate": (id) =>
+      `/api/v1/platform-admin/tree-donations/${id}/certificate/`,
     "platformAdminTreeOrgs": "/api/v1/platform-admin/tree-admin-orgs/",
     "platformAdminTreeOrgModerate": (id) => `/api/v1/platform-admin/tree-admin-orgs/${id}/moderate/`,
     "platformAdminResponderPayments": "/api/v1/platform-admin/responder-payments/",

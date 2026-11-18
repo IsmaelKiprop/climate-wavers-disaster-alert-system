@@ -253,10 +253,22 @@ def redeem_trees_with_points(
         donation=donation,
     )
 
+    try:
+        from .tree_certificate import maybe_issue_certificate
+
+        maybe_issue_certificate(donation)
+        donation.refresh_from_db()
+    except Exception:
+        pass
+
     return {
         "donation": donation,
         "points_spent": cost,
         "balance": account.balance,
         "trees": trees,
         "selected_species": cleaned_species or {},
+        "certificate_id": getattr(donation, "certificate_id", "") or "",
+        "certificate_emailed_at": donation.certificate_emailed_at.isoformat()
+        if getattr(donation, "certificate_emailed_at", None)
+        else None,
     }

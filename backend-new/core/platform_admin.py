@@ -357,18 +357,9 @@ def serialize_tree_project(p):
 
 
 def serialize_donation(d):
-    return {
-        "id": d.id,
-        "project_id": d.project_id,
-        "project_name": getattr(d.project, "name", "") if d.project_id else "",
-        "amount": float(d.amount) if d.amount is not None else 0,
-        "currency": "KES",
-        "payment_status": getattr(d, "payment_status", "") or "",
-        "payment_reference": getattr(d, "payment_reference", "") or "",
-        "trees_purchased": getattr(d, "trees_purchased", 0) or 0,
-        "donor_email": getattr(d, "payer_email", "") or "",
-        "created_at": d.created_at.isoformat() if d.created_at else None,
-    }
+    from .tree_certificate import serialize_donation_rich
+
+    return serialize_donation_rich(d)
 
 
 def _user_display_name(u):
@@ -887,12 +878,48 @@ class PlatformAdminTreeDonationsView(APIView):
     permission_classes = [IsAuthenticated, IsPlatformStaff]
 
     def get(self, request):
-        qs = TreeProjectDonation.objects.select_related("project").order_by("-created_at")
+        qs = TreeProjectDonation.objects.select_related(
+            "project", "donor", "gifted_to"
+        ).order_by("-created_at")
         status = (request.query_params.get("payment_status") or "").strip()
         if status:
             qs = qs.filter(payment_status=status)
         rows, page = _paginate(qs, request)
         return Response({"results": [serialize_donation(d) for d in rows], **page})
+
+
+class PlatformAdminTreeDonationCertificateView(APIView):
+    """Issue / re-email a branded tree certificate (staff)."""
+
+    permission_classes = [IsAuthenticated, IsPlatformStaff]
+
+    def post(self, request, donation_id):
+        from .tree_certificate import issue_and_email_certificate, render_certificate_png
+
+        donation = (
+            TreeProjectDonation.objects.select_related("project", "donor", "gifted_to")
+            .filter(id=donation_id)
+            .first()
+        )
+        if not donation:
+            return Response({"detail": "Not found"}, status=404)
+        force = bool(request.data.get("resend") or request.data.get("force"))
+        result = issue_and_email_certificate(donation, force_resend=force)
+        donation.refresh_from_db()
+        include_png = bool(request.data.get("include_png"))
+        payload = {
+            "donation": serialize_donation(donation),
+            "issued": result.get("issued"),
+            "emailed": result.get("emailed"),
+            "certificate_id": result.get("certificate_id") or donation.certificate_id,
+        }
+        if include_png:
+            import base64
+
+            payload["png_base64"] = base64.b64encode(
+                render_certificate_png(donation)
+            ).decode("ascii")
+        return Response(payload)
 
 
 class PlatformAdminTreeOrgsView(APIView):

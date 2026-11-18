@@ -56,7 +56,9 @@ const PaymentSuccess = ({ paymentData, onClose }) => {
                 Payment Successful! 🎉
               </h2>
               <p className={`text-green-100 transition-all duration-1000 delay-700 ${animationComplete ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0'}`}>
-                Your tree will be planted soon!
+                {paymentData.certificate_emailed
+                  ? 'Certificate emailed — trees are on their way.'
+                  : 'Your tree will be planted soon!'}
               </p>
             </div>
           </div>
@@ -68,8 +70,15 @@ const PaymentSuccess = ({ paymentData, onClose }) => {
                 Thank you for your contribution! 🌱
               </h3>
               <p className="text-gray-600">
-                Your tree planting has been confirmed and will be processed within 7 days.
+                {paymentData.certificate_emailed
+                  ? 'A branded Climate Wavers certificate was sent to your email (check spam too).'
+                  : 'Your tree planting is confirmed. A certificate email follows shortly.'}
               </p>
+              {paymentData.certificate_id || paymentData.certificateId ? (
+                <p className="mt-2 font-mono text-xs text-gray-500">
+                  ID {paymentData.certificateId || paymentData.certificate_id}
+                </p>
+              ) : null}
             </div>
 
             {/* Project Details */}

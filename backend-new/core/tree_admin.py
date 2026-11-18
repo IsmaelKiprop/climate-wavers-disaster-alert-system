@@ -9,7 +9,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import TreeAdminMembership, TreeAdminOrganization
+from .models import TreeAdminMembership, TreeAdminOrganization, TreeProject, TreeProjectDonation
 from .tree_pricing import PLANS, normalize_plan, plan_meta
 
 User = get_user_model()
@@ -549,5 +549,51 @@ class TreeAdminMeView(APIView):
                     for key, meta in PLANS.items()
                 },
                 "platform_fee_rate": "0.18",
+            }
+        )
+
+
+class TreeAdminDonationsView(APIView):
+    """Payments / payers for projects owned by the Tree Admin's organization."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from .tree_certificate import serialize_donation_rich
+
+        if not user_has_tree_admin_access(request.user) and not (
+            request.user.is_staff or request.user.is_superuser
+        ):
+            return Response({"detail": "Tree Admin access required"}, status=403)
+
+        memberships = list(_memberships_for(request.user))
+        org_ids = [
+            m.org_id
+            for m in memberships
+            if m.org.verification_status == "approved" or request.user.is_staff
+        ]
+        qs = TreeProjectDonation.objects.select_related(
+            "project", "donor", "gifted_to"
+        ).order_by("-created_at")
+        if request.user.is_staff or request.user.is_superuser:
+            pass
+        elif org_ids:
+            qs = qs.filter(project__tree_admin_org_id__in=org_ids)
+        else:
+            qs = qs.none()
+
+        project_id = (request.query_params.get("project_id") or "").strip()
+        if project_id.isdigit():
+            qs = qs.filter(project_id=int(project_id))
+
+        try:
+            limit = min(int(request.query_params.get("limit") or 50), 100)
+        except (TypeError, ValueError):
+            limit = 50
+        rows = list(qs[:limit])
+        return Response(
+            {
+                "results": [serialize_donation_rich(d) for d in rows],
+                "count": len(rows),
             }
         )

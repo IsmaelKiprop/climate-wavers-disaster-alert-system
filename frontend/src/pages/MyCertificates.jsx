@@ -44,23 +44,41 @@ const MyCertificates = () => {
 
         if (treeRes.status === "fulfilled" && treeRes.value?.results) {
           setTreeCerts(
-            treeRes.value.results.map((donation) => ({
-              certificate_id: `CW${donation.payment_reference}${donation.id}`,
-              tree_type: donation.project_name || "Tree Planting",
-              co2_absorption: donation.co2_absorption_per_tree || 0,
-              location: `${donation.project_city || "Unknown"}, ${
-                donation.project_country || "Unknown"
-              }`,
-              planting_date: new Date(donation.created_at).toLocaleDateString(),
-              user_name:
-                `${donation.donor_first_name || ""} ${donation.donor_last_name || ""}`.trim() ||
-                donation.donor_username ||
-                "Anonymous",
-              trees_planted: donation.trees_purchased || 0,
-              amount: donation.amount || 0,
-              is_downloaded: donation.is_downloaded || false,
-              kind: "tree",
-            }))
+            treeRes.value.results
+              .filter((d) => (d.payment_status || "completed") === "completed")
+              .map((donation) => {
+                const species =
+                  donation.selected_species &&
+                  typeof donation.selected_species === "object"
+                    ? Object.entries(donation.selected_species)
+                        .filter(([, qty]) => Number(qty) > 0)
+                        .map(([name, qty]) => `${name} × ${qty}`)
+                        .join(", ")
+                    : "";
+                return {
+                  certificate_id:
+                    donation.certificate_id ||
+                    `CW-${donation.payment_reference}-${donation.id}`,
+                  tree_type: species || donation.project_name || "Tree Planting",
+                  project_name: donation.project_name || "",
+                  species,
+                  co2_absorption: donation.co2_absorption_per_tree || 0,
+                  location: `${donation.project_city || "Unknown"}, ${
+                    donation.project_country || "Unknown"
+                  }`,
+                  planting_date: new Date(donation.created_at).toLocaleDateString(),
+                  user_name:
+                    donation.donor_display_name ||
+                    donation.donor_name ||
+                    "Anonymous",
+                  gifted_to: donation.gifted_to_name || "",
+                  trees_planted: donation.trees_purchased || 0,
+                  amount: donation.amount || 0,
+                  is_downloaded: donation.is_downloaded || false,
+                  certificate_emailed_at: donation.certificate_emailed_at || null,
+                  kind: "tree",
+                };
+              })
           );
         } else {
           setTreeCerts([]);

@@ -691,6 +691,10 @@ class TreeProjectDonation(models.Model):
         help_text="When set, this gift supports that Climate calendar day's activities",
     )
     is_anonymous = models.BooleanField(default=False)
+    donor_display_name = models.CharField(max_length=200, blank=True, default="")
+    certificate_id = models.CharField(max_length=80, blank=True, default="", db_index=True)
+    certificate_issued_at = models.DateTimeField(null=True, blank=True)
+    certificate_emailed_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     
     class Meta:
