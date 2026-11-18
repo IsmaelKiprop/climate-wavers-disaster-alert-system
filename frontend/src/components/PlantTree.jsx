@@ -16,7 +16,11 @@ import TreeAnalyticsPanel from './TreeAnalyticsPanel';
 import { client } from '../api';
 import { apiUrl } from '../config/env';
 import { unwrapList } from '../utils/apiData';
-import { normalizeTreeSpecies, speciesUnitPrice } from '../utils/treeSpecies';
+import {
+  normalizeTreeSpecies,
+  speciesInventoryValueUsd,
+  speciesUnitPrice,
+} from '../utils/treeSpecies';
 
 const PlantTree = () => {
   const navigate = useNavigate();
@@ -609,7 +613,19 @@ const PlantTree = () => {
             });
           };
           const progressPct = Number(selectedProject.progress_percentage) || 0;
-          const fundingPct = Number(selectedProject.funding_percentage) || 0;
+          const inventoryGoal = speciesInventoryValueUsd(
+            selectedProject.tree_species,
+            selectedProject.tree_price
+          );
+          const fundingGoal =
+            Number(selectedProject.funding_goal) > 0
+              ? Number(selectedProject.funding_goal)
+              : inventoryGoal;
+          const fundsRaised = Number(selectedProject.funds_raised) || 0;
+          const fundingPct =
+            fundingGoal > 0
+              ? Math.min(100, (fundsRaised / fundingGoal) * 100)
+              : Number(selectedProject.funding_percentage) || 0;
 
           return (
           <div
@@ -822,13 +838,20 @@ const PlantTree = () => {
                           </p>
                         </div>
 
-                        {selectedProject.funding_goal ? (
+                        {fundingGoal > 0 ? (
                           <div>
                             <div className="flex justify-between text-xs sm:text-sm text-muted mb-1.5">
                               <span>Funding</span>
                               <span className="tabular-nums text-foreground">
-                                ${Number(selectedProject.funds_raised || 0).toLocaleString()} / $
-                                {Number(selectedProject.funding_goal).toLocaleString()}
+                                ${fundsRaised.toLocaleString(undefined, {
+                                  minimumFractionDigits: 0,
+                                  maximumFractionDigits: 2,
+                                })}{" "}
+                                / $
+                                {fundingGoal.toLocaleString(undefined, {
+                                  minimumFractionDigits: 0,
+                                  maximumFractionDigits: 2,
+                                })}
                               </span>
                             </div>
                             <div className="w-full h-2 bg-[var(--cw-overlay-soft)] border border-border overflow-hidden">

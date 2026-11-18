@@ -12,6 +12,7 @@ import {
   formatSpeciesList,
   normalizeTreeSpecies,
   serializeTreeSpecies,
+  speciesInventoryValueUsd,
   speciesPlantedSum,
   speciesRemaining,
   speciesTargetSum,
@@ -476,8 +477,17 @@ const TreeProjectAdmin = () => {
         gallery,
         start_date: formData.start_date,
         expected_completion: formData.expected_completion,
-        total_budget: parseFloat(formData.total_budget) || 0,
-        funding_goal: parseFloat(formData.funding_goal) || 0,
+        // Keep funding goal aligned with species inventory × prices when unset.
+        total_budget: (() => {
+          const entered = parseFloat(formData.total_budget);
+          if (Number.isFinite(entered) && entered > 0) return entered;
+          return speciesInventoryValueUsd(speciesList, resolvedTreePrice);
+        })(),
+        funding_goal: (() => {
+          const entered = parseFloat(formData.funding_goal);
+          if (Number.isFinite(entered) && entered > 0) return entered;
+          return speciesInventoryValueUsd(speciesList, resolvedTreePrice);
+        })(),
         contact_person: formData.contact_person || "",
         contact_email: formData.contact_email || "",
         contact_phone: formData.contact_phone || "",

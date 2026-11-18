@@ -5,6 +5,7 @@ import { projectCoverImage } from '../utils/apiData';
 import {
   formatSpeciesList,
   normalizeTreeSpecies,
+  speciesInventoryValueUsd,
   speciesUnitPrice,
 } from '../utils/treeSpecies';
 
@@ -24,9 +25,37 @@ const ProjectCard = ({
     return { min, max, varied: max - min > 0.001 };
   }, [project.tree_price, project.tree_species]);
 
+  const funding = useMemo(() => {
+    const inventoryGoal = speciesInventoryValueUsd(
+      project.tree_species,
+      project.tree_price
+    );
+    const goal =
+      Number(project.funding_goal) > 0
+        ? Number(project.funding_goal)
+        : inventoryGoal;
+    const raised = Number(project.funds_raised) || 0;
+    const pct = goal > 0 ? Math.min(100, (raised / goal) * 100) : 0;
+    return { goal, raised, pct };
+  }, [
+    project.funding_goal,
+    project.funds_raised,
+    project.tree_price,
+    project.tree_species,
+  ]);
+
   const displayPrice = priceRange.varied ? priceRange.min : priceRange.min || project.tree_price;
   const { exchangeRate, convertedAmount, loading: loadingExchangeRate } = useExchangeRate(displayPrice);
+  const kesMax =
+    exchangeRate && priceRange.varied
+      ? priceRange.max * exchangeRate
+      : null;
   const cover = projectCoverImage(project);
+  const speciesTitle = formatSpeciesList(project.tree_species, {
+    withRemaining: true,
+    withPrice: true,
+    fallbackPrice: project.tree_price,
+  });
 
   return (
     <div className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-all duration-300 hover:scale-105">
@@ -67,28 +96,42 @@ const ProjectCard = ({
         {normalizeTreeSpecies(project.tree_species).length > 0 ? (
           <p
             className="text-xs text-gray-500 mb-3 line-clamp-2"
-            title={formatSpeciesList(project.tree_species, { withRemaining: true })}
+            title={speciesTitle}
           >
-            Species:{" "}
-            {formatSpeciesList(project.tree_species, {
-              withRemaining: true,
-              withPrice: true,
-              fallbackPrice: project.tree_price,
-            })}
+            Species: {speciesTitle}
           </p>
         ) : null}
         
-        <div className="mb-3 sm:mb-4">
-          <div className="flex justify-between text-xs sm:text-sm text-gray-600 mb-1">
-            <span className="truncate">Progress: {project.trees_planted} / {project.target_trees}</span>
-            <span className="ml-2">{project.progress_percentage.toFixed(1)}%</span>
+        <div className="mb-3 sm:mb-4 space-y-2">
+          <div>
+            <div className="flex justify-between text-xs sm:text-sm text-gray-600 mb-1">
+              <span className="truncate">Trees: {project.trees_planted} / {project.target_trees}</span>
+              <span className="ml-2">{Number(project.progress_percentage || 0).toFixed(1)}%</span>
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-1.5 sm:h-2">
+              <div
+                className="bg-green-600 h-1.5 sm:h-2 rounded-full"
+                style={{ width: `${Math.min(100, Number(project.progress_percentage) || 0)}%` }}
+              ></div>
+            </div>
           </div>
-          <div className="w-full bg-gray-200 rounded-full h-1.5 sm:h-2">
-            <div
-              className="bg-green-600 h-1.5 sm:h-2 rounded-full"
-              style={{ width: `${project.progress_percentage}%` }}
-            ></div>
-          </div>
+          {funding.goal > 0 ? (
+            <div>
+              <div className="flex justify-between text-xs sm:text-sm text-gray-600 mb-1">
+                <span className="truncate">
+                  Funding: ${funding.raised.toLocaleString(undefined, { maximumFractionDigits: 2 })} / $
+                  {funding.goal.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                </span>
+                <span className="ml-2">{funding.pct.toFixed(1)}%</span>
+              </div>
+              <div className="w-full bg-gray-200 rounded-full h-1.5 sm:h-2">
+                <div
+                  className="bg-sky-600 h-1.5 sm:h-2 rounded-full"
+                  style={{ width: `${Math.min(100, funding.pct)}%` }}
+                ></div>
+              </div>
+            </div>
+          ) : null}
         </div>
         
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-3 sm:mb-4">
@@ -107,7 +150,9 @@ const ProjectCard = ({
               </div>
             ) : convertedAmount ? (
               <div className="text-sm text-gray-600 mt-1">
-                ≈ KSh{convertedAmount.toLocaleString(undefined, {maximumFractionDigits: 0})}
+                {kesMax
+                  ? `≈ KSh${convertedAmount.toLocaleString(undefined, { maximumFractionDigits: 0 })}–${kesMax.toLocaleString(undefined, { maximumFractionDigits: 0 })}`
+                  : `≈ KSh${convertedAmount.toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
               </div>
             ) : null}
           </div>

@@ -101,22 +101,36 @@ export function formatSpeciesList(raw, { withTargets = true, withRemaining = fal
   if (!list.length) return "";
   return list
     .map((s) => {
-      const bits = [s.name];
+      const meta = [];
       if (withPrice) {
-        const p = speciesUnitPrice(s, fallbackPrice);
-        bits.push(`$${Number(p).toFixed(2)}`);
+        meta.push(`$${Number(speciesUnitPrice(s, fallbackPrice)).toFixed(2)}`);
       }
       if (withRemaining && s.target > 0) {
         const rem = speciesRemaining(s);
-        bits.push(
+        meta.push(
           `${(s.planted || 0).toLocaleString()}/${s.target.toLocaleString()} · ${rem.toLocaleString()} left`
         );
       } else if (withTargets && s.target > 0) {
-        bits.push(`(${s.target.toLocaleString()})`);
+        meta.push(s.target.toLocaleString());
       }
-      return bits.join(" ");
+      return meta.length ? `${s.name} (${meta.join(" · ")})` : s.name;
     })
     .join(", ");
+}
+
+/**
+ * Full inventory value in USD = Σ (target × unit price).
+ * Uses per-species price when set, else fallbackPrice (project default).
+ */
+export function speciesInventoryValueUsd(raw, fallbackPrice = 0) {
+  const catalog = normalizeTreeSpecies(raw);
+  let total = 0;
+  for (const s of catalog) {
+    const target = Math.max(0, parseInt(s.target, 10) || 0);
+    if (!target) continue;
+    total += target * speciesUnitPrice(s, fallbackPrice);
+  }
+  return Number(total.toFixed(2));
 }
 
 /** Persist shape for API — keep planted + optional per-species price. */
