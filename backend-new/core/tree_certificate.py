@@ -25,9 +25,13 @@ logger = logging.getLogger(__name__)
 
 TEAL = (6, 125, 131)
 TEAL_DARK = (5, 90, 95)
-INK = (15, 23, 42)
-MUTED = (100, 116, 139)
-CREAM = (248, 250, 252)
+NAVY = (12, 48, 58)
+GOLD = (184, 148, 60)
+GOLD_LIGHT = (212, 180, 98)
+INK = (20, 28, 36)
+MUTED = (90, 100, 110)
+CREAM = (250, 249, 246)
+PAPER = (252, 251, 248)
 WHITE = (255, 255, 255)
 BORDER = (13, 148, 136)
 
@@ -142,30 +146,80 @@ def _draw_cw_mark(img: Image.Image, cx: int, cy: int, size: int = 72) -> None:
 
 
 def _draw_seal(draw: ImageDraw.ImageDraw, cx: int, cy: int, radius: int = 78) -> None:
+    """Gold-and-teal recognition seal with ribbon tails (A2SV-style)."""
+    # Ribbon tails behind the seal
+    ribbon_w = int(radius * 0.55)
+    ribbon_h = int(radius * 1.15)
+    left = [
+        (cx - ribbon_w - 4, cy + 8),
+        (cx - 6, cy + 8),
+        (cx - ribbon_w // 2 - 8, cy + ribbon_h),
+        (cx - ribbon_w - 2, cy + ribbon_h - 10),
+        (cx - ribbon_w // 2 - 2, cy + ribbon_h - 22),
+    ]
+    right = [
+        (cx + 6, cy + 8),
+        (cx + ribbon_w + 4, cy + 8),
+        (cx + ribbon_w // 2 + 2, cy + ribbon_h - 22),
+        (cx + ribbon_w + 2, cy + ribbon_h - 10),
+        (cx + ribbon_w // 2 + 8, cy + ribbon_h),
+    ]
+    draw.polygon(left, fill=TEAL_DARK)
+    draw.polygon(right, fill=TEAL)
+    # Outer gold ring
     draw.ellipse(
         [cx - radius, cy - radius, cx + radius, cy + radius],
-        outline=TEAL,
-        width=3,
-    )
-    draw.ellipse(
-        [cx - radius + 10, cy - radius + 10, cx + radius - 10, cy + radius - 10],
-        outline=(153, 246, 228),
+        fill=GOLD,
+        outline=NAVY,
         width=2,
     )
-    seal_font = _load_font(18, bold=True)
-    seal_small = _load_font(13)
+    # Inner navy disc
+    inner = radius - 10
+    draw.ellipse(
+        [cx - inner, cy - inner, cx + inner, cy + inner],
+        fill=NAVY,
+        outline=GOLD_LIGHT,
+        width=2,
+    )
+    # Thin teal ring
+    mid = radius - 22
+    draw.ellipse(
+        [cx - mid, cy - mid, cx + mid, cy + mid],
+        outline=TEAL,
+        width=2,
+    )
+    seal_font = _load_font(15, bold=True)
+    seal_small = _load_font(11, bold=True)
     for text, font, dy, color in (
-        ("CLIMATE", seal_font, -26, TEAL),
-        ("WAVERS", seal_font, -4, TEAL),
-        ("VERIFIED", seal_small, 22, MUTED),
-        ("PLANTING", seal_small, 40, MUTED),
+        ("CLIMATE", seal_font, -28, GOLD_LIGHT),
+        ("WAVERS", seal_font, -8, GOLD_LIGHT),
+        ("VERIFIED", seal_small, 16, (200, 220, 218)),
+        ("PLANTING", seal_small, 32, (200, 220, 218)),
     ):
         tw = _text_width(draw, text, font)
         draw.text((cx - tw // 2, cy + dy), text, fill=color, font=font)
 
 
-def _load_font(size: int, bold: bool = False):
+def _load_font(size: int, bold: bool = False, serif: bool = False):
     candidates = []
+    if serif:
+        if bold:
+            candidates.extend(
+                [
+                    "C:/Windows/Fonts/georgiab.ttf",
+                    "C:/Windows/Fonts/timesbd.ttf",
+                    "/usr/share/fonts/truetype/liberation/LiberationSerif-Bold.ttf",
+                    "/usr/share/fonts/truetype/dejavu/DejaVuSerif-Bold.ttf",
+                ]
+            )
+        candidates.extend(
+            [
+                "C:/Windows/Fonts/georgia.ttf",
+                "C:/Windows/Fonts/times.ttf",
+                "/usr/share/fonts/truetype/liberation/LiberationSerif-Regular.ttf",
+                "/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf",
+            ]
+        )
     if bold:
         candidates.extend(
             [
@@ -190,6 +244,156 @@ def _load_font(size: int, bold: bool = False):
         except Exception:
             continue
     return ImageFont.load_default()
+
+
+def _wrap_text(draw, text: str, font, max_width: int) -> List[str]:
+    words = (text or "").split()
+    if not words:
+        return []
+    lines: List[str] = []
+    current = words[0]
+    for word in words[1:]:
+        trial = f"{current} {word}"
+        if _text_width(draw, trial, font) <= max_width:
+            current = trial
+        else:
+            lines.append(current)
+            current = word
+    lines.append(current)
+    return lines
+
+
+def _draw_paper_texture(draw: ImageDraw.ImageDraw, w: int, h: int) -> None:
+    """Subtle diagonal hatch — solid strokes, no gradients."""
+    step = 14
+    for i in range(-h, w + h, step):
+        draw.line([(i, 0), (i + h, h)], fill=(240, 238, 232), width=1)
+
+
+def _corner_bracket(
+    draw: ImageDraw.ImageDraw,
+    *,
+    x: int,
+    y: int,
+    arm: int,
+    thick: int,
+    h_dir: int,
+    v_dir: int,
+    primary,
+    accent,
+) -> None:
+    """Thick L-bracket with overlapping gold edge (recognition sample style)."""
+    # Primary L
+    draw.rectangle(
+        [
+            x if h_dir > 0 else x - arm,
+            y if v_dir > 0 else y - thick,
+            x + arm if h_dir > 0 else x,
+            y + thick if v_dir > 0 else y,
+        ],
+        fill=primary,
+    )
+    draw.rectangle(
+        [
+            x if h_dir > 0 else x - thick,
+            y if v_dir > 0 else y - arm,
+            x + thick if h_dir > 0 else x,
+            y + arm if v_dir > 0 else y,
+        ],
+        fill=primary,
+    )
+    # Gold inner edge along the L
+    inset = 7
+    g = 5
+    draw.rectangle(
+        [
+            x + inset if h_dir > 0 else x - arm + inset,
+            y + inset if v_dir > 0 else y - g - inset,
+            x + arm - inset if h_dir > 0 else x - inset,
+            y + inset + g if v_dir > 0 else y - inset,
+        ],
+        fill=accent,
+    )
+    draw.rectangle(
+        [
+            x + inset if h_dir > 0 else x - inset - g,
+            y + inset if v_dir > 0 else y - arm + inset,
+            x + inset + g if h_dir > 0 else x - inset,
+            y + arm - inset if v_dir > 0 else y - inset,
+        ],
+        fill=accent,
+    )
+    # Sharp 45° bevel tip where arms meet
+    tip = [
+        (x + (thick if h_dir > 0 else -thick), y),
+        (x, y),
+        (x, y + (thick if v_dir > 0 else -thick)),
+    ]
+    draw.polygon(tip, fill=accent)
+
+
+def _draw_formal_frame(draw: ImageDraw.ImageDraw, w: int, h: int) -> None:
+    """Landscape geometric frame: navy/teal L-corners + gold inner rule."""
+    m = 42
+    # Outer navy band
+    draw.rectangle([m, m, w - m, h - m], outline=NAVY, width=12)
+    # Gold inner rule
+    draw.rectangle([m + 16, m + 16, w - m - 16, h - m - 16], outline=GOLD, width=3)
+    # Thin teal accent
+    draw.rectangle([m + 26, m + 26, w - m - 26, h - m - 26], outline=TEAL, width=1)
+
+    arm = 150
+    thick = 22
+    # Asymmetric emphasis like the sample: stronger top-right + bottom-left
+    _corner_bracket(
+        draw, x=m, y=m, arm=arm, thick=thick, h_dir=1, v_dir=1, primary=TEAL, accent=GOLD
+    )
+    _corner_bracket(
+        draw,
+        x=w - m,
+        y=m,
+        arm=arm + 20,
+        thick=thick + 2,
+        h_dir=-1,
+        v_dir=1,
+        primary=NAVY,
+        accent=GOLD,
+    )
+    _corner_bracket(
+        draw,
+        x=m,
+        y=h - m,
+        arm=arm + 20,
+        thick=thick + 2,
+        h_dir=1,
+        v_dir=-1,
+        primary=NAVY,
+        accent=GOLD,
+    )
+    _corner_bracket(
+        draw,
+        x=w - m,
+        y=h - m,
+        arm=arm,
+        thick=thick,
+        h_dir=-1,
+        v_dir=-1,
+        primary=TEAL,
+        accent=GOLD,
+    )
+
+
+def _draw_gold_divider(draw, y: int, canvas_w: int, margin: int = 160) -> None:
+    mid = canvas_w // 2
+    draw.line([(margin, y), (mid - 20, y)], fill=GOLD, width=2)
+    draw.line([(mid + 20, y), (canvas_w - margin, y)], fill=GOLD, width=2)
+    # Diamond centerpiece
+    d = 9
+    draw.polygon(
+        [(mid, y - d), (mid + d, y), (mid, y + d), (mid - d, y)],
+        fill=GOLD,
+        outline=GOLD_LIGHT,
+    )
 
 
 def _fetch_logo(url: str, max_w: int = 220, max_h: int = 72) -> Optional[Image.Image]:
@@ -299,170 +503,148 @@ def build_certificate_context(donation) -> Dict[str, Any]:
 
 
 def render_certificate_png(donation) -> bytes:
-    """Landscape branded Climate Wavers certificate as PNG bytes."""
+    """Formal landscape Climate Wavers certificate (A2SV recognition-style)."""
     ctx = build_certificate_context(donation)
-    w, h = 1600, 920
-    img = Image.new("RGB", (w, h), (247, 250, 250))
+    w, h = 1600, 1130
+    img = Image.new("RGB", (w, h), PAPER)
     draw = ImageDraw.Draw(img)
+    _draw_paper_texture(draw, w, h)
+    _draw_formal_frame(draw, w, h)
 
-    # Frame
-    draw.rectangle([24, 24, w - 24, h - 24], outline=TEAL, width=5)
-    draw.rectangle([38, 38, w - 38, h - 38], outline=(167, 243, 208), width=2)
+    title_font = _load_font(48, bold=True, serif=True)
+    name_font = _load_font(56, bold=True, serif=True)
+    body_font = _load_font(22, serif=True)
+    lead_font = _load_font(15, bold=True)
+    tiny_font = _load_font(13)
+    meta_font = _load_font(14)
+    label_font = _load_font(12, bold=True)
 
-    # Brand header with real logos
-    header_h = 168
-    draw.rectangle([38, 38, w - 38, 38 + header_h], fill=TEAL)
-
-    brand_font = _load_font(32, bold=True)
-    brand_sub = _load_font(15)
-    eyebrow = _load_font(15, bold=True)
-    name_font = _load_font(54, bold=True)
-    body_font = _load_font(23)
-    label_font = _load_font(13, bold=True)
-    value_font = _load_font(19, bold=True)
-    small_font = _load_font(17)
-    tiny_font = _load_font(14)
-
-    cw_logo = _cw_logo(max_w=210, max_h=130)
-    fo_logo = _flowops_logo(max_w=118, max_h=118)
-
-    # Climate Wavers logo plate (logo has dark bg + white wordmark)
+    # Top centered Climate Wavers logo
+    cw_logo = _cw_logo(max_w=180, max_h=110)
+    y = 88
     if cw_logo:
-        pad = 8
-        lx, ly = 58, 54
+        lx = (w - cw_logo.width) // 2
         draw.rounded_rectangle(
-            [lx - pad, ly - pad, lx + cw_logo.width + pad, ly + cw_logo.height + pad],
-            radius=8,
-            fill=(10, 10, 10),
-        )
-        _paste_logo(img, cw_logo, lx, ly)
-        text_x = lx + cw_logo.width + 28
-    else:
-        _draw_cw_mark(img, 110, 110, size=84)
-        text_x = 170
-
-    draw.text((text_x, 72), "CLIMATE WAVERS", fill=WHITE, font=brand_font)
-    draw.text(
-        (text_x, 114),
-        "Tree planting certificate  ·  alerts.flowops.africa",
-        fill=(204, 251, 241),
-        font=brand_sub,
-    )
-
-    # FlowOps logo plate on the right
-    if fo_logo:
-        pad = 10
-        fx = w - 70 - fo_logo.width
-        fy = 54 + max(0, (130 - fo_logo.height) // 2)
-        draw.rounded_rectangle(
-            [fx - pad, fy - pad, fx + fo_logo.width + pad, fy + fo_logo.height + pad],
-            radius=10,
-            fill=WHITE,
-        )
-        _paste_logo(img, fo_logo, fx, fy)
-        powered = _load_font(12, bold=True)
-        label = "POWERED BY"
-        lw = _text_width(draw, label, powered)
-        draw.text((fx + (fo_logo.width - lw) // 2, fy - 22), label, fill=(204, 251, 241), font=powered)
-
-    body_top = 38 + header_h + 22
-    # Centered certificate body — tight rhythm
-    _center_text(draw, body_top, "CERTIFICATE OF PLANTATION", eyebrow, TEAL, w)
-    _center_text(draw, body_top + 28, "This certifies that", small_font, MUTED, w)
-    donor = (ctx["donor_name"] or "Climate Wavers supporter").strip()
-    _center_text(draw, body_top + 64, donor[:48], name_font, INK, w)
-
-    if ctx["gifted_to"]:
-        action = f"gifted {ctx['trees']} tree{'s' if ctx['trees'] != 1 else ''} to {ctx['gifted_to']}"
-    else:
-        action = (
-            f"funded the planting of {ctx['trees']} tree"
-            f"{'s' if ctx['trees'] != 1 else ''} with Climate Wavers"
-        )
-    _center_text(draw, body_top + 136, action[:90], body_font, TEAL_DARK, w)
-
-    # Impact strip
-    strip_y0, strip_y1 = body_top + 190, body_top + 340
-    draw.rectangle([64, strip_y0, w - 64, strip_y1], fill=(236, 253, 245))
-    draw.rectangle([64, strip_y0, w - 64, strip_y1], outline=(167, 243, 208), width=2)
-
-    org = (ctx["organization_name"] or "").strip()
-    cells = [
-        ("TREES", f"{ctx['trees']}"),
-        ("SPECIES", (ctx["species"] or "Seedling")[:28]),
-        ("PROJECT", (ctx["project_name"] or "—")[:32]),
-        ("LOCATION", (ctx["location"] or "—")[:28]),
-        ("CO₂ / YEAR", f"~{ctx['co2']:.0f} kg"),
-    ]
-    cell_w = (w - 128) // len(cells)
-    for i, (label, value) in enumerate(cells):
-        cx0 = 64 + i * cell_w
-        if i > 0:
-            draw.line(
-                [(cx0, strip_y0 + 16), (cx0, strip_y1 - 16)],
-                fill=(167, 243, 208),
-                width=1,
-            )
-        tw = _text_width(draw, label, label_font)
-        draw.text((cx0 + (cell_w - tw) // 2, strip_y0 + 28), label, fill=TEAL, font=label_font)
-        val = value
-        if _text_width(draw, val, value_font) > cell_w - 24 and len(val) > 8:
-            val = val[: max(8, len(val) - 4)] + "…"
-        vw = _text_width(draw, val, value_font)
-        draw.text((cx0 + (cell_w - vw) // 2, strip_y0 + 64), val, fill=INK, font=value_font)
-        if i == 2 and org:
-            ow = _text_width(draw, org[:30], tiny_font)
-            draw.text(
-                (cx0 + (cell_w - ow) // 2, strip_y0 + 98),
-                org[:30],
-                fill=MUTED,
-                font=tiny_font,
-            )
-
-    # Meta + seal (no handwritten / digital signature block)
-    meta_y = strip_y1 + 40
-    meta_x = 84
-    draw.text((meta_x, meta_y), "CERTIFICATE ID", fill=MUTED, font=label_font)
-    draw.text((meta_x, meta_y + 22), ctx["certificate_id"][:48], fill=INK, font=small_font)
-    draw.text((meta_x, meta_y + 58), "ISSUED", fill=MUTED, font=label_font)
-    draw.text((meta_x, meta_y + 80), ctx["issued_on"], fill=INK, font=small_font)
-    draw.text((meta_x + 280, meta_y), "PAYMENT REF", fill=MUTED, font=label_font)
-    draw.text(
-        (meta_x + 280, meta_y + 22),
-        (ctx["payment_reference"] or "—")[:28],
-        fill=INK,
-        font=small_font,
-    )
-
-    _draw_seal(draw, w - 160, meta_y + 55, radius=78)
-
-    # Footer brand strip with both logos
-    footer_top = h - 100
-    draw.rectangle([38, footer_top, w - 38, h - 38], fill=TEAL)
-    cw_foot = _cw_logo(max_w=70, max_h=48)
-    fo_foot = _flowops_logo(max_w=52, max_h=52)
-    fx = 58
-    if cw_foot:
-        draw.rounded_rectangle(
-            [fx, footer_top + 18, fx + cw_foot.width + 8, footer_top + 18 + cw_foot.height + 4],
-            radius=4,
-            fill=(10, 10, 10),
-        )
-        _paste_logo(img, cw_foot, fx + 4, footer_top + 20)
-        fx += cw_foot.width + 24
-    if fo_foot:
-        draw.rounded_rectangle(
-            [fx, footer_top + 16, fx + fo_foot.width + 10, footer_top + 16 + fo_foot.height + 6],
+            [lx - 10, y - 6, lx + cw_logo.width + 10, y + cw_logo.height + 6],
             radius=6,
-            fill=WHITE,
+            fill=(10, 10, 10),
         )
-        _paste_logo(img, fo_foot, fx + 5, footer_top + 19)
-        fx += fo_foot.width + 24
-    draw.text(
-        (fx, footer_top + 34),
+        _paste_logo(img, cw_logo, lx, y)
+        y += cw_logo.height + 28
+    else:
+        _draw_cw_mark(img, w // 2, y + 36, size=78)
+        y += 96
+
+    _center_text(draw, y, "CERTIFICATE OF PLANTATION", title_font, NAVY, w)
+    y += 58
+    _draw_gold_divider(draw, y, w, margin=280)
+    y += 32
+
+    _center_text(
+        draw,
+        y,
+        "THE FOLLOWING AWARD IS GIVEN TO",
+        lead_font,
+        MUTED,
+        w,
+    )
+    y += 36
+
+    donor = (ctx["donor_name"] or "Climate Wavers supporter").strip()[:48]
+    _center_text(draw, y, donor, name_font, INK, w)
+    nw = _text_width(draw, donor, name_font)
+    draw.line(
+        [(w // 2 - nw // 2 - 12, y + 66), (w // 2 + nw // 2 + 12, y + 66)],
+        fill=GOLD,
+        width=2,
+    )
+    y += 90
+
+    tree_word = "tree" if ctx["trees"] == 1 else "trees"
+    if ctx["gifted_to"]:
+        prose = (
+            f"Congratulations on funding {ctx['trees']} {tree_word} gifted to "
+            f"{ctx['gifted_to']}, supporting {ctx['project_name']} in {ctx['location']} "
+            f"({ctx['species']}). Your dedication restores ecosystems and advances "
+            f"climate action across Africa. Estimated CO₂ absorption ~{ctx['co2']:.0f} kg/year."
+        )
+    else:
+        prose = (
+            f"Congratulations on funding the planting of {ctx['trees']} {tree_word} "
+            f"with Climate Wavers — {ctx['species']} for {ctx['project_name']} in "
+            f"{ctx['location']}. Your outstanding dedication restores ecosystems and "
+            f"supports local climate action across Africa. "
+            f"Estimated CO₂ absorption ~{ctx['co2']:.0f} kg/year."
+        )
+    if ctx["organization_name"]:
+        prose += f" Hosted by {ctx['organization_name']}."
+
+    for line in _wrap_text(draw, prose, body_font, w - 360):
+        _center_text(draw, y, line, body_font, INK, w)
+        y += 30
+
+    y += 22
+    # Compact meta strip (trees · species · issued)
+    details = [
+        ("TREES", str(ctx["trees"])),
+        ("SPECIES", (ctx["species"] or "—")[:28]),
+        ("ISSUED", ctx["issued_on"]),
+    ]
+    col_w = (w - 420) // len(details)
+    for i, (label, value) in enumerate(details):
+        cx = 210 + i * col_w + col_w // 2
+        lw = _text_width(draw, label, label_font)
+        draw.text((cx - lw // 2, y), label, fill=TEAL, font=label_font)
+        vw = _text_width(draw, value, meta_font)
+        draw.text((cx - vw // 2, y + 20), value, fill=INK, font=meta_font)
+
+    y += 52
+    id_bits = f"ID  {ctx['certificate_id']}"
+    if ctx["payment_reference"]:
+        id_bits += f"   ·   Ref  {ctx['payment_reference']}"
+    _center_text(draw, y, id_bits[:90], tiny_font, MUTED, w)
+
+    # Footer band: CW | seal | FlowOps — recognition sample layout
+    footer_y = h - 240
+    cw_foot = _cw_logo(max_w=130, max_h=90)
+    fo_foot = _flowops_logo(max_w=110, max_h=110)
+
+    if cw_foot:
+        lx = 160
+        fy = footer_y + 36
+        draw.rounded_rectangle(
+            [lx - 6, fy - 4, lx + cw_foot.width + 6, fy + cw_foot.height + 4],
+            radius=6,
+            fill=(10, 10, 10),
+        )
+        _paste_logo(img, cw_foot, lx, fy)
+
+    seal_cy = footer_y + 58
+    _draw_seal(draw, w // 2, seal_cy, radius=66)
+
+    if fo_foot:
+        fx = w - 160 - fo_foot.width
+        fy = footer_y + 28
+        powered = _load_font(11, bold=True)
+        pl = "POWERED BY"
+        pw = _text_width(draw, pl, powered)
+        draw.text((fx + (fo_foot.width - pw) // 2, fy - 18), pl, fill=MUTED, font=powered)
+        draw.rounded_rectangle(
+            [fx - 8, fy - 2, fx + fo_foot.width + 8, fy + fo_foot.height + 6],
+            radius=8,
+            fill=WHITE,
+            outline=(226, 232, 240),
+            width=1,
+        )
+        _paste_logo(img, fo_foot, fx, fy)
+
+    _center_text(
+        draw,
+        h - 88,
         "Climate Wavers  ·  Powered by FlowOps Africa  ·  Digitally issued",
-        fill=WHITE,
-        font=tiny_font,
+        tiny_font,
+        MUTED,
+        w,
     )
 
     buf = io.BytesIO()

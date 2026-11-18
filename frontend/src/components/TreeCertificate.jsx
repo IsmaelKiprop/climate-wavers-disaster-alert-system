@@ -42,31 +42,36 @@ const TreeCertificate = ({
     new Date().toLocaleDateString();
   const co2 = certificateData?.co2Absorption || certificateData?.co2_absorption || '22';
   const projectName =
-    certificateData?.project_name || certificateData?.projectName || '';
+    certificateData?.project_name || certificateData?.projectName || 'Climate Wavers project';
   const orgName =
     certificateData?.organization_name || certificateData?.organizationName || '';
   const paymentRef =
     certificateData?.payment_reference || certificateData?.paymentReference || '';
 
+  const treeWord = trees === 1 ? 'tree' : 'trees';
+  const prose = giftedTo
+    ? `Congratulations on funding ${trees} ${treeWord} gifted to ${giftedTo}, supporting ${projectName} in ${location} (${species}). Your dedication restores ecosystems and advances climate action across Africa. Estimated CO₂ absorption ~${co2} kg/year.${orgName ? ` Hosted by ${orgName}.` : ''}`
+    : `Congratulations on funding the planting of ${trees} ${treeWord} with Climate Wavers — ${species} for ${projectName} in ${location}. Your outstanding dedication restores ecosystems and supports local climate action across Africa. Estimated CO₂ absorption ~${co2} kg/year.${orgName ? ` Hosted by ${orgName}.` : ''}`;
+
   const handleDownload = async () => {
     if (downloading || !certificateRef.current) return;
-
     setDownloading(true);
     try {
       const canvas = await html2canvas(certificateRef.current, {
         scale: 2,
         useCORS: true,
         allowTaint: true,
-        backgroundColor: '#f7fafa',
+        backgroundColor: '#fcfbf8',
       });
-
       const imgData = canvas.toDataURL('image/png');
       const pdf = new jsPDF('landscape', 'mm', 'a4');
-      const imgWidth = 297;
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-      pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, Math.min(imgHeight, 210));
+      const pageW = 297;
+      const pageH = 210;
+      const imgW = pageW;
+      const imgH = (canvas.height * imgW) / canvas.width;
+      const y = Math.max(0, (pageH - Math.min(imgH, pageH)) / 2);
+      pdf.addImage(imgData, 'PNG', 0, y, imgW, Math.min(imgH, pageH));
       pdf.save(`ClimateWavers_Certificate_${certId}.pdf`);
-
       if (onDownload) onDownload(certId);
     } catch (error) {
       console.error('Error generating certificate:', error);
@@ -78,11 +83,7 @@ const TreeCertificate = ({
   const handleShare = () => {
     const text = `I planted ${trees} tree${trees > 1 ? 's' : ''} with Climate Wavers (${certId}). Join me: https://alerts.flowops.africa`;
     if (navigator.share) {
-      navigator.share({
-        title: 'Climate Wavers tree certificate',
-        text,
-        url: window.location.href,
-      });
+      navigator.share({ title: 'Climate Wavers tree certificate', text, url: window.location.href });
     } else {
       navigator.clipboard.writeText(text);
     }
@@ -91,24 +92,15 @@ const TreeCertificate = ({
 
   if (!isOpen) return null;
 
-  const action = giftedTo
-    ? `gifted ${trees} tree${trees > 1 ? 's' : ''} to ${giftedTo}`
-    : `funded the planting of ${trees} tree${trees > 1 ? 's' : ''} with Climate Wavers`;
-
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-3 sm:p-4">
-      <div className="bg-white w-full max-w-4xl max-h-[92vh] overflow-y-auto shadow-2xl">
-        <div className="flex justify-between items-center px-5 py-4 border-b border-slate-200">
+      <div className="bg-white w-full max-w-4xl max-h-[94vh] overflow-y-auto shadow-2xl">
+        <div className="flex justify-between items-center px-5 py-4 border-b border-slate-200 sticky top-0 bg-white z-10">
           <div>
             <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Climate Wavers</p>
-            <h2 className="text-lg font-semibold text-slate-900">Tree planting certificate</h2>
+            <h2 className="text-lg font-semibold text-slate-900">Certificate preview</h2>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-slate-400 hover:text-slate-700 transition-colors p-1"
-            aria-label="Close"
-          >
+          <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-700 p-1" aria-label="Close">
             <IoClose className="w-6 h-6" />
           </button>
         </div>
@@ -116,129 +108,125 @@ const TreeCertificate = ({
         <div className="p-4 sm:p-6">
           <div
             ref={certificateRef}
-            className="relative overflow-hidden border-[5px] border-[#067d83] bg-[#f7fafa]"
+            className="relative mx-auto w-full max-w-[860px] aspect-[16/11.3] bg-[#fcfbf8] text-center overflow-hidden"
+            style={{
+              border: '10px solid #0c303a',
+              boxShadow: 'inset 0 0 0 3px #b8943c, inset 0 0 0 5px #067d83',
+              fontFamily: 'Georgia, "Times New Roman", serif',
+              backgroundImage:
+                'repeating-linear-gradient(135deg, rgba(240,238,232,0.55) 0 1px, transparent 1px 14px)',
+            }}
           >
-            <div className="absolute inset-[10px] border-2 border-emerald-200 pointer-events-none" aria-hidden />
+            {/* Geometric corner L-brackets */}
+            <div className="pointer-events-none absolute inset-0" aria-hidden>
+              <div className="absolute top-0 left-0 w-[72px] h-[14px] bg-[#067d83]" />
+              <div className="absolute top-0 left-0 w-[14px] h-[72px] bg-[#067d83]" />
+              <div className="absolute top-[7px] left-[7px] w-[52px] h-[4px] bg-[#b8943c]" />
+              <div className="absolute top-[7px] left-[7px] w-[4px] h-[52px] bg-[#b8943c]" />
 
-            <div className="relative bg-[#067d83] px-5 sm:px-8 py-4 flex items-center gap-3 sm:gap-5">
-              <div className="bg-black p-1.5 shrink-0 border border-black/40">
-                <img
-                  src="/logo.jpg"
-                  alt="Climate Wavers"
-                  className="h-14 sm:h-16 w-auto object-contain"
-                />
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-white text-lg sm:text-2xl font-semibold tracking-tight">
-                  CLIMATE WAVERS
-                </p>
-                <p className="text-emerald-100 text-xs sm:text-sm mt-0.5">
-                  Tree planting certificate · alerts.flowops.africa
-                </p>
-              </div>
-              <div className="shrink-0 text-center">
-                <p className="hidden sm:block text-[10px] uppercase tracking-wide text-emerald-100 mb-1">
-                  Powered by
-                </p>
-                <div className="bg-white p-1.5 sm:p-2">
-                  <img
-                    src="/flowops-logo.png"
-                    alt="FlowOps Africa"
-                    className="h-10 sm:h-12 w-auto object-contain"
-                  />
-                </div>
-              </div>
+              <div className="absolute top-0 right-0 w-[84px] h-[16px] bg-[#0c303a]" />
+              <div className="absolute top-0 right-0 w-[16px] h-[84px] bg-[#0c303a]" />
+              <div className="absolute top-[8px] right-[8px] w-[60px] h-[4px] bg-[#b8943c]" />
+              <div className="absolute top-[8px] right-[8px] w-[4px] h-[60px] bg-[#b8943c]" />
+
+              <div className="absolute bottom-0 left-0 w-[84px] h-[16px] bg-[#0c303a]" />
+              <div className="absolute bottom-0 left-0 w-[16px] h-[84px] bg-[#0c303a]" />
+              <div className="absolute bottom-[8px] left-[8px] w-[60px] h-[4px] bg-[#b8943c]" />
+              <div className="absolute bottom-[8px] left-[8px] w-[4px] h-[60px] bg-[#b8943c]" />
+
+              <div className="absolute bottom-0 right-0 w-[72px] h-[14px] bg-[#067d83]" />
+              <div className="absolute bottom-0 right-0 w-[14px] h-[72px] bg-[#067d83]" />
+              <div className="absolute bottom-[7px] right-[7px] w-[52px] h-[4px] bg-[#b8943c]" />
+              <div className="absolute bottom-[7px] right-[7px] w-[4px] h-[52px] bg-[#b8943c]" />
             </div>
 
-            <div className="relative px-6 sm:px-10 py-8 text-center">
-              <p className="text-[11px] uppercase tracking-[0.2em] text-[#067d83] font-semibold">
-                Certificate of plantation
-              </p>
-              <p className="text-sm text-slate-500 mt-3">This certifies that</p>
-              <h1 className="text-3xl sm:text-4xl font-semibold text-slate-900 mt-2 tracking-tight">
-                {donorName}
-              </h1>
-              <p className="text-base sm:text-lg text-[#054f54] mt-4 max-w-2xl mx-auto">
-                {action}
-              </p>
-              <p className="text-sm font-medium text-slate-800 mt-2">{species}</p>
+            <div className="relative h-full flex flex-col px-8 sm:px-12 pt-7 pb-5">
+              <div className="inline-block bg-black p-1.5 mx-auto mb-4">
+                <img src="/logo.jpg" alt="Climate Wavers" className="h-12 sm:h-14 w-auto object-contain" />
+              </div>
 
-              <div className="mt-8 grid grid-cols-2 sm:grid-cols-5 border-2 border-emerald-200 bg-emerald-50 text-left">
+              <h1
+                className="text-[#0c303a] text-xl sm:text-3xl font-bold tracking-wide uppercase"
+                style={{ fontFamily: 'Georgia, serif' }}
+              >
+                Certificate of Plantation
+              </h1>
+
+              <div className="flex items-center justify-center gap-3 my-3 sm:my-4">
+                <div className="h-0.5 flex-1 max-w-[140px] bg-[#b8943c]" />
+                <div className="w-2.5 h-2.5 rotate-45 bg-[#b8943c]" />
+                <div className="h-0.5 flex-1 max-w-[140px] bg-[#b8943c]" />
+              </div>
+
+              <p className="text-[10px] sm:text-[11px] font-sans font-semibold uppercase tracking-[0.18em] text-slate-500">
+                The following award is given to
+              </p>
+              <p
+                className="mt-2 text-2xl sm:text-4xl font-bold text-slate-900"
+                style={{ fontFamily: 'Georgia, serif' }}
+              >
+                {donorName}
+              </p>
+              <div className="mx-auto mt-2 h-0.5 w-44 sm:w-56 bg-[#b8943c]" />
+
+              <p
+                className="mt-4 text-xs sm:text-[15px] leading-relaxed text-slate-700 max-w-2xl mx-auto"
+                style={{ fontFamily: 'Georgia, serif' }}
+              >
+                {prose}
+              </p>
+
+              <div className="mt-4 grid grid-cols-3 gap-2 sm:gap-4 text-center font-sans max-w-xl mx-auto w-full">
                 {[
                   { label: 'Trees', value: String(trees) },
                   { label: 'Species', value: species },
-                  {
-                    label: 'Project',
-                    value: projectName || 'Climate Wavers project',
-                    sub: orgName,
-                  },
-                  { label: 'Location', value: location },
-                  { label: 'CO₂ / year', value: `~${co2} kg` },
-                ].map((cell) => (
-                  <div
-                    key={cell.label}
-                    className="px-3 py-4 border-t sm:border-t-0 sm:border-l border-emerald-200 first:border-l-0 first:border-t-0"
-                  >
-                    <p className="text-[10px] uppercase tracking-wide text-[#067d83] font-semibold">
-                      {cell.label}
+                  { label: 'Issued', value: plantingDate },
+                ].map((d) => (
+                  <div key={d.label}>
+                    <p className="text-[9px] sm:text-[10px] uppercase tracking-wide text-[#067d83] font-semibold">
+                      {d.label}
                     </p>
-                    <p className="text-sm font-semibold text-slate-900 mt-1 line-clamp-2">
-                      {cell.value}
+                    <p className="text-[11px] sm:text-sm font-medium text-slate-900 mt-0.5 line-clamp-2">
+                      {d.value}
                     </p>
-                    {cell.sub ? (
-                      <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-1">{cell.sub}</p>
-                    ) : null}
                   </div>
                 ))}
               </div>
 
-              <div className="mt-8 grid sm:grid-cols-[1fr_auto] gap-6 text-left items-center">
-                <div className="grid sm:grid-cols-3 gap-4">
-                  <div>
-                    <p className="text-[10px] uppercase tracking-wide text-slate-500 font-semibold">
-                      Certificate ID
-                    </p>
-                    <p className="font-mono text-xs text-slate-800 mt-1 break-all">{certId}</p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] uppercase tracking-wide text-slate-500 font-semibold">
-                      Issued
-                    </p>
-                    <p className="text-sm text-slate-800 mt-1">{plantingDate}</p>
-                    {amount > 0 ? (
-                      <p className="text-xs text-slate-500 mt-1">KES {amount.toLocaleString()}</p>
-                    ) : null}
-                  </div>
-                  <div>
-                    <p className="text-[10px] uppercase tracking-wide text-slate-500 font-semibold">
-                      Payment ref
-                    </p>
-                    <p className="font-mono text-xs text-slate-800 mt-1">
-                      {paymentRef || "—"}
-                    </p>
-                  </div>
+              <p className="mt-3 font-mono text-[9px] text-slate-500">
+                ID {certId}
+                {paymentRef ? ` · Ref ${paymentRef}` : ''}
+                {amount > 0 ? ` · KES ${amount.toLocaleString()}` : ''}
+              </p>
+
+              <div className="mt-auto pt-3 flex items-end justify-between gap-3">
+                <div className="bg-black p-1 shrink-0">
+                  <img src="/logo.jpg" alt="" className="h-10 sm:h-12 w-auto object-contain" />
                 </div>
-                <div className="justify-self-center sm:justify-self-end">
-                  <div className="h-28 w-28 rounded-full border-[3px] border-[#067d83] flex flex-col items-center justify-center text-center">
-                    <div className="h-[5.5rem] w-[5.5rem] rounded-full border-2 border-emerald-200 flex flex-col items-center justify-center">
-                      <p className="text-[10px] font-bold text-[#067d83] leading-tight">CLIMATE</p>
-                      <p className="text-[10px] font-bold text-[#067d83] leading-tight">WAVERS</p>
-                      <p className="text-[9px] text-slate-500 mt-1">VERIFIED</p>
-                      <p className="text-[9px] text-slate-500">PLANTING</p>
+
+                <div className="relative h-[4.5rem] w-[4.5rem] sm:h-20 sm:w-20 shrink-0">
+                  <div className="absolute left-1/2 top-[55%] -translate-x-[110%] w-5 h-10 bg-[#055a5f] origin-top -rotate-[18deg]" />
+                  <div className="absolute left-1/2 top-[55%] translate-x-[10%] w-5 h-10 bg-[#067d83] origin-top rotate-[18deg]" />
+                  <div className="relative h-full w-full rounded-full bg-[#b8943c] border-2 border-[#0c303a] flex items-center justify-center">
+                    <div className="h-[78%] w-[78%] rounded-full bg-[#0c303a] border border-[#d4b462] flex flex-col items-center justify-center font-sans">
+                      <p className="text-[8px] sm:text-[9px] font-bold text-[#d4b462] leading-tight">CLIMATE</p>
+                      <p className="text-[8px] sm:text-[9px] font-bold text-[#d4b462] leading-tight">WAVERS</p>
+                      <p className="text-[7px] text-slate-300 mt-0.5">VERIFIED</p>
                     </div>
                   </div>
                 </div>
-              </div>
-            </div>
 
-            <div className="bg-[#067d83] px-5 sm:px-6 py-3 flex items-center gap-3 flex-wrap">
-              <div className="bg-black p-0.5">
-                <img src="/logo.jpg" alt="" className="h-7 w-auto object-contain" />
+                <div className="text-center shrink-0">
+                  <p className="text-[8px] sm:text-[9px] uppercase tracking-wide text-slate-400 font-sans mb-1">
+                    Powered by
+                  </p>
+                  <div className="bg-white border border-slate-200 p-1 inline-block">
+                    <img src="/flowops-logo.png" alt="FlowOps" className="h-10 sm:h-12 w-auto object-contain" />
+                  </div>
+                </div>
               </div>
-              <div className="bg-white p-0.5">
-                <img src="/flowops-logo.png" alt="" className="h-7 w-auto object-contain" />
-              </div>
-              <p className="text-[11px] text-white/95">
+
+              <p className="mt-3 text-[9px] sm:text-[10px] text-slate-400 font-sans">
                 Climate Wavers · Powered by FlowOps Africa · Digitally issued
               </p>
             </div>
@@ -270,7 +258,6 @@ const TreeCertificate = ({
                 Downloaded
               </div>
             )}
-
             <button
               type="button"
               onClick={handleShare}
