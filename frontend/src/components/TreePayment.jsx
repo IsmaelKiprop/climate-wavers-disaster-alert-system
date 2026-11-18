@@ -452,6 +452,21 @@ const TreePayment = ({
           : {}),
         custom_fields: [
           ...config.metadata.custom_fields,
+          {
+            display_name: "Project Id",
+            variable_name: "project_id",
+            value: String(treeData.id),
+          },
+          {
+            display_name: "Trees Purchased",
+            variable_name: "trees_purchased",
+            value: String(totalQuantity),
+          },
+          {
+            display_name: "Selected Species",
+            variable_name: "selected_species",
+            value: JSON.stringify(selectedSpecies),
+          },
           ...(giftForUser?.id
             ? [
                 {

@@ -148,6 +148,58 @@ def _resolve_climate_event(metadata, client_data):
     return event
 
 
+def _resolve_project(metadata, client_data):
+    """
+    Prefer project_id from Paystack metadata / client payload.
+    Fall back to tree type name + planting location so orphaned charges
+    (redirect without sessionStorage, webhook-only) still record.
+    """
+    client_data = client_data or {}
+    project_id = _metadata_value(metadata, "project_id") or client_data.get("project_id")
+    if project_id not in (None, ""):
+        try:
+            return TreeProject.objects.get(id=int(project_id))
+        except (TreeProject.DoesNotExist, TypeError, ValueError):
+            pass
+
+    tree_type = str(
+        _metadata_value(metadata, "tree_type")
+        or client_data.get("tree_type")
+        or ""
+    ).strip()
+    # Checkout labels projects as "{name} Tree"
+    name = tree_type
+    if name.lower().endswith(" tree"):
+        name = name[: -len(" tree")].strip()
+    location = str(
+        _metadata_value(metadata, "planting_location")
+        or client_data.get("planting_location")
+        or ""
+    ).strip()
+
+    qs = TreeProject.objects.all()
+    if name:
+        match = qs.filter(name__iexact=name).first()
+        if match:
+            return match
+        match = qs.filter(name__icontains=name).first()
+        if match:
+            return match
+
+    if location and "," in location:
+        city = location.split(",")[0].strip()
+        country = location.split(",")[-1].strip()
+        if city:
+            match = qs.filter(city__iexact=city).first()
+            if match:
+                return match
+        if city and country:
+            match = qs.filter(city__iexact=city, country__icontains=country).first()
+            if match:
+                return match
+    return None
+
+
 def _verify_with_paystack(reference):
     secret = os.getenv("PAYSTACK_SECRET_KEY", "").strip()
     if not secret:
@@ -250,13 +302,13 @@ def record_tree_payment(reference, request_user=None, client_data=None):
         payload = _donation_payload(existing, payer_email)
         return _attach_points(payload, existing)
 
-    project_id = _metadata_value(metadata, "project_id") or client_data.get("project_id")
-    if not project_id:
-        raise PaymentRecordError("This payment has no tree project attached.", 400)
-    try:
-        project = TreeProject.objects.get(id=project_id)
-    except (TreeProject.DoesNotExist, ValueError, TypeError):
-        raise PaymentRecordError("Project not found.", 404)
+    project = _resolve_project(metadata, client_data)
+    if project is None:
+        raise PaymentRecordError(
+            "This payment has no tree project attached. "
+            "Ask support to recover it with the Paystack reference.",
+            400,
+        )
 
     amount = _as_decimal(payment.get("amount", 0))
     if amount is None:

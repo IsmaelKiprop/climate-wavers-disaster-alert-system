@@ -19,6 +19,37 @@ const PaymentSuccess = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
+  const runVerify = async (reference) => {
+    let stored = {};
+    try {
+      stored = JSON.parse(sessionStorage.getItem(`cw-pay-${reference}`) || '{}') || {};
+    } catch {
+      stored = {};
+    }
+    const token = getAuthToken();
+    const response = await fetch(apiUrl('/api/v1/verify-payment/'), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ reference, ...stored }),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || !result.success) {
+      throw new Error(result.message || 'Payment verification failed.');
+    }
+    const details = result.certificate_data || {};
+    setPaymentData({
+      reference,
+      amount: Number(details.amount || 0),
+      trees: Number(details.trees_planted || 1),
+    });
+    setError('');
+    sessionStorage.removeItem(`cw-pay-${reference}`);
+    toast.success('Payment saved. Your trees are on your dashboard.');
+  };
+
   useEffect(() => {
     const reference = searchParams.get('reference') || searchParams.get('trxref');
     if (!reference) {
@@ -30,34 +61,7 @@ const PaymentSuccess = () => {
     let cancelled = false;
     const verify = async () => {
       try {
-        let stored = {};
-        try {
-          stored = JSON.parse(sessionStorage.getItem(`cw-pay-${reference}`) || '{}') || {};
-        } catch {
-          stored = {};
-        }
-        const token = getAuthToken();
-        const response = await fetch(apiUrl('/api/v1/verify-payment/'), {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-          body: JSON.stringify({ reference, ...stored }),
-        });
-        const result = await response.json().catch(() => ({}));
-        if (!response.ok || !result.success) {
-          throw new Error(result.message || 'Payment verification failed.');
-        }
-        if (cancelled) return;
-        const details = result.certificate_data || {};
-        setPaymentData({
-          reference,
-          amount: Number(details.amount || 0),
-          trees: Number(details.trees_planted || 1),
-        });
-        sessionStorage.removeItem(`cw-pay-${reference}`);
-        toast.success('Payment saved. Your trees are on your dashboard.');
+        await runVerify(reference);
       } catch (verifyError) {
         if (!cancelled) {
           setError(verifyError.message || 'Payment verification failed.');
@@ -72,6 +76,20 @@ const PaymentSuccess = () => {
       cancelled = true;
     };
   }, [searchParams]);
+
+  const handleRetry = async () => {
+    const reference = searchParams.get('reference') || searchParams.get('trxref');
+    if (!reference) return;
+    setLoading(true);
+    setError('');
+    try {
+      await runVerify(reference);
+    } catch (verifyError) {
+      setError(verifyError.message || 'Payment verification failed.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleGoHome = () => {
     navigate('/app');
@@ -118,9 +136,22 @@ const PaymentSuccess = () => {
               </h2>
               <p className="text-gray-600">{error}</p>
               {(searchParams.get('reference') || searchParams.get('trxref')) && (
-                <p className="text-sm text-gray-500 mt-3">
-                  Paystack already confirmed the charge. Sign in with the same email and open this page again, or contact support with your payment reference.
-                </p>
+                <>
+                  <p className="text-sm text-gray-500 mt-3">
+                    Paystack already confirmed the charge (ref{' '}
+                    <span className="font-mono">
+                      {searchParams.get('reference') || searchParams.get('trxref')}
+                    </span>
+                    ). Retry saving it to update project impact.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={handleRetry}
+                    className="mt-4 inline-flex items-center px-4 py-2 bg-[#067d83] text-white text-sm font-medium"
+                  >
+                    Retry save to Climate Wavers
+                  </button>
+                </>
               )}
             </div>
           )}
