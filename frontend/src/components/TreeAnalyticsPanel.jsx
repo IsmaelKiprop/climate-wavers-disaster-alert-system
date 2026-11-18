@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -118,9 +119,12 @@ const TreeAnalyticsPanel = ({
   userStats = {},
   className = "",
   variant = "default",
+  onStatClick,
 }) => {
   const isAdmin = variant === "admin";
+  const navigate = useNavigate();
   const reportRef = useRef(null);
+  const highlightTimer = useRef(null);
   const { isDark } = useTheme();
   const [report, setReport] = useState(null);
   const [aiBrief, setAiBrief] = useState("");
@@ -189,6 +193,37 @@ const TreeAnalyticsPanel = ({
     setLoading(false);
     enrichWithAi(local);
   };
+
+  const focusSection = (sectionId) => {
+    const root = reportRef.current;
+    if (!root || !sectionId) return;
+    const el = root.querySelector(`[data-stat-section="${sectionId}"]`);
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    el.classList.add("ring-2", "ring-primary", "ring-offset-2", "ring-offset-surface");
+    if (highlightTimer.current) clearTimeout(highlightTimer.current);
+    highlightTimer.current = setTimeout(() => {
+      el.classList.remove("ring-2", "ring-primary", "ring-offset-2", "ring-offset-surface");
+    }, 1600);
+  };
+
+  const handleStatClick = (stat) => {
+    if (typeof onStatClick === "function") {
+      onStatClick(stat);
+      return;
+    }
+    if (stat.route && getAuthToken()) {
+      navigate(stat.route);
+      return;
+    }
+    if (stat.section) focusSection(stat.section);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (highlightTimer.current) clearTimeout(highlightTimer.current);
+    };
+  }, []);
 
   useEffect(() => {
     load();
@@ -396,39 +431,69 @@ const TreeAnalyticsPanel = ({
       <div ref={reportRef} className="p-4 space-y-5 bg-surface text-foreground">
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3">
           {[
-            { label: "Network trees", value: (summary.total_trees_planted ?? 0).toLocaleString?.() ?? summary.total_trees_planted },
             {
+              key: "network_trees",
+              label: "Network trees",
+              value: (summary.total_trees_planted ?? 0).toLocaleString?.() ?? summary.total_trees_planted,
+              section: "trees-country",
+              hint: "View trees by country",
+            },
+            {
+              key: "network_co2",
               label: "Network CO₂",
               value: `${Math.round(summary.network_co2_kg || 0).toLocaleString()} kg/yr`,
+              section: "co2-project",
+              hint: "View CO₂ by project",
             },
-            { label: "Active projects", value: summary.active_projects ?? 0 },
             {
+              key: "active_projects",
+              label: "Active projects",
+              value: summary.active_projects ?? 0,
+              section: "project-progress",
+              hint: "View project progress",
+            },
+            {
+              key: "funds_raised",
               label: "Funds raised (USD)",
               value: `$${Math.round(summary.total_funds_raised || 0).toLocaleString()}`,
+              section: isAdmin ? "progress-table" : "project-progress",
+              hint: "View funding & progress detail",
             },
             {
+              key: isAdmin ? "listed_projects" : "my_co2",
               label: isAdmin ? "Listed projects" : "Your CO₂",
               value: isAdmin
                 ? projects.length
                 : `${Math.round(summary.my_co2 || 0).toLocaleString()} kg/yr`,
+              section: isAdmin ? "progress-table" : "my-co2",
+              route: isAdmin ? undefined : "/app/my-certificates",
+              hint: isAdmin ? "View project list" : "Open your certificates",
             },
             {
+              key: isAdmin ? "top_co2" : "my_trees",
               label: isAdmin ? "Top CO₂ project" : "Your trees",
               value: isAdmin
                 ? summary.top_co2_project || "—"
                 : summary.my_trees ?? 0,
+              section: isAdmin ? "co2-leaders" : "my-plantings",
+              route: isAdmin ? undefined : "/app/my-certificates",
+              hint: isAdmin ? "View CO₂ leaders" : "Open your certificates",
             },
           ].map((stat) => (
-            <div
-              key={stat.label}
-              className="border border-border bg-surface-muted p-3 min-w-0"
+            <button
+              key={stat.key}
+              type="button"
+              title={stat.hint}
+              onClick={() => handleStatClick(stat)}
+              className="border border-border bg-surface-muted p-3 min-w-0 text-left transition hover:border-primary hover:bg-background focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
               style={{ borderRadius: 5 }}
             >
               <p className="text-[11px] sm:text-xs text-muted">{stat.label}</p>
               <p className="text-base sm:text-xl font-semibold text-foreground mt-1 truncate tabular-nums">
                 {stat.value}
               </p>
-            </div>
+              <p className="text-[10px] text-primary/80 mt-1.5 truncate">{stat.hint}</p>
+            </button>
           ))}
         </div>
 
@@ -447,7 +512,11 @@ const TreeAnalyticsPanel = ({
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="border border-border p-3" style={{ borderRadius: 5, breakInside: "avoid" }}>
+          <div
+            data-stat-section="co2-project"
+            className="border border-border p-3 transition"
+            style={{ borderRadius: 5, breakInside: "avoid" }}
+          >
             <h3 className="text-sm font-medium mb-2">CO₂ by project (kg/year)</h3>
             <div className="h-48">
               {(charts.co2_by_project?.labels || []).length ? (
@@ -475,7 +544,11 @@ const TreeAnalyticsPanel = ({
               )}
             </div>
           </div>
-          <div className="border border-border p-3" style={{ borderRadius: 5 }}>
+          <div
+            data-stat-section="co2-country"
+            className="border border-border p-3 transition"
+            style={{ borderRadius: 5 }}
+          >
             <h3 className="text-sm font-medium mb-2">CO₂ by country (kg/year)</h3>
             <div className="h-48">
               {(charts.co2_by_country?.labels || []).length ? (
@@ -485,7 +558,11 @@ const TreeAnalyticsPanel = ({
               )}
             </div>
           </div>
-          <div className="border border-border p-3" style={{ borderRadius: 5 }}>
+          <div
+            data-stat-section="my-co2"
+            className="border border-border p-3 transition"
+            style={{ borderRadius: 5 }}
+          >
             <h3 className="text-sm font-medium mb-2">
               {isAdmin ? "Your 7-day CO₂ added" : "Your 7-day CO₂ (kg/year)"}
             </h3>
@@ -493,7 +570,11 @@ const TreeAnalyticsPanel = ({
               <Line data={co2ActivityData} options={baseOptions} />
             </div>
           </div>
-          <div className="border border-border p-3" style={{ borderRadius: 5 }}>
+          <div
+            data-stat-section="my-plantings"
+            className="border border-border p-3 transition"
+            style={{ borderRadius: 5 }}
+          >
             <h3 className="text-sm font-medium mb-2">
               {isAdmin ? "Network 7-day plantings" : "Your 7-day plantings"}
             </h3>
@@ -504,7 +585,11 @@ const TreeAnalyticsPanel = ({
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="border border-border p-3" style={{ borderRadius: 5, breakInside: "avoid" }}>
+          <div
+            data-stat-section="trees-country"
+            className="border border-border p-3 transition"
+            style={{ borderRadius: 5, breakInside: "avoid" }}
+          >
             <h3 className="text-sm font-medium mb-2">Trees by country</h3>
             <div className="h-48">
               {(charts.by_country?.labels || []).length ? (
@@ -535,7 +620,11 @@ const TreeAnalyticsPanel = ({
               )}
             </div>
           </div>
-          <div className="border border-border p-3" style={{ borderRadius: 5 }}>
+          <div
+            data-stat-section="project-progress"
+            className="border border-border p-3 transition"
+            style={{ borderRadius: 5 }}
+          >
             <h3 className="text-sm font-medium mb-2">Project progress leaders</h3>
             <div className="h-48">
               {(charts.progress?.labels || []).length ? (
@@ -558,7 +647,11 @@ const TreeAnalyticsPanel = ({
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="border border-border p-3 overflow-x-auto" style={{ borderRadius: 5 }}>
+          <div
+            data-stat-section="co2-leaders"
+            className="border border-border p-3 overflow-x-auto transition"
+            style={{ borderRadius: 5 }}
+          >
             <h3 className="text-sm font-medium mb-2">CO₂ leaders (kg/year)</h3>
             {(report?.co2_table || []).length ? (
               <table className="w-full text-sm">
@@ -587,7 +680,11 @@ const TreeAnalyticsPanel = ({
               <p className="text-sm text-muted">No CO₂ rows yet.</p>
             )}
           </div>
-          <div className="border border-border p-3 overflow-x-auto" style={{ borderRadius: 5 }}>
+          <div
+            data-stat-section="progress-table"
+            className="border border-border p-3 overflow-x-auto transition"
+            style={{ borderRadius: 5 }}
+          >
             <h3 className="text-sm font-medium mb-2">Progress table</h3>
             {(report?.progress_table || []).length ? (
               <table className="w-full text-sm">
