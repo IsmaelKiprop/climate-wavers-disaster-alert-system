@@ -557,7 +557,7 @@ const PublicPlasticView = () => {
                   onClick={() => sponsor({ redeemPoints: false })}
                   className="h-11 px-4 bg-primary text-primary-foreground text-sm font-medium disabled:opacity-60"
                 >
-                  {paying ? "Opening Paystack…" : "Sponsor with Paystack"}
+                  {paying ? "Opening checkout…" : "Sponsor"}
                 </button>
                 {getAuthToken() ? (
                   <button
