@@ -864,3 +864,34 @@ class PlasticAdminQueueView(APIView):
         else:
             qs = qs.filter(project__organization=request.user)
         return Response(PlasticRecoverySerializer(qs[:100], many=True).data)
+
+
+class PlasticBagLookupView(APIView):
+    """Look up a recovery by bag_id for recycler QR intake screens."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, bag_id=None):
+        bag_id = str(bag_id or request.query_params.get("bag") or "").strip()
+        if not bag_id:
+            return Response({"detail": "bag_id required."}, status=400)
+        recovery = (
+            PlasticRecovery.objects.select_related(
+                "project", "hotspot", "submitted_by", "recycler"
+            )
+            .filter(bag_id__iexact=bag_id)
+            .order_by("-created_at")
+            .first()
+        )
+        if not recovery:
+            return Response({"detail": "Bag not found."}, status=404)
+        if not (
+            _can_manage_project(request.user, recovery.project) or request.user.is_staff
+        ):
+            return Response({"detail": "Forbidden."}, status=403)
+        data = PlasticRecoverySerializer(recovery).data
+        data["project_name"] = recovery.project.name if recovery.project_id else ""
+        data["can_intake"] = recovery.status in ("cbo_verified", "submitted")
+        cert = recovery.certificates.order_by("-created_at").first()
+        data["certificate_code"] = cert.code if cert else ""
+        return Response(data)

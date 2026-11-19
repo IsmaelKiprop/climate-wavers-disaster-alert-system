@@ -8,6 +8,7 @@ import { uploadFiles } from "../services/upload.service";
 import PlantingProofMediaCarousel, {
   proofMediaFromArrays,
 } from "./PlantingProofMediaCarousel";
+import PlasticBagQrCard from "./PlasticBagQrCard";
 import {
   enqueuePlasticOfflineProof,
   flushPlasticOfflineProofs,
@@ -79,6 +80,8 @@ const PlasticProjectAdmin = () => {
   const [savingRecycler, setSavingRecycler] = useState(false);
   const [tab, setTab] = useState("projects");
   const [offlineCount, setOfflineCount] = useState(0);
+  const [lastBagLabel, setLastBagLabel] = useState(null);
+  const [qrBagId, setQrBagId] = useState(null);
 
   const [hotspotForm, setHotspotForm] = useState({
     title: "",
@@ -329,8 +332,25 @@ const PlasticProjectAdmin = () => {
       return;
     }
     try {
-      await api(endpoints.plasticRecoveries, { method: "POST", body: payload });
-      toast.success("Proof submitted — review in Verify queue");
+      const created = await api(endpoints.plasticRecoveries, {
+        method: "POST",
+        body: payload,
+      });
+      const bag = created?.bag_id || payload.bag_id;
+      toast.success(
+        bag
+          ? `Proof submitted · Bag ${bag} — print QR for the bag`
+          : "Proof submitted — review in Verify queue"
+      );
+      if (bag) {
+        setLastBagLabel({
+          bag_id: bag,
+          kg: created?.kg_claimed || payload.kg_claimed,
+          polymer_type: created?.polymer_type || payload.polymer_type,
+          status: created?.status || "submitted",
+        });
+        setQrBagId(bag);
+      }
       setProofForm((p) => ({
         ...p,
         bag_id: "",
@@ -925,6 +945,15 @@ const PlasticProjectAdmin = () => {
       {tab === "queue" ? (
         <div className="space-y-3">
           <h2 className="font-medium">Awaiting CBO verify</h2>
+          {lastBagLabel?.bag_id ? (
+            <PlasticBagQrCard
+              bagId={lastBagLabel.bag_id}
+              kg={lastBagLabel.kg}
+              polymerType={lastBagLabel.polymer_type}
+              status={lastBagLabel.status}
+              onClose={() => setLastBagLabel(null)}
+            />
+          ) : null}
           {queue.length === 0 ? (
             <div className="text-sm text-muted space-y-2">
               <p>Queue is empty.</p>
@@ -952,7 +981,14 @@ const PlasticProjectAdmin = () => {
                       {r.kg_claimed} kg · {r.polymer_type} · project #{r.project}
                     </div>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      className="h-9 px-3 border border-border text-sm"
+                      onClick={() => setQrBagId(r.bag_id === qrBagId ? null : r.bag_id)}
+                    >
+                      {qrBagId === r.bag_id ? "Hide QR" : "Bag QR"}
+                    </button>
                     <button
                       type="button"
                       className="h-9 px-3 border border-border text-sm disabled:opacity-60"
@@ -971,6 +1007,15 @@ const PlasticProjectAdmin = () => {
                     </button>
                   </div>
                 </div>
+                {qrBagId === r.bag_id ? (
+                  <PlasticBagQrCard
+                    bagId={r.bag_id}
+                    kg={r.kg_claimed}
+                    polymerType={r.polymer_type}
+                    status={r.status}
+                    compact
+                  />
+                ) : null}
                 <PlantingProofMediaCarousel
                   items={proofMediaFromArrays(r.images, r.videos)}
                 />
@@ -983,9 +1028,17 @@ const PlasticProjectAdmin = () => {
       {tab === "intake" ? (
         <div className="space-y-6">
           <div className="space-y-3">
-            <h2 className="font-medium">Awaiting recycler intake</h2>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="font-medium">Awaiting recycler intake</h2>
+              <Link
+                to="/plastic/intake"
+                className="h-9 px-3 bg-primary text-white text-sm inline-flex items-center"
+              >
+                Open QR scanner
+              </Link>
+            </div>
             <p className="text-sm text-muted">
-              Bags verified by CBO show here. Tap Confirm, or type Bag ID below.
+              Scan the bag QR, tap Confirm here, or type Bag ID below.
             </p>
             {intakeQueue.length === 0 ? (
               <p className="text-sm text-muted border border-border p-4">
@@ -1001,15 +1054,39 @@ const PlasticProjectAdmin = () => {
                         {r.kg_verified || r.kg_claimed} kg · {r.polymer_type} · CBO verified
                       </div>
                     </div>
-                    <button
-                      type="button"
-                      disabled={intaking}
-                      className="h-9 px-3 bg-primary text-white text-sm disabled:opacity-60"
-                      onClick={() => confirmIntakeRow(r)}
-                    >
-                      {intaking ? "Confirming…" : "Confirm intake"}
-                    </button>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        className="h-9 px-3 border border-border text-sm"
+                        onClick={() => setQrBagId(r.bag_id === qrBagId ? null : r.bag_id)}
+                      >
+                        {qrBagId === r.bag_id ? "Hide QR" : "Bag QR"}
+                      </button>
+                      <Link
+                        to={`/plastic/intake?bag=${encodeURIComponent(r.bag_id)}`}
+                        className="h-9 px-3 border border-border text-sm inline-flex items-center"
+                      >
+                        Scan page
+                      </Link>
+                      <button
+                        type="button"
+                        disabled={intaking}
+                        className="h-9 px-3 bg-primary text-white text-sm disabled:opacity-60"
+                        onClick={() => confirmIntakeRow(r)}
+                      >
+                        {intaking ? "Confirming…" : "Confirm intake"}
+                      </button>
+                    </div>
                   </div>
+                  {qrBagId === r.bag_id ? (
+                    <PlasticBagQrCard
+                      bagId={r.bag_id}
+                      kg={r.kg_verified || r.kg_claimed}
+                      polymerType={r.polymer_type}
+                      status={r.status}
+                      compact
+                    />
+                  ) : null}
                   <PlantingProofMediaCarousel
                     items={proofMediaFromArrays(r.images, r.videos)}
                   />

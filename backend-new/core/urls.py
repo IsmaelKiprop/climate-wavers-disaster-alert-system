@@ -52,6 +52,7 @@ from .plastic import (
     PlasticRecoveryCreateView,
     PlasticRecoveryVerifyView,
     PlasticIntakeScanView,
+    PlasticBagLookupView,
     PlasticRecyclerListCreateView,
     PlasticCertificateVerifyView,
     PlasticFloodHotspotsView,
@@ -262,6 +263,16 @@ urlpatterns = [
         name="plastic-recovery-verify",
     ),
     path("plastic/intake/scan/", PlasticIntakeScanView.as_view(), name="plastic-intake-scan"),
+    path(
+        "plastic/bags/<str:bag_id>/",
+        PlasticBagLookupView.as_view(),
+        name="plastic-bag-lookup",
+    ),
+    path(
+        "plastic/bags/",
+        PlasticBagLookupView.as_view(),
+        name="plastic-bag-lookup-query",
+    ),
     path("plastic/recyclers/", PlasticRecyclerListCreateView.as_view(), name="plastic-recyclers"),
     path(
         "plastic/certificates/<str:code>/",

@@ -63,6 +63,7 @@ export const endpoints = {
     "plasticRecoveries": "/api/v1/plastic/recoveries/",
     "plasticRecoveryVerify": (id) => `/api/v1/plastic/recoveries/${id}/verify/`,
     "plasticIntakeScan": "/api/v1/plastic/intake/scan/",
+    "plasticBag": (bagId) => `/api/v1/plastic/bags/${encodeURIComponent(bagId)}/`,
     "plasticRecyclers": "/api/v1/plastic/recyclers/",
     "plasticCertificate": (code) => `/api/v1/plastic/certificates/${encodeURIComponent(code)}/`,
     "plasticFloodHotspots": "/api/v1/plastic/flood-hotspots/",
