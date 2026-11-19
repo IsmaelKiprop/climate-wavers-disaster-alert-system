@@ -909,6 +909,16 @@ class PlatformAdminTreeDonationsView(APIView):
         rows, page = _paginate(qs, request)
         return Response({"results": [serialize_donation(d) for d in rows], **page})
 
+    def post(self, request):
+        """Repair inflated admin_share / funds_raised (KES-as-USD cleanup)."""
+        action = (request.data.get("action") or "").strip().lower()
+        if action != "repair_funds":
+            return Response({"detail": "Unknown action"}, status=400)
+        from .tree_pricing import repair_all_tree_project_funds
+
+        result = repair_all_tree_project_funds()
+        return Response({"ok": True, **result})
+
 
 class PlatformAdminTreeDonationPayoutView(APIView):
     """Manually retry / force admin_share Paystack transfer for one donation."""

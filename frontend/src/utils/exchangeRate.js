@@ -1,6 +1,13 @@
-const FALLBACK_USD_KES = 150;
+import { apiUrl } from "../config/env";
+import { endpoints } from "./endpoints";
 
-function resolveExchangeRateUrl() {
+/** Soft fallback only if every live source fails (market is ~130, not 150). */
+const FALLBACK_USD_KES = 130;
+
+const CACHE_TTL_MS = 10 * 60 * 1000;
+let memoryCache = { rate: null, source: null, live: false, at: 0 };
+
+function resolveConfiguredUrl() {
   const fromEnv = String(import.meta.env.VITE_EXCHANGE_RATE_API_URL || "").trim();
   if (/^https?:\/\//i.test(fromEnv)) return fromEnv;
 
@@ -10,33 +17,146 @@ function resolveExchangeRateUrl() {
   return null;
 }
 
-/**
- * Fetch USD→KES. Never parses HTML SPA fallbacks as JSON.
- * Returns a numeric rate (API or approximate fallback).
- */
-export async function fetchUsdToKesRate() {
-  const apiUrl = resolveExchangeRateUrl();
-  if (!apiUrl) return FALLBACK_USD_KES;
-
+async function readJson(url, { timeoutMs = 8000 } = {}) {
+  const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+  const timer = controller
+    ? setTimeout(() => controller.abort(), timeoutMs)
+    : null;
   try {
-    const response = await fetch(apiUrl);
+    const response = await fetch(url, {
+      signal: controller?.signal,
+      headers: { Accept: "application/json" },
+    });
     const contentType = response.headers.get("content-type") || "";
     if (!response.ok || !contentType.includes("application/json")) {
-      throw new Error(
-        `Exchange rate API returned ${response.status} (${contentType || "unknown type"})`
-      );
+      throw new Error(`${response.status} ${contentType || "non-json"}`);
     }
-
-    const data = await response.json();
-    const rate = data?.conversion_rates?.KES;
-    if (data?.result === "success" && typeof rate === "number" && rate > 0) {
-      return rate;
-    }
-    throw new Error("Invalid exchange rate payload");
-  } catch (error) {
-    console.error("Failed to fetch exchange rate:", error);
-    return FALLBACK_USD_KES;
+    return await response.json();
+  } finally {
+    if (timer) clearTimeout(timer);
   }
+}
+
+function pickKes(data) {
+  if (!data || typeof data !== "object") return null;
+  const candidates = [
+    data.rate,
+    data.conversion_rates?.KES,
+    data.rates?.KES,
+    data.usd?.kes,
+    data.kes,
+  ];
+  for (const raw of candidates) {
+    const n = Number(raw);
+    if (Number.isFinite(n) && n >= 50 && n <= 400) return n;
+  }
+  return null;
+}
+
+async function fromBackend() {
+  const url = `${apiUrl(endpoints.fxUsdKes)}?refresh=0`;
+  const data = await readJson(url);
+  const rate = pickKes(data);
+  if (rate == null) throw new Error("backend FX missing KES");
+  return {
+    rate,
+    source: data.source || "backend",
+    live: data.live !== false,
+  };
+}
+
+async function fromConfigured() {
+  const apiUrlConfigured = resolveConfiguredUrl();
+  if (!apiUrlConfigured) throw new Error("no configured FX url");
+  const data = await readJson(apiUrlConfigured);
+  const rate = pickKes(data);
+  if (rate == null) throw new Error("configured FX missing KES");
+  return { rate, source: "configured", live: true };
+}
+
+async function fromOpenErApi() {
+  const data = await readJson("https://open.er-api.com/v6/latest/USD");
+  if (data?.result !== "success") throw new Error("open-er-api failed");
+  const rate = pickKes(data);
+  if (rate == null) throw new Error("open-er-api missing KES");
+  return { rate, source: "open-er-api", live: true };
+}
+
+async function fromFrankfurter() {
+  const data = await readJson(
+    "https://api.frankfurter.app/latest?from=USD&to=KES"
+  );
+  const rate = pickKes(data);
+  if (rate == null) throw new Error("frankfurter missing KES");
+  return { rate, source: "frankfurter", live: true };
+}
+
+async function fromCurrencyApi() {
+  const data = await readJson(
+    "https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.min.json"
+  );
+  const rate = pickKes(data);
+  if (rate == null) throw new Error("currency-api missing KES");
+  return { rate, source: "currency-api", live: true };
+}
+
+/**
+ * Fetch live USD→KES market rate.
+ * Tries Climate Wavers API first, then public market feeds.
+ * Returns exact numeric rate from a live source whenever possible.
+ */
+export async function fetchUsdToKesRateDetailed({ force = false } = {}) {
+  const now = Date.now();
+  if (
+    !force &&
+    memoryCache.rate != null &&
+    now - memoryCache.at < CACHE_TTL_MS &&
+    memoryCache.live
+  ) {
+    return { ...memoryCache };
+  }
+
+  const loaders = [
+    fromBackend,
+    fromConfigured,
+    fromOpenErApi,
+    fromFrankfurter,
+    fromCurrencyApi,
+  ];
+  const errors = [];
+  for (const load of loaders) {
+    try {
+      const result = await load();
+      if (result?.rate > 0) {
+        memoryCache = {
+          rate: result.rate,
+          source: result.source,
+          live: Boolean(result.live),
+          at: Date.now(),
+        };
+        return { ...memoryCache };
+      }
+    } catch (err) {
+      errors.push(String(err?.message || err));
+    }
+  }
+
+  console.error("All live FX sources failed; using soft fallback", errors);
+  memoryCache = {
+    rate: FALLBACK_USD_KES,
+    source: "fallback",
+    live: false,
+    at: Date.now(),
+  };
+  return { ...memoryCache };
+}
+
+/**
+ * Fetch USD→KES. Prefer live market; soft fallback only if all sources fail.
+ */
+export async function fetchUsdToKesRate() {
+  const { rate } = await fetchUsdToKesRateDetailed();
+  return rate;
 }
 
 export { FALLBACK_USD_KES };

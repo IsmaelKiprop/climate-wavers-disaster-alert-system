@@ -44,6 +44,7 @@ from .tree_admin import (
     TreeAdminDonationProofView,
 )
 from .tree_certificate import TreeCertificateVerifyView
+from .fx import UsdKesRateView
 from .groups import (
     SocialGroupListCreateView,
     SocialGroupDetailView,
@@ -382,6 +383,7 @@ urlpatterns = [
         ChampionCertificateVerifyView.as_view(),
         name="champions-certificate-verify",
     ),
+    path("fx/usd-kes/", UsdKesRateView.as_view(), name="fx-usd-kes"),
     path(
         "trees/certificate/verify/",
         TreeCertificateVerifyView.as_view(),

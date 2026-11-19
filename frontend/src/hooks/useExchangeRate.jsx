@@ -1,11 +1,13 @@
 import { useState, useEffect } from "react";
-import { fetchUsdToKesRate } from "../utils/exchangeRate";
+import { fetchUsdToKesRateDetailed } from "../utils/exchangeRate";
 
 export const useExchangeRate = (usdAmount) => {
   const [exchangeRate, setExchangeRate] = useState(null);
   const [convertedAmount, setConvertedAmount] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [live, setLive] = useState(false);
+  const [source, setSource] = useState(null);
 
   useEffect(() => {
     let alive = true;
@@ -15,12 +17,16 @@ export const useExchangeRate = (usdAmount) => {
       setError(null);
 
       try {
-        const usdToKesRate = await fetchUsdToKesRate();
+        const result = await fetchUsdToKesRateDetailed();
         if (!alive) return;
 
-        setExchangeRate(usdToKesRate);
+        setExchangeRate(result.rate);
+        setLive(Boolean(result.live));
+        setSource(result.source || null);
         if (usdAmount) {
-          setConvertedAmount(usdAmount * usdToKesRate);
+          setConvertedAmount(usdAmount * result.rate);
+        } else {
+          setConvertedAmount(null);
         }
       } catch (err) {
         if (!alive) return;
@@ -42,5 +48,7 @@ export const useExchangeRate = (usdAmount) => {
     convertedAmount,
     loading,
     error,
+    live,
+    source,
   };
 };

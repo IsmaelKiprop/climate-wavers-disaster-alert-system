@@ -46,6 +46,7 @@ export const endpoints = {
     "responderBillingCheckout": "/api/v1/responder/billing/checkout/",
     "responderBillingVerify": "/api/v1/responder/billing/verify/",
     "verifyPayment": "/api/v1/verify-payment/",
+    "fxUsdKes": "/api/v1/fx/usd-kes/",
     "groups": "/api/v1/groups/",
     "treeAdminApply": "/api/v1/tree-admin/apply/",
     "treeAdminApplyPublic": "/api/v1/tree-admin/apply-public/",

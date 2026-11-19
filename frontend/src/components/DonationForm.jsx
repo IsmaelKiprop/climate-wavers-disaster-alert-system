@@ -12,7 +12,7 @@ const DonationForm = ({ onClose }) => {
   const [comments, setComments] = useState('');
   const [showComments, setShowComments] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [exchangeRate, setExchangeRate] = useState(150);
+  const [exchangeRate, setExchangeRate] = useState(null);
   const [convertedAmount, setConvertedAmount] = useState(0);
 
   const predefinedAmounts = [25, 50, 100, 300, 500, 1000];
@@ -60,7 +60,8 @@ const DonationForm = ({ onClose }) => {
   // Update converted amount when amount changes
   useEffect(() => {
     const amount = selectedAmount || parseFloat(customAmount) || 0;
-    const converted = amount * exchangeRate;
+    const rate = Number(exchangeRate);
+    const converted = Number.isFinite(rate) && rate > 0 ? amount * rate : 0;
     setConvertedAmount(converted);
   }, [selectedAmount, customAmount, exchangeRate]);
 
@@ -88,6 +89,11 @@ const DonationForm = ({ onClose }) => {
     const amount = selectedAmount || parseFloat(customAmount) || 0;
     if (amount <= 0) {
       toast.error('Please select or enter a support amount');
+      return;
+    }
+
+    if (!exchangeRate || !convertedAmount) {
+      toast.error('Live exchange rate not loaded. Please wait a moment and try again.');
       return;
     }
 

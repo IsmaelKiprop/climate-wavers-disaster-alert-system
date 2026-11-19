@@ -6,7 +6,7 @@ import PaymentSuccess from './PaymentSuccess';
 import { apiUrl } from '../config/env';
 import { client } from '../api';
 import { endpoints } from '../utils/endpoints';
-import { fetchUsdToKesRate } from '../utils/exchangeRate';
+import { fetchUsdToKesRateDetailed } from '../utils/exchangeRate';
 import { getAuthToken, getUser } from '../utils/factory';
 import {
   normalizeTreeSpecies,
@@ -103,15 +103,22 @@ const TreePayment = ({
   const speciesCatalog = normalizeTreeSpecies(treeData.tree_species);
   const availableSpecies = speciesNames(treeData.tree_species);
 
-  // Fetch exchange rate
+  // Fetch live market USD→KES (backend + public FX feeds)
   const fetchExchangeRate = async () => {
     setLoadingExchangeRate(true);
     try {
-      const usdToKesRate = await fetchUsdToKesRate();
+      const { rate: usdToKesRate, live } = await fetchUsdToKesRateDetailed({
+        force: true,
+      });
       setExchangeRate(usdToKesRate);
 
       const amountToConvert = totalAmount > 0 ? totalAmount : treeData.price;
       setConvertedAmount(amountToConvert * usdToKesRate);
+      if (!live) {
+        toast.warn(
+          "Live market rate unavailable — using an approximate KES rate. Refresh before paying."
+        );
+      }
     } finally {
       setLoadingExchangeRate(false);
     }

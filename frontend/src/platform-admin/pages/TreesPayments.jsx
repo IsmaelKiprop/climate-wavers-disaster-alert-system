@@ -283,6 +283,26 @@ const TreesPayments = () => {
     }
   };
 
+  const repairFunds = async () => {
+    setBusyId("repair-funds");
+    try {
+      const data = await client.run(
+        "post",
+        endpoints.platformAdminTreeDonations,
+        { action: "repair_funds" },
+        true
+      );
+      toast.success(
+        `Repaired ${data?.donations_repaired ?? 0} donations · recomputed ${data?.projects_recomputed ?? 0} projects`
+      );
+      await load();
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "Fund repair failed");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   const retryDonationPayout = async (id) => {
     setBusyId(id);
     try {
@@ -906,6 +926,13 @@ const TreesPayments = () => {
             <option value="completed">Completed</option>
             <option value="failed">Failed</option>
           </FilterSelect>
+        ) : null}
+        {tab === "donations" ? (
+          <ConfirmAction
+            label="Repair funds (KES→USD)"
+            busy={busyId === "repair-funds"}
+            onConfirm={repairFunds}
+          />
         ) : null}
         <FilterButton>Refresh</FilterButton>
       </AdminFilters>

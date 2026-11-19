@@ -147,7 +147,8 @@ def split_tree_payment(amount, fee_rate=None, org=None) -> Tuple[Decimal, Decima
 
 
 # Paystack charges KES; project.funds_raised is tracked in USD.
-DEFAULT_USD_KES = Decimal("150")
+# Soft fallback only — prefer live market via core.fx / checkout metadata.
+DEFAULT_USD_KES = Decimal("130")
 
 
 def _as_decimal(value, default: Optional[Decimal] = None) -> Optional[Decimal]:
@@ -160,33 +161,22 @@ def _as_decimal(value, default: Optional[Decimal] = None) -> Optional[Decimal]:
 
 
 def kes_to_usd(amount_kes, rate=None) -> Decimal:
+    from .fx import kes_to_usd as fx_kes_to_usd
+
     kes = _as_decimal(amount_kes, Decimal("0")) or Decimal("0")
-    usd_kes = _as_decimal(rate, DEFAULT_USD_KES) or DEFAULT_USD_KES
-    if usd_kes <= 0:
-        usd_kes = DEFAULT_USD_KES
-    return (kes / usd_kes).quantize(Decimal("0.01"))
+    if rate is not None:
+        usd_kes = _as_decimal(rate)
+        if usd_kes and usd_kes > 0:
+            return (kes / usd_kes).quantize(Decimal("0.01"))
+    return fx_kes_to_usd(kes)
 
 
-def donation_amount_usd(donation, project=None, *, metadata=None, kes_amount=None) -> Decimal:
-    """
-    Best-effort USD gross for a tree donation.
-    Prefer explicit USD from checkout metadata, then species×prices, then KES÷rate.
-    """
-    meta = metadata if isinstance(metadata, dict) else {}
-    for key in ("amount_usd", "original_usd", "usd_amount", "price_usd"):
-        raw = meta.get(key)
-        if raw is None and donation is not None and hasattr(donation, key):
-            raw = getattr(donation, key, None)
-        parsed = _as_decimal(raw)
-        if parsed is not None and parsed > 0:
-            return parsed.quantize(Decimal("0.01"))
-
+def donation_usd_from_species(donation, project=None) -> Optional[Decimal]:
+    """USD gross from trees_purchased × catalog prices (authoritative when present)."""
     proj = project or (getattr(donation, "project", None) if donation is not None else None)
-    selected = (
-        (getattr(donation, "selected_species", None) if donation is not None else None)
-        or meta.get("selected_species")
-        or {}
-    )
+    if proj is None:
+        return None
+    selected = getattr(donation, "selected_species", None) or {}
     if isinstance(selected, str):
         try:
             import json
@@ -194,7 +184,9 @@ def donation_amount_usd(donation, project=None, *, metadata=None, kes_amount=Non
             selected = json.loads(selected)
         except Exception:
             selected = {}
-    if proj is not None and isinstance(selected, dict) and selected:
+    trees = int(getattr(donation, "trees_purchased", 0) or 0)
+    fallback = _as_decimal(getattr(proj, "tree_price", 0), Decimal("0")) or Decimal("0")
+    if isinstance(selected, dict) and selected:
         try:
             from .tree_inventory import normalize_tree_species
 
@@ -202,7 +194,6 @@ def donation_amount_usd(donation, project=None, *, metadata=None, kes_amount=Non
                 str(s.get("name") or "").strip().lower(): s
                 for s in normalize_tree_species(getattr(proj, "tree_species", None))
             }
-            fallback = _as_decimal(getattr(proj, "tree_price", 0), Decimal("0")) or Decimal("0")
             total = Decimal("0")
             for name, qty in selected.items():
                 try:
@@ -218,8 +209,30 @@ def donation_amount_usd(donation, project=None, *, metadata=None, kes_amount=Non
                 return total.quantize(Decimal("0.01"))
         except Exception:
             pass
+    if trees > 0 and fallback > 0:
+        return (fallback * Decimal(trees)).quantize(Decimal("0.01"))
+    return None
 
-    rate = _as_decimal(meta.get("usd_kes_rate") or meta.get("exchange_rate"), DEFAULT_USD_KES)
+
+def donation_amount_usd(donation, project=None, *, metadata=None, kes_amount=None) -> Decimal:
+    """
+    Best-effort USD gross for a tree donation.
+    Prefer explicit USD from checkout metadata, then species×prices, then KES÷live rate.
+    """
+    meta = metadata if isinstance(metadata, dict) else {}
+    for key in ("amount_usd", "original_usd", "usd_amount", "price_usd"):
+        raw = meta.get(key)
+        if raw is None and donation is not None and hasattr(donation, key):
+            raw = getattr(donation, key, None)
+        parsed = _as_decimal(raw)
+        if parsed is not None and parsed > 0:
+            return parsed.quantize(Decimal("0.01"))
+
+    species_usd = donation_usd_from_species(donation, project)
+    if species_usd is not None and species_usd > 0:
+        return species_usd
+
+    rate = _as_decimal(meta.get("usd_kes_rate") or meta.get("exchange_rate"))
     kes = _as_decimal(
         kes_amount
         if kes_amount is not None
@@ -229,28 +242,100 @@ def donation_amount_usd(donation, project=None, *, metadata=None, kes_amount=Non
     return kes_to_usd(kes, rate)
 
 
+def expected_admin_share_usd(donation, project=None) -> Tuple[Decimal, Decimal, Decimal]:
+    """Return (platform_fee, admin_share, fee_rate) from true USD gross."""
+    proj = project or getattr(donation, "project", None)
+    org = getattr(proj, "tree_admin_org", None) if proj is not None else None
+    usd_gross = donation_amount_usd(donation, proj)
+    fee_rate = getattr(donation, "fee_rate", None)
+    return split_tree_payment(usd_gross, fee_rate=fee_rate, org=org)
+
+
+def admin_share_looks_inflated(donation, project=None) -> bool:
+    """
+    Detect KES-as-USD fee split: stored admin_share ≈ KES×(1-fee) instead of USD share.
+    """
+    stored = _as_decimal(getattr(donation, "admin_share", None), Decimal("0")) or Decimal("0")
+    if stored <= 0:
+        return False
+    _fee, expected, _rate = expected_admin_share_usd(donation, project)
+    if expected <= 0:
+        return stored > Decimal("5")
+    # Inflated if stored is much larger than price-based share (e.g. $94 vs $0.82)
+    if stored > expected * Decimal("2.5") and stored - expected > Decimal("1"):
+        return True
+    kes = _as_decimal(getattr(donation, "amount", None), Decimal("0")) or Decimal("0")
+    if kes > 0:
+        # Classic bug: admin_share ≈ amount_kes * (1 - fee)
+        fee = _as_decimal(getattr(donation, "fee_rate", None), PLATFORM_FEE_RATE) or PLATFORM_FEE_RATE
+        kes_as_share = (kes * (Decimal("1") - fee)).quantize(Decimal("0.01"))
+        if abs(stored - kes_as_share) <= Decimal("0.05") and stored > expected * Decimal("2"):
+            return True
+    return False
+
+
+def repair_donation_fee_split(donation, project=None, *, save: bool = True) -> bool:
+    """Rewrite platform_fee/admin_share from true USD. Returns True if changed."""
+    proj = project or getattr(donation, "project", None)
+    fee, share, rate = expected_admin_share_usd(donation, proj)
+    changed = False
+    updates = []
+    for field, value in (
+        ("platform_fee", fee),
+        ("admin_share", share),
+        ("fee_rate", rate),
+    ):
+        current = _as_decimal(getattr(donation, field, None))
+        if current is None or abs(current - value) > Decimal("0.001"):
+            setattr(donation, field, value)
+            updates.append(field)
+            changed = True
+    if changed and save and updates:
+        donation.save(update_fields=updates)
+    return changed
+
+
 def project_funds_raised_usd(project) -> Decimal:
     """Sum Tree Admin USD share from completed donations (does not save)."""
     from .models import TreeProjectDonation
 
     total = Decimal("0.00")
-    org = getattr(project, "tree_admin_org", None)
     qs = TreeProjectDonation.objects.filter(
         project_id=project.pk, payment_status="completed"
-    ).only("amount", "admin_share", "selected_species", "trees_purchased")
+    ).select_related("project", "project__tree_admin_org")
     for donation in qs:
-        stored = getattr(donation, "admin_share", None)
-        if stored is not None and Decimal(str(stored)) > 0:
-            total += Decimal(str(stored))
-            continue
-        usd_gross = donation_amount_usd(donation, project)
-        _fee, admin_share_usd, _rate = split_tree_payment(usd_gross, org=org)
+        # Always derive from USD gross — never trust possibly inflated stored share
+        _fee, admin_share_usd, _rate = expected_admin_share_usd(donation, project)
         total += admin_share_usd
     return total.quantize(Decimal("0.01"))
 
 
-def recompute_project_funds_raised(project) -> Decimal:
+def recompute_project_funds_raised(project, *, repair_donations: bool = True) -> Decimal:
     """Persist funds_raised (USD) from completed donations — Tree Admin share only."""
+    if repair_donations:
+        from .models import TreeProjectDonation
+
+        for donation in TreeProjectDonation.objects.filter(
+            project_id=project.pk, payment_status="completed"
+        ).select_related("project", "project__tree_admin_org"):
+            repair_donation_fee_split(donation, project, save=True)
     project.funds_raised = project_funds_raised_usd(project)
     project.save(update_fields=["funds_raised"])
     return project.funds_raised
+
+
+def repair_all_tree_project_funds() -> dict:
+    """Repair fee splits + funds_raised for every tree project."""
+    from .models import TreeProject, TreeProjectDonation
+
+    fixed_donations = 0
+    for donation in TreeProjectDonation.objects.filter(
+        payment_status="completed"
+    ).select_related("project", "project__tree_admin_org"):
+        if repair_donation_fee_split(donation, donation.project, save=True):
+            fixed_donations += 1
+    projects = 0
+    for project in TreeProject.objects.all():
+        recompute_project_funds_raised(project, repair_donations=False)
+        projects += 1
+    return {"donations_repaired": fixed_donations, "projects_recomputed": projects}
