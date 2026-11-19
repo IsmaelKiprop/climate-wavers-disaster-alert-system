@@ -193,6 +193,29 @@ function replySnippet(msg) {
   return "Message";
 }
 
+function sameSender(a, b) {
+  if (!a || !b) return false;
+  return Number(a.sender?.id) === Number(b.sender?.id);
+}
+
+function bubbleRadius(mine, clusteredPrev, clusteredNext) {
+  // Soft chat corners; keep the "tail" corner tighter like WhatsApp.
+  if (mine) {
+    return {
+      borderTopLeftRadius: 12,
+      borderTopRightRadius: clusteredPrev ? 6 : 12,
+      borderBottomLeftRadius: 12,
+      borderBottomRightRadius: clusteredNext ? 6 : 4,
+    };
+  }
+  return {
+    borderTopLeftRadius: clusteredPrev ? 6 : 12,
+    borderTopRightRadius: 12,
+    borderBottomLeftRadius: clusteredNext ? 6 : 4,
+    borderBottomRightRadius: 12,
+  };
+}
+
 function previewLabel(msg) {
   if (!msg) return "Say hello";
   if (msg.body) return msg.body;
@@ -1810,6 +1833,7 @@ const CommunityChat = () => {
                 disabled={startingCall}
                 onClick={startOrRejoinClimateCall}
                 className="min-h-10 min-w-10 flex items-center justify-center text-primary hover:bg-primary/10 disabled:opacity-50"
+                style={{ borderRadius: 8 }}
                 aria-label="Start Climate Call"
                 title="Start or rejoin Climate Call"
               >
@@ -1819,6 +1843,7 @@ const CommunityChat = () => {
                 type="button"
                 onClick={() => setGiftSheetOpen(true)}
                 className="min-h-10 min-w-10 flex items-center justify-center text-primary hover:bg-primary/10"
+                style={{ borderRadius: 8 }}
                 aria-label="Gift a tree"
                 title="Gift a tree"
               >
@@ -1826,85 +1851,125 @@ const CommunityChat = () => {
               </button>
             </header>
 
-            <div className="flex-1 overflow-y-auto px-3 sm:px-4 py-4 space-y-4">
+            <div className="flex-1 overflow-y-auto px-3 sm:px-4 py-4">
               {loadingMessages ? (
-                <div className="space-y-3" aria-busy="true">
+                <div className="space-y-2" aria-busy="true">
                   {[0, 1, 2].map((i) => (
                     <div
                       key={i}
-                      className={`max-w-[70%] h-12 bg-surface border border-border ${
+                      className={`max-w-[62%] h-11 bg-surface border border-border animate-pulse ${
                         i % 2 ? "ml-auto" : ""
                       }`}
+                      style={{ borderRadius: 12 }}
                     />
                   ))}
                 </div>
               ) : null}
 
               {!loadingMessages && messages.length === 0 ? (
-                <div className="text-center py-16">
+                <div className="text-center py-16 px-4">
+                  <span
+                    className="mx-auto mb-3 flex h-12 w-12 items-center justify-center bg-surface border border-border text-primary"
+                    style={{ borderRadius: 12 }}
+                  >
+                    <IoChatbubblesOutline size={22} />
+                  </span>
                   <p className="font-medium">No messages yet</p>
-                  <p className="mt-1 text-sm text-muted">Be the first to say something.</p>
+                  <p className="mt-1 text-sm text-muted">
+                    Say hello, paste a photo, or send a voice note.
+                  </p>
                 </div>
               ) : null}
 
               {messageGroups.map((group) => (
-                <div key={group.day} className="space-y-2">
-                  <div className="flex justify-center">
-                    <span className="text-[11px] px-2 py-1 bg-surface border border-border text-muted">
+                <div key={group.day} className="mb-5 last:mb-0">
+                  <div className="sticky top-0 z-[1] flex justify-center py-2 mb-1">
+                    <span
+                      className="text-[11px] font-medium px-2.5 py-1 bg-surface/95 border border-border text-muted backdrop-blur-sm"
+                      style={{ borderRadius: 999 }}
+                    >
                       {group.day}
                     </span>
                   </div>
-                  {group.items.map((msg) => {
+                  <div className="flex flex-col">
+                  {group.items.map((msg, idx) => {
                     const mine =
                       msg.is_mine || Number(msg.sender?.id) === Number(me?.id);
+                    const prev = group.items[idx - 1];
+                    const next = group.items[idx + 1];
+                    const clusteredPrev = sameSender(prev, msg);
+                    const clusteredNext = sameSender(next, msg);
                     const quoted = msg.reply_to;
-                    const mediaOnly = Boolean(msg.media_url && !msg.body && !quoted);
+                    const isAudio = msg.media_type === "audio";
+                    const isVisual =
+                      msg.media_type === "image" || msg.media_type === "video";
+                    const mediaOnly = Boolean(
+                      msg.media_url && !msg.body && !quoted && isVisual
+                    );
                     const canReply =
                       Boolean(msg.id) &&
                       !String(msg.id).startsWith("tmp_") &&
                       Number(msg.id) > 0 &&
                       !msg.is_deleted;
+                    const showSender =
+                      !mine &&
+                      activeConversation.conversation_type !== "dm" &&
+                      !clusteredPrev;
                     return (
                       <div
                         key={msg.id || msg.client_id}
                         id={msg.id ? `chat-msg-${msg.id}` : undefined}
-                        className={`group/msg flex items-end gap-1 ${
+                        className={`group/msg relative flex items-end gap-1.5 transition-[box-shadow] ${
                           mine ? "justify-end" : "justify-start"
-                        }`}
+                        } ${clusteredPrev ? "mt-0.5" : "mt-2.5"}`}
+                        onDoubleClick={() => {
+                          if (canReply) startReplyTo(msg);
+                        }}
                       >
-                        {mine && canReply ? (
-                          <button
-                            type="button"
-                            onClick={() => startReplyTo(msg)}
-                            className="mb-1 min-h-8 min-w-8 flex items-center justify-center text-muted opacity-100 sm:opacity-0 sm:group-hover/msg:opacity-100 hover:text-foreground transition-opacity"
-                            aria-label="Reply"
-                            title="Reply"
-                          >
-                            <IoArrowUndoOutline size={16} />
-                          </button>
-                        ) : null}
+                        <div className="relative max-w-[85%] sm:max-w-[72%]">
+                          {canReply ? (
+                            <button
+                              type="button"
+                              onClick={() => startReplyTo(msg)}
+                              className={`absolute top-1 z-[2] min-h-7 min-w-7 inline-flex items-center justify-center border border-border bg-surface text-muted shadow-sm opacity-100 sm:opacity-0 sm:group-hover/msg:opacity-100 hover:text-foreground transition-opacity ${
+                                mine ? "-left-3" : "-right-3"
+                              }`}
+                              style={{ borderRadius: 999 }}
+                              aria-label="Reply"
+                              title="Reply"
+                            >
+                              <IoArrowUndoOutline size={14} />
+                            </button>
+                          ) : null}
                         <div
-                          className={`max-w-[85%] sm:max-w-[70%] overflow-hidden border ${
+                          className={`overflow-hidden border shadow-[0_1px_0_rgba(0,0,0,0.04)] ${
                             mine
-                              ? "bg-primary text-primary-foreground border-primary"
+                              ? "bg-primary text-primary-foreground border-primary/80"
                               : "bg-surface text-foreground border-border"
-                          } ${mediaOnly ? "p-0" : "px-3 py-2"}`}
+                          } ${
+                            mediaOnly
+                              ? "p-0"
+                              : isAudio && !msg.body && !quoted
+                                ? "p-1.5"
+                                : "px-3 py-2"
+                          } ${msg.pending ? "opacity-80" : ""}`}
+                          style={bubbleRadius(mine, clusteredPrev, clusteredNext)}
                         >
-                          {!mine && activeConversation.conversation_type !== "dm" ? (
+                          {showSender ? (
                             msg.sender?.id ? (
                               <Link
                                 to={profilePath(msg.sender.id)}
-                                className={`text-[11px] font-medium mb-0.5 block hover:underline px-3 pt-2 ${
-                                  mine ? "text-primary-foreground/80" : "text-primary"
-                                } ${mediaOnly ? "" : "px-0 pt-0"}`}
+                                className={`text-[11px] font-semibold mb-1 block hover:underline ${
+                                  mine ? "text-primary-foreground/85" : "text-primary"
+                                } ${mediaOnly ? "px-3 pt-2" : ""}`}
                                 onClick={(e) => e.stopPropagation()}
                               >
                                 {displayName(msg.sender)}
                               </Link>
                             ) : (
                               <p
-                                className={`text-[11px] font-medium mb-0.5 ${
-                                  mine ? "text-primary-foreground/80" : "text-primary"
+                                className={`text-[11px] font-semibold mb-1 ${
+                                  mine ? "text-primary-foreground/85" : "text-primary"
                                 }`}
                               >
                                 {displayName(msg.sender)}
@@ -1915,12 +1980,12 @@ const CommunityChat = () => {
                             <button
                               type="button"
                               onClick={() => scrollToMessage(quoted.id)}
-                              className={`mb-1.5 w-full text-left border-l-2 px-2 py-1 ${
+                              className={`mb-1.5 w-full text-left border-l-[3px] px-2 py-1.5 ${
                                 mine
-                                  ? "border-primary-foreground/70 bg-black/15"
-                                  : "border-primary bg-background/80"
+                                  ? "border-primary-foreground/75 bg-black/20"
+                                  : "border-primary bg-background"
                               }`}
-                              style={{ borderRadius: 4 }}
+                              style={{ borderRadius: 6 }}
                             >
                               <span
                                 className={`block text-[11px] font-semibold truncate ${
@@ -1943,8 +2008,17 @@ const CommunityChat = () => {
                           {msg.media_url ? (
                             <div
                               className={`relative overflow-hidden group/media ${
-                                msg.body ? "-mx-3 mb-1.5" : ""
-                              }`}
+                                msg.body && isVisual ? "-mx-3 -mt-0.5 mb-1.5" : ""
+                              } ${quoted && isVisual ? "mb-1.5" : ""}`}
+                              style={
+                                isVisual
+                                  ? {
+                                      borderRadius: mediaOnly
+                                        ? undefined
+                                        : 8,
+                                    }
+                                  : undefined
+                              }
                             >
                               {msg.media_type === "image" ? (
                                 <button
@@ -1984,15 +2058,25 @@ const CommunityChat = () => {
                                   />
                                 </button>
                               ) : msg.media_type === "audio" ? (
-                                <div className="flex items-center gap-2 px-3 py-2">
+                                <div
+                                  className="flex items-center gap-2 min-w-[220px] sm:min-w-[260px] px-2.5 py-2 bg-background text-foreground border border-border/70"
+                                  style={{ borderRadius: 8 }}
+                                >
+                                  <span
+                                    className="shrink-0 h-9 w-9 inline-flex items-center justify-center bg-primary/15 text-primary"
+                                    style={{ borderRadius: 999 }}
+                                    aria-hidden
+                                  >
+                                    <IoMicOutline size={18} />
+                                  </span>
                                   <audio
                                     src={secureMediaUrl(msg.media_url)}
                                     controls
-                                    className="w-full min-w-0"
+                                    className="w-full min-w-0 h-8"
                                   />
                                   <button
                                     type="button"
-                                    className="shrink-0 min-h-9 min-w-9 inline-flex items-center justify-center border border-border bg-background text-foreground"
+                                    className="shrink-0 min-h-8 min-w-8 inline-flex items-center justify-center border border-border bg-surface text-foreground hover:bg-background"
                                     style={{ borderRadius: 5 }}
                                     aria-label="Download audio"
                                     title="Download"
@@ -2003,22 +2087,25 @@ const CommunityChat = () => {
                                       )
                                     }
                                   >
-                                    <IoDownloadOutline size={16} />
+                                    <IoDownloadOutline size={15} />
                                   </button>
                                 </div>
                               ) : (
-                                <div className="flex items-center justify-between gap-2 px-3 py-2">
+                                <div
+                                  className="flex items-center justify-between gap-2 px-3 py-2 bg-background text-foreground border border-border/70"
+                                  style={{ borderRadius: 8 }}
+                                >
                                   <a
                                     href={secureMediaUrl(msg.media_url)}
                                     target="_blank"
                                     rel="noreferrer"
-                                    className="text-sm underline"
+                                    className="text-sm underline truncate"
                                   >
                                     Open attachment
                                   </a>
                                   <button
                                     type="button"
-                                    className="shrink-0 min-h-9 min-w-9 inline-flex items-center justify-center border border-border bg-background text-foreground"
+                                    className="shrink-0 min-h-8 min-w-8 inline-flex items-center justify-center border border-border bg-surface text-foreground"
                                     style={{ borderRadius: 5 }}
                                     aria-label="Download attachment"
                                     title="Download"
@@ -2026,14 +2113,14 @@ const CommunityChat = () => {
                                       downloadMedia(secureMediaUrl(msg.media_url))
                                     }
                                   >
-                                    <IoDownloadOutline size={16} />
+                                    <IoDownloadOutline size={15} />
                                   </button>
                                 </div>
                               )}
-                              {msg.media_type === "image" || msg.media_type === "video" ? (
+                              {isVisual ? (
                                 <button
                                   type="button"
-                                  className="absolute top-2 right-2 z-[1] min-h-9 min-w-9 inline-flex items-center justify-center bg-black/65 text-white hover:bg-black/80 opacity-100 sm:opacity-0 sm:group-hover/media:opacity-100 transition-opacity"
+                                  className="absolute top-2 right-2 z-[1] min-h-8 min-w-8 inline-flex items-center justify-center bg-black/60 text-white hover:bg-black/75 opacity-100 sm:opacity-0 sm:group-hover/media:opacity-100 transition-opacity"
                                   style={{ borderRadius: 5 }}
                                   aria-label="Download media"
                                   title="Download"
@@ -2048,13 +2135,17 @@ const CommunityChat = () => {
                                     );
                                   }}
                                 >
-                                  <IoDownloadOutline size={16} />
+                                  <IoDownloadOutline size={15} />
                                 </button>
                               ) : null}
                             </div>
                           ) : null}
                           {msg.body ? (
-                            <div className={`text-sm ${msg.media_url ? "px-3" : ""}`}>
+                            <div
+                              className={`text-[15px] leading-snug break-words ${
+                                msg.media_url && isVisual ? "px-3" : ""
+                              }`}
+                            >
                               {renderMessageBody(
                                 msg.body,
                                 mergeMentions(msg.mentions, roomMembers),
@@ -2084,9 +2175,15 @@ const CommunityChat = () => {
                             </div>
                           ) : null}
                           <p
-                            className={`mt-1 flex items-center justify-end gap-1 text-[10px] ${
-                              mediaOnly ? "px-3 pb-2" : ""
-                            } ${mine ? "text-primary-foreground/80" : "text-muted"}`}
+                            className={`mt-1 flex items-center justify-end gap-1 text-[10px] leading-none ${
+                              mediaOnly ? "absolute bottom-1.5 right-2 px-0" : ""
+                            } ${
+                              mediaOnly
+                                ? "text-white drop-shadow"
+                                : mine
+                                  ? "text-primary-foreground/75"
+                                  : "text-muted"
+                            }`}
                           >
                             <span>{formatClock(msg.created_at)}</span>
                             {mine ? (
@@ -2101,32 +2198,23 @@ const CommunityChat = () => {
                             ) : null}
                           </p>
                         </div>
-                        {!mine && canReply ? (
-                          <button
-                            type="button"
-                            onClick={() => startReplyTo(msg)}
-                            className="mb-1 min-h-8 min-w-8 flex items-center justify-center text-muted opacity-100 sm:opacity-0 sm:group-hover/msg:opacity-100 hover:text-foreground transition-opacity"
-                            aria-label="Reply"
-                            title="Reply"
-                          >
-                            <IoArrowUndoOutline size={16} />
-                          </button>
-                        ) : null}
+                        </div>
                       </div>
                     );
                   })}
+                  </div>
                 </div>
               ))}
 
               {typingLabel ? (
-                <div className="flex items-center gap-2 px-1 py-1 text-xs text-primary italic">
+                <div className="flex items-center gap-2 px-1 py-2 text-xs text-primary">
                   <span
-                    className="inline-flex items-center justify-center min-h-8 min-w-[3.25rem] px-2.5 bg-muted border border-border"
-                    style={{ borderRadius: 5 }}
+                    className="inline-flex items-center justify-center min-h-8 min-w-[3.25rem] px-2.5 bg-surface border border-border"
+                    style={{ borderRadius: 12 }}
                   >
                     <TypingDots className="text-muted" />
                   </span>
-                  <span className="truncate">{typingLabel}</span>
+                  <span className="truncate italic">{typingLabel}</span>
                 </div>
               ) : null}
               <div ref={bottomRef} />
@@ -2216,17 +2304,20 @@ const CommunityChat = () => {
               onPaste={onPasteDraft}
             >
               {replyingTo ? (
-                <div className="flex items-start gap-2 border border-border bg-background px-3 py-2">
+                <div
+                  className="flex items-start gap-2 border border-primary/25 bg-primary/5 px-3 py-2 animate-[fadeIn_200ms_ease-out]"
+                  style={{ borderRadius: 8 }}
+                >
                   <span className="mt-0.5 text-primary shrink-0">
                     <IoArrowUndoOutline size={16} />
                   </span>
                   <button
                     type="button"
                     onClick={() => scrollToMessage(replyingTo.id)}
-                    className="min-w-0 flex-1 text-left border-l-2 border-primary pl-2"
+                    className="min-w-0 flex-1 text-left border-l-[3px] border-primary pl-2"
                   >
                     <span className="block text-xs font-semibold text-primary truncate">
-                      {displayName(replyingTo.sender)}
+                      Replying to {displayName(replyingTo.sender)}
                     </span>
                     <span className="block text-xs text-muted truncate">
                       {replySnippet(replyingTo)}
@@ -2235,7 +2326,7 @@ const CommunityChat = () => {
                   <button
                     type="button"
                     onClick={clearReplyTo}
-                    className="min-h-8 min-w-8 flex items-center justify-center text-muted"
+                    className="min-h-8 min-w-8 flex items-center justify-center text-muted hover:text-foreground"
                     aria-label="Cancel reply"
                   >
                     <IoClose size={16} />
@@ -2244,22 +2335,55 @@ const CommunityChat = () => {
               ) : null}
 
               {pendingMedia ? (
-                <div className="flex items-center gap-3 border border-border bg-background px-3 py-2">
+                <div
+                  className="flex items-center gap-3 border border-border bg-background px-3 py-2 animate-[fadeIn_200ms_ease-out]"
+                  style={{ borderRadius: 8 }}
+                >
                   {pendingMedia.kind === "audio" && pendingMedia.preview ? (
-                    <audio
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <span
+                        className="shrink-0 h-9 w-9 inline-flex items-center justify-center bg-primary/15 text-primary"
+                        style={{ borderRadius: 999 }}
+                      >
+                        <IoMicOutline size={18} />
+                      </span>
+                      <audio
+                        src={pendingMedia.preview}
+                        controls
+                        className="min-w-0 flex-1 h-8"
+                      />
+                    </div>
+                  ) : pendingMedia.kind === "image" && pendingMedia.preview ? (
+                    <img
                       src={pendingMedia.preview}
-                      controls
-                      className="min-w-0 flex-1 h-10"
+                      alt=""
+                      className="h-14 w-14 object-cover border border-border"
+                      style={{ borderRadius: 6 }}
                     />
                   ) : pendingMedia.preview ? (
-                    <img src={pendingMedia.preview} alt="" className="h-12 w-12 object-cover" />
+                    <img
+                      src={pendingMedia.preview}
+                      alt=""
+                      className="h-12 w-12 object-cover"
+                      style={{ borderRadius: 6 }}
+                    />
                   ) : (
                     <span className="text-xs text-muted truncate">{pendingMedia.name}</span>
                   )}
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-medium truncate">
+                      {pendingMedia.kind === "audio"
+                        ? "Voice note ready"
+                        : pendingMedia.kind === "image"
+                          ? "Photo ready"
+                          : pendingMedia.name}
+                    </p>
+                    <p className="text-[11px] text-muted">Tap send to share</p>
+                  </div>
                   <button
                     type="button"
                     onClick={clearPendingMedia}
-                    className="ml-auto min-h-8 min-w-8 flex items-center justify-center text-muted"
+                    className="ml-auto min-h-8 min-w-8 flex items-center justify-center text-muted hover:text-foreground"
                     aria-label="Remove attachment"
                   >
                     <IoClose size={16} />
@@ -2268,7 +2392,10 @@ const CommunityChat = () => {
               ) : null}
 
               {mentionOpen && mentionCandidates.length ? (
-                <ul className="border border-border bg-background max-h-40 overflow-y-auto">
+                <ul
+                  className="border border-border bg-background max-h-40 overflow-y-auto shadow-sm"
+                  style={{ borderRadius: 8 }}
+                >
                   {mentionCandidates.map((person) => (
                     <li key={person.id}>
                       <button
@@ -2296,7 +2423,10 @@ const CommunityChat = () => {
               ) : null}
 
               {showEmoji ? (
-                <div className="border border-border bg-background overflow-hidden">
+                <div
+                  className="border border-border bg-background overflow-hidden"
+                  style={{ borderRadius: 8 }}
+                >
                   <LazyEmojiPicker
                     onEmojiClick={insertEmoji}
                     width="100%"
@@ -2311,26 +2441,31 @@ const CommunityChat = () => {
                   <button
                     type="button"
                     onClick={cancelAudioRecording}
-                    className="min-h-11 min-w-10 flex items-center justify-center text-muted hover:text-foreground"
+                    className="min-h-11 min-w-11 flex items-center justify-center text-muted hover:text-foreground border border-border bg-background"
+                    style={{ borderRadius: 999 }}
                     aria-label="Cancel recording"
                     title="Cancel"
                   >
-                    <IoTrashOutline size={22} />
+                    <IoTrashOutline size={20} />
                   </button>
-                  <div className="flex-1 flex items-center gap-2 border border-border bg-background px-3 py-2.5 min-h-11">
+                  <div
+                    className="flex-1 flex items-center gap-2 border border-red-500/30 bg-red-500/5 px-3 py-2.5 min-h-11"
+                    style={{ borderRadius: 12 }}
+                  >
                     <span
                       className="h-2.5 w-2.5 rounded-full bg-red-500 animate-pulse"
                       aria-hidden
                     />
-                    <span className="text-sm font-medium tabular-nums">
+                    <span className="text-sm font-semibold tabular-nums">
                       {formatRecordingClock(recordingSeconds)}
                     </span>
-                    <span className="text-xs text-muted">Recording…</span>
+                    <span className="text-xs text-muted">Recording voice note…</span>
                   </div>
                   <button
                     type="button"
                     onClick={finishAudioRecording}
                     className="min-h-11 min-w-11 flex items-center justify-center bg-primary text-primary-foreground hover:bg-primary-dark"
+                    style={{ borderRadius: 999 }}
                     aria-label="Stop recording"
                     title="Stop and attach"
                   >
@@ -2338,7 +2473,7 @@ const CommunityChat = () => {
                   </button>
                 </div>
               ) : (
-                <div className="flex items-end gap-1.5">
+                <div className="flex items-end gap-2">
                   <input
                     ref={attachRef}
                     type="file"
@@ -2346,86 +2481,101 @@ const CommunityChat = () => {
                     className="hidden"
                     onChange={onPickMedia}
                   />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      unlockNotificationSound();
-                      attachRef.current?.click();
-                    }}
-                    className="min-h-11 min-w-10 flex items-center justify-center text-muted hover:text-foreground"
-                    aria-label="Attach media"
+                  <div
+                    className="flex-1 flex items-end gap-0.5 border border-border bg-background focus-within:border-primary transition-colors"
+                    style={{ borderRadius: 12 }}
                   >
-                    <IoAttachOutline size={22} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      unlockNotificationSound();
-                      setShowEmoji((v) => !v);
-                    }}
-                    className="min-h-11 min-w-10 flex items-center justify-center text-muted hover:text-foreground"
-                    aria-label="Emoji"
-                  >
-                    <IoHappyOutline size={22} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      unlockNotificationSound();
-                      setGiftSheetOpen(true);
-                    }}
-                    className="min-h-11 min-w-10 flex items-center justify-center text-primary hover:text-primary-dark"
-                    aria-label="Gift a tree"
-                    title="Gift a tree"
-                  >
-                    <IoGiftOutline size={22} />
-                  </button>
-                  <label className="sr-only" htmlFor="chat-draft">
-                    Message
-                  </label>
-                  <textarea
-                    id="chat-draft"
-                    ref={draftRef}
-                    rows={1}
-                    value={draft}
-                    onChange={(e) => onDraftChange(e.target.value)}
-                    onPaste={onPasteDraft}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && !e.shiftKey) {
-                        e.preventDefault();
-                        submitMessage();
+                    <button
+                      type="button"
+                      onClick={() => {
+                        unlockNotificationSound();
+                        attachRef.current?.click();
+                      }}
+                      className="min-h-11 min-w-10 flex items-center justify-center text-muted hover:text-foreground"
+                      aria-label="Attach media"
+                      title="Attach"
+                    >
+                      <IoAttachOutline size={20} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        unlockNotificationSound();
+                        setShowEmoji((v) => !v);
+                      }}
+                      className={`min-h-11 min-w-10 flex items-center justify-center hover:text-foreground ${
+                        showEmoji ? "text-primary" : "text-muted"
+                      }`}
+                      aria-label="Emoji"
+                      title="Emoji"
+                    >
+                      <IoHappyOutline size={20} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        unlockNotificationSound();
+                        setGiftSheetOpen(true);
+                      }}
+                      className="min-h-11 min-w-10 flex items-center justify-center text-primary hover:text-primary-dark"
+                      aria-label="Gift a tree"
+                      title="Gift a tree"
+                    >
+                      <IoGiftOutline size={20} />
+                    </button>
+                    <label className="sr-only" htmlFor="chat-draft">
+                      Message
+                    </label>
+                    <textarea
+                      id="chat-draft"
+                      ref={draftRef}
+                      rows={1}
+                      value={draft}
+                      onChange={(e) => onDraftChange(e.target.value)}
+                      onPaste={onPasteDraft}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault();
+                          submitMessage();
+                        }
+                        if (e.key === "Escape") {
+                          setShowEmoji(false);
+                          setMentionOpen(false);
+                          if (replyingTo) clearReplyTo();
+                        }
+                      }}
+                      placeholder={
+                        replyingTo
+                          ? `Reply to ${displayName(replyingTo.sender)}…`
+                          : "Message · paste image · @mention"
                       }
-                      if (e.key === "Escape") {
-                        setShowEmoji(false);
-                        setMentionOpen(false);
-                        if (replyingTo) clearReplyTo();
-                      }
-                    }}
-                    placeholder={
-                      replyingTo
-                        ? `Reply to ${displayName(replyingTo.sender)}…`
-                        : "Type a message · @ to mention"
-                    }
-                    className="flex-1 min-h-11 max-h-32 resize-none border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-primary"
-                  />
-                  <button
-                    type="button"
-                    onClick={startAudioRecording}
-                    disabled={sending || !activeId}
-                    className="min-h-11 min-w-10 flex items-center justify-center text-muted hover:text-foreground disabled:opacity-50"
-                    aria-label="Record audio"
-                    title="Record audio"
-                  >
-                    <IoMicOutline size={22} />
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={(!draft.trim() && !pendingMedia) || sending}
-                    className="min-h-11 min-w-11 flex items-center justify-center bg-primary text-primary-foreground hover:bg-primary-dark disabled:opacity-50"
-                    aria-label="Send message"
-                  >
-                    <IoSend size={18} />
-                  </button>
+                      className="flex-1 min-h-11 max-h-32 resize-none bg-transparent px-1.5 py-2.5 text-sm outline-none"
+                    />
+                  </div>
+                  {draft.trim() || pendingMedia ? (
+                    <button
+                      type="submit"
+                      disabled={sending}
+                      className="min-h-11 min-w-11 flex items-center justify-center bg-primary text-primary-foreground hover:bg-primary-dark disabled:opacity-50"
+                      style={{ borderRadius: 999 }}
+                      aria-label="Send message"
+                      title="Send"
+                    >
+                      <IoSend size={18} />
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={startAudioRecording}
+                      disabled={sending || !activeId}
+                      className="min-h-11 min-w-11 flex items-center justify-center bg-primary text-primary-foreground hover:bg-primary-dark disabled:opacity-50"
+                      style={{ borderRadius: 999 }}
+                      aria-label="Record audio"
+                      title="Record voice note"
+                    >
+                      <IoMicOutline size={20} />
+                    </button>
+                  )}
                 </div>
               )}
             </form>
