@@ -204,10 +204,167 @@ def _issue_certificate(
     return cert
 
 
+def _plastic_cert_recipients(cert: PlasticCertificate, recovery: PlasticRecovery | None):
+    """Submitter + CBO contacts (deduped)."""
+    emails: list[str] = []
+
+    def add(value):
+        cleaned = _safe_email(value)
+        if cleaned and cleaned.lower() not in {e.lower() for e in emails}:
+            emails.append(cleaned)
+
+    add(cert.holder_email)
+    if recovery and recovery.submitted_by_id:
+        add(getattr(recovery.submitted_by, "email", ""))
+    project = cert.project or (recovery.project if recovery else None)
+    if project is not None:
+        if getattr(project, "organization_id", None):
+            add(getattr(project.organization, "email", ""))
+        org = getattr(project, "tree_admin_org", None)
+        if org is not None:
+            add(getattr(org, "contact_email", ""))
+            for m in TreeAdminMembership.objects.filter(
+                org_id=org.id, role__in=("owner", "manager")
+            ).select_related("user")[:5]:
+                add(getattr(m.user, "email", ""))
+    return emails
+
+
+def _send_plastic_certificate_email(
+    cert: PlasticCertificate,
+    *,
+    to_email: str,
+    recipient_name: str = "",
+) -> bool:
+    email = _safe_email(to_email)
+    if not email or email.endswith("@example.com"):
+        return False
+
+    recovery = cert.recovery
+    project = cert.project
+    verify_url = f"{_frontend_base()}/verify/plastic/{cert.code}"
+    bag = recovery.bag_id if recovery else "—"
+    kg = cert.kg
+    project_name = project.name if project else "Plastic Pulse"
+    name = (recipient_name or cert.holder_name or email.split("@")[0]).strip()
+    subject = f"Plastic Pulse certificate · {cert.code}"
+    body = (
+        f"Hi {name},\n\n"
+        f"Your Climate Wavers Plastic Pulse recovery certificate is ready.\n\n"
+        f"Certificate: {cert.code}\n"
+        f"Project: {project_name}\n"
+        f"Bag ID: {bag}\n"
+        f"Verified kg: {kg}\n\n"
+        f"View / share your certificate:\n{verify_url}\n\n"
+        f"Powered by FlowOps Africa · Climate Wavers"
+    )
+    try:
+        from api.tasks import _send_resend
+
+        _send_resend(
+            "custom_mail",
+            {
+                "email": email,
+                "data": {
+                    "subject": subject,
+                    "headline": "Your plastic recovery certificate is ready.",
+                    "name": name,
+                    "content": body,
+                    "cta_text": "View certificate",
+                    "cta_url": verify_url,
+                    "link": verify_url,
+                    "preheader": f"{kg} kg verified · {cert.code}",
+                    "reply_hint": (
+                        "This certificate confirms verified plastic recovery "
+                        "on Climate Wavers Plastic Pulse."
+                    ),
+                },
+            },
+        )
+        return True
+    except Exception:
+        logger.exception("Plastic certificate email failed to %s", email)
+        return False
+
+
+def _email_plastic_certificate(
+    cert: PlasticCertificate,
+    *,
+    force: bool = False,
+) -> dict:
+    """Email certificate to submitter + CBO. Idempotent unless force=True."""
+    if cert.emailed_at and not force:
+        return {"emailed": False, "already": True, "recipients": []}
+
+    recovery = None
+    if cert.recovery_id:
+        recovery = (
+            PlasticRecovery.objects.select_related(
+                "submitted_by",
+                "project",
+                "project__organization",
+                "project__tree_admin_org",
+            )
+            .filter(pk=cert.recovery_id)
+            .first()
+        )
+    if not getattr(cert, "project", None) and cert.project_id:
+        cert = (
+            PlasticCertificate.objects.select_related(
+                "project", "project__organization", "project__tree_admin_org"
+            )
+            .filter(pk=cert.pk)
+            .first()
+            or cert
+        )
+
+    recipients = _plastic_cert_recipients(cert, recovery)
+    if not recipients:
+        return {"emailed": False, "already": False, "recipients": []}
+
+    sent = []
+    for to_email in recipients:
+        name = ""
+        if recovery and _safe_email(getattr(recovery.submitted_by, "email", "")) == to_email:
+            name = _user_display_name(recovery.submitted_by)
+        elif _safe_email(cert.holder_email) == to_email:
+            name = cert.holder_name
+        if _send_plastic_certificate_email(cert, to_email=to_email, recipient_name=name):
+            sent.append(to_email)
+
+    if sent:
+        cert.emailed_at = timezone.now()
+        cert.save(update_fields=["emailed_at"])
+    return {"emailed": bool(sent), "already": False, "recipients": sent}
+
+
+def _schedule_plastic_certificate_email(cert_id: int):
+    def _run():
+        try:
+            cert = (
+                PlasticCertificate.objects.select_related(
+                    "project", "recovery", "recovery__submitted_by"
+                )
+                .filter(pk=cert_id)
+                .first()
+            )
+            if cert:
+                _email_plastic_certificate(cert)
+        except Exception:
+            logger.exception("Scheduled plastic certificate email failed id=%s", cert_id)
+
+    try:
+        transaction.on_commit(_run)
+    except Exception:
+        _run()
+
+
 def _ensure_recovery_certificate(recovery: PlasticRecovery) -> PlasticCertificate | None:
-    """Issue a certificate if intake is done but none exists yet."""
+    """Issue a certificate if intake is done but none exists yet; email when ready."""
     existing = recovery.certificates.order_by("-issued_at").first()
     if existing:
+        if not existing.emailed_at:
+            _schedule_plastic_certificate_email(existing.id)
         return existing
     if recovery.status != "intake_confirmed":
         return None
@@ -216,8 +373,9 @@ def _ensure_recovery_certificate(recovery: PlasticRecovery) -> PlasticCertificat
         return None
     holder = _user_display_name(recovery.submitted_by)
     email = getattr(recovery.submitted_by, "email", "") if recovery.submitted_by_id else ""
+    cert = None
     try:
-        return _issue_certificate(
+        cert = _issue_certificate(
             project=recovery.project,
             kg=kg,
             holder_name=holder,
@@ -229,7 +387,7 @@ def _ensure_recovery_certificate(recovery: PlasticRecovery) -> PlasticCertificat
             "Plastic certificate backfill failed for bag %s", recovery.bag_id
         )
         try:
-            return _issue_certificate(
+            cert = _issue_certificate(
                 project=recovery.project,
                 kg=kg,
                 holder_name=holder or "Climate Wavers recovery",
@@ -241,6 +399,9 @@ def _ensure_recovery_certificate(recovery: PlasticRecovery) -> PlasticCertificat
                 "Plastic certificate retry failed for bag %s", recovery.bag_id
             )
             return None
+    if cert:
+        _schedule_plastic_certificate_email(cert.id)
+    return cert
 
 
 # ---------- serializers ----------
@@ -432,6 +593,7 @@ class PlasticCertificateSerializer(serializers.ModelSerializer):
             "holder_name",
             "holder_email",
             "issued_at",
+            "emailed_at",
             "project",
             "project_name",
             "organization_name",
@@ -765,6 +927,9 @@ class PlasticIntakeScanView(APIView):
                     payload = PlasticRecoverySerializer(recovery).data
                     cert = _ensure_recovery_certificate(recovery)
                     payload["certificate_code"] = cert.code if cert else ""
+                    payload["certificate_emailed"] = bool(
+                        cert and cert.emailed_at
+                    )
                     payload["points_earned"] = 0
                     payload["project_recovered_kg"] = float(
                         recovery.project.recovered_kg or 0
@@ -846,6 +1011,7 @@ class PlasticIntakeScanView(APIView):
 
                 payload = PlasticRecoverySerializer(recovery).data
                 payload["certificate_code"] = certificate_code
+                payload["certificate_emailed"] = False  # emailed on_commit after response
                 payload["project_recovered_kg"] = float(project.recovered_kg or 0)
                 recovery_pk = recovery.pk
 

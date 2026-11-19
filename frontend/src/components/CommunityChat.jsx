@@ -14,10 +14,13 @@ import {
   IoGiftOutline,
   IoHappyOutline,
   IoLeafOutline,
+  IoMicOutline,
   IoPeopleOutline,
   IoSearchOutline,
   IoSend,
   IoShieldCheckmarkOutline,
+  IoStop,
+  IoTrashOutline,
 } from "react-icons/io5";
 import { toast } from "react-toastify";
 import JitsiMeetEmbed from "./JitsiMeetEmbed";
@@ -152,6 +155,32 @@ function mediaKindFromFile(file) {
   return "file";
 }
 
+function preferredAudioMime() {
+  if (typeof MediaRecorder === "undefined") return "";
+  const types = [
+    "audio/webm;codecs=opus",
+    "audio/webm",
+    "audio/mp4",
+    "audio/ogg;codecs=opus",
+    "audio/ogg",
+  ];
+  return types.find((t) => MediaRecorder.isTypeSupported(t)) || "";
+}
+
+function audioExtensionForMime(mime = "") {
+  if (mime.includes("mp4") || mime.includes("m4a") || mime.includes("aac")) return "m4a";
+  if (mime.includes("ogg")) return "ogg";
+  if (mime.includes("mpeg") || mime.includes("mp3")) return "mp3";
+  return "webm";
+}
+
+function formatRecordingClock(totalSeconds) {
+  const secs = Math.max(0, Math.floor(Number(totalSeconds) || 0));
+  const m = Math.floor(secs / 60);
+  const s = secs % 60;
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
 function previewLabel(msg) {
   if (!msg) return "Say hello";
   if (msg.body) return msg.body;
@@ -260,6 +289,8 @@ const CommunityChat = () => {
   const [climateCall, setClimateCall] = useState(null);
   const [startingCall, setStartingCall] = useState(false);
   const [incomingCall, setIncomingCall] = useState(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
 
   const bottomRef = useRef(null);
   const draftRef = useRef(null);
@@ -268,6 +299,12 @@ const CommunityChat = () => {
   const typingActiveRef = useRef(false);
   const activeIdRef = useRef(null);
   const messagesRef = useRef([]);
+  const mediaRecorderRef = useRef(null);
+  const recordingChunksRef = useRef([]);
+  const recordingStreamRef = useRef(null);
+  const recordingTimerRef = useRef(null);
+  const recordingMimeRef = useRef("");
+  const discardRecordingRef = useRef(false);
 
   useEffect(() => {
     activeIdRef.current = activeId;
@@ -1075,10 +1112,14 @@ const CommunityChat = () => {
     if (pendingMedia?.preview?.startsWith("blob:")) {
       URL.revokeObjectURL(pendingMedia.preview);
     }
+    const kind = mediaKindFromFile(file);
     setPendingMedia({
       file,
-      kind: mediaKindFromFile(file),
-      preview: file.type.startsWith("image/") ? URL.createObjectURL(file) : "",
+      kind,
+      preview:
+        kind === "image" || kind === "audio"
+          ? URL.createObjectURL(file)
+          : "",
       name: file.name,
     });
   };
@@ -1090,11 +1131,176 @@ const CommunityChat = () => {
     setPendingMedia(null);
   };
 
+  const stopRecordingTracks = () => {
+    const stream = recordingStreamRef.current;
+    if (stream) {
+      stream.getTracks().forEach((track) => track.stop());
+      recordingStreamRef.current = null;
+    }
+  };
+
+  const clearRecordingTimer = () => {
+    if (recordingTimerRef.current) {
+      clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = null;
+    }
+  };
+
+  const resetRecordingState = () => {
+    clearRecordingTimer();
+    stopRecordingTracks();
+    mediaRecorderRef.current = null;
+    recordingChunksRef.current = [];
+    recordingMimeRef.current = "";
+    discardRecordingRef.current = false;
+    setIsRecording(false);
+    setRecordingSeconds(0);
+  };
+
+  const startAudioRecording = async () => {
+    if (isRecording || sending || !activeId) return;
+    if (typeof MediaRecorder === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+      toast.error("Audio recording is not supported in this browser.");
+      return;
+    }
+    unlockNotificationSound();
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeType = preferredAudioMime();
+      const recorder = mimeType
+        ? new MediaRecorder(stream, { mimeType })
+        : new MediaRecorder(stream);
+      recordingStreamRef.current = stream;
+      mediaRecorderRef.current = recorder;
+      recordingChunksRef.current = [];
+      recordingMimeRef.current = recorder.mimeType || mimeType || "audio/webm";
+      discardRecordingRef.current = false;
+
+      recorder.ondataavailable = (event) => {
+        if (event.data && event.data.size > 0) {
+          recordingChunksRef.current.push(event.data);
+        }
+      };
+
+      recorder.onstop = () => {
+        const shouldDiscard = discardRecordingRef.current;
+        const chunks = recordingChunksRef.current.slice();
+        const mime = recordingMimeRef.current || "audio/webm";
+        stopRecordingTracks();
+        clearRecordingTimer();
+        mediaRecorderRef.current = null;
+        recordingChunksRef.current = [];
+        setIsRecording(false);
+        setRecordingSeconds(0);
+
+        if (shouldDiscard || !chunks.length) {
+          discardRecordingRef.current = false;
+          return;
+        }
+
+        const blob = new Blob(chunks, { type: mime });
+        if (!blob.size) return;
+        const ext = audioExtensionForMime(mime);
+        const file = new File([blob], `voice-note-${Date.now()}.${ext}`, {
+          type: mime.split(";")[0] || "audio/webm",
+        });
+        setPendingMedia((prev) => {
+          if (prev?.preview?.startsWith("blob:")) {
+            URL.revokeObjectURL(prev.preview);
+          }
+          return {
+            file,
+            kind: "audio",
+            preview: URL.createObjectURL(file),
+            name: file.name,
+          };
+        });
+      };
+
+      recorder.start(250);
+      setIsRecording(true);
+      setRecordingSeconds(0);
+      recordingTimerRef.current = setInterval(() => {
+        setRecordingSeconds((prev) => prev + 1);
+      }, 1000);
+    } catch (err) {
+      resetRecordingState();
+      const denied =
+        err?.name === "NotAllowedError" || err?.name === "PermissionDeniedError";
+      toast.error(
+        denied
+          ? "Microphone permission is required to record audio."
+          : "Could not start audio recording."
+      );
+    }
+  };
+
+  const finishAudioRecording = () => {
+    const recorder = mediaRecorderRef.current;
+    if (!recorder || recorder.state === "inactive") {
+      resetRecordingState();
+      return;
+    }
+    discardRecordingRef.current = false;
+    try {
+      recorder.stop();
+    } catch {
+      resetRecordingState();
+    }
+  };
+
+  const cancelAudioRecording = () => {
+    const recorder = mediaRecorderRef.current;
+    discardRecordingRef.current = true;
+    if (!recorder || recorder.state === "inactive") {
+      resetRecordingState();
+      return;
+    }
+    try {
+      recorder.stop();
+    } catch {
+      resetRecordingState();
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      discardRecordingRef.current = true;
+      if (recordingTimerRef.current) {
+        clearInterval(recordingTimerRef.current);
+        recordingTimerRef.current = null;
+      }
+      try {
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+          mediaRecorderRef.current.stop();
+        }
+      } catch {
+        /* ignore */
+      }
+      recordingStreamRef.current?.getTracks?.().forEach((track) => track.stop());
+      recordingStreamRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (!mediaRecorderRef.current || mediaRecorderRef.current.state === "inactive") {
+        return;
+      }
+      discardRecordingRef.current = true;
+      try {
+        mediaRecorderRef.current.stop();
+      } catch {
+        /* ignore */
+      }
+    };
+  }, [activeId]);
+
   const submitMessage = async (e) => {
     e?.preventDefault?.();
     unlockNotificationSound();
     const body = draft.trim();
-    if ((!body && !pendingMedia) || !activeId || sending) return;
+    if ((!body && !pendingMedia) || !activeId || sending || isRecording) return;
     const clientId = clientMessageId();
     let media_url = "";
     let media_type = "";
@@ -1865,7 +2071,13 @@ const CommunityChat = () => {
             >
               {pendingMedia ? (
                 <div className="flex items-center gap-3 border border-border bg-background px-3 py-2">
-                  {pendingMedia.preview ? (
+                  {pendingMedia.kind === "audio" && pendingMedia.preview ? (
+                    <audio
+                      src={pendingMedia.preview}
+                      controls
+                      className="min-w-0 flex-1 h-10"
+                    />
+                  ) : pendingMedia.preview ? (
                     <img src={pendingMedia.preview} alt="" className="h-12 w-12 object-cover" />
                   ) : (
                     <span className="text-xs text-muted truncate">{pendingMedia.name}</span>
@@ -1920,79 +2132,122 @@ const CommunityChat = () => {
                 </div>
               ) : null}
 
-              <div className="flex items-end gap-1.5">
-                <input
-                  ref={attachRef}
-                  type="file"
-                  accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.txt"
-                  className="hidden"
-                  onChange={onPickMedia}
-                />
-                <button
-                  type="button"
-                  onClick={() => {
-                    unlockNotificationSound();
-                    attachRef.current?.click();
-                  }}
-                  className="min-h-11 min-w-10 flex items-center justify-center text-muted hover:text-foreground"
-                  aria-label="Attach media"
-                >
-                  <IoAttachOutline size={22} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    unlockNotificationSound();
-                    setShowEmoji((v) => !v);
-                  }}
-                  className="min-h-11 min-w-10 flex items-center justify-center text-muted hover:text-foreground"
-                  aria-label="Emoji"
-                >
-                  <IoHappyOutline size={22} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    unlockNotificationSound();
-                    setGiftSheetOpen(true);
-                  }}
-                  className="min-h-11 min-w-10 flex items-center justify-center text-primary hover:text-primary-dark"
-                  aria-label="Gift a tree"
-                  title="Gift a tree"
-                >
-                  <IoGiftOutline size={22} />
-                </button>
-                <label className="sr-only" htmlFor="chat-draft">
-                  Message
-                </label>
-                <textarea
-                  id="chat-draft"
-                  ref={draftRef}
-                  rows={1}
-                  value={draft}
-                  onChange={(e) => onDraftChange(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      submitMessage();
-                    }
-                    if (e.key === "Escape") {
-                      setShowEmoji(false);
-                      setMentionOpen(false);
-                    }
-                  }}
-                  placeholder="Type a message · @ to mention"
-                  className="flex-1 min-h-11 max-h-32 resize-none border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-primary"
-                />
-                <button
-                  type="submit"
-                  disabled={(!draft.trim() && !pendingMedia) || sending}
-                  className="min-h-11 min-w-11 flex items-center justify-center bg-primary text-primary-foreground hover:bg-primary-dark disabled:opacity-50"
-                  aria-label="Send message"
-                >
-                  <IoSend size={18} />
-                </button>
-              </div>
+              {isRecording ? (
+                <div className="flex items-center gap-2 min-h-11">
+                  <button
+                    type="button"
+                    onClick={cancelAudioRecording}
+                    className="min-h-11 min-w-10 flex items-center justify-center text-muted hover:text-foreground"
+                    aria-label="Cancel recording"
+                    title="Cancel"
+                  >
+                    <IoTrashOutline size={22} />
+                  </button>
+                  <div className="flex-1 flex items-center gap-2 border border-border bg-background px-3 py-2.5 min-h-11">
+                    <span
+                      className="h-2.5 w-2.5 rounded-full bg-red-500 animate-pulse"
+                      aria-hidden
+                    />
+                    <span className="text-sm font-medium tabular-nums">
+                      {formatRecordingClock(recordingSeconds)}
+                    </span>
+                    <span className="text-xs text-muted">Recording…</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={finishAudioRecording}
+                    className="min-h-11 min-w-11 flex items-center justify-center bg-primary text-primary-foreground hover:bg-primary-dark"
+                    aria-label="Stop recording"
+                    title="Stop and attach"
+                  >
+                    <IoStop size={18} />
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-end gap-1.5">
+                  <input
+                    ref={attachRef}
+                    type="file"
+                    accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.txt"
+                    className="hidden"
+                    onChange={onPickMedia}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      unlockNotificationSound();
+                      attachRef.current?.click();
+                    }}
+                    className="min-h-11 min-w-10 flex items-center justify-center text-muted hover:text-foreground"
+                    aria-label="Attach media"
+                  >
+                    <IoAttachOutline size={22} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      unlockNotificationSound();
+                      setShowEmoji((v) => !v);
+                    }}
+                    className="min-h-11 min-w-10 flex items-center justify-center text-muted hover:text-foreground"
+                    aria-label="Emoji"
+                  >
+                    <IoHappyOutline size={22} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      unlockNotificationSound();
+                      setGiftSheetOpen(true);
+                    }}
+                    className="min-h-11 min-w-10 flex items-center justify-center text-primary hover:text-primary-dark"
+                    aria-label="Gift a tree"
+                    title="Gift a tree"
+                  >
+                    <IoGiftOutline size={22} />
+                  </button>
+                  <label className="sr-only" htmlFor="chat-draft">
+                    Message
+                  </label>
+                  <textarea
+                    id="chat-draft"
+                    ref={draftRef}
+                    rows={1}
+                    value={draft}
+                    onChange={(e) => onDraftChange(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        submitMessage();
+                      }
+                      if (e.key === "Escape") {
+                        setShowEmoji(false);
+                        setMentionOpen(false);
+                      }
+                    }}
+                    placeholder="Type a message · @ to mention"
+                    className="flex-1 min-h-11 max-h-32 resize-none border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-primary"
+                  />
+                  <button
+                    type="button"
+                    onClick={startAudioRecording}
+                    disabled={sending || !activeId}
+                    className="min-h-11 min-w-10 flex items-center justify-center text-muted hover:text-foreground disabled:opacity-50"
+                    aria-label="Record audio"
+                    title="Record audio"
+                  >
+                    <IoMicOutline size={22} />
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={(!draft.trim() && !pendingMedia) || sending}
+                    className="min-h-11 min-w-11 flex items-center justify-center bg-primary text-primary-foreground hover:bg-primary-dark disabled:opacity-50"
+                    aria-label="Send message"
+                  >
+                    <IoSend size={18} />
+                  </button>
+                </div>
+              )}
             </form>
           </>
         )}

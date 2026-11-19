@@ -3269,6 +3269,7 @@ class PlasticCertificate(models.Model):
     holder_name = models.CharField(max_length=200, blank=True, default="")
     holder_email = models.EmailField(blank=True, default="")
     issued_at = models.DateTimeField(auto_now_add=True)
+    emailed_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ["-issued_at"]
