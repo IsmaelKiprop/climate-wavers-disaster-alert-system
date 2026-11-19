@@ -556,13 +556,31 @@ const PlasticProjectAdmin = () => {
                     value={hotspotForm.notes}
                     onChange={(e) => setHotspotForm((p) => ({ ...p, notes: e.target.value }))}
                   />
-                  <button
-                    type="button"
-                    onClick={() => captureGps("hotspot")}
-                    className="w-full h-10 border border-border text-sm"
-                  >
-                    Capture GPS for hotspot
-                  </button>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => captureGps("hotspot")}
+                      className="flex-1 min-w-[140px] h-10 border border-border text-sm"
+                    >
+                      Capture GPS
+                    </button>
+                    {proofForm.latitude && proofForm.longitude ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setHotspotForm((p) => ({
+                            ...p,
+                            latitude: proofForm.latitude,
+                            longitude: proofForm.longitude,
+                          }));
+                          toast.success("Copied GPS from recovery form");
+                        }}
+                        className="flex-1 min-w-[140px] h-10 border border-primary text-primary text-sm"
+                      >
+                        Use proof GPS
+                      </button>
+                    ) : null}
+                  </div>
                   <div className="grid grid-cols-2 gap-2">
                     <input
                       className="h-10 px-3 border border-border bg-background"
@@ -585,7 +603,8 @@ const PlasticProjectAdmin = () => {
                   </div>
                   {!hotspotForm.latitude || !hotspotForm.longitude ? (
                     <p className="text-xs text-amber-600 dark:text-amber-300">
-                      Lat/Lng required — tap Capture GPS first.
+                      Lat/Lng required — Capture GPS, or tap Use proof GPS (you already have
+                      coords on the right).
                     </p>
                   ) : (
                     <p className="text-xs text-primary">
