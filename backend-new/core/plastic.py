@@ -160,6 +160,22 @@ def _safe_email(value: str) -> str:
         return ""
 
 
+def _user_display_name(user) -> str:
+    """Support both User.get_full_name as @property and as method."""
+    if not user:
+        return ""
+    full = getattr(user, "get_full_name", None)
+    if callable(full):
+        try:
+            full = full()
+        except Exception:
+            full = ""
+    name = str(full or "").strip()
+    if name:
+        return name[:200]
+    return str(getattr(user, "username", "") or "").strip()[:200]
+
+
 def _issue_certificate(
     *,
     project: PlasticProject,
@@ -198,15 +214,8 @@ def _ensure_recovery_certificate(recovery: PlasticRecovery) -> PlasticCertificat
     kg = recovery.kg_verified or recovery.kg_claimed
     if _money(kg) <= 0:
         return None
-    holder = ""
-    email = ""
-    if recovery.submitted_by_id:
-        submitter = recovery.submitted_by
-        holder = (
-            (submitter.get_full_name() if submitter else "")
-            or (submitter.username if submitter else "")
-        )
-        email = (submitter.email if submitter else "") or ""
+    holder = _user_display_name(recovery.submitted_by)
+    email = getattr(recovery.submitted_by, "email", "") if recovery.submitted_by_id else ""
     try:
         return _issue_certificate(
             project=recovery.project,
