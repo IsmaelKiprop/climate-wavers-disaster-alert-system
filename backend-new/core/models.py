@@ -3079,6 +3079,15 @@ class PlasticHotspot(models.Model):
 
 
 class PlasticRecyclerPartner(models.Model):
+    """Recycler yard partner. May be linked to a scan-only Climate Wavers user."""
+
+    INVITE_STATUS = [
+        ("none", "No invite"),
+        ("pending", "Invite pending"),
+        ("accepted", "Invite accepted"),
+        ("revoked", "Invite revoked"),
+    ]
+
     name = models.CharField(max_length=200)
     organization = models.ForeignKey(
         "TreeAdminOrganization",
@@ -3098,6 +3107,27 @@ class PlasticRecyclerPartner(models.Model):
         help_text='KES/kg by polymer, e.g. {"PET": 20, "HDPE": 25, "PP": 10}',
     )
     is_active = models.BooleanField(default=True)
+    linked_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="plastic_recycler_partners",
+    )
+    invite_token = models.CharField(max_length=64, blank=True, default="", db_index=True)
+    invite_status = models.CharField(
+        max_length=20, choices=INVITE_STATUS, default="none", db_index=True
+    )
+    invite_expires_at = models.DateTimeField(null=True, blank=True)
+    invited_at = models.DateTimeField(null=True, blank=True)
+    invited_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="invited_plastic_recyclers",
+    )
+    invite_accepted_at = models.DateTimeField(null=True, blank=True)
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -3113,6 +3143,12 @@ class PlasticRecyclerPartner(models.Model):
 
     def __str__(self):
         return self.name
+
+    @property
+    def invite_is_expired(self) -> bool:
+        if not self.invite_expires_at:
+            return False
+        return timezone.now() >= self.invite_expires_at
 
 
 class PlasticRecovery(models.Model):

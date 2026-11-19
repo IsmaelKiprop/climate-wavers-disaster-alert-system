@@ -82,6 +82,8 @@ const PlasticProjectAdmin = () => {
   const [offlineCount, setOfflineCount] = useState(0);
   const [lastBagLabel, setLastBagLabel] = useState(null);
   const [qrBagId, setQrBagId] = useState(null);
+  const [invitingId, setInvitingId] = useState(null);
+  const [lastInvite, setLastInvite] = useState(null);
 
   const [hotspotForm, setHotspotForm] = useState({
     title: "",
@@ -477,6 +479,50 @@ const PlasticProjectAdmin = () => {
       toast.error(err.message);
     } finally {
       setSavingRecycler(false);
+    }
+  };
+
+  const inviteRecycler = async (recycler) => {
+    if (!recycler?.id || invitingId) return;
+    setInvitingId(recycler.id);
+    try {
+      const data = await api(endpoints.plasticRecyclerInvite(recycler.id), {
+        method: "POST",
+        body: {},
+      });
+      setLastInvite(data);
+      await loadRecyclers();
+      toast.success(`Invite ready for ${recycler.name}`);
+      if (data.invite_url) {
+        try {
+          await navigator.clipboard.writeText(data.invite_url);
+          toast.info("Invite link copied");
+        } catch {
+          /* ignore */
+        }
+      }
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
+      setInvitingId(null);
+    }
+  };
+
+  const revokeRecyclerInvite = async (recycler) => {
+    if (!recycler?.id || invitingId) return;
+    setInvitingId(recycler.id);
+    try {
+      await api(endpoints.plasticRecyclerInviteRevoke(recycler.id), {
+        method: "POST",
+        body: {},
+      });
+      if (lastInvite?.recycler?.id === recycler.id) setLastInvite(null);
+      await loadRecyclers();
+      toast.success("Scan access revoked");
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
+      setInvitingId(null);
     }
   };
 
@@ -1154,6 +1200,10 @@ const PlasticProjectAdmin = () => {
 
           <form onSubmit={createRecycler} className="space-y-3 border border-border p-4">
             <h2 className="font-medium">Add recycler partner</h2>
+            <p className="text-xs text-muted">
+              After saving, tap <span className="text-foreground">Invite to scan</span> and
+              share WhatsApp — they get scan-only access.
+            </p>
             <input
               className="w-full h-10 px-3 border border-border bg-background"
               placeholder="Name"
@@ -1169,7 +1219,7 @@ const PlasticProjectAdmin = () => {
             />
             <input
               className="w-full h-10 px-3 border border-border bg-background"
-              placeholder="Phone"
+              placeholder="WhatsApp phone e.g. 07…"
               value={recyclerForm.contact_phone}
               onChange={(e) =>
                 setRecyclerForm((p) => ({ ...p, contact_phone: e.target.value }))
@@ -1182,12 +1232,92 @@ const PlasticProjectAdmin = () => {
             >
               {savingRecycler ? "Saving…" : "Save recycler"}
             </button>
-            <div className="text-xs text-muted space-y-1 pt-2">
+
+            {lastInvite?.invite_url ? (
+              <div className="border border-border p-3 space-y-2 text-sm">
+                <div className="font-medium">
+                  Invite ready · {lastInvite.recycler?.name || "Recycler"}
+                </div>
+                <p className="text-xs text-muted break-all">{lastInvite.invite_url}</p>
+                <div className="flex flex-wrap gap-2">
+                  <a
+                    href={lastInvite.whatsapp_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="h-9 px-3 bg-primary text-white text-sm inline-flex items-center"
+                  >
+                    Share on WhatsApp
+                  </a>
+                  <button
+                    type="button"
+                    className="h-9 px-3 border border-border text-sm"
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard.writeText(lastInvite.invite_url);
+                        toast.success("Link copied");
+                      } catch {
+                        toast.error("Could not copy");
+                      }
+                    }}
+                  >
+                    Copy link
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
+            <div className="space-y-3 pt-2">
               {recyclers.map((r) => (
-                <div key={r.id}>
-                  {r.name} · {r.city || "—"}
+                <div
+                  key={r.id}
+                  className="border border-border/70 p-3 space-y-2 text-sm"
+                >
+                  <div className="flex flex-wrap justify-between gap-2">
+                    <div>
+                      <div className="font-medium">{r.name}</div>
+                      <div className="text-xs text-muted">
+                        {r.city || "—"}
+                        {r.contact_phone ? ` · ${r.contact_phone}` : ""}
+                        {" · "}
+                        {r.scan_access
+                          ? "scan access on"
+                          : r.invite_status === "pending"
+                            ? "invite pending"
+                            : r.invite_status === "accepted"
+                              ? "linked"
+                              : "no invite yet"}
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        disabled={invitingId === r.id}
+                        className="h-9 px-3 bg-primary text-white text-xs disabled:opacity-60"
+                        onClick={() => inviteRecycler(r)}
+                      >
+                        {invitingId === r.id
+                          ? "…"
+                          : r.scan_access || r.invite_status === "pending"
+                            ? "Re-invite"
+                            : "Invite to scan"}
+                      </button>
+                      {r.scan_access || r.invite_status === "pending" ? (
+                        <button
+                          type="button"
+                          disabled={invitingId === r.id}
+                          className="h-9 px-3 border border-border text-xs disabled:opacity-60"
+                          onClick={() => revokeRecyclerInvite(r)}
+                        >
+                          Revoke
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
                 </div>
               ))}
+              {!recyclers.length ? (
+                <p className="text-xs text-muted">No recycler partners yet.</p>
+              ) : null}
             </div>
           </form>
         </div>

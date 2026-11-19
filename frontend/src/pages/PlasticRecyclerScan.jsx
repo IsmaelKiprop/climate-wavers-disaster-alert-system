@@ -40,6 +40,7 @@ const PlasticRecyclerScan = () => {
   const [result, setResult] = useState(null);
   const [scanning, setScanning] = useState(false);
   const [scanHint, setScanHint] = useState("");
+  const [me, setMe] = useState(null);
 
   const videoRef = useRef(null);
   const streamRef = useRef(null);
@@ -93,6 +94,9 @@ const PlasticRecyclerScan = () => {
           ? String(data.kg_verified)
           : String(data.kg_claimed || "")
       );
+      if (data.scanner_recycler_id) {
+        setRecyclerId(String(data.scanner_recycler_id));
+      }
     } catch (err) {
       setRecovery(null);
       setError(err.message || "Bag not found");
@@ -106,11 +110,17 @@ const PlasticRecyclerScan = () => {
   }, [bagId, loadBag]);
 
   useEffect(() => {
+    api(endpoints.plasticRecyclerMe)
+      .then((data) => setMe(data))
+      .catch(() => setMe(null));
     api(endpoints.plasticRecyclers)
       .then((data) => setRecyclers(Array.isArray(data) ? data : []))
       .catch(() => setRecyclers([]));
     return () => stopCamera();
   }, [stopCamera]);
+
+  const scanOnly = Boolean(me?.scan_only);
+  const partnerName = me?.partners?.[0]?.name;
 
   const startCamera = async () => {
     setScanHint("");
@@ -209,7 +219,11 @@ const PlasticRecyclerScan = () => {
           <BrandLogo imgClassName="h-8 w-auto" />
           <div>
             <h1 className="text-xl font-semibold">Recycler QR intake</h1>
-            <p className="text-sm text-muted">Scan bag → confirm kg → close chain of custody</p>
+            <p className="text-sm text-muted">
+              {scanOnly && partnerName
+                ? `${partnerName} · scan-only access`
+                : "Scan bag → confirm kg → close chain of custody"}
+            </p>
           </div>
         </div>
 
@@ -232,12 +246,14 @@ const PlasticRecyclerScan = () => {
                 Stop camera
               </button>
             )}
-            <Link
-              to="/app/admin/plastic"
-              className="h-10 px-4 border border-border text-sm inline-flex items-center"
-            >
-              Plastic admin
-            </Link>
+            {!scanOnly ? (
+              <Link
+                to="/app/admin/plastic"
+                className="h-10 px-4 border border-border text-sm inline-flex items-center"
+              >
+                Plastic admin
+              </Link>
+            ) : null}
           </div>
           {scanHint ? <p className="text-xs text-amber-600 dark:text-amber-300">{scanHint}</p> : null}
           {scanning ? (
@@ -322,23 +338,29 @@ const PlasticRecyclerScan = () => {
                     required
                   />
                 </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-medium">
-                    Recycler <span className="text-muted font-normal">(optional)</span>
-                  </label>
-                  <select
-                    className="w-full h-10 px-3 border border-border bg-background"
-                    value={recyclerId}
-                    onChange={(e) => setRecyclerId(e.target.value)}
-                  >
-                    <option value="">No recycler selected</option>
-                    {recyclers.map((r) => (
-                      <option key={r.id} value={r.id}>
-                        {r.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                {!scanOnly ? (
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium">
+                      Recycler <span className="text-muted font-normal">(optional)</span>
+                    </label>
+                    <select
+                      className="w-full h-10 px-3 border border-border bg-background"
+                      value={recyclerId}
+                      onChange={(e) => setRecyclerId(e.target.value)}
+                    >
+                      <option value="">No recycler selected</option>
+                      {recyclers.map((r) => (
+                        <option key={r.id} value={r.id}>
+                          {r.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted">
+                    Intake will be recorded as {partnerName || "your recycler yard"}.
+                  </p>
+                )}
                 <button
                   type="button"
                   disabled={confirming || !(Number(kg) > 0)}

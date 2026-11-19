@@ -764,7 +764,15 @@ class PlasticSponsorshipAdmin(ModelAdmin):
 
 @admin.register(PlasticRecyclerPartner)
 class PlasticRecyclerPartnerAdmin(ModelAdmin):
-    list_display = ("name", "city", "is_active", "created_at")
-    list_filter = ("is_active",)
+    list_display = (
+        "name",
+        "city",
+        "invite_status",
+        "linked_user",
+        "is_active",
+        "created_at",
+    )
+    list_filter = ("is_active", "invite_status")
+    search_fields = ("name", "contact_phone", "contact_email", "invite_token")
 
 

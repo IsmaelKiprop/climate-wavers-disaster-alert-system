@@ -54,6 +54,7 @@ const AppNav = ({ onNavigate, compact = false }) => {
   const [isReportOpen, setIsReportOpen] = useState(false);
   const [treeAdminOk, setTreeAdminOk] = useState(isAdmin());
   const [hasChampionDesk, setHasChampionDesk] = useState(false);
+  const [recyclerScanOk, setRecyclerScanOk] = useState(false);
 
   useEffect(() => {
     const sync = () => setUser(getUser());
@@ -70,6 +71,7 @@ const AppNav = ({ onNavigate, compact = false }) => {
       setTreeAdminOk(false);
       setTreeAdminAccess(false);
       setHasChampionDesk(false);
+      setRecyclerScanOk(false);
       return;
     }
     let cancelled = false;
@@ -100,6 +102,23 @@ const AppNav = ({ onNavigate, compact = false }) => {
         setHasChampionDesk(Boolean(data?.champion?.id || data?.champion?.status));
       } catch {
         if (!cancelled) setHasChampionDesk(false);
+      }
+    })();
+    (async () => {
+      try {
+        const data = await client.run(
+          "get",
+          endpoints.plasticRecyclerMe,
+          {},
+          true,
+          false,
+          false,
+          false
+        );
+        if (cancelled) return;
+        setRecyclerScanOk(Boolean(data?.is_recycler));
+      } catch {
+        if (!cancelled) setRecyclerScanOk(false);
       }
     })();
     return () => {
@@ -189,6 +208,16 @@ const AppNav = ({ onNavigate, compact = false }) => {
                 ActiveIcon: IoSettingsOutline,
               },
             ]),
+        ...(recyclerScanOk
+          ? [
+              {
+                to: "/plastic/intake",
+                label: "Bag scanner",
+                Icon: IoLeafOutline,
+                ActiveIcon: IoLeafOutline,
+              },
+            ]
+          : []),
         { to: "/app/notifications", label: "Notifications", Icon: IoNotificationsOutline, ActiveIcon: IoNotifications },
         {
           to: "/app/alert-settings",

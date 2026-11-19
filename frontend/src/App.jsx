@@ -37,6 +37,9 @@ const VerifyChampionCertificate = lazy(() => import("./pages/VerifyChampionCerti
 const VerifyTreeCertificate = lazy(() => import("./pages/VerifyTreeCertificate"));
 const VerifyPlasticCertificate = lazy(() => import("./pages/VerifyPlasticCertificate"));
 const PlasticRecyclerScan = lazy(() => import("./pages/PlasticRecyclerScan"));
+const PlasticRecyclerInviteAccept = lazy(
+  () => import("./pages/PlasticRecyclerInviteAccept")
+);
 const PlasticPulseOnboarding = lazy(() => import("./pages/PlasticPulseOnboarding"));
 const DisasterPage = lazy(() => import("./pages/DisasterPage"));
 const Donations = lazy(() => import("./components/Donations"));
@@ -248,6 +251,10 @@ function App() {
                     <PlasticRecyclerScan />
                   </ProtectedRoute>
                 }
+              />
+              <Route
+                path="/plastic/recycler-invite/:token"
+                element={<PlasticRecyclerInviteAccept />}
               />
               <Route path="/project" element={<PublicProjectView />} />
               <Route path="/p/:projectId" element={<PublicProjectView />} />

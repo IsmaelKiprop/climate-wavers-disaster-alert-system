@@ -5,10 +5,15 @@ sponsor-a-kilo, certificates, flood hotspot feed.
 
 from __future__ import annotations
 
+import re
+import secrets
 import uuid
+from datetime import timedelta
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Optional
+from urllib.parse import quote
 
+from django.conf import settings as dj_settings
 from django.db import IntegrityError, transaction
 from django.db.models import F, Q, Sum
 from django.utils import timezone
@@ -78,6 +83,65 @@ def _can_manage_project(user, project: PlasticProject) -> bool:
         user=user, org_id=project.tree_admin_org_id, role__in=("owner", "manager")
     ).select_related("org").first()
     return bool(m and m.org.has_tree_admin_access)
+
+
+def _frontend_base() -> str:
+    return str(
+        getattr(dj_settings, "FRONTEND_URL", None)
+        or getattr(dj_settings, "SITE_URL", None)
+        or "https://alerts.flowops.africa"
+    ).rstrip("/")
+
+
+def _recycler_partners_for_user(user):
+    if not user or not getattr(user, "is_authenticated", False):
+        return PlasticRecyclerPartner.objects.none()
+    return PlasticRecyclerPartner.objects.filter(linked_user=user, is_active=True)
+
+
+def _recycler_partner_for_project(user, project: PlasticProject):
+    """Linked scan-only partner that belongs to this project's CBO org."""
+    qs = _recycler_partners_for_user(user)
+    if not qs.exists():
+        return None
+    if project.tree_admin_org_id:
+        match = qs.filter(organization_id=project.tree_admin_org_id).first()
+        if match:
+            return match
+    # Fallback: partner created under same CBO user ownership
+    return qs.filter(created_by_id=project.organization_id).first()
+
+
+def _can_intake_recovery(user, recovery: PlasticRecovery) -> bool:
+    if _can_manage_project(user, recovery.project) or getattr(user, "is_staff", False):
+        return True
+    return bool(_recycler_partner_for_project(user, recovery.project))
+
+
+def _is_scan_only_recycler(user) -> bool:
+    if not user or not getattr(user, "is_authenticated", False):
+        return False
+    if user_has_tree_admin_access(user) or getattr(user, "is_staff", False):
+        return False
+    return _recycler_partners_for_user(user).exists()
+
+
+def _whatsapp_share_url(phone: str, text: str) -> str:
+    digits = re.sub(r"\D", "", phone or "")
+    if digits.startswith("0") and len(digits) >= 9:
+        digits = "254" + digits.lstrip("0")
+    elif len(digits) == 9 and digits.startswith("7"):
+        digits = "254" + digits
+    encoded = quote(text)
+    if digits:
+        return f"https://wa.me/{digits}?text={encoded}"
+    return f"https://wa.me/?text={encoded}"
+
+
+def _invite_urls(token: str) -> dict:
+    path = f"/plastic/recycler-invite/{token}"
+    invite_url = f"{_frontend_base()}{path}"
+    return {"invite_path": path, "invite_url": invite_url}
 
 
 def _issue_certificate(
@@ -189,6 +253,8 @@ class PlasticRecoverySerializer(serializers.ModelSerializer):
 
 
 class PlasticRecyclerSerializer(serializers.ModelSerializer):
+    scan_access = serializers.SerializerMethodField()
+
     class Meta:
         model = PlasticRecyclerPartner
         fields = [
@@ -202,9 +268,27 @@ class PlasticRecyclerSerializer(serializers.ModelSerializer):
             "longitude",
             "buy_rates",
             "is_active",
+            "linked_user",
+            "invite_status",
+            "invite_expires_at",
+            "invited_at",
+            "invite_accepted_at",
+            "scan_access",
             "created_at",
         ]
-        read_only_fields = ["id", "created_at"]
+        read_only_fields = [
+            "id",
+            "linked_user",
+            "invite_status",
+            "invite_expires_at",
+            "invited_at",
+            "invite_accepted_at",
+            "scan_access",
+            "created_at",
+        ]
+
+    def get_scan_access(self, obj):
+        return bool(obj.linked_user_id and obj.invite_status == "accepted" and obj.is_active)
 
 
 class PlasticProjectSerializer(serializers.ModelSerializer):
@@ -600,16 +684,19 @@ class PlasticIntakeScanView(APIView):
             return Response({"detail": "Bag not found."}, status=404)
         if recovery.status == "intake_confirmed":
             return Response(PlasticRecoverySerializer(recovery).data)
-        if recovery.status not in ("cbo_verified", "submitted"):
+
+        is_cbo = _can_manage_project(request.user, recovery.project) or request.user.is_staff
+        partner = _recycler_partner_for_project(request.user, recovery.project)
+        if not is_cbo and not partner:
+            return Response({"detail": "Forbidden."}, status=403)
+
+        # Scan-only recyclers may only intake CBO-verified bags
+        allowed_statuses = ("cbo_verified", "submitted") if is_cbo else ("cbo_verified",)
+        if recovery.status not in allowed_statuses:
             return Response(
                 {"detail": f"Recovery status {recovery.status} cannot be intaken."},
                 status=400,
             )
-        # Allow CBO or staff to intake; recyclers may also if authenticated admin
-        if not (
-            _can_manage_project(request.user, recovery.project) or request.user.is_staff
-        ):
-            return Response({"detail": "Forbidden."}, status=403)
 
         kg = request.data.get("kg_verified")
         if kg in (None, ""):
@@ -622,6 +709,8 @@ class PlasticIntakeScanView(APIView):
         recycler_id = request.data.get("recycler_id") or request.data.get("recycler")
         if recycler_id:
             recycler = PlasticRecyclerPartner.objects.filter(pk=recycler_id).first()
+        if not recycler and partner:
+            recycler = partner
 
         already_intaken = False
         prev_status = recovery.status
@@ -692,6 +781,15 @@ class PlasticRecyclerListCreateView(APIView):
 
     def get(self, request):
         qs = PlasticRecyclerPartner.objects.filter(is_active=True)
+        # Authenticated CBO sees only their org partners when possible
+        if (
+            request.user
+            and request.user.is_authenticated
+            and user_has_tree_admin_access(request.user)
+        ):
+            m = _org_membership(request.user)
+            if m and m.org_id:
+                qs = qs.filter(Q(organization_id=m.org_id) | Q(created_by=request.user))
         return Response(PlasticRecyclerSerializer(qs, many=True).data)
 
     def post(self, request):
@@ -706,6 +804,212 @@ class PlasticRecyclerListCreateView(APIView):
         )
         return Response(
             PlasticRecyclerSerializer(partner).data, status=status.HTTP_201_CREATED
+        )
+
+
+class PlasticRecyclerInviteView(APIView):
+    """CBO creates/refreshes a scan-only invite link for a recycler partner."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, recycler_id):
+        if not user_has_tree_admin_access(request.user):
+            return Response({"detail": "Tree Admin required."}, status=403)
+        partner = PlasticRecyclerPartner.objects.filter(pk=recycler_id).first()
+        if not partner:
+            return Response({"detail": "Recycler not found."}, status=404)
+        m = _org_membership(request.user)
+        if m and partner.organization_id and partner.organization_id != m.org_id:
+            if partner.created_by_id != request.user.id and not request.user.is_staff:
+                return Response({"detail": "Forbidden."}, status=403)
+
+        token = secrets.token_urlsafe(24)
+        partner.invite_token = token
+        partner.invite_status = "pending"
+        partner.invite_expires_at = timezone.now() + timedelta(days=14)
+        partner.invited_at = timezone.now()
+        partner.invited_by = request.user
+        # Keep linked_user until they accept a new invite? Clear so old user loses access
+        # until re-accept — safer for re-invite to a different person.
+        partner.linked_user = None
+        partner.invite_accepted_at = None
+        partner.save(
+            update_fields=[
+                "invite_token",
+                "invite_status",
+                "invite_expires_at",
+                "invited_at",
+                "invited_by",
+                "linked_user",
+                "invite_accepted_at",
+                "updated_at",
+            ]
+        )
+
+        urls = _invite_urls(token)
+        org_name = ""
+        if m and m.org:
+            org_name = getattr(m.org, "name", "") or ""
+        message = (
+            f"Climate Wavers Plastic Pulse: {org_name or 'a CBO'} invited "
+            f"{partner.name} to confirm bag intake. Open this link, sign in "
+            f"(or create a free account), then scan bags:\n{urls['invite_url']}"
+        )
+        whatsapp_url = _whatsapp_share_url(partner.contact_phone, message)
+        return Response(
+            {
+                "recycler": PlasticRecyclerSerializer(partner).data,
+                "invite_url": urls["invite_url"],
+                "invite_path": urls["invite_path"],
+                "whatsapp_url": whatsapp_url,
+                "message": message,
+                "expires_at": partner.invite_expires_at,
+            }
+        )
+
+
+class PlasticRecyclerInviteRevokeView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, recycler_id):
+        if not user_has_tree_admin_access(request.user):
+            return Response({"detail": "Tree Admin required."}, status=403)
+        partner = PlasticRecyclerPartner.objects.filter(pk=recycler_id).first()
+        if not partner:
+            return Response({"detail": "Recycler not found."}, status=404)
+        partner.invite_status = "revoked"
+        partner.invite_token = ""
+        partner.linked_user = None
+        partner.save(
+            update_fields=[
+                "invite_status",
+                "invite_token",
+                "linked_user",
+                "updated_at",
+            ]
+        )
+        return Response({"recycler": PlasticRecyclerSerializer(partner).data})
+
+
+class PlasticRecyclerInviteDetailView(APIView):
+    """Public preview of a scan-only invite."""
+
+    permission_classes = [AllowAny]
+
+    def get(self, request, token):
+        token = str(token or "").strip()
+        partner = (
+            PlasticRecyclerPartner.objects.select_related("organization")
+            .filter(invite_token=token)
+            .first()
+        )
+        if not partner:
+            return Response({"detail": "Invite not found."}, status=404)
+        status_value = partner.invite_status
+        if status_value == "pending" and partner.invite_is_expired:
+            partner.invite_status = "revoked"
+            partner.save(update_fields=["invite_status", "updated_at"])
+            status_value = "expired"
+        org_name = ""
+        if partner.organization_id:
+            org_name = getattr(partner.organization, "name", "") or ""
+        return Response(
+            {
+                "valid": status_value == "pending",
+                "status": status_value,
+                "recycler_name": partner.name,
+                "city": partner.city,
+                "organization_name": org_name,
+                "expires_at": partner.invite_expires_at,
+            }
+        )
+
+
+class PlasticRecyclerInviteAcceptView(APIView):
+    """Authenticated user accepts invite → becomes scan-only recycler for that partner."""
+
+    permission_classes = [IsAuthenticated]
+
+    @transaction.atomic
+    def post(self, request, token):
+        token = str(token or request.data.get("token") or "").strip()
+        if not token:
+            return Response({"detail": "token required."}, status=400)
+        partner = (
+            PlasticRecyclerPartner.objects.select_for_update()
+            .filter(invite_token=token)
+            .first()
+        )
+        if not partner:
+            return Response({"detail": "Invite not found."}, status=404)
+        if partner.invite_status == "accepted" and partner.linked_user_id == request.user.id:
+            return Response(
+                {
+                    "already": True,
+                    "recycler": PlasticRecyclerSerializer(partner).data,
+                    "scan_path": "/plastic/intake",
+                }
+            )
+        if partner.invite_status != "pending":
+            return Response(
+                {"detail": f"Invite is {partner.invite_status}."}, status=400
+            )
+        if partner.invite_is_expired:
+            partner.invite_status = "revoked"
+            partner.save(update_fields=["invite_status", "updated_at"])
+            return Response({"detail": "Invite expired."}, status=400)
+
+        partner.linked_user = request.user
+        partner.invite_status = "accepted"
+        partner.invite_accepted_at = timezone.now()
+        partner.save(
+            update_fields=[
+                "linked_user",
+                "invite_status",
+                "invite_accepted_at",
+                "updated_at",
+            ]
+        )
+        if partner.contact_email and not request.user.email:
+            pass
+        _notify(
+            request.user,
+            f"You can now scan Plastic Pulse bags for {partner.name}. Open Recycler intake.",
+            partner,
+        )
+        return Response(
+            {
+                "already": False,
+                "recycler": PlasticRecyclerSerializer(partner).data,
+                "scan_path": "/plastic/intake",
+            }
+        )
+
+
+class PlasticRecyclerMeView(APIView):
+    """Current user's scan-only recycler profile (if any)."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        partners = list(
+            _recycler_partners_for_user(request.user).select_related("organization")
+        )
+        if not partners:
+            return Response(
+                {
+                    "is_recycler": False,
+                    "scan_only": False,
+                    "partners": [],
+                }
+            )
+        return Response(
+            {
+                "is_recycler": True,
+                "scan_only": _is_scan_only_recycler(request.user),
+                "partners": PlasticRecyclerSerializer(partners, many=True).data,
+                "scan_path": "/plastic/intake",
+            }
         )
 
 
@@ -885,13 +1189,18 @@ class PlasticBagLookupView(APIView):
         )
         if not recovery:
             return Response({"detail": "Bag not found."}, status=404)
-        if not (
-            _can_manage_project(request.user, recovery.project) or request.user.is_staff
-        ):
+        if not _can_intake_recovery(request.user, recovery):
             return Response({"detail": "Forbidden."}, status=403)
+        is_cbo = _can_manage_project(request.user, recovery.project) or request.user.is_staff
         data = PlasticRecoverySerializer(recovery).data
         data["project_name"] = recovery.project.name if recovery.project_id else ""
-        data["can_intake"] = recovery.status in ("cbo_verified", "submitted")
+        if is_cbo:
+            data["can_intake"] = recovery.status in ("cbo_verified", "submitted")
+        else:
+            data["can_intake"] = recovery.status == "cbo_verified"
         cert = recovery.certificates.order_by("-created_at").first()
         data["certificate_code"] = cert.code if cert else ""
+        partner = _recycler_partner_for_project(request.user, recovery.project)
+        data["scanner_recycler_id"] = partner.id if partner else None
+        data["scan_only"] = bool(partner) and not is_cbo
         return Response(data)

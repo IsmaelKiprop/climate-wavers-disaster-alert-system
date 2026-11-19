@@ -65,6 +65,13 @@ export const endpoints = {
     "plasticIntakeScan": "/api/v1/plastic/intake/scan/",
     "plasticBag": (bagId) => `/api/v1/plastic/bags/${encodeURIComponent(bagId)}/`,
     "plasticRecyclers": "/api/v1/plastic/recyclers/",
+    "plasticRecyclerInvite": (id) => `/api/v1/plastic/recyclers/${id}/invite/`,
+    "plasticRecyclerInviteRevoke": (id) => `/api/v1/plastic/recyclers/${id}/invite/revoke/`,
+    "plasticRecyclerInviteDetail": (token) =>
+      `/api/v1/plastic/recycler-invites/${encodeURIComponent(token)}/`,
+    "plasticRecyclerInviteAccept": (token) =>
+      `/api/v1/plastic/recycler-invites/${encodeURIComponent(token)}/accept/`,
+    "plasticRecyclerMe": "/api/v1/plastic/recycler/me/",
     "plasticCertificate": (code) => `/api/v1/plastic/certificates/${encodeURIComponent(code)}/`,
     "plasticFloodHotspots": "/api/v1/plastic/flood-hotspots/",
     "plasticAdminQueue": "/api/v1/plastic/admin/queue/",
