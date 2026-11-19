@@ -262,6 +262,7 @@ class PostViewSet(viewsets.ModelViewSet):
                     message=f"{notice_text}: {preview}",
                     link=post_link,
                     headline="You were mentioned on Climate Wavers",
+                    post=post,
                 )
         except Exception:
             pass

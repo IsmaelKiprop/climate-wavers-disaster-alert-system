@@ -241,7 +241,13 @@ def _send_climate_event_mail(
         return False
 
 
-def send_climate_invite_email(event: ClimateEvent, to_email: str, invitee_name: str = ""):
+def send_climate_invite_email(
+    event: ClimateEvent,
+    to_email: str,
+    invitee_name: str = "",
+    *,
+    role: str = "attendee",
+):
     """Send invite via Resend (SMTP is blocked on Render)."""
     email = str(to_email or "").strip()
     if not email or "@" not in email or email.endswith("@example.com"):
@@ -253,10 +259,21 @@ def send_climate_invite_email(event: ClimateEvent, to_email: str, invitee_name: 
     join_url = _event_join_url(event)
     who = invitee_name or email
     host = display_name_for(event.host) if event.host_id else "Climate Wavers"
-    subject = f"You're invited: {event.title} — Climate Wavers"
+    is_cohost = str(role or "").lower() == "cohost"
+    role_line = (
+        "You've been invited as a co-host (collaborator) — you can help invite attendees."
+        if is_cohost
+        else "You've been invited as a guest."
+    )
+    subject = (
+        f"You're invited as co-host: {event.title} — Climate Wavers"
+        if is_cohost
+        else f"You're invited: {event.title} — Climate Wavers"
+    )
     body = (
         f"Hi {who},\n\n"
         f"{host} invited you to a Climate Wavers event.\n\n"
+        f"{role_line}\n\n"
         f"Event: {event.title}\n"
         f"Type: {event.get_event_type_display()}\n"
         f"When: {when or 'See calendar'}\n\n"
@@ -346,6 +363,33 @@ def deliver_event_reminder(
     return delivered
 
 
+def normalize_invite_role(role, *, allow_cohost=True):
+    role = str(role or "attendee").strip().lower()
+    if role == "cohost" and allow_cohost:
+        return "cohost"
+    if role == "host":
+        return "host"
+    return "attendee"
+
+
+def user_is_event_cohost(user, event: ClimateEvent) -> bool:
+    if not user or not getattr(user, "is_authenticated", False):
+        return False
+    return ClimateEventInvite.objects.filter(
+        event=event, user=user, role="cohost"
+    ).exists()
+
+
+def user_can_manage_invites(user, event: ClimateEvent) -> bool:
+    if not user or not getattr(user, "is_authenticated", False):
+        return False
+    if getattr(user, "is_staff", False) or getattr(user, "is_superuser", False):
+        return True
+    if event.host_id == user.id:
+        return True
+    return user_is_event_cohost(user, event)
+
+
 def _deliver_invite_notice(
     event: ClimateEvent,
     invite: ClimateEventInvite,
@@ -355,12 +399,19 @@ def _deliver_invite_notice(
 ):
     """Always deliver in-app + email when requested (including re-invites)."""
     user = invite.user
+    role = normalize_invite_role(invite.role, allow_cohost=True)
     if notify and user is not None:
-        notify_climate_event(user, event, f"You're invited: {event.title}")
+        message = (
+            f"You're invited as co-host: {event.title}"
+            if role == "cohost"
+            else f"You're invited: {event.title}"
+        )
+        notify_climate_event(user, event, message)
         logger.info(
-            "Climate invite in-app notify user=%s event=%s",
+            "Climate invite in-app notify user=%s event=%s role=%s",
             getattr(user, "username", user.id),
             event.id,
+            role,
         )
     if not send_email:
         return
@@ -372,7 +423,7 @@ def _deliver_invite_notice(
     if not to_email:
         to_email = (invite.email or "").strip()
     if to_email:
-        send_climate_invite_email(event, to_email, name)
+        send_climate_invite_email(event, to_email, name, role=role)
 
 
 def invite_users(
@@ -382,6 +433,9 @@ def invite_users(
     notify=True,
     send_email=True,
 ):
+    role = normalize_invite_role(role, allow_cohost=True)
+    if role == "host":
+        role = "attendee"
     invited = []
     for uid in user_ids or []:
         try:
@@ -403,6 +457,16 @@ def invite_users(
         )
         if not created:
             dirty = []
+            # Hosts can promote attendees to co-host on re-invite.
+            if (
+                role == "cohost"
+                and invite.role not in {"host", "cohost"}
+            ):
+                invite.role = "cohost"
+                dirty.append("role")
+            elif role == "attendee" and invite.role not in {"host", "cohost"}:
+                # Keep existing non-host role unless promoting.
+                pass
             if invite.notify_in_app != notify:
                 invite.notify_in_app = notify
                 dirty.append("notify_in_app")
@@ -420,9 +484,10 @@ def invite_users(
         )
         invited.append(invite)
         logger.info(
-            "Climate invite user event=%s user_id=%s created=%s notify=%s email=%s",
+            "Climate invite user event=%s user_id=%s role=%s created=%s notify=%s email=%s",
             event.id,
             uid_int,
+            invite.role,
             created,
             notify,
             send_email,
@@ -441,6 +506,9 @@ def invite_emails(
     from django.contrib.auth import get_user_model
 
     User = get_user_model()
+    role = normalize_invite_role(role, allow_cohost=True)
+    if role == "host":
+        role = "attendee"
     invited = []
     seen = set()
     for raw in emails or []:
@@ -472,17 +540,25 @@ def invite_emails(
                 "notify_email": send_email,
             },
         )
-        if not created and invite.notify_email != send_email:
-            invite.notify_email = send_email
-            invite.save(update_fields=["notify_email", "updated_at"])
+        dirty = []
+        if not created:
+            if role == "cohost" and invite.role != "cohost":
+                invite.role = "cohost"
+                dirty.append("role")
+            if invite.notify_email != send_email:
+                invite.notify_email = send_email
+                dirty.append("notify_email")
+            if dirty:
+                invite.save(update_fields=[*dirty, "updated_at"])
         _deliver_invite_notice(
             event, invite, notify=False, send_email=send_email
         )
         invited.append(invite)
         logger.info(
-            "Climate invite email-only event=%s email=%s created=%s send_email=%s",
+            "Climate invite email-only event=%s email=%s role=%s created=%s send_email=%s",
             event.id,
             email,
+            invite.role,
             created,
             send_email,
         )
@@ -494,28 +570,31 @@ def apply_invites(
     *,
     user_ids=None,
     emails=None,
+    role="attendee",
     notify=True,
     send_email=True,
 ):
     user_ids = list(user_ids or [])
     emails = list(emails or [])
+    role = normalize_invite_role(role, allow_cohost=True)
     logger.info(
-        "apply_invites event=%s user_ids=%s emails=%s notify=%s send_email=%s",
+        "apply_invites event=%s user_ids=%s emails=%s role=%s notify=%s send_email=%s",
         event.id,
         user_ids,
         emails,
+        role,
         notify,
         send_email,
     )
     created = []
     created.extend(
         invite_users(
-            event, user_ids, notify=notify, send_email=send_email
+            event, user_ids, role=role, notify=notify, send_email=send_email
         )
     )
     created.extend(
         invite_emails(
-            event, emails, notify=notify, send_email=send_email
+            event, emails, role=role, notify=notify, send_email=send_email
         )
     )
     return created
@@ -583,6 +662,7 @@ class ClimateEventSerializer(serializers.ModelSerializer):
     can_join = serializers.SerializerMethodField()
     invite_count = serializers.SerializerMethodField()
     invites = serializers.SerializerMethodField()
+    can_invite = serializers.SerializerMethodField()
     tree_project_name = serializers.CharField(
         source="tree_project.name", read_only=True, default=None
     )
@@ -624,6 +704,7 @@ class ClimateEventSerializer(serializers.ModelSerializer):
             "my_rsvp",
             "my_role",
             "can_join",
+            "can_invite",
             "invite_count",
             "invites",
             "join_path",
@@ -712,6 +793,12 @@ class ClimateEventSerializer(serializers.ModelSerializer):
             return False
         return user_can_access_event(request.user, obj)
 
+    def get_can_invite(self, obj):
+        request = self.context.get("request")
+        if not request or not request.user.is_authenticated:
+            return False
+        return user_can_manage_invites(request.user, obj)
+
     def get_invite_count(self, obj):
         if hasattr(obj, "_invite_count"):
             return obj._invite_count
@@ -721,14 +808,15 @@ class ClimateEventSerializer(serializers.ModelSerializer):
         request = self.context.get("request")
         if not request or not request.user.is_authenticated:
             return []
-        if (
-            obj.host_id != request.user.id
-            and not request.user.is_staff
-            and not request.user.is_superuser
-        ):
-            return []
-        qs = obj.invites.all()
-        # Prefetch already loaded
+        # Host/co-host/staff see full roster; other invitees see a compact guest list.
+        can_manage = user_can_manage_invites(request.user, obj)
+        qs = list(obj.invites.all())
+        if not can_manage:
+            # Guests still see who else is invited (LinkedIn-style), without emails.
+            data = ClimateEventInviteSerializer(qs, many=True).data
+            for row in data:
+                row["email"] = ""
+            return data
         return ClimateEventInviteSerializer(qs, many=True).data
 
 
@@ -991,16 +1079,35 @@ class ClimateEventViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"])
     def invite(self, request, pk=None):
         event = self.get_object()
-        if event.host_id != request.user.id and not request.user.is_staff:
-            return Response({"detail": "Only the host can invite."}, status=403)
+        if not user_can_manage_invites(request.user, event):
+            return Response(
+                {"detail": "Only the host or a co-host can invite."},
+                status=403,
+            )
         ids = request.data.get("user_ids") or request.data.get("invite_user_ids") or []
         emails = request.data.get("emails") or request.data.get("invite_emails") or []
         notify = request.data.get("notify_in_app", True)
         send_email = request.data.get("notify_email", True)
+        requested_role = normalize_invite_role(
+            request.data.get("role") or "attendee", allow_cohost=True
+        )
+        is_host = (
+            event.host_id == request.user.id
+            or request.user.is_staff
+            or request.user.is_superuser
+        )
+        # Co-hosts may only invite attendees (LinkedIn collaborator pattern).
+        if not is_host and requested_role == "cohost":
+            return Response(
+                {"detail": "Only the host can invite co-hosts."},
+                status=403,
+            )
+        role = requested_role if is_host else "attendee"
         created = apply_invites(
             event,
             user_ids=ids,
             emails=emails,
+            role=role,
             notify=bool(notify),
             send_email=bool(send_email),
         )
@@ -1008,6 +1115,7 @@ class ClimateEventViewSet(viewsets.ModelViewSet):
             {
                 "invited": ClimateEventInviteSerializer(created, many=True).data,
                 "count": len(created),
+                "role": role,
             }
         )
 

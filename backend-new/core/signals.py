@@ -80,6 +80,7 @@ def notify_followers_on_post_creation(sender, instance, created, **kwargs):
                     subject=f"{instance.user.username} posted on Climate Wavers",
                     message=notification.message,
                     link=social_email.post_url(instance.id),
+                    post=instance,
                 )
 
 
@@ -112,6 +113,7 @@ def notify_post_author_and_commenters(sender, instance, created, **kwargs):
                 subject=f"{instance.user.username} commented on your post",
                 message=notification.message,
                 link=social_email.post_url(instance.post_id),
+                post=instance.post,
             )
 
         # Notify other commenters
@@ -138,19 +140,23 @@ def notify_post_author_and_commenters(sender, instance, created, **kwargs):
                 subject=f"{instance.user.username} replied on a post you commented on",
                 message=notification.message,
                 link=social_email.post_url(instance.post_id),
+                post=instance.post,
             )
 
 
 @receiver(post_save, sender=Reaction)
 def notify_author_on_reaction(sender, instance, created, **kwargs):
     if created:
+        related_post = None
         if instance.content_type == ContentType.objects.get_for_model(Post):
             post = Post.objects.get(id=instance.object_id)
+            related_post = post
             content_author = post.user
             content_id = post.id
             content = PostSerializer(post,  context={'request': None}).data
         elif instance.content_type == ContentType.objects.get_for_model(Comment):
             comment = Comment.objects.get(id=instance.object_id)
+            related_post = getattr(comment, "post", None)
             content_author = comment.user
             content_id = comment.id
             content = CommentSerializer(
@@ -180,27 +186,33 @@ def notify_author_on_reaction(sender, instance, created, **kwargs):
                 subject=f"{instance.user.username} liked your {instance.content_type.model}",
                 message=notification.message,
                 link=(
-                    social_email.post_url(content_id)
-                    if instance.content_type == ContentType.objects.get_for_model(Post)
+                    social_email.post_url(related_post.id)
+                    if related_post is not None
                     else social_email.notifications_url()
                 ),
+                post=related_post,
             )
 
 
 @receiver(post_save, sender=Repost)
 def notify_original_post_author(sender, instance, created, **kwargs):
     if created:
+        related_post = None
         if instance.content_type == ContentType.objects.get_for_model(Post):
             post = Post.objects.get(id=instance.object_id)
+            related_post = post
             original_post_author = post.user
             content_id = post.id
             content = PostSerializer(post,  context={'request': None}).data
         elif instance.content_type == ContentType.objects.get_for_model(Comment):
             comment = Comment.objects.get(id=instance.object_id)
+            related_post = getattr(comment, "post", None)
             original_post_author = comment.user
             content_id = comment.id
             content = CommentSerializer(
                 comment,  context={'request': None}).data
+        else:
+            return
 
         # Skip notification if the user reposting is the original post author
         if original_post_author != instance.user:
@@ -223,7 +235,10 @@ def notify_original_post_author(sender, instance, created, **kwargs):
                 original_post_author,
                 subject=f"{instance.user.username} reposted your {instance.content_type.model}",
                 message=notification.message,
-                link=social_email.post_url(content_id),
+                link=social_email.post_url(
+                    related_post.id if related_post else content_id
+                ),
+                post=related_post,
             )
 
 
@@ -287,13 +302,16 @@ def notify_user_on_new_follower(sender, instance, created, **kwargs):
 @receiver(post_save, sender=Bookmark)
 def notify_author_on_bookmark(sender, instance, created, **kwargs):
     if created:
+        related_post = None
         if instance.content_type == ContentType.objects.get_for_model(Post):
             post = Post.objects.get(id=instance.object_id)
+            related_post = post
             original_post_author = post.user
             content_id = post.id
             content = PostSerializer(post,  context={'request': None}).data
         elif instance.content_type == ContentType.objects.get_for_model(Comment):
             comment = Comment.objects.get(id=instance.object_id)
+            related_post = getattr(comment, "post", None)
             original_post_author = comment.user
             content_id = comment.id
             content = CommentSerializer(
@@ -322,5 +340,8 @@ def notify_author_on_bookmark(sender, instance, created, **kwargs):
                 original_post_author,
                 subject=f"{instance.user.username} bookmarked your {instance.content_type.model}",
                 message=notification.message,
-                link=social_email.post_url(content_id),
+                link=social_email.post_url(
+                    related_post.id if related_post else content_id
+                ),
+                post=related_post,
             )

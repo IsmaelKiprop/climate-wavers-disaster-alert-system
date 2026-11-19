@@ -26,7 +26,7 @@ const emailOk = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || "")
 const ScheduleClimateEventModal = ({
   open,
   onClose,
-  mode = "manual", // manual | disaster | project | edit
+  mode = "manual", // manual | disaster | project | edit | invite_only
   event = null,
   eventType = null,
   disasterId = null,
@@ -36,11 +36,14 @@ const ScheduleClimateEventModal = ({
   defaultTitle = "",
   defaultDescription = "",
   defaultStartsAt = null,
+  /** When false (co-host inviting), only Attendee role is offered. */
+  allowCohostRole = true,
   onCreated,
   onUpdated,
 }) => {
   const me = getUser();
   const isEdit = mode === "edit" || Boolean(event?.id);
+  const inviteOnly = mode === "invite_only";
 
   const [title, setTitle] = useState(defaultTitle);
   const [description, setDescription] = useState(defaultDescription);
@@ -64,7 +67,7 @@ const ScheduleClimateEventModal = ({
 
   useEffect(() => {
     if (!open) return;
-    if (isEdit && event) {
+    if ((isEdit || inviteOnly) && event) {
       setTitle(event.title || "");
       setDescription(event.description || "");
       setStartsAt(toLocalInput(event.starts_at));
@@ -80,9 +83,11 @@ const ScheduleClimateEventModal = ({
           userId: inv.user || null,
           email: inv.email || "",
           label: inv.user_name || inv.username || inv.email || "Invitee",
+          role: inv.role === "cohost" ? "cohost" : "attendee",
+          initialRole: inv.role === "cohost" ? "cohost" : "attendee",
           existing: true,
         }));
-      setInvitees(existing);
+      setInvitees(inviteOnly ? [] : existing);
     } else {
       setTitle(defaultTitle || "");
       setDescription(defaultDescription || "");
@@ -102,6 +107,7 @@ const ScheduleClimateEventModal = ({
   }, [
     open,
     isEdit,
+    inviteOnly,
     event,
     defaultTitle,
     defaultDescription,
@@ -112,7 +118,7 @@ const ScheduleClimateEventModal = ({
   ]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || inviteOnly) return;
     let alive = true;
     client
       .run("get", endpoints.tree_projects_african, {}, false)
@@ -131,7 +137,7 @@ const ScheduleClimateEventModal = ({
     return () => {
       alive = false;
     };
-  }, [open]);
+  }, [open, inviteOnly]);
 
   useEffect(() => {
     if (!open) return;
@@ -168,11 +174,12 @@ const ScheduleClimateEventModal = ({
   }, [searchQ, open, me?.id]);
 
   const heading = useMemo(() => {
+    if (inviteOnly) return "Invite people";
     if (isEdit) return "Edit Climate event";
     if (mode === "disaster") return "Schedule disaster briefing";
     if (mode === "project") return "Schedule planting day";
     return "Schedule Climate event";
-  }, [mode, isEdit]);
+  }, [mode, isEdit, inviteOnly]);
 
   const addUserInvitee = (user) => {
     if (!user?.id) return;
@@ -194,6 +201,8 @@ const ScheduleClimateEventModal = ({
         userId: user.id,
         email: user.email || "",
         label,
+        role: "attendee",
+        initialRole: null,
         existing: false,
       },
     ]);
@@ -214,13 +223,28 @@ const ScheduleClimateEventModal = ({
     }
     setInvitees((prev) => [
       ...prev,
-      { key, userId: null, email, label: email, existing: false },
+      {
+        key,
+        userId: null,
+        email,
+        label: email,
+        role: "attendee",
+        initialRole: null,
+        existing: false,
+      },
     ]);
     setEmailDraft("");
   };
 
   const removeInvitee = (key) => {
     setInvitees((prev) => prev.filter((i) => i.key !== key));
+  };
+
+  const setInviteeRole = (key, role) => {
+    const next = role === "cohost" && allowCohostRole ? "cohost" : "attendee";
+    setInvitees((prev) =>
+      prev.map((i) => (i.key === key ? { ...i, role: next } : i))
+    );
   };
 
   if (!open || typeof document === "undefined") return null;
@@ -234,59 +258,116 @@ const ScheduleClimateEventModal = ({
     ) {
       list = [
         ...list,
-        { key: `e-${draft}`, userId: null, email: draft, label: draft, existing: false },
+        {
+          key: `e-${draft}`,
+          userId: null,
+          email: draft,
+          label: draft,
+          role: "attendee",
+          initialRole: null,
+          existing: false,
+        },
       ];
     }
     return list;
   };
 
-  const invitePayloadFrom = (list) => {
-    const newOnes = list.filter((i) => !i.existing);
-    return {
-      invite_user_ids: newOnes
+  /** People who need an invite API call (new, or role promotion to cohost). */
+  const pendingInviteRows = (list) =>
+    list.filter(
+      (i) =>
+        !i.existing ||
+        (allowCohostRole &&
+          i.role === "cohost" &&
+          i.initialRole !== "cohost")
+    );
+
+  const splitByRole = (rows) => {
+    const attendees = rows.filter((i) => i.role !== "cohost");
+    const cohosts = allowCohostRole
+      ? rows.filter((i) => i.role === "cohost")
+      : [];
+    const pack = (group) => ({
+      invite_user_ids: group
         .filter((i) => i.userId != null && i.userId !== "")
         .map((i) => Number(i.userId))
         .filter((id) => Number.isFinite(id) && id > 0),
-      invite_emails: newOnes
+      invite_emails: group
         .filter((i) => (i.userId == null || i.userId === "") && i.email)
         .map((i) => String(i.email).trim().toLowerCase()),
-      notify_in_app: notifyInApp,
-      notify_email: notifyEmail,
-    };
+    });
+    return { attendees: pack(attendees), cohosts: pack(cohosts) };
   };
 
-  const pushInvites = async (eventId, invites) => {
-    const hasUsers = (invites.invite_user_ids || []).length > 0;
-    const hasEmails = (invites.invite_emails || []).length > 0;
+  const pushInviteBatch = async (eventId, batch, role) => {
+    const hasUsers = (batch.invite_user_ids || []).length > 0;
+    const hasEmails = (batch.invite_emails || []).length > 0;
     if (!eventId || (!hasUsers && !hasEmails)) return null;
     return client.run(
       "post",
       `${endpoints.climateEvents}${eventId}/invite/`,
       {
-        invite_user_ids: invites.invite_user_ids,
-        invite_emails: invites.invite_emails,
-        notify_in_app: invites.notify_in_app,
-        notify_email: invites.notify_email,
+        invite_user_ids: batch.invite_user_ids,
+        invite_emails: batch.invite_emails,
+        role,
+        notify_in_app: notifyInApp,
+        notify_email: notifyEmail,
       },
       true
     );
   };
 
+  const pushInvitesByRole = async (eventId, list) => {
+    const pending = pendingInviteRows(list);
+    const { attendees, cohosts } = splitByRole(pending);
+    const results = [];
+    const a = await pushInviteBatch(eventId, attendees, "attendee");
+    if (a) results.push(a);
+    const c = await pushInviteBatch(eventId, cohosts, "cohost");
+    if (c) results.push(c);
+    return results;
+  };
+
+  const countPending = (list) => pendingInviteRows(list).length;
+
   const submit = async (e) => {
     e.preventDefault();
-    if (!title.trim()) {
+    if (!inviteOnly && !title.trim()) {
       toast.error("Add a title");
       return;
     }
     setSaving(true);
     try {
-      const startsIso = new Date(startsAt).toISOString();
       const list = buildInviteList();
-      const invites = invitePayloadFrom(list);
-      const newCount =
-        (invites.invite_user_ids?.length || 0) + (invites.invite_emails?.length || 0);
+      const newCount = countPending(list);
       let data;
 
+      if (inviteOnly && event?.id) {
+        if (newCount === 0) {
+          toast.info("Add someone to invite");
+          setSaving(false);
+          return;
+        }
+        await pushInvitesByRole(event.id, list);
+        try {
+          data = await client.run(
+            "get",
+            `${endpoints.climateEvents}${event.id}/`,
+            {},
+            true
+          );
+        } catch {
+          data = event;
+        }
+        toast.success(
+          `${newCount} invite${newCount === 1 ? "" : "s"} sent`
+        );
+        onUpdated?.(data);
+        onClose?.();
+        return;
+      }
+
+      const startsIso = new Date(startsAt).toISOString();
       const treeFields = {
         allow_tree_gifts: allowTreeGifts,
         tree_project: treeProjectId ? Number(treeProjectId) : null,
@@ -305,9 +386,8 @@ const ScheduleClimateEventModal = ({
           },
           true
         );
-        // Invites go through /invite/ so notify + email always run once
         if (newCount > 0) {
-          await pushInvites(event.id, invites);
+          await pushInvitesByRole(event.id, list);
           try {
             data = await client.run(
               "get",
@@ -325,78 +405,76 @@ const ScheduleClimateEventModal = ({
             : "Event updated"
         );
         onUpdated?.(data);
-      } else if (mode === "disaster" && disasterId) {
-        data = await client.run(
-          "post",
-          endpoints.climateEventFromDisaster,
-          {
-            disaster_id: disasterId,
-            title: title.trim(),
-            description: description.trim(),
-            starts_at: startsIso,
-            visibility,
-            responder_org: responderOrgId || undefined,
-            ...treeFields,
-            ...invites,
-          },
-          true
-        );
-        toast.success(
-          newCount > 0
-            ? `Scheduled · ${newCount} invite${newCount === 1 ? "" : "s"} sent`
-            : "Climate event scheduled"
-        );
-        onCreated?.(data);
-      } else if (mode === "project" && projectId) {
-        data = await client.run(
-          "post",
-          endpoints.climateEventFromProject,
-          {
-            project_id: projectId,
-            title: title.trim(),
-            description: description.trim(),
-            starts_at: startsIso,
-            visibility,
-            tree_admin_org: treeAdminOrgId || undefined,
-            ...treeFields,
-            ...invites,
-          },
-          true
-        );
-        toast.success(
-          newCount > 0
-            ? `Scheduled · ${newCount} invite${newCount === 1 ? "" : "s"} sent`
-            : "Climate event scheduled"
-        );
-        onCreated?.(data);
       } else {
-        const resolvedType =
-          eventType ||
-          (mode === "disaster"
-            ? "disaster_briefing"
-            : mode === "project"
-              ? "planting_day"
-              : "huddle");
-        data = await client.run(
-          "post",
-          endpoints.climateEvents,
-          {
-            title: title.trim(),
-            description: description.trim(),
-            event_type: resolvedType,
-            starts_at: startsIso,
-            visibility,
-            disaster: disasterId || undefined,
-            tree_project: treeProjectId
-              ? Number(treeProjectId)
-              : projectId || undefined,
-            responder_org: responderOrgId || undefined,
-            tree_admin_org: treeAdminOrgId || undefined,
-            allow_tree_gifts: allowTreeGifts,
-            ...invites,
-          },
-          true
-        );
+        const createBodyBase = {
+          title: title.trim(),
+          description: description.trim(),
+          starts_at: startsIso,
+          visibility,
+          ...treeFields,
+        };
+
+        if (mode === "disaster" && disasterId) {
+          data = await client.run(
+            "post",
+            endpoints.climateEventFromDisaster,
+            {
+              disaster_id: disasterId,
+              responder_org: responderOrgId || undefined,
+              ...createBodyBase,
+            },
+            true
+          );
+        } else if (mode === "project" && projectId) {
+          data = await client.run(
+            "post",
+            endpoints.climateEventFromProject,
+            {
+              project_id: projectId,
+              tree_admin_org: treeAdminOrgId || undefined,
+              ...createBodyBase,
+            },
+            true
+          );
+        } else {
+          const resolvedType =
+            eventType ||
+            (mode === "disaster"
+              ? "disaster_briefing"
+              : mode === "project"
+                ? "planting_day"
+                : "huddle");
+          data = await client.run(
+            "post",
+            endpoints.climateEvents,
+            {
+              ...createBodyBase,
+              event_type: resolvedType,
+              disaster: disasterId || undefined,
+              tree_project: treeProjectId
+                ? Number(treeProjectId)
+                : projectId || undefined,
+              responder_org: responderOrgId || undefined,
+              tree_admin_org: treeAdminOrgId || undefined,
+            },
+            true
+          );
+        }
+
+        if (data?.id && newCount > 0) {
+          await pushInvitesByRole(data.id, list);
+          try {
+            data = await client.run(
+              "get",
+              `${endpoints.climateEvents}${data.id}/`,
+              {},
+              true
+            );
+          } catch {
+            /* keep create payload */
+          }
+        }
+
         toast.success(
           newCount > 0
             ? `Scheduled · ${newCount} invite${newCount === 1 ? "" : "s"} sent`
@@ -408,7 +486,11 @@ const ScheduleClimateEventModal = ({
     } catch (err) {
       toast.error(
         err?.response?.data?.detail ||
-          (isEdit ? "Could not update event" : "Could not schedule event")
+          (inviteOnly
+            ? "Could not send invites"
+            : isEdit
+              ? "Could not update event"
+              : "Could not schedule event")
       );
     } finally {
       setSaving(false);
@@ -436,7 +518,9 @@ const ScheduleClimateEventModal = ({
           <div>
             <h3 className="text-base font-semibold text-foreground">{heading}</h3>
             <p className="text-xs text-muted">
-              Invite by Climate Wavers profile or email
+              {allowCohostRole
+                ? "Invite collaborators as attendees or co-hosts"
+                : "Invite attendees to this event"}
             </p>
           </div>
           <button
@@ -449,90 +533,97 @@ const ScheduleClimateEventModal = ({
           </button>
         </header>
         <div className="p-4 space-y-3">
-          <label className="block text-xs font-medium text-muted">
-            Title
-            <input
-              className="mt-1 w-full h-11 px-3 border border-border bg-background text-foreground text-sm"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              required
-            />
-          </label>
-          <label className="block text-xs font-medium text-muted">
-            Starts
-            <input
-              type="datetime-local"
-              className="mt-1 w-full h-11 px-3 border border-border bg-background text-foreground text-sm"
-              value={startsAt}
-              onChange={(e) => setStartsAt(e.target.value)}
-              required
-            />
-          </label>
-          <label className="block text-xs font-medium text-muted">
-            Visibility
-            <select
-              className="mt-1 w-full h-11 px-3 border border-border bg-background text-foreground text-sm"
-              value={visibility}
-              onChange={(e) => setVisibility(e.target.value)}
-            >
-              <option value="invitees">Invitees only</option>
-              <option value="org">Organization</option>
-              <option value="public">Public</option>
-            </select>
-          </label>
-          <label className="block text-xs font-medium text-muted">
-            Description
-            <textarea
-              className="mt-1 w-full min-h-[72px] px-3 py-2 border border-border bg-background text-foreground text-sm"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-            />
-          </label>
+          {!inviteOnly ? (
+            <>
+              <label className="block text-xs font-medium text-muted">
+                Title
+                <input
+                  className="mt-1 w-full h-11 px-3 border border-border bg-background text-foreground text-sm"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  required
+                />
+              </label>
+              <label className="block text-xs font-medium text-muted">
+                Starts
+                <input
+                  type="datetime-local"
+                  className="mt-1 w-full h-11 px-3 border border-border bg-background text-foreground text-sm"
+                  value={startsAt}
+                  onChange={(e) => setStartsAt(e.target.value)}
+                  required
+                />
+              </label>
+              <label className="block text-xs font-medium text-muted">
+                Visibility
+                <select
+                  className="mt-1 w-full h-11 px-3 border border-border bg-background text-foreground text-sm"
+                  value={visibility}
+                  onChange={(e) => setVisibility(e.target.value)}
+                >
+                  <option value="invitees">Invitees only</option>
+                  <option value="org">Organization</option>
+                  <option value="public">Public</option>
+                </select>
+              </label>
+              <label className="block text-xs font-medium text-muted">
+                Description
+                <textarea
+                  className="mt-1 w-full min-h-[72px] px-3 py-2 border border-border bg-background text-foreground text-sm"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                />
+              </label>
 
-          <div className="border border-border bg-background p-3 space-y-3">
-            <div>
-              <p className="text-xs font-medium text-foreground">
-                Trees for this day’s activities
-              </p>
-              <p className="text-[11px] text-muted mt-0.5">
-                Attach a planting project so invitees and anyone can buy available
-                species for this day
-              </p>
-            </div>
-            <label className="block text-xs font-medium text-muted">
-              Day tree project
-              <select
-                className="mt-1 w-full h-11 px-3 border border-border bg-surface text-foreground text-sm"
-                value={treeProjectId}
-                onChange={(e) => setTreeProjectId(e.target.value)}
-              >
-                <option value="">Any verified Climate Wavers project</option>
-                {projectOptions.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                    {p.city ? ` · ${p.city}` : ""}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="inline-flex items-center gap-2 text-xs text-foreground">
-              <input
-                type="checkbox"
-                checked={allowTreeGifts}
-                onChange={(e) => setAllowTreeGifts(e.target.checked)}
-              />
-              Allow buying / gifting trees for this day
-            </label>
-          </div>
+              <div className="border border-border bg-background p-3 space-y-3">
+                <div>
+                  <p className="text-xs font-medium text-foreground">
+                    Trees for this day’s activities
+                  </p>
+                  <p className="text-[11px] text-muted mt-0.5">
+                    Attach a planting project so invitees and anyone can buy available
+                    species for this day
+                  </p>
+                </div>
+                <label className="block text-xs font-medium text-muted">
+                  Day tree project
+                  <select
+                    className="mt-1 w-full h-11 px-3 border border-border bg-surface text-foreground text-sm"
+                    value={treeProjectId}
+                    onChange={(e) => setTreeProjectId(e.target.value)}
+                  >
+                    <option value="">Any verified Climate Wavers project</option>
+                    {projectOptions.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                        {p.city ? ` · ${p.city}` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="inline-flex items-center gap-2 text-xs text-foreground">
+                  <input
+                    type="checkbox"
+                    checked={allowTreeGifts}
+                    onChange={(e) => setAllowTreeGifts(e.target.checked)}
+                  />
+                  Allow buying / gifting trees for this day
+                </label>
+              </div>
+            </>
+          ) : null}
 
           <div className="border border-border bg-background p-3 space-y-3">
             <div>
               <p className="text-xs font-medium text-foreground inline-flex items-center gap-1.5">
                 <IoPersonAddOutline size={14} />
-                Invitees
+                {allowCohostRole ? "Invite collaborators" : "Invite attendees"}
               </p>
               <p className="text-[11px] text-muted mt-0.5">
                 Search Climate Wavers members or add an email
+                {allowCohostRole
+                  ? " — set each person as Attendee or Co-host"
+                  : ""}
               </p>
             </div>
 
@@ -598,28 +689,62 @@ const ScheduleClimateEventModal = ({
                 {invitees.map((inv) => (
                   <li
                     key={inv.key}
-                    className="flex items-center gap-2 border border-border px-2.5 py-1.5 text-sm"
+                    className="flex flex-col gap-1.5 border border-border px-2.5 py-2 text-sm"
                   >
-                    <span className="flex-1 min-w-0 truncate text-foreground">
-                      {inv.label}
-                      {inv.existing ? (
-                        <span className="text-[10px] text-muted ml-1">· invited</span>
-                      ) : inv.userId ? (
-                        <span className="text-[10px] text-muted ml-1">· in-app</span>
-                      ) : (
-                        <span className="text-[10px] text-muted ml-1">· email</span>
-                      )}
-                    </span>
-                    {!inv.existing ? (
-                      <button
-                        type="button"
-                        onClick={() => removeInvitee(inv.key)}
-                        className="text-muted hover:text-foreground"
-                        aria-label="Remove invitee"
+                    <div className="flex items-center gap-2">
+                      <span className="flex-1 min-w-0 truncate text-foreground">
+                        {inv.label}
+                        {inv.existing ? (
+                          <span className="text-[10px] text-muted ml-1">· invited</span>
+                        ) : inv.userId ? (
+                          <span className="text-[10px] text-muted ml-1">· in-app</span>
+                        ) : (
+                          <span className="text-[10px] text-muted ml-1">· email</span>
+                        )}
+                      </span>
+                      {!inv.existing ? (
+                        <button
+                          type="button"
+                          onClick={() => removeInvitee(inv.key)}
+                          className="text-muted hover:text-foreground"
+                          aria-label="Remove invitee"
+                        >
+                          <IoTrashOutline size={16} />
+                        </button>
+                      ) : null}
+                    </div>
+                    {allowCohostRole ? (
+                      <div
+                        className="inline-flex border border-border self-start"
+                        role="group"
+                        aria-label={`Role for ${inv.label}`}
                       >
-                        <IoTrashOutline size={16} />
-                      </button>
-                    ) : null}
+                        <button
+                          type="button"
+                          onClick={() => setInviteeRole(inv.key, "attendee")}
+                          className={`h-7 px-2.5 text-[11px] font-medium ${
+                            inv.role !== "cohost"
+                              ? "bg-primary text-primary-foreground"
+                              : "text-muted hover:text-foreground"
+                          }`}
+                        >
+                          Attendee
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setInviteeRole(inv.key, "cohost")}
+                          className={`h-7 px-2.5 text-[11px] font-medium border-l border-border ${
+                            inv.role === "cohost"
+                              ? "bg-primary text-primary-foreground"
+                              : "text-muted hover:text-foreground"
+                          }`}
+                        >
+                          Co-host
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="text-[11px] text-muted">Attendee</span>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -660,7 +785,13 @@ const ScheduleClimateEventModal = ({
             disabled={saving}
             className="h-11 bg-primary text-primary-foreground text-sm font-medium disabled:opacity-60"
           >
-            {saving ? "Saving…" : isEdit ? "Save changes" : "Schedule"}
+            {saving
+              ? "Saving…"
+              : inviteOnly
+                ? "Send invites"
+                : isEdit
+                  ? "Save changes"
+                  : "Schedule"}
           </button>
         </footer>
       </form>

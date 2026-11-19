@@ -22,6 +22,7 @@ import {
   IoCreateOutline,
   IoEarthOutline,
   IoLeafOutline,
+  IoPersonAddOutline,
   IoRadioButtonOn,
   IoWarningOutline,
 } from "react-icons/io5";
@@ -95,6 +96,29 @@ function eventDotClass(type, isLive) {
   return "bg-sky-500";
 }
 
+function roleBadgeLabel(role) {
+  if (role === "host") return "Host";
+  if (role === "cohost") return "Co-host";
+  return "Attendee";
+}
+
+function rsvpLabel(rsvp) {
+  if (rsvp === "yes") return "Going";
+  if (rsvp === "maybe") return "Maybe";
+  if (rsvp === "no") return "Can't go";
+  return "Pending";
+}
+
+function guestInitials(name) {
+  const parts = String(name || "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return `${parts[0][0] || ""}${parts[1][0] || ""}`.toUpperCase();
+}
+
 function normalizeObservance(row) {
   if (!row) return null;
   const occurs = row.occurs_on || (row.starts_at || "").slice(0, 10);
@@ -125,6 +149,7 @@ const ClimateCalendar = () => {
   const [filter, setFilter] = useState("all");
   const [showCreate, setShowCreate] = useState(false);
   const [editingEvent, setEditingEvent] = useState(null);
+  const [invitingEvent, setInvitingEvent] = useState(null);
   const [giftEvent, setGiftEvent] = useState(null);
   const [scheduleDefaultStarts, setScheduleDefaultStarts] = useState(null);
   const [callSession, setCallSession] = useState(null);
@@ -297,6 +322,21 @@ const ClimateCalendar = () => {
       return;
     }
     navigate(`/app/calendar/events/${event.id}`, { replace: true });
+    // Refresh so guest roster / can_invite stay current
+    client
+      .run("get", `${endpoints.climateEvents}${event.id}/`, {}, true)
+      .then((fresh) => {
+        if (!fresh?.id) return;
+        setSelected((prev) =>
+          prev && String(prev.id) === String(fresh.id) ? { ...prev, ...fresh } : prev
+        );
+        setEvents((prev) =>
+          prev.map((e) =>
+            String(e.id) === String(fresh.id) ? { ...e, ...fresh } : e
+          )
+        );
+      })
+      .catch(() => {});
   };
 
   const giftForEvent = (event) => {
@@ -356,9 +396,25 @@ const ClimateCalendar = () => {
         { rsvp: choice },
         true
       );
-      setSelected((s) => (s ? { ...s, my_rsvp: choice } : s));
+      const patchInvites = (invites) =>
+        Array.isArray(invites)
+          ? invites.map((inv) =>
+              me?.id && String(inv.user) === String(me.id)
+                ? { ...inv, rsvp: choice }
+                : inv
+            )
+          : invites;
+      setSelected((s) =>
+        s
+          ? { ...s, my_rsvp: choice, invites: patchInvites(s.invites) }
+          : s
+      );
       setEvents((list) =>
-        list.map((e) => (e.id === selected.id ? { ...e, my_rsvp: choice } : e))
+        list.map((e) =>
+          e.id === selected.id
+            ? { ...e, my_rsvp: choice, invites: patchInvites(e.invites) }
+            : e
+        )
       );
       if (choice === "yes") {
         toast.success("Accepted — we'll remind you before it starts");
@@ -805,6 +861,11 @@ const ClimateCalendar = () => {
                           </span>
                         ) : null}
                       </div>
+                      {selected.my_role === "cohost" ? (
+                        <p className="text-xs font-medium text-primary">
+                          You’re a co-host — you can invite attendees
+                        </p>
+                      ) : null}
                       <div>
                         <p className="text-[11px] uppercase tracking-wide text-muted mb-2">
                           Your RSVP
@@ -835,6 +896,50 @@ const ClimateCalendar = () => {
                           </p>
                         )}
                       </div>
+                      {Array.isArray(selected.invites) && selected.invites.length > 0 ? (
+                        <div>
+                          <p className="text-[11px] uppercase tracking-wide text-muted mb-2">
+                            Guests · {selected.invites.length}
+                          </p>
+                          <ul className="space-y-2 max-h-48 overflow-y-auto">
+                            {[...selected.invites]
+                              .sort((a, b) => {
+                                const rank = (r) =>
+                                  r === "host" ? 0 : r === "cohost" ? 1 : 2;
+                                return rank(a.role) - rank(b.role);
+                              })
+                              .map((inv) => {
+                                const name =
+                                  inv.user_name ||
+                                  inv.username ||
+                                  inv.email ||
+                                  "Guest";
+                                return (
+                                  <li
+                                    key={inv.id || `${inv.user}-${inv.email}`}
+                                    className="flex items-center gap-2.5"
+                                  >
+                                    <span
+                                      className="h-8 w-8 shrink-0 inline-flex items-center justify-center text-[11px] font-semibold border border-border bg-[var(--cw-overlay-soft)] text-foreground"
+                                      aria-hidden
+                                    >
+                                      {guestInitials(name)}
+                                    </span>
+                                    <div className="min-w-0 flex-1">
+                                      <p className="text-sm text-foreground truncate">
+                                        {name}
+                                      </p>
+                                      <p className="text-[11px] text-muted">
+                                        {roleBadgeLabel(inv.role)} ·{" "}
+                                        {rsvpLabel(inv.rsvp)}
+                                      </p>
+                                    </div>
+                                  </li>
+                                );
+                              })}
+                          </ul>
+                        </div>
+                      ) : null}
                     </>
                   )}
                 </div>
@@ -864,6 +969,28 @@ const ClimateCalendar = () => {
                       Edit & invite
                     </button>
                   ) : null}
+                  {!selected.is_observance && selected.can_invite ? (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          const fresh = await client.run(
+                            "get",
+                            `${endpoints.climateEvents}${selected.id}/`,
+                            {},
+                            true
+                          );
+                          setInvitingEvent(fresh || selected);
+                        } catch {
+                          setInvitingEvent(selected);
+                        }
+                      }}
+                      className="w-full h-10 border border-border text-sm font-medium inline-flex items-center justify-center gap-2 hover:bg-[var(--cw-overlay-soft)]"
+                    >
+                      <IoPersonAddOutline size={16} />
+                      Invite people
+                    </button>
+                  ) : null}
                   {selected.allow_tree_gifts !== false ? (
                     <button
                       type="button"
@@ -891,23 +1018,15 @@ const ClimateCalendar = () => {
                           : "Enter Climate room"}
                     </button>
                   ) : null}
-                  {!selected.is_observance &&
-                  (selected.invite_count > 0 || selected.invites?.length > 0) ? (
-                    <p className="text-[11px] text-muted text-center">
-                      {selected.invite_count || selected.invites?.length || 0} invitee
-                      {(selected.invite_count || selected.invites?.length || 0) === 1
-                        ? ""
-                        : "s"}
-                    </p>
-                  ) : selected.is_observance ? (
+                  {selected.is_observance ? (
                     <p className="text-[11px] text-muted text-center">
                       Synced official environment day — contribute trees anytime
                     </p>
-                  ) : (
+                  ) : !selected.invites?.length ? (
                     <p className="text-[11px] text-muted text-center">
                       Full-screen Climate Wavers conference
                     </p>
-                  )}
+                  ) : null}
                 </div>
               </div>
             )}
@@ -940,6 +1059,7 @@ const ClimateCalendar = () => {
         onClose={() => setEditingEvent(null)}
         mode="edit"
         event={editingEvent}
+        allowCohostRole
         onUpdated={(ev) => {
           setEvents((prev) =>
             prev.map((e) => (String(e.id) === String(ev.id) ? { ...e, ...ev } : e))
@@ -948,6 +1068,27 @@ const ClimateCalendar = () => {
             prev && String(prev.id) === String(ev.id) ? { ...prev, ...ev } : prev
           );
           setEditingEvent(null);
+        }}
+      />
+
+      <ScheduleClimateEventModal
+        open={Boolean(invitingEvent)}
+        onClose={() => setInvitingEvent(null)}
+        mode="invite_only"
+        event={invitingEvent}
+        allowCohostRole={
+          Boolean(invitingEvent) &&
+          (String(invitingEvent.host) === String(me?.id) ||
+            invitingEvent.my_role === "host")
+        }
+        onUpdated={(ev) => {
+          setEvents((prev) =>
+            prev.map((e) => (String(e.id) === String(ev.id) ? { ...e, ...ev } : e))
+          );
+          setSelected((prev) =>
+            prev && String(prev.id) === String(ev.id) ? { ...prev, ...ev } : prev
+          );
+          setInvitingEvent(null);
         }}
       />
 

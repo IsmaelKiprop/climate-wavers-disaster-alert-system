@@ -114,7 +114,7 @@ export const tour = {
       {
         title: "Plan ahead",
         message:
-          "Open Calendar from the sidebar to track what’s coming up and coordinate with your network.",
+          "Schedule Climate events, invite collaborators as attendees or co-hosts, and RSVP so your network shows up together.",
       },
     ],
   },
