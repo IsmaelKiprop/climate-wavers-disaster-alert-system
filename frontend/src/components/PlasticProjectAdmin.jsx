@@ -109,7 +109,7 @@ const PlasticProjectAdmin = () => {
     videos: [],
   });
   const [proofUploading, setProofUploading] = useState(false);
-  const [intakeBag, setIntakeBag] = useState({ bag_id: "", kg_verified: "", recycler_id: "" });
+  const [intakeForm, setIntakeForm] = useState({ bag_id: "", kg_verified: "", recycler_id: "" });
   const [recyclerForm, setRecyclerForm] = useState({
     name: "",
     city: "",
@@ -391,7 +391,7 @@ const PlasticProjectAdmin = () => {
       await loadQueue();
       if (selectedId) await loadDetail(selectedId);
       if (action !== "reject") {
-        setIntakeBag({
+        setIntakeForm({
           bag_id: row?.bag_id || "",
           kg_verified: String(row?.kg_claimed || ""),
           recycler_id: "",
@@ -419,7 +419,7 @@ const PlasticProjectAdmin = () => {
       toast.success(
         `Intake confirmed${result.certificate_code ? ` · ${result.certificate_code}` : ""}`
       );
-      setIntakeBag({ bag_id: "", kg_verified: "", recycler_id: "" });
+      setIntakeForm({ bag_id: "", kg_verified: "", recycler_id: "" });
       await loadQueue();
       if (selectedId) await loadDetail(selectedId);
     } catch (err) {
@@ -432,7 +432,7 @@ const PlasticProjectAdmin = () => {
   const scanIntake = async (e) => {
     e.preventDefault();
     if (intaking) return;
-    if (!String(intakeBag.bag_id || "").trim()) {
+    if (!String(intakeForm.bag_id || "").trim()) {
       return toast.error("Enter bag ID");
     }
     setIntaking(true);
@@ -440,15 +440,15 @@ const PlasticProjectAdmin = () => {
       const result = await api(endpoints.plasticIntakeScan, {
         method: "POST",
         body: {
-          bag_id: intakeBag.bag_id,
-          kg_verified: intakeBag.kg_verified || undefined,
-          recycler_id: intakeBag.recycler_id || undefined,
+          bag_id: intakeForm.bag_id,
+          kg_verified: intakeForm.kg_verified || undefined,
+          recycler_id: intakeForm.recycler_id || undefined,
         },
       });
       toast.success(
         `Intake confirmed${result.certificate_code ? ` · ${result.certificate_code}` : ""}`
       );
-      setIntakeBag({ bag_id: "", kg_verified: "", recycler_id: "" });
+      setIntakeForm({ bag_id: "", kg_verified: "", recycler_id: "" });
       await loadQueue();
       if (selectedId) await loadDetail(selectedId);
     } catch (err) {
@@ -1158,7 +1158,7 @@ const PlasticProjectAdmin = () => {
               <input
                 className="w-full h-10 px-3 border border-border bg-background"
                 placeholder="e.g. BAG-A1B2C3D4"
-                value={intakeBag.bag_id}
+                value={intakeForm.bag_id}
                 onChange={(e) => setIntakeForm((p) => ({ ...p, bag_id: e.target.value }))}
                 required
               />
