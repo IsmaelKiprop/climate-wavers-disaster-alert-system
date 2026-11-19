@@ -5,6 +5,7 @@ sponsor-a-kilo, certificates, flood hotspot feed.
 
 from __future__ import annotations
 
+import logging
 import re
 import secrets
 import uuid
@@ -21,6 +22,8 @@ from rest_framework import serializers, status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+
+logger = logging.getLogger(__name__)
 
 from .models import (
     Notification,
@@ -82,7 +85,7 @@ def _can_manage_project(user, project: PlasticProject) -> bool:
     m = TreeAdminMembership.objects.filter(
         user=user, org_id=project.tree_admin_org_id, role__in=("owner", "manager")
     ).select_related("org").first()
-    return bool(m and m.org.has_tree_admin_access)
+    return bool(m and m.org and m.org.has_tree_admin_access)
 
 
 def _frontend_base() -> str:
@@ -668,109 +671,168 @@ class PlasticRecoveryVerifyView(APIView):
 class PlasticIntakeScanView(APIView):
     permission_classes = [IsAuthenticated]
 
-    @transaction.atomic
     def post(self, request):
         bag_id = str(request.data.get("bag_id") or "").strip()
         if not bag_id:
             return Response({"detail": "bag_id required."}, status=400)
-        recovery = (
-            PlasticRecovery.objects.select_for_update()
-            .select_related("project")
-            .filter(bag_id=bag_id)
-            .order_by("-created_at")
-            .first()
-        )
-        if not recovery:
-            return Response({"detail": "Bag not found."}, status=404)
-        if recovery.status == "intake_confirmed":
-            return Response(PlasticRecoverySerializer(recovery).data)
 
-        is_cbo = _can_manage_project(request.user, recovery.project) or request.user.is_staff
-        partner = _recycler_partner_for_project(request.user, recovery.project)
-        if not is_cbo and not partner:
-            return Response({"detail": "Forbidden."}, status=403)
-
-        # Scan-only recyclers may only intake CBO-verified bags
-        allowed_statuses = ("cbo_verified", "submitted") if is_cbo else ("cbo_verified",)
-        if recovery.status not in allowed_statuses:
-            return Response(
-                {"detail": f"Recovery status {recovery.status} cannot be intaken."},
-                status=400,
-            )
-
-        kg = request.data.get("kg_verified")
-        if kg in (None, ""):
-            kg = recovery.kg_verified or recovery.kg_claimed
-        kg = _money(kg)
-        if kg <= 0:
-            return Response({"detail": "Confirmed kg must be > 0."}, status=400)
-
-        recycler = None
-        recycler_id = request.data.get("recycler_id") or request.data.get("recycler")
-        if recycler_id:
-            recycler = PlasticRecyclerPartner.objects.filter(pk=recycler_id).first()
-        if not recycler and partner:
-            recycler = partner
-
-        already_intaken = False
-        prev_status = recovery.status
-        recovery.kg_verified = kg
-        recovery.status = "intake_confirmed"
-        recovery.recycler = recycler
-        recovery.intake_at = timezone.now()
-        if prev_status == "cbo_verified" or not recovery.verified_at:
-            recovery.verified_by = recovery.verified_by or request.user
-            recovery.verified_at = recovery.verified_at or timezone.now()
-        recovery.save()
-
-        project = PlasticProject.objects.select_for_update().get(pk=recovery.project_id)
-        if not already_intaken:
-            project.recovered_kg = _money(_dec(project.recovered_kg) + kg)
-            project.save(update_fields=["recovered_kg", "updated_at"])
-
-        if recovery.hotspot_id:
-            PlasticHotspot.objects.filter(pk=recovery.hotspot_id).update(
-                status="cleared", cleared_at=timezone.now()
-            )
-
-        cert = None
-        if not recovery.certificates.exists():
-            holder = ""
-            email = ""
-            if recovery.submitted_by_id:
-                holder = (
-                    recovery.submitted_by.get_full_name()
-                    or recovery.submitted_by.username
-                )
-                email = recovery.submitted_by.email or ""
-            cert = _issue_certificate(
-                project=project,
-                kg=kg,
-                holder_name=holder,
-                holder_email=email,
-                recovery=recovery,
-            )
-
-        points_earned = 0
         try:
-            from .points import credit_recovery_points
+            with transaction.atomic():
+                # Lock by pk only (avoid FOR UPDATE + ORDER BY/LIMIT edge cases).
+                recovery_id = (
+                    PlasticRecovery.objects.filter(bag_id__iexact=bag_id)
+                    .order_by("-created_at")
+                    .values_list("id", flat=True)
+                    .first()
+                )
+                if not recovery_id:
+                    return Response({"detail": "Bag not found."}, status=404)
 
-            points_earned = credit_recovery_points(recovery) or 0
-        except Exception:
+                recovery = (
+                    PlasticRecovery.objects.select_for_update()
+                    .select_related("project")
+                    .get(pk=recovery_id)
+                )
+                if recovery.status == "intake_confirmed":
+                    payload = PlasticRecoverySerializer(recovery).data
+                    cert = recovery.certificates.order_by("-issued_at").first()
+                    payload["certificate_code"] = cert.code if cert else ""
+                    payload["points_earned"] = 0
+                    payload["project_recovered_kg"] = float(
+                        recovery.project.recovered_kg or 0
+                    )
+                    return Response(payload)
+
+                is_cbo = (
+                    _can_manage_project(request.user, recovery.project)
+                    or request.user.is_staff
+                )
+                partner = _recycler_partner_for_project(request.user, recovery.project)
+                if not is_cbo and not partner:
+                    return Response({"detail": "Forbidden."}, status=403)
+
+                # Scan-only recyclers may only intake CBO-verified bags
+                allowed_statuses = (
+                    ("cbo_verified", "submitted") if is_cbo else ("cbo_verified",)
+                )
+                if recovery.status not in allowed_statuses:
+                    return Response(
+                        {
+                            "detail": (
+                                f"Recovery status {recovery.status} cannot be intaken."
+                            )
+                        },
+                        status=400,
+                    )
+
+                kg = request.data.get("kg_verified")
+                if kg in (None, ""):
+                    kg = recovery.kg_verified or recovery.kg_claimed
+                kg = _money(kg)
+                if kg <= 0:
+                    return Response(
+                        {"detail": "Confirmed kg must be > 0."}, status=400
+                    )
+
+                recycler = None
+                recycler_id = request.data.get("recycler_id") or request.data.get(
+                    "recycler"
+                )
+                if recycler_id:
+                    recycler = PlasticRecyclerPartner.objects.filter(
+                        pk=recycler_id
+                    ).first()
+                if not recycler and partner:
+                    recycler = partner
+
+                prev_status = recovery.status
+                recovery.kg_verified = kg
+                recovery.status = "intake_confirmed"
+                recovery.recycler = recycler
+                recovery.intake_at = timezone.now()
+                if prev_status == "cbo_verified" or not recovery.verified_at:
+                    recovery.verified_by = recovery.verified_by or request.user
+                    recovery.verified_at = recovery.verified_at or timezone.now()
+                recovery.save()
+
+                project = PlasticProject.objects.select_for_update().get(
+                    pk=recovery.project_id
+                )
+                project.recovered_kg = _money(_dec(project.recovered_kg) + kg)
+                project.save(update_fields=["recovered_kg", "updated_at"])
+
+                if recovery.hotspot_id:
+                    PlasticHotspot.objects.filter(pk=recovery.hotspot_id).update(
+                        status="cleared", cleared_at=timezone.now()
+                    )
+
+                cert = None
+                try:
+                    if not recovery.certificates.exists():
+                        holder = ""
+                        email = ""
+                        if recovery.submitted_by_id:
+                            submitter = recovery.submitted_by
+                            holder = (
+                                (submitter.get_full_name() if submitter else "")
+                                or (submitter.username if submitter else "")
+                            )
+                            email = (submitter.email if submitter else "") or ""
+                        cert = _issue_certificate(
+                            project=project,
+                            kg=kg,
+                            holder_name=holder,
+                            holder_email=email,
+                            recovery=recovery,
+                        )
+                except Exception:
+                    logger.exception(
+                        "Plastic certificate issue failed for bag %s", recovery.bag_id
+                    )
+                    cert = None
+
+                _notify(
+                    recovery.submitted_by,
+                    f"Recycler intake confirmed for {recovery.bag_id}: {kg} kg.",
+                    recovery,
+                )
+
+                certificate_code = ""
+                if cert:
+                    certificate_code = cert.code
+                else:
+                    existing = recovery.certificates.order_by("-issued_at").first()
+                    certificate_code = existing.code if existing else ""
+
+                payload = PlasticRecoverySerializer(recovery).data
+                payload["certificate_code"] = certificate_code
+                payload["project_recovered_kg"] = float(project.recovered_kg or 0)
+                recovery_pk = recovery.pk
+
+            # Points after commit — avoids nested-atomic breakage on ledger errors.
             points_earned = 0
+            try:
+                from .points import credit_recovery_points
 
-        _notify(
-            recovery.submitted_by,
-            f"Recycler intake confirmed for {recovery.bag_id}: {kg} kg.",
-            recovery,
-        )
-        payload = PlasticRecoverySerializer(recovery).data
-        payload["certificate_code"] = cert.code if cert else (
-            recovery.certificates.first().code if recovery.certificates.exists() else ""
-        )
-        payload["points_earned"] = points_earned
-        payload["project_recovered_kg"] = float(project.recovered_kg)
-        return Response(payload)
+                fresh = PlasticRecovery.objects.filter(pk=recovery_pk).first()
+                if fresh:
+                    points_earned = credit_recovery_points(fresh) or 0
+            except Exception:
+                logger.exception(
+                    "Plastic recovery points failed for recovery %s", recovery_pk
+                )
+                points_earned = 0
+
+            payload["points_earned"] = points_earned
+            return Response(payload)
+        except PlasticRecovery.DoesNotExist:
+            return Response({"detail": "Bag not found."}, status=404)
+        except Exception as exc:
+            logger.exception("Plastic intake scan failed for bag %s", bag_id)
+            return Response(
+                {"detail": str(exc) or "Intake failed."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
 
 class PlasticRecyclerListCreateView(APIView):
@@ -1198,7 +1260,7 @@ class PlasticBagLookupView(APIView):
             data["can_intake"] = recovery.status in ("cbo_verified", "submitted")
         else:
             data["can_intake"] = recovery.status == "cbo_verified"
-        cert = recovery.certificates.order_by("-created_at").first()
+        cert = recovery.certificates.order_by("-issued_at").first()
         data["certificate_code"] = cert.code if cert else ""
         partner = _recycler_partner_for_project(request.user, recovery.project)
         data["scanner_recycler_id"] = partner.id if partner else None
