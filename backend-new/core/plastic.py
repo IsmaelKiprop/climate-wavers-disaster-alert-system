@@ -656,11 +656,41 @@ def build_plastic_project_impact(project: PlasticProject) -> dict:
     }
 
 
+def _absolute_media_url(request, value: str | None) -> str:
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+    if raw.startswith("http://") or raw.startswith("https://"):
+        return raw
+    if raw.startswith("//"):
+        return f"https:{raw}"
+    if request is not None:
+        try:
+            return request.build_absolute_uri(raw if raw.startswith("/") else f"/{raw}")
+        except Exception:
+            pass
+    base = (getattr(dj_settings, "FRONTEND_URL", None) or "https://alerts.flowops.africa").rstrip(
+        "/"
+    )
+    return f"{base}{raw if raw.startswith('/') else f'/{raw}'}"
+
+
+def _looks_like_email(value: str) -> bool:
+    return "@" in str(value or "") and "." in str(value or "").split("@")[-1]
+
+
 class PlasticProjectSerializer(serializers.ModelSerializer):
     progress_percentage = serializers.FloatField(read_only=True)
     hotspots = PlasticHotspotSerializer(many=True, read_only=True)
     recent_recoveries = serializers.SerializerMethodField()
     impact = serializers.SerializerMethodField()
+    organization_display_name = serializers.SerializerMethodField()
+    organization_logo_url = serializers.SerializerMethodField()
+    organization_website = serializers.SerializerMethodField()
+    organization_type = serializers.SerializerMethodField()
+    organization_verified = serializers.SerializerMethodField()
+    cover_image_url = serializers.SerializerMethodField()
+    gallery_urls = serializers.SerializerMethodField()
 
     class Meta:
         model = PlasticProject
@@ -672,6 +702,11 @@ class PlasticProjectSerializer(serializers.ModelSerializer):
             "organization",
             "tree_admin_org",
             "organization_name",
+            "organization_display_name",
+            "organization_logo_url",
+            "organization_website",
+            "organization_type",
+            "organization_verified",
             "country",
             "region",
             "city",
@@ -685,7 +720,9 @@ class PlasticProjectSerializer(serializers.ModelSerializer):
             "scrap_pet_kes_per_kg",
             "scrap_hdpe_kes_per_kg",
             "cover_image",
+            "cover_image_url",
             "gallery",
+            "gallery_urls",
             "flood_zone_flag",
             "contact_person",
             "contact_email",
@@ -706,6 +743,13 @@ class PlasticProjectSerializer(serializers.ModelSerializer):
             "hotspots",
             "recent_recoveries",
             "impact",
+            "organization_display_name",
+            "organization_logo_url",
+            "organization_website",
+            "organization_type",
+            "organization_verified",
+            "cover_image_url",
+            "gallery_urls",
             "created_at",
             "updated_at",
         ]
@@ -719,6 +763,65 @@ class PlasticProjectSerializer(serializers.ModelSerializer):
         if not self.context.get("include_impact"):
             return None
         return build_plastic_project_impact(obj)
+
+    def get_organization_display_name(self, obj):
+        org = getattr(obj, "tree_admin_org", None)
+        if org and getattr(org, "name", None):
+            return org.name
+        name = (obj.organization_name or "").strip()
+        if name and not _looks_like_email(name):
+            return name
+        user = getattr(obj, "organization", None)
+        if user is not None:
+            first = (getattr(user, "first_name", None) or "").strip()
+            last = (getattr(user, "last_name", None) or "").strip()
+            full = f"{first} {last}".strip()
+            if full:
+                return full
+            username = (getattr(user, "username", None) or "").strip()
+            if username and not _looks_like_email(username):
+                return username
+        return name or "Climate Wavers partner"
+
+    def get_organization_logo_url(self, obj):
+        request = self.context.get("request")
+        user = getattr(obj, "organization", None)
+        if user is None:
+            return ""
+        try:
+            url = getattr(user, "profile_picture", None) or ""
+        except Exception:
+            url = ""
+        return _absolute_media_url(request, url)
+
+    def get_organization_website(self, obj):
+        org = getattr(obj, "tree_admin_org", None)
+        if org and getattr(org, "website", None):
+            return org.website
+        return ""
+
+    def get_organization_type(self, obj):
+        org = getattr(obj, "tree_admin_org", None)
+        if org and getattr(org, "org_type", None):
+            return org.get_org_type_display() if hasattr(org, "get_org_type_display") else org.org_type
+        return ""
+
+    def get_organization_verified(self, obj):
+        org = getattr(obj, "tree_admin_org", None)
+        return bool(org and getattr(org, "verification_status", None) == "approved")
+
+    def get_cover_image_url(self, obj):
+        return _absolute_media_url(self.context.get("request"), obj.cover_image)
+
+    def get_gallery_urls(self, obj):
+        request = self.context.get("request")
+        items = obj.gallery if isinstance(obj.gallery, list) else []
+        urls = []
+        for item in items:
+            url = _absolute_media_url(request, item if isinstance(item, str) else None)
+            if url:
+                urls.append(url)
+        return urls
 
 
 class PlasticCertificateSerializer(serializers.ModelSerializer):
@@ -801,12 +904,18 @@ class PlasticProjectDetailView(APIView):
 
     def get(self, request, project_id):
         try:
-            project = PlasticProject.objects.prefetch_related(
-                "hotspots",
-                "recoveries",
-                "sponsorships",
-                "certificates",
-            ).get(pk=project_id)
+            project = (
+                PlasticProject.objects.select_related(
+                    "organization", "tree_admin_org"
+                )
+                .prefetch_related(
+                    "hotspots",
+                    "recoveries",
+                    "sponsorships",
+                    "certificates",
+                )
+                .get(pk=project_id)
+            )
         except PlasticProject.DoesNotExist:
             return Response({"detail": "Not found."}, status=404)
         return Response(
