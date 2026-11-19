@@ -133,6 +133,7 @@ export const endpoints = {
     "platformAdminEvents": "/api/v1/platform-admin/climate-events/",
     "platformAdminEvent": (id) => `/api/v1/platform-admin/climate-events/${id}/`,
     "platformAdminObservances": "/api/v1/platform-admin/observances/",
+    "platformAdminOutreach": "/api/v1/platform-admin/outreach/",
     "platformAdminNewsletter": "/api/v1/platform-admin/newsletter/",
     "calendarSendReminders": "/api/v1/climate-events/send-reminders/",
     "platformAdminInvites": "/api/v1/platform-admin/invites/",

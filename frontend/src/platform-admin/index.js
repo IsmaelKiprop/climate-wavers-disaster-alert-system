@@ -8,5 +8,6 @@ export { default as TreesPayments } from "./pages/TreesPayments";
 export { default as Champions } from "./pages/Champions";
 export { default as Responders } from "./pages/Responders";
 export { default as Calendar } from "./pages/Calendar";
+export { default as Outreach } from "./pages/Outreach";
 export { default as Newsletter } from "./pages/Newsletter";
 export { default as AcceptInvite } from "./pages/AcceptInvite";

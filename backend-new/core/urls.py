@@ -122,6 +122,7 @@ from .platform_admin import (
     PlatformAdminEventsView,
     PlatformAdminEventStatusView,
     PlatformAdminObservancesView,
+    PlatformAdminOutreachView,
     PlatformAdminNewsletterView,
     PlatformAdminInvitesView,
     PlatformAdminInviteRevokeView,
@@ -483,6 +484,7 @@ urlpatterns = [
     path("platform-admin/climate-events/", PlatformAdminEventsView.as_view(), name="platform-admin-events"),
     path("platform-admin/climate-events/<int:event_id>/", PlatformAdminEventStatusView.as_view(), name="platform-admin-event-status"),
     path("platform-admin/observances/", PlatformAdminObservancesView.as_view(), name="platform-admin-observances"),
+    path("platform-admin/outreach/", PlatformAdminOutreachView.as_view(), name="platform-admin-outreach"),
     path("platform-admin/newsletter/", PlatformAdminNewsletterView.as_view(), name="platform-admin-newsletter"),
     path("platform-admin/invites/", PlatformAdminInvitesView.as_view(), name="platform-admin-invites"),
     path(

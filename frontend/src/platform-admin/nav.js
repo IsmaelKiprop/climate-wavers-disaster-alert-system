@@ -7,5 +7,6 @@ export const PLATFORM_ADMIN_NAV = [
   { id: "champions", label: "Champions", to: "/app/platform-admin/champions", badge: "pending_champions" },
   { id: "responders", label: "Responders", to: "/app/platform-admin/responders", badge: "pending_responder_orgs" },
   { id: "calendar", label: "Calendar", to: "/app/platform-admin/calendar", badge: null },
+  { id: "outreach", label: "Engagement", to: "/app/platform-admin/outreach", badge: null },
   { id: "newsletter", label: "Newsletter", to: "/app/platform-admin/newsletter", badge: null },
 ];

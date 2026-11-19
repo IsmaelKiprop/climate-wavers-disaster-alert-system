@@ -49,6 +49,7 @@ MODULES = [
     {"id": "champions", "label": "Champions", "path": "/app/platform-admin/champions"},
     {"id": "responders", "label": "Responders", "path": "/app/platform-admin/responders"},
     {"id": "calendar", "label": "Calendar", "path": "/app/platform-admin/calendar"},
+    {"id": "outreach", "label": "Engagement", "path": "/app/platform-admin/outreach"},
     {"id": "newsletter", "label": "Newsletter", "path": "/app/platform-admin/newsletter"},
 ]
 
@@ -1397,6 +1398,68 @@ class PlatformAdminObservancesView(APIView):
             o.is_active = bool(request.data["is_active"])
             o.save(update_fields=["is_active"])
         return Response({"observance": serialize_observance(o)})
+
+
+class PlatformAdminOutreachView(APIView):
+    """
+    Engagement outreach: list segments with counts, preview creative emails,
+    and send bulk unique messages to incomplete / unverified / quiet users.
+    """
+
+    permission_classes = [IsAuthenticated, IsPlatformStaff]
+
+    def get(self, request):
+        from .engagement_outreach import preview_segment, segment_counts
+
+        segment = (request.query_params.get("segment") or "").strip()
+        if segment:
+            try:
+                limit = min(int(request.query_params.get("limit") or 20), 50)
+            except (TypeError, ValueError):
+                limit = 20
+            try:
+                offset = max(int(request.query_params.get("offset") or 0), 0)
+            except (TypeError, ValueError):
+                offset = 0
+            try:
+                return Response(preview_segment(segment, limit=limit, offset=offset))
+            except ValueError as exc:
+                return Response({"detail": str(exc)}, status=400)
+        return Response({"segments": segment_counts()})
+
+    def post(self, request):
+        from .engagement_outreach import send_segment_emails
+
+        segment = (request.data.get("segment") or "").strip()
+        if not segment:
+            return Response({"detail": "segment is required"}, status=400)
+        dry_run = str(request.data.get("dry_run") or "").lower() in {
+            "1",
+            "true",
+            "yes",
+        } or request.data.get("dry_run") is True
+        try:
+            limit = min(int(request.data.get("limit") or 50), 200)
+        except (TypeError, ValueError):
+            limit = 50
+        try:
+            offset = max(int(request.data.get("offset") or 0), 0)
+        except (TypeError, ValueError):
+            offset = 0
+        user_ids = request.data.get("user_ids")
+        if user_ids is not None and not isinstance(user_ids, list):
+            return Response({"detail": "user_ids must be a list"}, status=400)
+        try:
+            result = send_segment_emails(
+                segment,
+                limit=limit,
+                offset=offset,
+                user_ids=user_ids,
+                dry_run=dry_run,
+            )
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=400)
+        return Response({"ok": True, **result})
 
 
 class PlatformAdminNewsletterView(APIView):

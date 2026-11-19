@@ -76,6 +76,9 @@ const PlatformCalendar = lazy(() =>
 const PlatformNewsletter = lazy(() =>
   import("./platform-admin").then((m) => ({ default: m.Newsletter }))
 );
+const PlatformOutreach = lazy(() =>
+  import("./platform-admin").then((m) => ({ default: m.Outreach }))
+);
 const PlatformAcceptInvite = lazy(() =>
   import("./platform-admin").then((m) => ({ default: m.AcceptInvite }))
 );
@@ -253,6 +256,7 @@ function App() {
                 <Route path="champions" element={<PlatformChampions />} />
                 <Route path="responders" element={<PlatformResponders />} />
                 <Route path="calendar" element={<PlatformCalendar />} />
+                <Route path="outreach" element={<PlatformOutreach />} />
                 <Route path="newsletter" element={<PlatformNewsletter />} />
               </Route>
               <Route
