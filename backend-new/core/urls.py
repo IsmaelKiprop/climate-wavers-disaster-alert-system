@@ -41,6 +41,7 @@ from .tree_admin import (
     TreeAdminEnsureView,
     TreeAdminMeView,
     TreeAdminDonationsView,
+    TreeAdminDonationProofView,
 )
 from .tree_certificate import TreeCertificateVerifyView
 from .groups import (
@@ -231,6 +232,11 @@ urlpatterns = [
         "tree-admin/donations/",
         TreeAdminDonationsView.as_view(),
         name="tree-admin-donations",
+    ),
+    path(
+        "tree-admin/donations/<int:donation_id>/proof/",
+        TreeAdminDonationProofView.as_view(),
+        name="tree-admin-donation-proof",
     ),
     path("groups/", SocialGroupListCreateView.as_view(), name="social-groups"),
     path(

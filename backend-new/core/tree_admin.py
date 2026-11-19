@@ -9,7 +9,17 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import TreeAdminMembership, TreeAdminOrganization, TreeProject, TreeProjectDonation
+from django.contrib.contenttypes.models import ContentType
+from django.utils import timezone
+
+from .models import (
+    Notification,
+    TreeAdminMembership,
+    TreeAdminOrganization,
+    TreeProject,
+    TreeProjectDonation,
+    TreeProjectUpdate,
+)
 from .tree_pricing import PLANS, normalize_plan, plan_meta
 
 User = get_user_model()
@@ -590,10 +600,146 @@ class TreeAdminDonationsView(APIView):
             limit = min(int(request.query_params.get("limit") or 50), 100)
         except (TypeError, ValueError):
             limit = 50
-        rows = list(qs[:limit])
+        rows = list(
+            qs.select_related("project", "donor", "gifted_to").prefetch_related(
+                "planting_updates"
+            )[:limit]
+        )
         return Response(
             {
                 "results": [serialize_donation_rich(d) for d in rows],
                 "count": len(rows),
             }
+        )
+
+
+def _notify_planting_proof(donation, proof: TreeProjectUpdate) -> None:
+    """In-app notify donor and gift recipient that their tree was planted."""
+    project_name = getattr(donation.project, "name", "your project") or "your project"
+    message = (
+        f"Your tree for {project_name} has been planted. "
+        f"Photo/video and location are now on your certificate."
+    )
+    recipients = []
+    if donation.donor_id:
+        recipients.append(donation.donor_id)
+    if donation.gifted_to_id and donation.gifted_to_id not in recipients:
+        recipients.append(donation.gifted_to_id)
+    ct = ContentType.objects.get_for_model(TreeProjectDonation)
+    for uid in recipients:
+        try:
+            Notification.objects.create(
+                user_id=uid,
+                notification_type="tree",
+                content_type=ct,
+                object_id=donation.id,
+                message=message,
+            )
+        except Exception:
+            continue
+
+
+class TreeAdminDonationProofView(APIView):
+    """
+    Tree Admin shares planting proof for a funded donation:
+    photos, videos, GPS / place label. Marks donation planted so the donor can see it.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, donation_id):
+        from .tree_certificate import serialize_donation_rich
+
+        donation = (
+            TreeProjectDonation.objects.select_related("project", "donor", "gifted_to")
+            .filter(pk=donation_id)
+            .first()
+        )
+        if not donation:
+            return Response({"detail": "Donation not found"}, status=404)
+        if (donation.payment_status or "") != "completed":
+            return Response(
+                {"detail": "Only completed payments can receive planting proof."},
+                status=400,
+            )
+        project = donation.project
+        if not user_can_manage_tree_project(request.user, project):
+            return Response({"detail": "Not allowed for this project"}, status=403)
+
+        images = request.data.get("images") or []
+        videos = request.data.get("videos") or []
+        if not isinstance(images, list):
+            images = [images] if images else []
+        if not isinstance(videos, list):
+            videos = [videos] if videos else []
+        images = [str(u).strip() for u in images if str(u or "").strip()]
+        videos = [str(u).strip() for u in videos if str(u or "").strip()]
+        if not images and not videos:
+            return Response(
+                {"detail": "Add at least one photo or video of the planting."},
+                status=400,
+            )
+
+        note = (request.data.get("note") or request.data.get("content") or "").strip()
+        location_label = (request.data.get("location_label") or "").strip()[:255]
+        lat = request.data.get("latitude")
+        lng = request.data.get("longitude")
+        try:
+            lat_val = float(lat) if lat not in (None, "") else None
+            lng_val = float(lng) if lng not in (None, "") else None
+        except (TypeError, ValueError):
+            return Response({"detail": "Invalid latitude/longitude"}, status=400)
+
+        donor_name = ""
+        try:
+            from .tree_certificate import donor_label
+
+            donor_name = donor_label(donation)
+        except Exception:
+            donor_name = "supporter"
+
+        title = (request.data.get("title") or "").strip() or (
+            f"Tree planted for {donor_name}"[:200]
+        )
+        content = note or (
+            f"Planting proof for {donation.trees_purchased} tree(s) "
+            f"on {getattr(project, 'name', 'this project')}."
+        )
+
+        with transaction.atomic():
+            proof = TreeProjectUpdate.objects.create(
+                project=project,
+                donation=donation,
+                created_by=request.user,
+                update_type="planting_proof",
+                title=title,
+                content=content,
+                images=images,
+                videos=videos,
+                latitude=lat_val,
+                longitude=lng_val,
+                location_label=location_label,
+                trees_planted_this_update=0,  # already counted at payment
+            )
+            donation.planting_status = "planted"
+            donation.planted_at = timezone.now()
+            donation.save(update_fields=["planting_status", "planted_at"])
+
+        try:
+            _notify_planting_proof(donation, proof)
+        except Exception:
+            pass
+
+        donation = (
+            TreeProjectDonation.objects.select_related("project", "donor", "gifted_to")
+            .prefetch_related("planting_updates")
+            .get(pk=donation.pk)
+        )
+        return Response(
+            {
+                "ok": True,
+                "donation": serialize_donation_rich(donation),
+                "proof_id": proof.id,
+            },
+            status=201,
         )

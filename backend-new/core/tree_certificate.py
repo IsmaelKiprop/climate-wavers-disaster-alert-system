@@ -1036,6 +1036,33 @@ def maybe_issue_certificate(donation) -> None:
         logger.exception("Certificate issue failed for donation %s: %s", getattr(donation, "id", None), exc)
 
 
+def serialize_planting_proof(donation) -> Optional[Dict[str, Any]]:
+    """Latest planting proof update for a donation, if any."""
+    updates = getattr(donation, "planting_updates", None)
+    if updates is None:
+        return None
+    proof = (
+        updates.filter(update_type="planting_proof")
+        .order_by("-created_at")
+        .first()
+    )
+    if not proof:
+        proof = updates.order_by("-created_at").first()
+    if not proof:
+        return None
+    return {
+        "id": proof.id,
+        "title": proof.title or "",
+        "content": proof.content or "",
+        "images": list(proof.images or []),
+        "videos": list(proof.videos or []),
+        "latitude": float(proof.latitude) if proof.latitude is not None else None,
+        "longitude": float(proof.longitude) if proof.longitude is not None else None,
+        "location_label": proof.location_label or "",
+        "created_at": proof.created_at.isoformat() if proof.created_at else None,
+    }
+
+
 def serialize_donation_rich(d) -> Dict[str, Any]:
     gifted = ""
     if getattr(d, "gifted_to_id", None):
@@ -1062,6 +1089,9 @@ def serialize_donation_rich(d) -> Dict[str, Any]:
         "certificate_emailed_at": d.certificate_emailed_at.isoformat()
         if getattr(d, "certificate_emailed_at", None)
         else None,
+        "planting_status": getattr(d, "planting_status", "") or "funded",
+        "planted_at": d.planted_at.isoformat() if getattr(d, "planted_at", None) else None,
+        "planting_proof": serialize_planting_proof(d),
         "created_at": d.created_at.isoformat() if d.created_at else None,
         "admin_share": float(getattr(d, "admin_share", 0) or 0),
         "platform_fee": float(getattr(d, "platform_fee", 0) or 0),
@@ -1113,6 +1143,7 @@ class TreeCertificateVerifyView(APIView):
             donation.certificate_id = cert_id
             donation.save(update_fields=["certificate_id"])
         ctx = build_certificate_context(donation)
+        proof = serialize_planting_proof(donation)
         return Response(
             {
                 "valid": True,
@@ -1129,6 +1160,12 @@ class TreeCertificateVerifyView(APIView):
                     "issued_on": ctx["issued_on"],
                     "payment_reference": ctx["payment_reference"],
                     "verify_url": ctx["verify_url"],
+                    "planting_status": getattr(donation, "planting_status", "")
+                    or "funded",
+                    "planted_at": donation.planted_at.isoformat()
+                    if getattr(donation, "planted_at", None)
+                    else None,
+                    "planting_proof": proof,
                 },
             }
         )

@@ -1695,14 +1695,16 @@ class TreeProjectDonationViewSet(viewsets.ModelViewSet):
         project_id = self.request.query_params.get('project_id')
         donor_id = self.request.query_params.get('donor')
         gifted_to_id = self.request.query_params.get('gifted_to')
-        
+        base = TreeProjectDonation.objects.select_related(
+            "project", "donor", "gifted_to"
+        ).prefetch_related("planting_updates")
         if project_id:
-            return TreeProjectDonation.objects.filter(project_id=project_id)
+            return base.filter(project_id=project_id)
         if gifted_to_id:
-            return TreeProjectDonation.objects.filter(gifted_to_id=gifted_to_id)
+            return base.filter(gifted_to_id=gifted_to_id)
         if donor_id:
-            return TreeProjectDonation.objects.filter(donor_id=donor_id)
-        return TreeProjectDonation.objects.filter(donor=self.request.user)
+            return base.filter(donor_id=donor_id)
+        return base.filter(donor=self.request.user)
 
 
 class FileUploadViewSet(viewsets.ViewSet):

@@ -52,6 +52,8 @@ export const endpoints = {
     "treeAdminEnsure": "/api/v1/tree-admin/ensure/",
     "treeAdminMe": "/api/v1/tree-admin/me/",
     "treeAdminDonations": "/api/v1/tree-admin/donations/",
+    "treeAdminDonationProof": (id) =>
+      `/api/v1/tree-admin/donations/${id}/proof/`,
     "pointsRates": "/api/v1/points/rates/",
     "pointsBalance": "/api/v1/points/balance/",
     "pointsLedger": "/api/v1/points/ledger/",

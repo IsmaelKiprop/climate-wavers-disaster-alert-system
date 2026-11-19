@@ -19,10 +19,18 @@ const mapDonationToCert = (donation) => {
     donation.selected_species && typeof donation.selected_species === "object"
       ? Object.entries(donation.selected_species)
           .filter(([, qty]) => Number(qty) > 0)
-          .map(([name, qty]) => `${name} × ${qty}`)
+          .map(([name, qty]) => `${name} x ${qty}`)
           .join(", ")
       : "";
+  const proof = donation.planting_proof || null;
+  const planted = (donation.planting_status || "") === "planted";
+  const proofPlace =
+    proof?.location_label ||
+    (proof?.latitude != null && proof?.longitude != null
+      ? `${proof.latitude}, ${proof.longitude}`
+      : "");
   return {
+    id: donation.id,
     certificate_id:
       donation.certificate_id ||
       `CW-${donation.payment_reference}-${donation.id}`,
@@ -36,6 +44,12 @@ const mapDonationToCert = (donation) => {
     planting_date: donation.created_at
       ? new Date(donation.created_at).toLocaleDateString()
       : "",
+    planted_at: donation.planted_at
+      ? new Date(donation.planted_at).toLocaleDateString()
+      : "",
+    planting_status: donation.planting_status || "funded",
+    planting_proof: proof,
+    proof_place: proofPlace,
     user_name:
       donation.donor_display_name || donation.donor_name || "Anonymous",
     gifted_to: donation.gifted_to_name || "",
@@ -45,6 +59,7 @@ const mapDonationToCert = (donation) => {
     is_downloaded: donation.is_downloaded || false,
     certificate_emailed_at: donation.certificate_emailed_at || null,
     kind: "tree",
+    is_planted: planted,
   };
 };
 
@@ -59,6 +74,7 @@ const MyCertificates = () => {
   const [championCert, setChampionCert] = useState(null);
   const [selectedTree, setSelectedTree] = useState(null);
   const [showTree, setShowTree] = useState(false);
+  const [proofTree, setProofTree] = useState(null);
   const [showChampion, setShowChampion] = useState(false);
   const [downloaded, setDownloaded] = useState(new Set());
   const [loading, setLoading] = useState(true);
@@ -345,18 +361,30 @@ const MyCertificates = () => {
               <div className="p-5 flex-1 flex flex-col gap-2 text-sm text-muted">
                 <p className="inline-flex items-center gap-1.5">
                   <IoLocation size={14} />
-                  {certificate.location}
+                  {certificate.proof_place || certificate.location}
                 </p>
                 <p className="inline-flex items-center gap-1.5">
                   <IoTime size={14} />
-                  {certificate.planting_date}
+                  {certificate.is_planted
+                    ? `Planted ${certificate.planted_at || certificate.planting_date}`
+                    : `Funded ${certificate.planting_date}`}
                 </p>
                 <p className="inline-flex items-center gap-1.5">
                   <IoLeaf size={14} />
                   {certificate.trees_planted} tree
-                  {certificate.trees_planted === 1 ? "" : "s"} planted
+                  {certificate.trees_planted === 1 ? "" : "s"}
+                  {certificate.is_planted ? " · proof shared" : " · awaiting planting"}
                 </p>
-                <div className="mt-auto pt-3">
+                {certificate.is_planted ? (
+                  <p className="text-xs font-semibold text-primary uppercase tracking-wide">
+                    Verified planting
+                  </p>
+                ) : (
+                  <p className="text-xs text-amber-700">
+                    OKOA / host will share photo, video and location after planting.
+                  </p>
+                )}
+                <div className="mt-auto pt-3 space-y-2">
                   <button
                     type="button"
                     onClick={() => {
@@ -368,6 +396,15 @@ const MyCertificates = () => {
                     <IoCheckmarkCircle size={16} />
                     View certificate
                   </button>
+                  {certificate.is_planted && certificate.planting_proof ? (
+                    <button
+                      type="button"
+                      onClick={() => setProofTree(certificate)}
+                      className="w-full h-10 border border-border text-sm font-medium"
+                    >
+                      View planting proof
+                    </button>
+                  ) : null}
                 </div>
               </div>
             </article>
@@ -406,6 +443,92 @@ const MyCertificates = () => {
             : false
         }
       />
+
+      {proofTree?.planting_proof ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60">
+          <div className="bg-surface border border-border w-full max-w-lg max-h-[92vh] overflow-y-auto shadow-xl">
+            <div className="flex items-start justify-between gap-3 px-5 py-4 border-b border-border sticky top-0 bg-surface">
+              <div>
+                <p className="text-[11px] uppercase tracking-[0.16em] text-primary font-semibold">
+                  Planting proof
+                </p>
+                <h2 className="text-lg font-semibold text-foreground mt-0.5">
+                  {proofTree.project_name || "Your tree"}
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setProofTree(null)}
+                className="text-muted hover:text-foreground text-sm"
+              >
+                Close
+              </button>
+            </div>
+            <div className="p-5 space-y-4 text-sm">
+              {proofTree.planting_proof.content ? (
+                <p className="text-foreground leading-relaxed">
+                  {proofTree.planting_proof.content}
+                </p>
+              ) : null}
+              {(proofTree.proof_place || proofTree.planting_proof.latitude != null) && (
+                <p className="inline-flex items-start gap-1.5 text-muted">
+                  <IoLocation size={14} className="mt-0.5 shrink-0" />
+                  <span>
+                    {proofTree.proof_place ||
+                      `${proofTree.planting_proof.latitude}, ${proofTree.planting_proof.longitude}`}
+                    {proofTree.planting_proof.latitude != null &&
+                    proofTree.planting_proof.longitude != null ? (
+                      <>
+                        {" · "}
+                        <a
+                          className="text-primary hover:underline"
+                          href={`https://www.google.com/maps?q=${proofTree.planting_proof.latitude},${proofTree.planting_proof.longitude}`}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          Open map
+                        </a>
+                      </>
+                    ) : null}
+                  </span>
+                </p>
+              )}
+              {Array.isArray(proofTree.planting_proof.images) &&
+              proofTree.planting_proof.images.length > 0 ? (
+                <div className="grid grid-cols-2 gap-2">
+                  {proofTree.planting_proof.images.map((url) => (
+                    <img
+                      key={url}
+                      src={url}
+                      alt="Planting"
+                      className="w-full aspect-square object-cover border border-border"
+                    />
+                  ))}
+                </div>
+              ) : null}
+              {Array.isArray(proofTree.planting_proof.videos) &&
+              proofTree.planting_proof.videos.length > 0 ? (
+                <div className="space-y-2">
+                  {proofTree.planting_proof.videos.map((url) => (
+                    <video
+                      key={url}
+                      src={url}
+                      controls
+                      className="w-full border border-border bg-black"
+                    />
+                  ))}
+                </div>
+              ) : null}
+              {proofTree.planted_at ? (
+                <p className="text-xs text-muted">
+                  Shared {proofTree.planted_at}
+                </p>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <ChampionCertificate
         isOpen={showChampion}
         onClose={() => setShowChampion(false)}

@@ -24,6 +24,7 @@ class Notification(models.Model):
         ("champion", "Community Champion"),
         ("proximity_alert", "Proximity Alert"),
         ("platform_admin", "Platform Admin"),
+        ("tree", "Tree planting"),
     ]
 
     user = models.ForeignKey(
@@ -600,16 +601,46 @@ class TreeProject(models.Model):
 
 class TreeProjectUpdate(models.Model):
     """
-    Model for project updates and progress reports
+    Project progress reports and per-donation planting proof (photo/video/GPS).
     """
+    UPDATE_TYPES = [
+        ("progress", "Progress update"),
+        ("planting_proof", "Planting proof"),
+    ]
     project = models.ForeignKey(
         TreeProject, 
         on_delete=models.CASCADE, 
         related_name='updates'
     )
+    donation = models.ForeignKey(
+        "TreeProjectDonation",
+        on_delete=models.SET_NULL,
+        related_name="planting_updates",
+        null=True,
+        blank=True,
+        help_text="When set, this update is planting proof for that funded gift",
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name="tree_project_updates",
+        null=True,
+        blank=True,
+    )
+    update_type = models.CharField(
+        max_length=20, choices=UPDATE_TYPES, default="progress"
+    )
     title = models.CharField(max_length=200)
     content = models.TextField()
-    images = models.JSONField(default=list, blank=True)  # List of image file paths
+    images = models.JSONField(default=list, blank=True)  # photo URLs
+    videos = models.JSONField(default=list, blank=True)  # video URLs
+    latitude = models.DecimalField(
+        max_digits=9, decimal_places=6, null=True, blank=True
+    )
+    longitude = models.DecimalField(
+        max_digits=9, decimal_places=6, null=True, blank=True
+    )
+    location_label = models.CharField(max_length=255, blank=True, default="")
     trees_planted_this_update = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -696,6 +727,16 @@ class TreeProjectDonation(models.Model):
     certificate_id = models.CharField(max_length=80, blank=True, default="", db_index=True)
     certificate_issued_at = models.DateTimeField(null=True, blank=True)
     certificate_emailed_at = models.DateTimeField(null=True, blank=True)
+    planting_status = models.CharField(
+        max_length=20,
+        choices=[
+            ("funded", "Funded — awaiting planting"),
+            ("planted", "Planted — proof shared"),
+        ],
+        default="funded",
+        db_index=True,
+    )
+    planted_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     
     class Meta:

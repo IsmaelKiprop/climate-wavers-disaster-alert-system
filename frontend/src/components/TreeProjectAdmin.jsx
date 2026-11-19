@@ -127,6 +127,16 @@ const TreeProjectAdmin = () => {
   const [treeAdminMe, setTreeAdminMe] = useState(null);
   const [donations, setDonations] = useState([]);
   const [donationsLoading, setDonationsLoading] = useState(false);
+  const [proofDonation, setProofDonation] = useState(null);
+  const [proofNote, setProofNote] = useState('');
+  const [proofLocationLabel, setProofLocationLabel] = useState('');
+  const [proofLat, setProofLat] = useState('');
+  const [proofLng, setProofLng] = useState('');
+  const [proofImages, setProofImages] = useState([]);
+  const [proofVideos, setProofVideos] = useState([]);
+  const [proofUploading, setProofUploading] = useState(false);
+  const [proofSaving, setProofSaving] = useState(false);
+  const [proofLocating, setProofLocating] = useState(false);
 
   // Debug admin status
   useEffect(() => {
@@ -409,6 +419,135 @@ const TreeProjectAdmin = () => {
       setDonations([]);
     } finally {
       setDonationsLoading(false);
+    }
+  };
+
+  const resetProofForm = () => {
+    setProofDonation(null);
+    setProofNote('');
+    setProofLocationLabel('');
+    setProofLat('');
+    setProofLng('');
+    setProofImages([]);
+    setProofVideos([]);
+    setProofUploading(false);
+    setProofSaving(false);
+    setProofLocating(false);
+  };
+
+  const openProofModal = (donation) => {
+    setProofDonation(donation);
+    setProofNote('');
+    setProofLocationLabel(
+      [donation?.project_name, donation?.planting_proof?.location_label]
+        .filter(Boolean)
+        .join(' · ') || ''
+    );
+    setProofLat(donation?.planting_proof?.latitude ?? '');
+    setProofLng(donation?.planting_proof?.longitude ?? '');
+    setProofImages(Array.isArray(donation?.planting_proof?.images) ? donation.planting_proof.images : []);
+    setProofVideos(Array.isArray(donation?.planting_proof?.videos) ? donation.planting_proof.videos : []);
+  };
+
+  const captureProofLocation = () => {
+    if (!navigator.geolocation) {
+      toast.error('Location is not available on this device');
+      return;
+    }
+    setProofLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setProofLat(pos.coords.latitude.toFixed(6));
+        setProofLng(pos.coords.longitude.toFixed(6));
+        if (!proofLocationLabel.trim()) {
+          setProofLocationLabel('Captured at planting site');
+        }
+        setProofLocating(false);
+        toast.success('Planting location captured');
+      },
+      (err) => {
+        console.error(err);
+        setProofLocating(false);
+        toast.error('Could not get GPS. Enter a place name instead.');
+      },
+      { enableHighAccuracy: true, timeout: 15000 }
+    );
+  };
+
+  const handleProofMediaUpload = async (files) => {
+    const list = Array.from(files || []);
+    if (!list.length) return;
+    setProofUploading(true);
+    try {
+      const urls = await uploadFiles(list);
+      const next = (Array.isArray(urls) ? urls : [urls]).filter(Boolean);
+      const imgs = [];
+      const vids = [];
+      next.forEach((url, i) => {
+        const file = list[i];
+        const isVideo =
+          (file && String(file.type || '').startsWith('video/')) ||
+          /\.(mp4|webm|mov|m4v)(\?|$)/i.test(String(url));
+        if (isVideo) vids.push(url);
+        else imgs.push(url);
+      });
+      if (imgs.length) setProofImages((prev) => [...prev, ...imgs]);
+      if (vids.length) setProofVideos((prev) => [...prev, ...vids]);
+      toast.success('Media uploaded');
+    } catch (error) {
+      console.error(error);
+      toast.error('Upload failed');
+    } finally {
+      setProofUploading(false);
+    }
+  };
+
+  const submitPlantingProof = async () => {
+    if (!proofDonation?.id) return;
+    if (!proofImages.length && !proofVideos.length) {
+      toast.error('Add at least one photo or video');
+      return;
+    }
+    setProofSaving(true);
+    try {
+      const token = getAuthToken() || localStorage.getItem('token');
+      const response = await fetch(
+        apiUrl(endpoints.treeAdminDonationProof(proofDonation.id)),
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            note: proofNote,
+            location_label: proofLocationLabel,
+            latitude: proofLat === '' ? null : proofLat,
+            longitude: proofLng === '' ? null : proofLng,
+            images: proofImages,
+            videos: proofVideos,
+          }),
+        }
+      );
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        toast.error(data?.detail || 'Could not save planting proof');
+        return;
+      }
+      toast.success('Planting proof shared — the supporter can see it now');
+      if (data?.donation) {
+        setDonations((prev) =>
+          prev.map((d) => (d.id === data.donation.id ? data.donation : d))
+        );
+      } else {
+        fetchDonations();
+      }
+      resetProofForm();
+    } catch (error) {
+      console.error(error);
+      toast.error('Could not save planting proof');
+    } finally {
+      setProofSaving(false);
     }
   };
 
@@ -1015,7 +1154,7 @@ Thank you for your understanding! 🌱
               <p className="text-xs uppercase tracking-wide text-muted">Funding</p>
               <h2 className="text-lg font-semibold text-foreground">Payments &amp; certificates</h2>
               <p className="text-sm text-muted mt-0.5">
-                Payers who funded your projects. Certificates are emailed automatically after payment.
+                When you plant, share photo/video and location so the supporter can see proof.
               </p>
             </div>
             <button
@@ -1034,20 +1173,21 @@ Thank you for your understanding! 🌱
                   <th className="px-4 py-3 font-medium">Project</th>
                   <th className="px-4 py-3 font-medium">Trees</th>
                   <th className="px-4 py-3 font-medium">Amount</th>
-                  <th className="px-4 py-3 font-medium">Certificate</th>
+                  <th className="px-4 py-3 font-medium">Planting</th>
                   <th className="px-4 py-3 font-medium">When</th>
+                  <th className="px-4 py-3 font-medium">Action</th>
                 </tr>
               </thead>
               <tbody>
                 {donationsLoading && donations.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-4 py-8 text-center text-muted">
+                    <td colSpan={7} className="px-4 py-8 text-center text-muted">
                       Loading payments…
                     </td>
                   </tr>
                 ) : donations.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-4 py-8 text-center text-muted">
+                    <td colSpan={7} className="px-4 py-8 text-center text-muted">
                       No payments yet. When someone plants or gifts a tree on your project, they appear here.
                     </td>
                   </tr>
@@ -1057,9 +1197,10 @@ Thank you for your understanding! 🌱
                       d.selected_species && typeof d.selected_species === 'object'
                         ? Object.entries(d.selected_species)
                             .filter(([, qty]) => Number(qty) > 0)
-                            .map(([name, qty]) => `${name} × ${qty}`)
+                            .map(([name, qty]) => `${name} x ${qty}`)
                             .join(', ')
                         : '';
+                    const planted = (d.planting_status || '') === 'planted';
                     return (
                       <tr key={d.id} className="border-b border-border last:border-0">
                         <td className="px-4 py-3">
@@ -1078,21 +1219,28 @@ Thank you for your understanding! 🌱
                           {Number(d.amount || 0).toLocaleString()} {d.currency || 'KES'}
                         </td>
                         <td className="px-4 py-3">
-                          {d.certificate_emailed_at ? (
-                            <span className="text-primary text-xs font-medium">Emailed</span>
-                          ) : d.certificate_id ? (
-                            <span className="text-muted text-xs">Issued</span>
+                          {planted ? (
+                            <span className="text-primary text-xs font-semibold">Planted</span>
                           ) : (
-                            <span className="text-muted text-xs">Pending</span>
+                            <span className="text-amber-700 text-xs font-medium">Awaiting planting</span>
                           )}
-                          {d.certificate_id ? (
-                            <p className="font-mono text-[10px] text-muted mt-0.5 truncate max-w-[9rem]">
-                              {d.certificate_id}
+                          {d.planted_at ? (
+                            <p className="text-[10px] text-muted mt-0.5">
+                              {new Date(d.planted_at).toLocaleDateString()}
                             </p>
                           ) : null}
                         </td>
                         <td className="px-4 py-3 text-muted whitespace-nowrap">
                           {d.created_at ? new Date(d.created_at).toLocaleString() : '—'}
+                        </td>
+                        <td className="px-4 py-3">
+                          <button
+                            type="button"
+                            onClick={() => openProofModal(d)}
+                            className="h-9 px-3 text-xs font-semibold border border-primary text-primary hover:bg-primary hover:text-primary-foreground"
+                          >
+                            {planted ? 'Update proof' : 'Share planting proof'}
+                          </button>
                         </td>
                       </tr>
                     );
@@ -1102,6 +1250,128 @@ Thank you for your understanding! 🌱
             </table>
           </div>
         </div>
+
+        {proofDonation ? (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/55">
+            <div className="bg-surface border border-border w-full max-w-lg max-h-[92vh] overflow-y-auto shadow-xl">
+              <div className="sticky top-0 z-10 flex items-start justify-between gap-3 px-4 sm:px-5 py-4 border-b border-border bg-surface">
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-muted">Credibility</p>
+                  <h2 className="text-lg font-semibold text-foreground">Share planting proof</h2>
+                  <p className="text-sm text-muted mt-1">
+                    For {proofDonation.donor_name || 'supporter'}
+                    {proofDonation.gifted_to ? ` (gifted to ${proofDonation.gifted_to})` : ''}
+                    {' · '}
+                    {proofDonation.trees_purchased || 1} tree(s) on {proofDonation.project_name}
+                  </p>
+                </div>
+                <button type="button" onClick={resetProofForm} className="text-muted hover:text-foreground text-sm">
+                  Close
+                </button>
+              </div>
+              <div className="p-4 sm:p-5 space-y-4">
+                <div>
+                  <label className={labelClass}>Photos or video from the planting</label>
+                  <input
+                    type="file"
+                    accept="image/*,video/*"
+                    multiple
+                    disabled={proofUploading || proofSaving}
+                    onChange={(e) => {
+                      handleProofMediaUpload(e.target.files);
+                      e.target.value = '';
+                    }}
+                    className="block w-full text-sm text-muted file:mr-3 file:h-10 file:px-3 file:border file:border-border file:bg-background file:text-foreground"
+                  />
+                  {proofUploading ? <p className="text-xs text-muted mt-1">Uploading…</p> : null}
+                  {(proofImages.length > 0 || proofVideos.length > 0) && (
+                    <div className="mt-3 grid grid-cols-3 gap-2">
+                      {proofImages.map((url) => (
+                        <div key={url} className="relative aspect-square border border-border overflow-hidden bg-background">
+                          <img src={mediaUrl(url) || url} alt="" className="h-full w-full object-cover" />
+                          <button
+                            type="button"
+                            className="absolute top-1 right-1 h-6 w-6 bg-black/70 text-white text-xs"
+                            onClick={() => setProofImages((prev) => prev.filter((u) => u !== url))}
+                          >
+                            x
+                          </button>
+                        </div>
+                      ))}
+                      {proofVideos.map((url) => (
+                        <div key={url} className="relative aspect-square border border-border overflow-hidden bg-background">
+                          <video src={mediaUrl(url) || url} className="h-full w-full object-cover" muted />
+                          <button
+                            type="button"
+                            className="absolute top-1 right-1 h-6 w-6 bg-black/70 text-white text-xs"
+                            onClick={() => setProofVideos((prev) => prev.filter((u) => u !== url))}
+                          >
+                            x
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <label className={labelClass}>Where was it planted?</label>
+                  <input
+                    type="text"
+                    value={proofLocationLabel}
+                    onChange={(e) => setProofLocationLabel(e.target.value)}
+                    placeholder="e.g. Lungalunga mangrove site, plot B"
+                    className={fieldClass}
+                  />
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={captureProofLocation}
+                      disabled={proofLocating}
+                      className="h-10 px-3 border border-border text-sm hover:border-primary"
+                    >
+                      {proofLocating ? 'Getting GPS…' : 'Use my GPS'}
+                    </button>
+                    {(proofLat || proofLng) && (
+                      <p className="text-xs text-muted self-center font-mono">
+                        {proofLat}, {proofLng}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <label className={labelClass}>Note for the supporter (optional)</label>
+                  <textarea
+                    value={proofNote}
+                    onChange={(e) => setProofNote(e.target.value)}
+                    rows={3}
+                    placeholder="e.g. Planted today with the OKOA Youth team. Healthy seedling at the waterline."
+                    className={`${fieldClass} h-auto py-2`}
+                  />
+                </div>
+
+                <div className="flex flex-col sm:flex-row gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={submitPlantingProof}
+                    disabled={proofSaving || proofUploading}
+                    className="flex-1 h-11 bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-60"
+                  >
+                    {proofSaving ? 'Saving…' : 'Publish proof'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={resetProofForm}
+                    className="h-11 px-4 border border-border text-sm"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : null}
 
         {/* Create/Edit Form Modal */}
         {showCreateForm && (

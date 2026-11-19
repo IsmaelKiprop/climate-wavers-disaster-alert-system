@@ -167,7 +167,40 @@ const VerifyTreeCertificate = () => {
                 <dt className="text-[11px] uppercase tracking-wide text-muted">CO₂ / year</dt>
                 <dd className="font-medium mt-1">~{Math.round(result.co2_kg_year || 0)} kg</dd>
               </div>
+              <div>
+                <dt className="text-[11px] uppercase tracking-wide text-muted">Planting status</dt>
+                <dd className="font-medium mt-1 capitalize">
+                  {result.planting_status === "planted" ? "Planted (proof shared)" : "Funded — awaiting planting"}
+                </dd>
+              </div>
+              {result.planting_proof?.location_label ? (
+                <div className="sm:col-span-2">
+                  <dt className="text-[11px] uppercase tracking-wide text-muted">Planting site</dt>
+                  <dd className="font-medium mt-1">{result.planting_proof.location_label}</dd>
+                </div>
+              ) : null}
             </dl>
+            {result.planting_status === "planted" &&
+            (result.planting_proof?.images?.length || result.planting_proof?.videos?.length) ? (
+              <div className="mt-5 border-t border-border pt-5 space-y-3">
+                <p className="text-[11px] uppercase tracking-wide text-muted">Planting proof</p>
+                {result.planting_proof.images?.length ? (
+                  <div className="grid grid-cols-2 gap-2">
+                    {result.planting_proof.images.map((url) => (
+                      <img
+                        key={url}
+                        src={url}
+                        alt="Planting proof"
+                        className="w-full aspect-square object-cover border border-border"
+                      />
+                    ))}
+                  </div>
+                ) : null}
+                {result.planting_proof.videos?.map((url) => (
+                  <video key={url} src={url} controls className="w-full border border-border" />
+                ))}
+              </div>
+            ) : null}
           </div>
         ) : null}
 

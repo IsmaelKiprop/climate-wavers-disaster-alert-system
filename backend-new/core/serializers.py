@@ -666,12 +666,27 @@ class NotificationSerializer(serializers.ModelSerializer):
 class TreeProjectUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = TreeProjectUpdate
-        fields = ['id', 'title', 'content', 'images', 'trees_planted_this_update', 'created_at', 'updated_at']
+        fields = [
+            "id",
+            "title",
+            "content",
+            "images",
+            "videos",
+            "latitude",
+            "longitude",
+            "location_label",
+            "donation",
+            "update_type",
+            "trees_planted_this_update",
+            "created_at",
+            "updated_at",
+        ]
 
 
 class TreeProjectDonationSerializer(serializers.ModelSerializer):
     donor_name = serializers.SerializerMethodField()
     gifted_to_name = serializers.SerializerMethodField()
+    planting_proof = serializers.SerializerMethodField()
     project_name = serializers.CharField(source='project.name', read_only=True)
     project_city = serializers.CharField(source='project.city', read_only=True)
     project_country = serializers.CharField(source='project.country', read_only=True)
@@ -684,11 +699,18 @@ class TreeProjectDonationSerializer(serializers.ModelSerializer):
                  'dedication_message', 'selected_species', 'is_anonymous', 'created_at', 'donor_name',
                  'donor_display_name', 'gifted_to', 'gifted_to_name', 'climate_event',
                  'certificate_id', 'certificate_issued_at', 'certificate_emailed_at',
+                 'planting_status', 'planted_at', 'planting_proof',
                  'project_name', 'project_city', 'project_country', 'co2_absorption_per_tree']
         read_only_fields = [
             'payment_reference', 'platform_fee', 'admin_share', 'fee_rate', 'created_at',
             'certificate_id', 'certificate_issued_at', 'certificate_emailed_at', 'donor_display_name',
+            'planting_status', 'planted_at',
         ]
+
+    def get_planting_proof(self, obj):
+        from .tree_certificate import serialize_planting_proof
+
+        return serialize_planting_proof(obj)
     
     def get_donor_name(self, obj):
         stored = (getattr(obj, "donor_display_name", "") or "").strip()
@@ -918,10 +940,24 @@ class TreeProjectCreateSerializer(serializers.ModelSerializer):
 class TreeProjectUpdateCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = TreeProjectUpdate
-        fields = ['title', 'content', 'images', 'trees_planted_this_update']
-    
+        fields = [
+            "title",
+            "content",
+            "images",
+            "videos",
+            "latitude",
+            "longitude",
+            "location_label",
+            "donation",
+            "update_type",
+            "trees_planted_this_update",
+        ]
+
     def create(self, validated_data):
-        validated_data['project'] = self.context['project']
+        validated_data["project"] = self.context["project"]
+        request = self.context.get("request")
+        if request and getattr(request, "user", None) and request.user.is_authenticated:
+            validated_data["created_by"] = request.user
         return super().create(validated_data)
 
 
