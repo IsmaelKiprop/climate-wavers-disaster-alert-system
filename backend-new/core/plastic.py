@@ -523,10 +523,144 @@ class PlasticRecyclerSerializer(serializers.ModelSerializer):
         return bool(obj.linked_user_id and obj.invite_status == "accepted" and obj.is_active)
 
 
+def build_plastic_project_impact(project: PlasticProject) -> dict:
+    """Aggregates for public impact charts on /plastic/:id."""
+    goal = float(project.goal_kg or 0)
+    recovered = float(project.recovered_kg or 0)
+    remaining = max(0.0, goal - recovered)
+
+    recoveries = list(
+        project.recoveries.all().only(
+            "polymer_type",
+            "status",
+            "kg_claimed",
+            "kg_verified",
+            "created_at",
+            "verified_at",
+            "intake_at",
+        )
+    )
+
+    def recovery_kg(row):
+        if row.kg_verified is not None:
+            return float(row.kg_verified or 0)
+        return float(row.kg_claimed or 0)
+
+    polymer = {}
+    status_map = {}
+    for row in recoveries:
+        kg = recovery_kg(row)
+        polymer_key = row.polymer_type or "mixed"
+        polymer[polymer_key] = polymer.get(polymer_key, 0.0) + kg
+        st = row.status or "submitted"
+        bucket = status_map.setdefault(st, {"kg": 0.0, "count": 0})
+        bucket["kg"] += kg
+        bucket["count"] += 1
+
+    polymer_breakdown = [
+        {"polymer": k, "kg": round(v, 2)}
+        for k, v in sorted(polymer.items(), key=lambda x: -x[1])
+        if v > 0
+    ]
+    status_breakdown = [
+        {"status": k, "kg": round(v["kg"], 2), "count": v["count"]}
+        for k, v in sorted(status_map.items(), key=lambda x: -x[1]["kg"])
+    ]
+
+    hotspot_counts = {}
+    drain_open = 0
+    for h in project.hotspots.all().only("status", "drain_related"):
+        st = h.status or "open"
+        hotspot_counts[st] = hotspot_counts.get(st, 0) + 1
+        if h.drain_related and st != "cleared":
+            drain_open += 1
+    hotspot_status = [
+        {"status": k, "count": v}
+        for k, v in sorted(hotspot_counts.items(), key=lambda x: -x[1])
+    ]
+
+    # Weekly kg for last 12 weeks (prefer intake/verified timestamps).
+    now = timezone.now()
+    week_start = (now - timedelta(weeks=11)).date()
+    week_start = week_start - timedelta(days=week_start.weekday())
+    weeks = []
+    for i in range(12):
+        start = week_start + timedelta(weeks=i)
+        weeks.append(start)
+
+    weekly = {w.isoformat(): 0.0 for w in weeks}
+    for row in recoveries:
+        when = row.intake_at or row.verified_at or row.created_at
+        if not when:
+            continue
+        d = when.date()
+        ws = d - timedelta(days=d.weekday())
+        key = ws.isoformat()
+        if key in weekly:
+            weekly[key] += recovery_kg(row)
+
+    from datetime import datetime as _dt
+
+    weekly_kg = [
+        {
+            "week": k,
+            "label": _dt.strptime(k, "%Y-%m-%d").strftime("%b %d"),
+            "kg": round(v, 2),
+        }
+        for k, v in weekly.items()
+    ]
+
+    sponsors_qs = project.sponsorships.filter(payment_status="completed")
+    sponsor_agg = sponsors_qs.aggregate(
+        sponsored_kg=Sum("kg_sponsored"),
+        sponsor_usd=Sum("amount_usd"),
+    )
+    sponsored_kg = float(sponsor_agg.get("sponsored_kg") or 0)
+    sponsor_usd = float(sponsor_agg.get("sponsor_usd") or 0)
+    sponsor_count = sponsors_qs.count()
+
+    recent_sponsors = [
+        {
+            "name": (s.sponsor_display_name or "Sponsor").strip() or "Sponsor",
+            "kg": float(s.kg_sponsored or 0),
+            "created_at": s.created_at.isoformat() if s.created_at else None,
+        }
+        for s in sponsors_qs.order_by("-created_at")[:8]
+    ]
+
+    cert_qs = project.certificates.all()
+    cert_agg = cert_qs.aggregate(total_kg=Sum("kg"))
+    certificate_count = cert_qs.count()
+    certificate_kg = float(cert_agg.get("total_kg") or 0)
+
+    return {
+        "goal_kg": round(goal, 2),
+        "recovered_kg": round(recovered, 2),
+        "remaining_kg": round(remaining, 2),
+        "progress_percentage": round(
+            min((recovered / goal) * 100, 100) if goal > 0 else 0, 1
+        ),
+        "sponsored_kg": round(sponsored_kg, 2),
+        "sponsor_usd": round(sponsor_usd, 2),
+        "sponsor_count": sponsor_count,
+        "certificate_count": certificate_count,
+        "certificate_kg": round(certificate_kg, 2),
+        "recovery_count": len(recoveries),
+        "hotspot_count": sum(hotspot_counts.values()),
+        "drain_hotspots_open": drain_open,
+        "polymer_breakdown": polymer_breakdown,
+        "status_breakdown": status_breakdown,
+        "hotspot_status": hotspot_status,
+        "weekly_kg": weekly_kg,
+        "recent_sponsors": recent_sponsors,
+    }
+
+
 class PlasticProjectSerializer(serializers.ModelSerializer):
     progress_percentage = serializers.FloatField(read_only=True)
     hotspots = PlasticHotspotSerializer(many=True, read_only=True)
     recent_recoveries = serializers.SerializerMethodField()
+    impact = serializers.SerializerMethodField()
 
     class Meta:
         model = PlasticProject
@@ -559,6 +693,7 @@ class PlasticProjectSerializer(serializers.ModelSerializer):
             "progress_percentage",
             "hotspots",
             "recent_recoveries",
+            "impact",
             "created_at",
             "updated_at",
         ]
@@ -570,6 +705,7 @@ class PlasticProjectSerializer(serializers.ModelSerializer):
             "progress_percentage",
             "hotspots",
             "recent_recoveries",
+            "impact",
             "created_at",
             "updated_at",
         ]
@@ -577,6 +713,12 @@ class PlasticProjectSerializer(serializers.ModelSerializer):
     def get_recent_recoveries(self, obj):
         qs = obj.recoveries.all()[:12]
         return PlasticRecoverySerializer(qs, many=True).data
+
+    def get_impact(self, obj):
+        # Heavy aggregates — only for project detail (public impact charts).
+        if not self.context.get("include_impact"):
+            return None
+        return build_plastic_project_impact(obj)
 
 
 class PlasticCertificateSerializer(serializers.ModelSerializer):
@@ -660,11 +802,18 @@ class PlasticProjectDetailView(APIView):
     def get(self, request, project_id):
         try:
             project = PlasticProject.objects.prefetch_related(
-                "hotspots", "recoveries"
+                "hotspots",
+                "recoveries",
+                "sponsorships",
+                "certificates",
             ).get(pk=project_id)
         except PlasticProject.DoesNotExist:
             return Response({"detail": "Not found."}, status=404)
-        return Response(PlasticProjectSerializer(project).data)
+        return Response(
+            PlasticProjectSerializer(
+                project, context={"request": request, "include_impact": True}
+            ).data
+        )
 
     def patch(self, request, project_id):
         if not request.user.is_authenticated:
@@ -678,7 +827,11 @@ class PlasticProjectDetailView(APIView):
         ser = PlasticProjectSerializer(project, data=request.data, partial=True)
         ser.is_valid(raise_exception=True)
         ser.save()
-        return Response(PlasticProjectSerializer(project).data)
+        return Response(
+            PlasticProjectSerializer(
+                project, context={"request": request, "include_impact": True}
+            ).data
+        )
 
 
 class PlasticHotspotCreateView(APIView):

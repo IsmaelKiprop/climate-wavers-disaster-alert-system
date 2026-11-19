@@ -8,6 +8,7 @@ import { useExchangeRate } from "../hooks/useExchangeRate";
 import PlantingProofMediaCarousel, {
   proofMediaFromArrays,
 } from "./PlantingProofMediaCarousel";
+import PlasticImpactCharts from "./PlasticImpactCharts";
 
 const PublicPlasticView = () => {
   const { projectId } = useParams();
@@ -217,6 +218,8 @@ const PublicPlasticView = () => {
           </div>
         </div>
       </div>
+
+      <PlasticImpactCharts impact={project.impact} />
 
       <div className="border border-border p-4 space-y-3">
         <h2 className="font-medium">Sponsor a kilo</h2>
