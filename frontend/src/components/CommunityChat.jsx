@@ -346,6 +346,8 @@ const CommunityChat = () => {
   const recordingTimerRef = useRef(null);
   const recordingMimeRef = useRef("");
   const discardRecordingRef = useRef(false);
+  const replyingToRef = useRef(null);
+  const sendVoiceNoteRef = useRef(null);
 
   useEffect(() => {
     activeIdRef.current = activeId;
@@ -354,6 +356,10 @@ const CommunityChat = () => {
   useEffect(() => {
     messagesRef.current = messages;
   }, [messages]);
+
+  useEffect(() => {
+    replyingToRef.current = replyingTo;
+  }, [replyingTo]);
 
   const activeConversation = useMemo(
     () => conversations.find((c) => Number(c.id) === Number(activeId)) || null,
@@ -1390,22 +1396,30 @@ const CommunityChat = () => {
         }
 
         const blob = new Blob(chunks, { type: mime });
-        if (!blob.size) return;
+        if (!blob.size) {
+          toast.error("Voice note was empty. Hold a moment longer, then stop.");
+          return;
+        }
         const ext = audioExtensionForMime(mime);
         const file = new File([blob], `voice-note-${Date.now()}.${ext}`, {
           type: mime.split(";")[0] || "audio/webm",
         });
-        setPendingMedia((prev) => {
-          if (prev?.preview?.startsWith("blob:")) {
-            URL.revokeObjectURL(prev.preview);
-          }
-          return {
-            file,
-            kind: "audio",
-            preview: URL.createObjectURL(file),
-            name: file.name,
-          };
-        });
+        // WhatsApp-style: stop sends immediately (works with reply too).
+        if (typeof sendVoiceNoteRef.current === "function") {
+          sendVoiceNoteRef.current(file);
+        } else {
+          setPendingMedia((prev) => {
+            if (prev?.preview?.startsWith("blob:")) {
+              URL.revokeObjectURL(prev.preview);
+            }
+            return {
+              file,
+              kind: "audio",
+              preview: URL.createObjectURL(file),
+              name: file.name,
+            };
+          });
+        }
       };
 
       recorder.start(250);
@@ -1487,26 +1501,39 @@ const CommunityChat = () => {
     };
   }, [activeId]);
 
-  const submitMessage = async (e) => {
+  const submitMessage = async (e, overrides = null) => {
     e?.preventDefault?.();
     unlockNotificationSound();
-    const body = draft.trim();
-    if ((!body && !pendingMedia) || !activeId || sending || isRecording) return;
+    const body =
+      overrides && Object.prototype.hasOwnProperty.call(overrides, "body")
+        ? String(overrides.body || "").trim()
+        : draft.trim();
+    const media = overrides?.media ?? pendingMedia;
+    const replyTarget = overrides?.replyTarget ?? replyingTo;
+    if ((!body && !media) || !activeId || sending || (isRecording && !overrides?.media)) {
+      return;
+    }
     const clientId = clientMessageId();
     let media_url = "";
     let media_type = "";
     setSending(true);
     try {
-      if (pendingMedia?.file) {
-        const uploaded = await uploadFiles(pendingMedia.file);
+      if (media?.file) {
+        const uploaded = await uploadFiles(media.file);
         media_url = Array.isArray(uploaded) ? uploaded[0] : uploaded;
-        media_type = pendingMedia.kind || mediaKindFromFile(pendingMedia.file);
+        media_type = media.kind || mediaKindFromFile(media.file);
         if (!media_url) {
+          toast.error("Could not upload that attachment. Try again.");
           setSending(false);
           return;
         }
       }
     } catch {
+      toast.error(
+        media?.kind === "audio"
+          ? "Voice note upload failed. Check your connection and try again."
+          : "Attachment upload failed. Try again."
+      );
       setSending(false);
       return;
     }
@@ -1514,7 +1541,6 @@ const CommunityChat = () => {
     const mentions = pendingMentions.filter((m) =>
       body.toLowerCase().includes(`@${(m.username || "").toLowerCase()}`)
     );
-    const replyTarget = replyingTo;
     const replyToId =
       replyTarget?.id && Number(replyTarget.id) > 0 ? Number(replyTarget.id) : null;
     const optimistic = {
@@ -1535,6 +1561,7 @@ const CommunityChat = () => {
             sender: replyTarget.sender || null,
           }
         : null,
+      reactions: [],
       client_id: clientId,
       created_at: new Date().toISOString(),
       sender: {
@@ -1549,12 +1576,13 @@ const CommunityChat = () => {
     };
     setMessages((prev) => [...prev, optimistic]);
     playOutgoingChatSound();
-    setDraft("");
+    if (!overrides?.keepDraft) setDraft("");
     setPendingMentions([]);
     clearPendingMedia();
     clearReplyTo();
     setShowEmoji(false);
     setMentionOpen(false);
+    setMessageMenuId(null);
     if (typingActiveRef.current && sendTyping) {
       typingActiveRef.current = false;
       sendTyping(activeId, false);
@@ -1588,9 +1616,24 @@ const CommunityChat = () => {
       } catch {
         setMessages((prev) => prev.filter((m) => m.client_id !== clientId));
         setDraft(body);
+        toast.error("Message failed to send.");
       }
     }
     setSending(false);
+  };
+
+  sendVoiceNoteRef.current = (file) => {
+    if (!file) return;
+    void submitMessage(null, {
+      body: "",
+      media: {
+        file,
+        kind: "audio",
+        preview: "",
+        name: file.name,
+      },
+      replyTarget: replyingToRef.current,
+    });
   };
 
   const loadDirectory = async (q = "") => {
@@ -2648,17 +2691,21 @@ const CommunityChat = () => {
                     <span className="text-sm font-semibold tabular-nums">
                       {formatRecordingClock(recordingSeconds)}
                     </span>
-                    <span className="text-xs text-muted">Recording voice note…</span>
+                    <span className="text-xs text-muted truncate">
+                      {replyingTo
+                        ? "Recording reply… tap send when done"
+                        : "Recording… tap send when done"}
+                    </span>
                   </div>
                   <button
                     type="button"
                     onClick={finishAudioRecording}
                     className="min-h-11 min-w-11 flex items-center justify-center bg-primary text-primary-foreground hover:bg-primary-dark"
                     style={{ borderRadius: 999 }}
-                    aria-label="Stop recording"
-                    title="Stop and attach"
+                    aria-label="Send voice note"
+                    title="Send voice note"
                   >
-                    <IoStop size={18} />
+                    <IoSend size={18} />
                   </button>
                 </div>
               ) : (

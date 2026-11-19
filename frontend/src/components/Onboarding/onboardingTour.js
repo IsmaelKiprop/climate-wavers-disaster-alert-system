@@ -89,9 +89,14 @@ export const tour = {
           "Message friends, join Climate Wavers Community, and talk inside your groups in real time.",
       },
       {
-        title: "Media, mentions & gifts",
+        title: "Voice, media & mentions",
         message:
-          "Send photos, @mention people, open profiles, and gift trees from chat with warm invite suggestions.",
+          "Tap the mic for a voice note, paste a photo into the composer, @mention people, and gift trees from chat.",
+      },
+      {
+        title: "Reply & react",
+        message:
+          "Open ⋯ on any message to reply (WhatsApp-style quote) or react with an emoji. Double-tap a bubble to reply fast.",
       },
     ],
   },
@@ -289,7 +294,7 @@ export const tour = {
       {
         title: "You’re ready",
         message:
-          "That’s the tour. Open the app to post, chat, gift trees, scan recovery bags, and stay alert with your community.",
+          "That’s the tour. Open the app to post, chat with voice notes and replies, gift trees, scan recovery bags, and stay alert with your community.",
       },
     ],
   },
