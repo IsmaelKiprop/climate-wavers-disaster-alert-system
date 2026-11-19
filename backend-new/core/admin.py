@@ -51,6 +51,12 @@ from .models import (
     ProximityBlast,
     ProximityBlastReceipt,
     PlatformAdminInvite,
+    PlasticProject,
+    PlasticHotspot,
+    PlasticRecovery,
+    PlasticCertificate,
+    PlasticSponsorship,
+    PlasticRecyclerPartner,
 )
 from .pricing import verification_priority
 from unfold.admin import ModelAdmin
@@ -714,5 +720,51 @@ class PlatformAdminInviteAdmin(ModelAdmin):
     list_filter = ("status",)
     search_fields = ("email", "token", "note")
     readonly_fields = ("token", "accepted_at", "created_at")
+
+
+@admin.register(PlasticProject)
+class PlasticProjectAdmin(ModelAdmin):
+    list_display = ("name", "organization_name", "status", "goal_kg", "recovered_kg", "created_at")
+    list_filter = ("status", "flood_zone_flag", "country")
+    search_fields = ("name", "organization_name", "city")
+
+
+@admin.register(PlasticHotspot)
+class PlasticHotspotAdmin(ModelAdmin):
+    list_display = ("id", "project", "status", "severity", "drain_related", "created_at")
+    list_filter = ("status", "drain_related", "severity")
+
+
+@admin.register(PlasticRecovery)
+class PlasticRecoveryAdmin(ModelAdmin):
+    list_display = ("bag_id", "project", "status", "kg_claimed", "kg_verified", "created_at")
+    list_filter = ("status", "polymer_type")
+    search_fields = ("bag_id",)
+
+
+@admin.register(PlasticCertificate)
+class PlasticCertificateAdmin(ModelAdmin):
+    list_display = ("code", "project", "kg", "holder_name", "issued_at")
+    search_fields = ("code", "holder_name", "holder_email")
+
+
+@admin.register(PlasticSponsorship)
+class PlasticSponsorshipAdmin(ModelAdmin):
+    list_display = (
+        "payment_reference",
+        "project",
+        "kg_sponsored",
+        "amount_usd",
+        "payment_status",
+        "created_at",
+    )
+    list_filter = ("payment_status",)
+    search_fields = ("payment_reference", "payer_email")
+
+
+@admin.register(PlasticRecyclerPartner)
+class PlasticRecyclerPartnerAdmin(ModelAdmin):
+    list_display = ("name", "city", "is_active", "created_at")
+    list_filter = ("is_active",)
 
 

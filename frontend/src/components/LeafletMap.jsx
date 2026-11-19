@@ -1,7 +1,9 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import { endpoints } from "../utils/endpoints";
+import { apiUrl } from "../config/env";
 
 import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
 import markerIcon from "leaflet/dist/images/marker-icon.png";
@@ -75,8 +77,26 @@ const LeafletMap = ({ disasters, onDisasterClick }) => {
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
   const markersRef = useRef([]);
+  const plasticMarkersRef = useRef([]);
   const navigateRef = useRef(navigate);
   navigateRef.current = navigate;
+  const [plasticHotspots, setPlasticHotspots] = useState([]);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const res = await fetch(apiUrl(endpoints.plasticFloodHotspots));
+        const data = await res.json();
+        if (alive && Array.isArray(data)) setPlasticHotspots(data);
+      } catch {
+        if (alive) setPlasticHotspots([]);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (!mapRef.current || mapInstanceRef.current) return;
@@ -196,12 +216,47 @@ const LeafletMap = ({ disasters, onDisasterClick }) => {
         });
       });
 
+    plasticMarkersRef.current.forEach((marker) => map.removeLayer(marker));
+    plasticMarkersRef.current = [];
+    (plasticHotspots || []).forEach((spot) => {
+      if (spot?.latitude == null || spot?.longitude == null) return;
+      const marker = L.circleMarker([spot.latitude, spot.longitude], {
+        radius: 8,
+        color: "#0f766e",
+        weight: 2,
+        fillColor: "#14b8a6",
+        fillOpacity: 0.75,
+      });
+      const href = `/plastic/${spot.project_id}`;
+      marker.bindPopup(`
+        <div style="padding:6px;min-width:160px;">
+          <div style="font-size:11px;color:#0f766e;font-weight:600;margin-bottom:4px;">Plastic / drain risk</div>
+          <div style="font-weight:600;margin-bottom:4px;">${escapeHtml(spot.title || "Hotspot")}</div>
+          <div style="font-size:12px;color:#6b7280;margin-bottom:8px;">${escapeHtml(spot.project_name || "")} · ${escapeHtml(spot.status || "")}</div>
+          <a href="${href}" data-plastic-link="true" style="display:block;text-align:center;background:#0f766e;color:#fff;padding:6px 8px;text-decoration:none;font-size:12px;font-weight:600;">Open Plastic Pulse</a>
+        </div>
+      `);
+      marker.addTo(map);
+      plasticMarkersRef.current.push(marker);
+      marker.on("popupopen", () => {
+        const popupEl = marker.getPopup()?.getElement();
+        const link = popupEl?.querySelector("[data-plastic-link]");
+        if (!link || link.dataset.bound === "true") return;
+        link.dataset.bound = "true";
+        link.addEventListener("click", (event) => {
+          event.preventDefault();
+          navigateRef.current(href);
+        });
+      });
+    });
+
     map.invalidateSize(true);
-    if (markersRef.current.length > 0) {
-      const group = new L.featureGroup(markersRef.current);
+    const all = [...markersRef.current, ...plasticMarkersRef.current];
+    if (all.length > 0) {
+      const group = new L.featureGroup(all);
       map.fitBounds(group.getBounds().pad(0.1));
     }
-  }, [disasters, onDisasterClick]);
+  }, [disasters, onDisasterClick, plasticHotspots]);
 
   return (
     <div className="relative w-full h-full min-h-[300px] overflow-hidden bg-[#e8eef0]">
@@ -232,10 +287,16 @@ const LeafletMap = ({ disasters, onDisasterClick }) => {
       <div className="absolute bottom-3 left-3 bg-surface border border-border p-3 z-[1000] max-w-[calc(100%-1.5rem)] sm:max-w-xs">
         <p className="text-foreground text-xs font-semibold mb-1">
           {(disasters || []).length} live events
+          {plasticHotspots.length
+            ? ` · ${plasticHotspots.length} plastic drain hotspot${
+                plasticHotspots.length === 1 ? "" : "s"
+              }`
+            : ""}
         </p>
         <p className="text-xs text-muted">
           Critical {(disasters || []).filter((d) => d.severity === "CRITICAL").length} · High{" "}
           {(disasters || []).filter((d) => d.severity === "HIGH").length}
+          {plasticHotspots.length ? " · Teal = drain plastic risk" : ""}
         </p>
       </div>
     </div>

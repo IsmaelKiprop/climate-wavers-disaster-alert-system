@@ -27,10 +27,19 @@ from decimal import Decimal, ROUND_CEILING
 from django.db import transaction
 from django.db.models import F
 
-from .models import TreeProject, TreeProjectDonation, WaversPointsAccount, WaversPointsLedger
+from .models import (
+    PlasticProject,
+    PlasticRecovery,
+    PlasticSponsorship,
+    TreeProject,
+    TreeProjectDonation,
+    WaversPointsAccount,
+    WaversPointsLedger,
+)
 
 POINTS_PER_USD = 100
 GIFT_EARN_RATE = Decimal("0.10")
+RECOVERY_POINTS_PER_KG = 5
 
 MARKET_NOTES = {
     "points_per_usd": POINTS_PER_USD,
@@ -271,4 +280,156 @@ def redeem_trees_with_points(
         "certificate_emailed_at": donation.certificate_emailed_at.isoformat()
         if getattr(donation, "certificate_emailed_at", None)
         else None,
+    }
+
+
+@transaction.atomic
+def credit_sponsor_points(sponsorship: PlasticSponsorship):
+    """10% loyalty when a logged-in user pays to sponsor plastic kg."""
+    if not sponsorship or not sponsorship.sponsor_id:
+        return 0
+    if sponsorship.payment_status != "completed":
+        return 0
+    if _as_money(sponsorship.amount_usd) <= 0:
+        return 0
+    ref = str(sponsorship.payment_reference or "")
+    if ref.startswith("POINTS-"):
+        return 0
+    if WaversPointsLedger.objects.filter(
+        plastic_sponsorship=sponsorship, reason="sponsor_earn"
+    ).exists():
+        return 0
+
+    points = points_for_usd(_as_money(sponsorship.amount_usd) * GIFT_EARN_RATE)
+    if points <= 0:
+        return 0
+
+    account = get_or_create_account(sponsorship.sponsor)
+    account.balance = F("balance") + points
+    account.lifetime_earned = F("lifetime_earned") + points
+    account.save(update_fields=["balance", "lifetime_earned", "updated_at"])
+    account.refresh_from_db()
+
+    WaversPointsLedger.objects.create(
+        user=sponsorship.sponsor,
+        delta=points,
+        balance_after=account.balance,
+        reason="sponsor_earn",
+        note=f"Sponsor reward for {sponsorship.kg_sponsored} kg plastic",
+        plastic_sponsorship=sponsorship,
+    )
+    return points
+
+
+@transaction.atomic
+def credit_recovery_points(recovery: PlasticRecovery):
+    """5 pts per verified kg after recycler intake."""
+    if not recovery or not recovery.submitted_by_id:
+        return 0
+    if recovery.status != "intake_confirmed":
+        return 0
+    kg = _as_money(recovery.kg_verified or recovery.kg_claimed)
+    if kg <= 0:
+        return 0
+    if WaversPointsLedger.objects.filter(
+        plastic_recovery=recovery, reason="recovery_earn"
+    ).exists():
+        return 0
+
+    points = max(int(kg * Decimal(RECOVERY_POINTS_PER_KG)), 0)
+    if points <= 0:
+        return 0
+
+    account = get_or_create_account(recovery.submitted_by)
+    account.balance = F("balance") + points
+    account.lifetime_earned = F("lifetime_earned") + points
+    account.save(update_fields=["balance", "lifetime_earned", "updated_at"])
+    account.refresh_from_db()
+
+    WaversPointsLedger.objects.create(
+        user=recovery.submitted_by,
+        delta=points,
+        balance_after=account.balance,
+        reason="recovery_earn",
+        note=f"Recovery reward for {kg} kg ({recovery.bag_id})",
+        plastic_recovery=recovery,
+    )
+    return points
+
+
+@transaction.atomic
+def redeem_plastic_with_points(
+    *,
+    user,
+    project: PlasticProject,
+    kg,
+    dedication_message: str = "",
+):
+    from .plastic import _issue_certificate
+
+    kg = _as_money(kg)
+    if kg <= 0:
+        raise ValueError("kg must be > 0.")
+    if kg > 500:
+        raise ValueError("You can redeem at most 500 kg at once.")
+
+    locked = PlasticProject.objects.select_for_update().get(pk=project.pk)
+    cost = points_for_usd(_as_money(locked.sponsor_price_usd_per_kg) * kg)
+    account = get_or_create_account(user)
+    if account.balance < cost:
+        raise ValueError(
+            f"Not enough points. Need {cost}, you have {account.balance}."
+        )
+
+    account.balance = F("balance") - cost
+    account.lifetime_redeemed = F("lifetime_redeemed") + cost
+    account.save(update_fields=["balance", "lifetime_redeemed", "updated_at"])
+    account.refresh_from_db()
+
+    reference = f"POINTS-PL-{uuid.uuid4().hex[:14].upper()}"
+    note = (dedication_message or "").strip()
+    note = f"{note}\n\nRedeemed with {cost} Wavers Points".strip()
+
+    sponsorship = PlasticSponsorship.objects.create(
+        project=locked,
+        sponsor=user,
+        payer_email=getattr(user, "email", "") or "",
+        sponsor_display_name=(
+            getattr(user, "get_full_name", lambda: "")() or user.username
+        ),
+        kg_sponsored=kg,
+        amount=Decimal("0.00"),
+        amount_usd=Decimal("0.00"),
+        platform_fee=Decimal("0.00"),
+        admin_share=Decimal("0.00"),
+        fee_rate=Decimal("0"),
+        payment_reference=reference,
+        payment_status="completed",
+        dedication_message=note,
+    )
+
+    cert = _issue_certificate(
+        project=locked,
+        kg=kg,
+        holder_name=sponsorship.sponsor_display_name,
+        holder_email=sponsorship.payer_email,
+        sponsorship=sponsorship,
+    )
+
+    WaversPointsLedger.objects.create(
+        user=user,
+        delta=-cost,
+        balance_after=account.balance,
+        reason="redeem_plastic",
+        note=f"Redeemed {kg} kg on {locked.name}",
+        plastic_sponsorship=sponsorship,
+    )
+
+    return {
+        "sponsorship_id": sponsorship.id,
+        "points_spent": cost,
+        "balance": account.balance,
+        "kg_sponsored": float(kg),
+        "certificate_id": cert.code,
+        "payment_reference": reference,
     }

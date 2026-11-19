@@ -1819,6 +1819,10 @@ def paystack_webhook(request):
     try:
         if product in {"rapidbrief", "responder_plan", "rapidbrief_plan"}:
             record_rapidbrief_payment(reference, client_data={"product": "rapidbrief"})
+        elif product in {"plastic", "plastic_pulse", "sponsor_plastic"}:
+            from .paystack_payment import record_plastic_sponsorship
+
+            record_plastic_sponsorship(reference, client_data={"product": "plastic"})
         else:
             record_tree_payment(reference)
     except PaymentRecordError as exc:

@@ -671,25 +671,187 @@ def record_rapidbrief_payment(reference, request_user=None, client_data=None):
     }
 
 
+def record_plastic_sponsorship(reference, request_user=None, client_data=None):
+    """Record sponsor-a-kilo Paystack charge for Plastic Pulse."""
+    from django.db import IntegrityError, transaction
+    from django.contrib.auth import get_user_model
+
+    from .models import PlasticProject, PlasticSponsorship
+    from .plastic import _issue_certificate, _money, _dec
+    from .tree_pricing import split_tree_payment
+
+    User = get_user_model()
+    reference = str(reference or "").strip()
+    if not reference:
+        raise PaymentRecordError("Missing payment reference.")
+
+    client_data = client_data or {}
+    existing = PlasticSponsorship.objects.filter(
+        payment_reference=reference
+    ).select_related("project").first()
+    if existing and existing.payment_status == "completed":
+        return {
+            "success": True,
+            "message": "Plastic sponsorship already recorded.",
+            "payment_reference": existing.payment_reference,
+            "sponsorship_id": existing.id,
+            "certificate_id": existing.certificate_id,
+            "kg_sponsored": float(existing.kg_sponsored),
+            "product": "plastic",
+        }
+
+    payment = _verify_with_paystack(reference)
+    metadata = payment.get("metadata") or {}
+    if not isinstance(metadata, dict):
+        metadata = {}
+
+    project_id = (
+        _metadata_value(metadata, "plastic_project_id")
+        or _metadata_value(metadata, "project_id")
+        or client_data.get("plastic_project_id")
+        or client_data.get("project_id")
+    )
+    try:
+        project = PlasticProject.objects.select_related("tree_admin_org").get(
+            pk=int(project_id)
+        )
+    except (TypeError, ValueError, PlasticProject.DoesNotExist) as exc:
+        raise PaymentRecordError("Plastic project not found.", 404) from exc
+
+    kg = _money(
+        _metadata_value(metadata, "kg_sponsored")
+        or client_data.get("kg_sponsored")
+        or client_data.get("kg")
+        or 0
+    )
+    if kg <= 0:
+        raise PaymentRecordError("Invalid kg_sponsored.", 400)
+
+    amount_kes = _as_decimal(payment.get("amount", 0))
+    if amount_kes is None:
+        raise PaymentRecordError("Paystack did not return a valid amount.", 400)
+    amount_kes = (amount_kes / Decimal("100")).quantize(Decimal("0.01"))
+
+    usd_meta = dict(metadata)
+    for key in ("amount_usd", "original_usd", "usd_amount", "usd_kes_rate", "exchange_rate"):
+        if client_data.get(key) not in (None, ""):
+            usd_meta[key] = client_data.get(key)
+    # Reuse tree USD resolver with a shim project price path via metadata amount_usd
+    amount_usd = _money(
+        _metadata_value(usd_meta, "amount_usd")
+        or client_data.get("amount_usd")
+        or 0
+    )
+    if amount_usd <= 0:
+        # Fall back: kg × project sponsor price
+        amount_usd = _money(_dec(project.sponsor_price_usd_per_kg) * kg)
+
+    org = project.tree_admin_org
+    platform_fee, admin_share, fee_rate = split_tree_payment(amount_usd, org=org)
+
+    payer_email = (
+        payment.get("customer", {}) or {}
+    ).get("email") or client_data.get("email") or ""
+    donor = request_user if getattr(request_user, "is_authenticated", False) else None
+    if donor is None and payer_email:
+        donor = User.objects.filter(email__iexact=payer_email).first()
+
+    dedication = str(
+        _metadata_value(metadata, "dedication_message")
+        or client_data.get("dedication_message")
+        or ""
+    )[:2000]
+    display = str(
+        _metadata_value(metadata, "sponsor_name")
+        or client_data.get("sponsor_name")
+        or ""
+    )[:200]
+
+    try:
+        with transaction.atomic():
+            sponsorship = PlasticSponsorship.objects.create(
+                project=project,
+                sponsor=donor,
+                payer_email=payer_email or "",
+                sponsor_display_name=display,
+                kg_sponsored=kg,
+                amount=amount_kes,
+                amount_usd=amount_usd,
+                platform_fee=platform_fee,
+                admin_share=admin_share,
+                fee_rate=fee_rate,
+                payment_reference=reference,
+                payment_status="completed",
+                dedication_message=dedication,
+            )
+    except IntegrityError:
+        sponsorship = PlasticSponsorship.objects.select_related("project").get(
+            payment_reference=reference
+        )
+
+    points_earned = 0
+    try:
+        from .points import credit_sponsor_points, get_or_create_account
+
+        points_earned = credit_sponsor_points(sponsorship) or 0
+    except Exception as exc:
+        logger.warning("Plastic sponsor points skipped: %s", exc)
+
+    cert_code = sponsorship.certificate_id
+    if not cert_code:
+        holder = display or (
+            donor.get_full_name() if donor else ""
+        ) or payer_email.split("@")[0]
+        cert = _issue_certificate(
+            project=project,
+            kg=kg,
+            holder_name=holder,
+            holder_email=payer_email or "",
+            sponsorship=sponsorship,
+        )
+        cert_code = cert.code
+        sponsorship.refresh_from_db()
+
+    return {
+        "success": True,
+        "message": "Plastic sponsorship recorded.",
+        "payment_reference": reference,
+        "sponsorship_id": sponsorship.id,
+        "project_id": project.id,
+        "kg_sponsored": float(kg),
+        "amount_usd": float(amount_usd),
+        "platform_fee": float(platform_fee),
+        "admin_share": float(admin_share),
+        "certificate_id": cert_code,
+        "points_earned": points_earned,
+        "product": "plastic",
+    }
+
+
 def record_paystack_charge(reference, request_user=None, client_data=None):
     """
-    Route a verified Paystack reference to tree donation or RapidBrief billing.
+    Route a verified Paystack reference to tree donation, plastic, or RapidBrief billing.
     Used by the browser verify endpoint and the webhook.
     """
     client_data = client_data or {}
     product = str(client_data.get("product") or "").strip().lower()
     if product in {"rapidbrief", "responder_plan", "rapidbrief_plan"}:
         return record_rapidbrief_payment(reference, request_user, client_data)
+    if product in {"plastic", "plastic_pulse", "sponsor_plastic"}:
+        return record_plastic_sponsorship(reference, request_user, client_data)
 
     # Peek metadata without failing tree flow when secret/network errors.
     try:
         payment = _verify_with_paystack(str(reference or "").strip())
-        if payment_product_type(payment) in {
+        ptype = payment_product_type(payment)
+        if ptype in {
             "rapidbrief",
             "responder_plan",
             "rapidbrief_plan",
         }:
             return record_rapidbrief_payment(reference, request_user, client_data)
+        if ptype in {"plastic", "plastic_pulse", "sponsor_plastic"}:
+            return record_plastic_sponsorship(reference, request_user, client_data)
     except PaymentRecordError:
         # Fall through to tree recording — tree verify will re-check Paystack.
         pass

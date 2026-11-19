@@ -44,6 +44,20 @@ from .tree_admin import (
     TreeAdminDonationProofView,
 )
 from .tree_certificate import TreeCertificateVerifyView
+from .plastic import (
+    PlasticProjectListCreateView,
+    PlasticProjectDetailView,
+    PlasticHotspotCreateView,
+    PlasticHotspotClaimView,
+    PlasticRecoveryCreateView,
+    PlasticRecoveryVerifyView,
+    PlasticIntakeScanView,
+    PlasticRecyclerListCreateView,
+    PlasticCertificateVerifyView,
+    PlasticFloodHotspotsView,
+    PlasticSponsorCheckoutView,
+    PlasticAdminQueueView,
+)
 from .fx import UsdKesRateView
 from .groups import (
     SocialGroupListCreateView,
@@ -219,6 +233,49 @@ urlpatterns = [
         ResponderBillingVerifyView.as_view(),
         name="responder-billing-verify",
     ),
+    # Plastic Pulse
+    path("plastic/projects/", PlasticProjectListCreateView.as_view(), name="plastic-projects"),
+    path(
+        "plastic/projects/<int:project_id>/",
+        PlasticProjectDetailView.as_view(),
+        name="plastic-project-detail",
+    ),
+    path(
+        "plastic/projects/<int:project_id>/hotspots/",
+        PlasticHotspotCreateView.as_view(),
+        name="plastic-hotspots-create",
+    ),
+    path(
+        "plastic/projects/<int:project_id>/sponsor/",
+        PlasticSponsorCheckoutView.as_view(),
+        name="plastic-sponsor",
+    ),
+    path(
+        "plastic/hotspots/<int:hotspot_id>/claim/",
+        PlasticHotspotClaimView.as_view(),
+        name="plastic-hotspot-claim",
+    ),
+    path("plastic/recoveries/", PlasticRecoveryCreateView.as_view(), name="plastic-recoveries"),
+    path(
+        "plastic/recoveries/<int:recovery_id>/verify/",
+        PlasticRecoveryVerifyView.as_view(),
+        name="plastic-recovery-verify",
+    ),
+    path("plastic/intake/scan/", PlasticIntakeScanView.as_view(), name="plastic-intake-scan"),
+    path("plastic/recyclers/", PlasticRecyclerListCreateView.as_view(), name="plastic-recyclers"),
+    path(
+        "plastic/certificates/<str:code>/",
+        PlasticCertificateVerifyView.as_view(),
+        name="plastic-certificate-verify",
+    ),
+    path(
+        "plastic/certificates/",
+        PlasticCertificateVerifyView.as_view(),
+        name="plastic-certificate-verify-query",
+    ),
+    path("plastic/flood-hotspots/", PlasticFloodHotspotsView.as_view(), name="plastic-flood-hotspots"),
+    path("plastic/admin/queue/", PlasticAdminQueueView.as_view(), name="plastic-admin-queue"),
+
     path("tree-admin/apply/", TreeAdminApplyView.as_view(), name="tree-admin-apply"),
     path(
         "tree-admin/apply-public/",

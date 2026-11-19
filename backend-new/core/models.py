@@ -25,6 +25,7 @@ class Notification(models.Model):
         ("proximity_alert", "Proximity Alert"),
         ("platform_admin", "Platform Admin"),
         ("tree", "Tree planting"),
+        ("plastic", "Plastic Pulse"),
     ]
 
     user = models.ForeignKey(
@@ -785,6 +786,9 @@ class WaversPointsLedger(models.Model):
     REASON_CHOICES = [
         ("gift_earn", "Gift reward"),
         ("redeem_tree", "Redeem tree"),
+        ("sponsor_earn", "Plastic sponsor reward"),
+        ("recovery_earn", "Plastic recovery reward"),
+        ("redeem_plastic", "Redeem plastic kg"),
         ("adjustment", "Adjustment"),
     ]
 
@@ -799,6 +803,20 @@ class WaversPointsLedger(models.Model):
     note = models.CharField(max_length=255, blank=True, default="")
     donation = models.ForeignKey(
         TreeProjectDonation,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="points_entries",
+    )
+    plastic_sponsorship = models.ForeignKey(
+        "PlasticSponsorship",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="points_entries",
+    )
+    plastic_recovery = models.ForeignKey(
+        "PlasticRecovery",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -2923,3 +2941,370 @@ class PlatformAdminInvite(models.Model):
     @property
     def is_expired(self):
         return timezone.now() >= self.expires_at
+
+
+class PlasticProject(models.Model):
+    """CBO-run Plastic Pulse project with live kg recovery."""
+
+    PROJECT_STATUS = [
+        ("active", "Active"),
+        ("completed", "Completed"),
+        ("paused", "Paused"),
+        ("pending_approval", "Pending Approval"),
+    ]
+
+    name = models.CharField(max_length=200)
+    description = models.TextField(blank=True, default="")
+    short_description = models.CharField(max_length=500, blank=True, default="")
+    organization = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="plastic_projects",
+    )
+    tree_admin_org = models.ForeignKey(
+        "TreeAdminOrganization",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="plastic_projects",
+    )
+    organization_name = models.CharField(max_length=200, blank=True, default="")
+    country = models.CharField(max_length=100, default="Kenya")
+    region = models.CharField(max_length=100, blank=True, default="")
+    city = models.CharField(max_length=100, blank=True, default="")
+    latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    address = models.TextField(blank=True, default="")
+    status = models.CharField(max_length=20, choices=PROJECT_STATUS, default="active")
+    goal_kg = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    recovered_kg = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    sponsor_price_usd_per_kg = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=1.00,
+        help_text="Impact sponsorship price USD per verified kg",
+    )
+    scrap_pet_kes_per_kg = models.DecimalField(
+        max_digits=10, decimal_places=2, default=20, help_text="Indicative PET scrap KES/kg"
+    )
+    scrap_hdpe_kes_per_kg = models.DecimalField(
+        max_digits=10, decimal_places=2, default=25, help_text="Indicative HDPE scrap KES/kg"
+    )
+    cover_image = models.CharField(max_length=500, blank=True, default="")
+    gallery = models.JSONField(default=list, blank=True)
+    flood_zone_flag = models.BooleanField(
+        default=False,
+        help_text="Project focuses on drain / flood-risk corridors",
+    )
+    contact_person = models.CharField(max_length=200, blank=True, default="")
+    contact_email = models.EmailField(blank=True, default="")
+    contact_phone = models.CharField(max_length=40, blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["status"]),
+            models.Index(fields=["country", "city"]),
+            models.Index(fields=["flood_zone_flag"]),
+        ]
+
+    def __str__(self):
+        return f"{self.name} ({self.recovered_kg} kg)"
+
+    @property
+    def progress_percentage(self):
+        goal = float(self.goal_kg or 0)
+        if goal <= 0:
+            return 0
+        return min((float(self.recovered_kg or 0) / goal) * 100, 100)
+
+
+class PlasticHotspot(models.Model):
+    STATUS_CHOICES = [
+        ("open", "Open"),
+        ("claimed", "Claimed"),
+        ("cleared", "Cleared"),
+    ]
+    SEVERITY_CHOICES = [
+        ("low", "Low"),
+        ("medium", "Medium"),
+        ("high", "High"),
+        ("critical", "Critical"),
+    ]
+
+    project = models.ForeignKey(
+        PlasticProject, on_delete=models.CASCADE, related_name="hotspots"
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="plastic_hotspots",
+    )
+    claimed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="claimed_plastic_hotspots",
+    )
+    title = models.CharField(max_length=200, blank=True, default="")
+    notes = models.TextField(blank=True, default="")
+    photo = models.CharField(max_length=500, blank=True, default="")
+    latitude = models.DecimalField(max_digits=9, decimal_places=6)
+    longitude = models.DecimalField(max_digits=9, decimal_places=6)
+    location_label = models.CharField(max_length=255, blank=True, default="")
+    severity = models.CharField(max_length=20, choices=SEVERITY_CHOICES, default="medium")
+    drain_related = models.BooleanField(
+        default=False, help_text="Blocks drainage / flood corridor"
+    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="open")
+    claimed_at = models.DateTimeField(null=True, blank=True)
+    cleared_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["status"]),
+            models.Index(fields=["drain_related", "status"]),
+        ]
+
+    def __str__(self):
+        return f"Hotspot {self.id} ({self.status})"
+
+
+class PlasticRecyclerPartner(models.Model):
+    name = models.CharField(max_length=200)
+    organization = models.ForeignKey(
+        "TreeAdminOrganization",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="plastic_recyclers",
+    )
+    contact_email = models.EmailField(blank=True, default="")
+    contact_phone = models.CharField(max_length=40, blank=True, default="")
+    city = models.CharField(max_length=100, blank=True, default="")
+    latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    buy_rates = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='KES/kg by polymer, e.g. {"PET": 20, "HDPE": 25, "PP": 10}',
+    )
+    is_active = models.BooleanField(default=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_plastic_recyclers",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
+
+
+class PlasticRecovery(models.Model):
+    STATUS_CHOICES = [
+        ("queued_offline", "Queued offline"),
+        ("submitted", "Submitted"),
+        ("cbo_verified", "CBO verified"),
+        ("rejected", "Rejected"),
+        ("intake_confirmed", "Recycler intake confirmed"),
+    ]
+    POLYMER_CHOICES = [
+        ("PET", "PET"),
+        ("HDPE", "HDPE"),
+        ("PP", "PP"),
+        ("mixed", "Mixed"),
+        ("other", "Other"),
+    ]
+
+    project = models.ForeignKey(
+        PlasticProject, on_delete=models.CASCADE, related_name="recoveries"
+    )
+    hotspot = models.ForeignKey(
+        PlasticHotspot,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="recoveries",
+    )
+    submitted_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="plastic_recoveries",
+    )
+    verified_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="verified_plastic_recoveries",
+    )
+    recycler = models.ForeignKey(
+        PlasticRecyclerPartner,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="intakes",
+    )
+    client_uuid = models.CharField(
+        max_length=64,
+        blank=True,
+        default="",
+        db_index=True,
+        help_text="Idempotent offline sync id",
+    )
+    bag_id = models.CharField(max_length=64, db_index=True)
+    polymer_type = models.CharField(
+        max_length=20, choices=POLYMER_CHOICES, default="mixed"
+    )
+    kg_claimed = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    kg_verified = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    images = models.JSONField(default=list, blank=True)
+    videos = models.JSONField(default=list, blank=True)
+    latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    location_label = models.CharField(max_length=255, blank=True, default="")
+    notes = models.TextField(blank=True, default="")
+    status = models.CharField(
+        max_length=20, choices=STATUS_CHOICES, default="submitted", db_index=True
+    )
+    reject_reason = models.CharField(max_length=255, blank=True, default="")
+    offline_queued_at = models.DateTimeField(null=True, blank=True)
+    synced_at = models.DateTimeField(null=True, blank=True)
+    verified_at = models.DateTimeField(null=True, blank=True)
+    intake_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["status", "project"]),
+            models.Index(fields=["bag_id"]),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["project", "client_uuid"],
+                condition=~models.Q(client_uuid=""),
+                name="uniq_plastic_recovery_client_uuid_per_project",
+            )
+        ]
+
+    def __str__(self):
+        return f"Recovery {self.bag_id} ({self.status})"
+
+
+class PlasticCertificate(models.Model):
+    code = models.CharField(max_length=80, unique=True, db_index=True)
+    project = models.ForeignKey(
+        PlasticProject, on_delete=models.CASCADE, related_name="certificates"
+    )
+    recovery = models.ForeignKey(
+        PlasticRecovery,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="certificates",
+    )
+    sponsorship = models.ForeignKey(
+        "PlasticSponsorship",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="certificates",
+    )
+    kg = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    holder_name = models.CharField(max_length=200, blank=True, default="")
+    holder_email = models.EmailField(blank=True, default="")
+    issued_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-issued_at"]
+
+    def __str__(self):
+        return self.code
+
+
+class PlasticSponsorship(models.Model):
+    """Sponsor-a-kilo payment (Paystack), mirrors tree donations."""
+
+    PAYMENT_STATUSES = [
+        ("pending", "Pending"),
+        ("completed", "Completed"),
+        ("failed", "Failed"),
+        ("refunded", "Refunded"),
+    ]
+    PAYOUT_STATUSES = [
+        ("none", "Not started"),
+        ("skipped", "Skipped"),
+        ("pending", "Pending"),
+        ("success", "Paid out"),
+        ("failed", "Failed"),
+    ]
+
+    project = models.ForeignKey(
+        PlasticProject, on_delete=models.CASCADE, related_name="sponsorships"
+    )
+    sponsor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="plastic_sponsorships",
+    )
+    gifted_to = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="gifted_plastic_sponsorships",
+    )
+    payer_email = models.EmailField(blank=True, default="")
+    sponsor_display_name = models.CharField(max_length=200, blank=True, default="")
+    kg_sponsored = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    amount = models.DecimalField(
+        max_digits=12, decimal_places=2, default=0, help_text="Charged amount (KES)"
+    )
+    amount_usd = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    platform_fee = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    admin_share = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    fee_rate = models.DecimalField(max_digits=5, decimal_places=4, default=0.18)
+    payment_reference = models.CharField(max_length=100, unique=True)
+    payment_status = models.CharField(
+        max_length=20, choices=PAYMENT_STATUSES, default="pending", db_index=True
+    )
+    dedication_message = models.TextField(blank=True, default="")
+    certificate_id = models.CharField(max_length=80, blank=True, default="", db_index=True)
+    certificate_issued_at = models.DateTimeField(null=True, blank=True)
+    payout_status = models.CharField(
+        max_length=20, choices=PAYOUT_STATUSES, default="none", db_index=True
+    )
+    payout_amount_kes = models.DecimalField(
+        max_digits=12, decimal_places=2, null=True, blank=True
+    )
+    payout_reference = models.CharField(max_length=120, blank=True, default="")
+    payout_error = models.CharField(max_length=500, blank=True, default="")
+    payout_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"Sponsor {self.kg_sponsored}kg on {self.project_id} ({self.payment_status})"

@@ -26,6 +26,10 @@ const PaymentSuccess = () => {
     } catch {
       stored = {};
     }
+    const productFromUrl = (searchParams.get('product') || '').trim().toLowerCase();
+    if (productFromUrl && !stored.product) {
+      stored.product = productFromUrl;
+    }
     const token = getAuthToken();
     const response = await fetch(apiUrl('/api/v1/verify-payment/'), {
       method: 'POST',
@@ -40,10 +44,14 @@ const PaymentSuccess = () => {
       throw new Error(result.message || 'Payment verification failed.');
     }
     const details = result.certificate_data || {};
+    const isPlastic =
+      (result.product || stored.product || '').toString().toLowerCase() === 'plastic';
     setPaymentData({
       reference,
-      amount: Number(details.amount || 0),
+      amount: Number(details.amount || result.amount_usd || 0),
       trees: Number(details.trees_planted || 1),
+      kgSponsored: Number(result.kg_sponsored || stored.kg_sponsored || 0),
+      product: isPlastic ? 'plastic' : 'tree',
       certificateId: details.certificate_id || result.certificate_id || '',
       certificateEmailed: Boolean(
         result.certificate_emailed_at || details.emailed
@@ -51,13 +59,16 @@ const PaymentSuccess = () => {
       donorEmail: details.payer_email || '',
       species: details.species || details.tree_type || '',
       giftedTo: details.gifted_to || '',
+      projectId: result.project_id || stored.plastic_project_id || stored.project_id,
     });
     setError('');
     sessionStorage.removeItem(`cw-pay-${reference}`);
     toast.success(
-      result.certificate_emailed_at || details.emailed
-        ? 'Payment saved. Your tree certificate is on its way by email.'
-        : 'Payment saved. Your trees are on your dashboard.'
+      isPlastic
+        ? 'Plastic sponsorship saved. Your impact certificate is ready.'
+        : result.certificate_emailed_at || details.emailed
+          ? 'Payment saved. Your tree certificate is on its way by email.'
+          : 'Payment saved. Your trees are on your dashboard.'
     );
   };
 
@@ -183,12 +194,21 @@ const PaymentSuccess = () => {
                   </span>
                 </div>
                 
-                <div className="flex justify-between items-center py-2 border-b border-gray-100">
-                  <span className="text-gray-600">Trees Planted:</span>
-                  <span className="font-semibold text-green-600">
-                    {paymentData.trees} tree{paymentData.trees > 1 ? 's' : ''}
-                  </span>
-                </div>
+                {paymentData.product === 'plastic' ? (
+                  <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                    <span className="text-gray-600">Plastic sponsored:</span>
+                    <span className="font-semibold text-green-600">
+                      {paymentData.kgSponsored || 0} kg
+                    </span>
+                  </div>
+                ) : (
+                  <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                    <span className="text-gray-600">Trees Planted:</span>
+                    <span className="font-semibold text-green-600">
+                      {paymentData.trees} tree{paymentData.trees > 1 ? 's' : ''}
+                    </span>
+                  </div>
+                )}
                 
                 <div className="flex justify-between items-center py-2 border-b border-gray-100">
                   <span className="text-gray-600">Amount:</span>
@@ -205,11 +225,21 @@ const PaymentSuccess = () => {
                   </div>
                 ) : null}
                 {paymentData.certificateId ? (
-                  <div className="flex justify-between items-center py-2">
-                    <span className="text-gray-600">Certificate ID:</span>
-                    <span className="font-mono text-xs bg-gray-100 px-2 py-1 rounded">
+                  <div className="flex justify-between items-center py-2 gap-3">
+                    <span className="text-gray-600 shrink-0">Certificate ID:</span>
+                    <button
+                      type="button"
+                      className="font-mono text-xs bg-gray-100 px-2 py-1 rounded text-left hover:underline"
+                      onClick={() =>
+                        navigate(
+                          paymentData.product === 'plastic'
+                            ? `/verify/plastic/${encodeURIComponent(paymentData.certificateId)}`
+                            : `/verify/tree/${encodeURIComponent(paymentData.certificateId)}`
+                        )
+                      }
+                    >
                       {paymentData.certificateId}
-                    </span>
+                    </button>
                   </div>
                 ) : null}
               </div>
@@ -253,22 +283,44 @@ const PaymentSuccess = () => {
               Your Impact
             </h3>
             <p className="text-white/90 mb-4">
-              By planting {paymentData?.trees || 1} tree{paymentData?.trees > 1 ? 's' : ''}
-              {paymentData.giftedTo ? ` for ${paymentData.giftedTo}` : ''}, you help:
+              {paymentData.product === 'plastic'
+                ? `By sponsoring ${paymentData.kgSponsored || 0} kg of verified plastic recovery, you help:`
+                : `By planting ${paymentData?.trees || 1} tree${paymentData?.trees > 1 ? 's' : ''}${
+                    paymentData.giftedTo ? ` for ${paymentData.giftedTo}` : ''
+                  }, you help:`}
             </p>
             <ul className="space-y-2 text-white/90">
-              <li className="flex items-center">
-                <IoCheckmarkCircle className="w-4 h-4 mr-2 text-white" />
-                Absorb CO₂ from the atmosphere
-              </li>
-              <li className="flex items-center">
-                <IoCheckmarkCircle className="w-4 h-4 mr-2 text-white" />
-                Restore degraded ecosystems
-              </li>
-              <li className="flex items-center">
-                <IoCheckmarkCircle className="w-4 h-4 mr-2 text-white" />
-                Support local communities
-              </li>
+              {paymentData.product === 'plastic' ? (
+                <>
+                  <li className="flex items-center">
+                    <IoCheckmarkCircle className="w-4 h-4 mr-2 text-white" />
+                    Fund CBO / youth collection above scrap value
+                  </li>
+                  <li className="flex items-center">
+                    <IoCheckmarkCircle className="w-4 h-4 mr-2 text-white" />
+                    Clear drain corridors that raise flood risk
+                  </li>
+                  <li className="flex items-center">
+                    <IoCheckmarkCircle className="w-4 h-4 mr-2 text-white" />
+                    Keep recyclable material in the circular economy
+                  </li>
+                </>
+              ) : (
+                <>
+                  <li className="flex items-center">
+                    <IoCheckmarkCircle className="w-4 h-4 mr-2 text-white" />
+                    Absorb CO₂ from the atmosphere
+                  </li>
+                  <li className="flex items-center">
+                    <IoCheckmarkCircle className="w-4 h-4 mr-2 text-white" />
+                    Restore degraded ecosystems
+                  </li>
+                  <li className="flex items-center">
+                    <IoCheckmarkCircle className="w-4 h-4 mr-2 text-white" />
+                    Support local communities
+                  </li>
+                </>
+              )}
             </ul>
           </div>
 
@@ -278,10 +330,21 @@ const PaymentSuccess = () => {
               What&apos;s next?
             </h3>
             <div className="space-y-3 text-gray-600">
-              <p>• Certificate email with PNG attachment (Climate Wavers + FlowOps)</p>
-              <p>• Trees planted with the project team — typically within 30 days</p>
-              <p>• Tree Admin org gets a payment notice for their project</p>
-              <p>• Track impact from your Climate Wavers dashboard</p>
+              {paymentData.product === 'plastic' ? (
+                <>
+                  <p>• Plastic impact certificate is ready to verify by code</p>
+                  <p>• CBO receives sponsorship share for verified recovery ops</p>
+                  <p>• Live kg updates on the public Plastic Pulse project page</p>
+                  <p>• Earn Wavers Points (10% of sponsored USD) when signed in</p>
+                </>
+              ) : (
+                <>
+                  <p>• Certificate email with PNG attachment (Climate Wavers + FlowOps)</p>
+                  <p>• Trees planted with the project team — typically within 30 days</p>
+                  <p>• Tree Admin org gets a payment notice for their project</p>
+                  <p>• Track impact from your Climate Wavers dashboard</p>
+                </>
+              )}
             </div>
           </div>
           </>)}
@@ -297,11 +360,19 @@ const PaymentSuccess = () => {
             </button>
             
             <button
-              onClick={handleViewProjects}
+              onClick={() => {
+                if (paymentData?.product === 'plastic' && paymentData?.projectId) {
+                  navigate(`/plastic/${paymentData.projectId}`);
+                } else if (paymentData?.product === 'plastic' && paymentData?.certificateId) {
+                  navigate(`/verify/plastic/${encodeURIComponent(paymentData.certificateId)}`);
+                } else {
+                  handleViewProjects();
+                }
+              }}
               className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200 flex items-center justify-center"
             >
               <IoLeaf className="w-5 h-5 mr-2" />
-              Plant More Trees
+              {paymentData?.product === 'plastic' ? 'View Plastic Project' : 'Plant More Trees'}
             </button>
           </div>
 

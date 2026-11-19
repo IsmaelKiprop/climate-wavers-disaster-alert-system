@@ -35,11 +35,14 @@ const PublicChampionApply = lazy(() => import("./pages/PublicChampionApply"));
 const ChampionDirectoryPage = lazy(() => import("./pages/ChampionDirectoryPage"));
 const VerifyChampionCertificate = lazy(() => import("./pages/VerifyChampionCertificate"));
 const VerifyTreeCertificate = lazy(() => import("./pages/VerifyTreeCertificate"));
+const VerifyPlasticCertificate = lazy(() => import("./pages/VerifyPlasticCertificate"));
 const DisasterPage = lazy(() => import("./pages/DisasterPage"));
 const Donations = lazy(() => import("./components/Donations"));
 const PlantTree = lazy(() => import("./components/PlantTree"));
 const TreeProjectAdmin = lazy(() => import("./components/TreeProjectAdmin"));
+const PlasticProjectAdmin = lazy(() => import("./components/PlasticProjectAdmin"));
 const PublicProjectView = lazy(() => import("./components/PublicProjectView"));
+const PublicPlasticView = lazy(() => import("./components/PublicPlasticView"));
 const MyCertificates = lazy(() => import("./pages/MyCertificates"));
 const PaymentSuccess = lazy(() => import("./pages/PaymentSuccess"));
 const SharedProfilePage = lazy(() => import("./pages/SharedProfilePage"));
@@ -233,8 +236,11 @@ function App() {
               />
               <Route path="/verify/tree" element={<VerifyTreeCertificate />} />
               <Route path="/verify/tree/:code" element={<VerifyTreeCertificate />} />
+              <Route path="/verify/plastic" element={<VerifyPlasticCertificate />} />
+              <Route path="/verify/plastic/:code" element={<VerifyPlasticCertificate />} />
               <Route path="/project" element={<PublicProjectView />} />
               <Route path="/p/:projectId" element={<PublicProjectView />} />
+              <Route path="/plastic/:projectId" element={<PublicPlasticView />} />
               <Route path="/u/:userId" element={<SharedProfilePage />} />
               <Route path="/gift/:userId" element={<PlantTree />} />
               {/* Public plant checkout — no account required (same as /gift/:userId). */}
@@ -297,6 +303,7 @@ function App() {
                   }
                 />
                 <Route path="/app/admin/tree-projects" element={<TreeProjectAdmin />} />
+                <Route path="/app/admin/plastic" element={<PlasticProjectAdmin />} />
                 <Route path="/app/alert-settings" element={<AuthAlertSettings />} />
                 <Route path="/app/responder" element={<AuthResponder />} />
                 <Route path="/app/responder/apply" element={<AuthResponder />} />

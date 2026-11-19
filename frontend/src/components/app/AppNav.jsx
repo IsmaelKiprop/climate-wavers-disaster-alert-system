@@ -174,6 +174,12 @@ const AppNav = ({ onNavigate, compact = false }) => {
                 Icon: IoSettingsOutline,
                 ActiveIcon: IoSettingsOutline,
               },
+              {
+                to: "/app/admin/plastic",
+                label: "Plastic Pulse",
+                Icon: IoSettingsOutline,
+                ActiveIcon: IoSettingsOutline,
+              },
             ]
           : [
               {
