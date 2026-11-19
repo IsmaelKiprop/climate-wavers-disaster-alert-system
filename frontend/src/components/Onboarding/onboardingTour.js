@@ -181,7 +181,7 @@ export const tour = {
       {
         title: "Collect in the field",
         message:
-          "No account needed. On the project page, enter your name and phone, then the CBO claim PIN on site — claim the hotspot and log bag proof with GPS and photos.",
+          "No account needed. On the project page, enter your name and phone, stand at the hotspot, enter the CBO claim PIN, and capture GPS — it must match the CBO pin point (within ~250 m).",
       },
       {
         title: "PIN → bag → certificate",

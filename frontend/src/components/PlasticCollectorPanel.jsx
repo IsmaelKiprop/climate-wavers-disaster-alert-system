@@ -81,6 +81,8 @@ const PlasticCollectorPanel = ({
 
   const [claimingId, setClaimingId] = useState(null);
   const [claimPins, setClaimPins] = useState({});
+  const [claimGps, setClaimGps] = useState({ latitude: "", longitude: "" });
+  const [capturingClaimGps, setCapturingClaimGps] = useState(false);
   const [proofForm, setProofForm] = useState(emptyProof);
   const [proofUploading, setProofUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -207,23 +209,42 @@ const PlasticCollectorPanel = ({
     return () => window.removeEventListener("online", sync);
   }, [loadMyBags, onProjectRefresh, refreshOffline, projectId]);
 
-  const captureGps = () => {
-    if (!navigator.geolocation) {
-      toast.error("GPS not available on this device");
-      return;
-    }
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
+  const readDeviceGps = () =>
+    new Promise((resolve, reject) => {
+      if (!navigator.geolocation) {
+        reject(new Error("GPS not available on this device"));
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(
+        (pos) =>
+          resolve({
+            latitude: String(pos.coords.latitude.toFixed(6)),
+            longitude: String(pos.coords.longitude.toFixed(6)),
+          }),
+        () => reject(new Error("Could not get GPS — enable location and try again")),
+        { enableHighAccuracy: true, timeout: 20000 }
+      );
+    });
+
+  const captureGps = async (target = "proof") => {
+    try {
+      if (target === "claim") setCapturingClaimGps(true);
+      const coords = await readDeviceGps();
+      if (target === "claim") {
+        setClaimGps(coords);
+      } else {
         setProofForm((p) => ({
           ...p,
-          latitude: String(pos.coords.latitude.toFixed(6)),
-          longitude: String(pos.coords.longitude.toFixed(6)),
+          latitude: coords.latitude,
+          longitude: coords.longitude,
         }));
-        toast.success("GPS captured");
-      },
-      () => toast.error("Could not get GPS — enable location and try again"),
-      { enableHighAccuracy: true, timeout: 20000 }
-    );
+      }
+      toast.success("GPS captured");
+    } catch (err) {
+      toast.error(err.message || "GPS failed");
+    } finally {
+      if (target === "claim") setCapturingClaimGps(false);
+    }
   };
 
   const claimHotspot = async (hotspot) => {
@@ -245,7 +266,19 @@ const PlasticCollectorPanel = ({
 
     setClaimingId(hotspot.id);
     try {
-      const body = { claim_pin: pin };
+      let lat = claimGps.latitude;
+      let lng = claimGps.longitude;
+      if (!alreadyMine && (!lat || !lng)) {
+        const coords = await readDeviceGps();
+        lat = coords.latitude;
+        lng = coords.longitude;
+        setClaimGps(coords);
+      }
+      const body = {
+        claim_pin: pin,
+        latitude: lat ? Number(lat) : undefined,
+        longitude: lng ? Number(lng) : undefined,
+      };
       if (!authed) {
         body.guest_name = guestName.trim();
         body.guest_phone = guestPhone.trim();
@@ -264,14 +297,16 @@ const PlasticCollectorPanel = ({
       } else if (projectId) {
         setPlasticGuestProjectSession(projectId, { hotspot_id: hotspot.id });
       }
-      toast.success("PIN matched — hotspot claimed. Log your bag when ready.");
+      toast.success("PIN + GPS matched — hotspot claimed. Log your bag when ready.");
       setProofForm((p) => ({
         ...p,
         hotspot_id: String(hotspot.id),
         claim_pin: pin,
         location_label: hotspot.location_label || hotspot.title || p.location_label,
-        latitude: hotspot.latitude != null ? String(hotspot.latitude) : p.latitude,
-        longitude: hotspot.longitude != null ? String(hotspot.longitude) : p.longitude,
+        // Prefer live collector GPS; fall back to CBO pin.
+        latitude: lat || (hotspot.latitude != null ? String(hotspot.latitude) : p.latitude),
+        longitude:
+          lng || (hotspot.longitude != null ? String(hotspot.longitude) : p.longitude),
       }));
       setClaimPins((prev) => ({ ...prev, [hotspot.id]: "" }));
       setTab("log");
@@ -423,8 +458,8 @@ const PlasticCollectorPanel = ({
         <div>
           <h3 className="font-semibold text-foreground">Field collector</h3>
           <p className="text-sm text-muted mt-0.5">
-            No account needed — name, phone, and the CBO claim PIN on site. Then log bag
-            proof → CBO verifies → recycler scans QR.
+            No account needed — name, phone, CBO claim PIN, and GPS at the same pin point
+            (within ~250 m). Then log bag proof → CBO verifies → recycler scans QR.
           </p>
         </div>
         {showProjectLink ? (
@@ -531,29 +566,54 @@ const PlasticCollectorPanel = ({
                       </p>
                     </div>
                     {!mine ? (
-                      <div className="flex flex-col sm:flex-row gap-2">
-                        <input
-                          className="flex-1 h-10 px-3 border border-border bg-surface text-foreground text-sm tracking-widest font-mono"
-                          placeholder="CBO claim PIN"
-                          inputMode="numeric"
-                          autoComplete="off"
-                          maxLength={8}
-                          value={claimPins[h.id] || ""}
-                          onChange={(e) =>
-                            setClaimPins((prev) => ({
-                              ...prev,
-                              [h.id]: e.target.value.replace(/\D/g, "").slice(0, 8),
-                            }))
-                          }
-                          aria-label={`Claim PIN for hotspot ${h.id}`}
-                        />
+                      <div className="space-y-2">
+                        <div className="flex flex-col sm:flex-row gap-2">
+                          <input
+                            className="flex-1 h-10 px-3 border border-border bg-surface text-foreground text-sm tracking-widest font-mono"
+                            placeholder="CBO claim PIN"
+                            inputMode="numeric"
+                            autoComplete="off"
+                            maxLength={8}
+                            value={claimPins[h.id] || ""}
+                            onChange={(e) =>
+                              setClaimPins((prev) => ({
+                                ...prev,
+                                [h.id]: e.target.value.replace(/\D/g, "").slice(0, 8),
+                              }))
+                            }
+                            aria-label={`Claim PIN for hotspot ${h.id}`}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => captureGps("claim")}
+                            disabled={capturingClaimGps}
+                            className="h-10 px-3 border border-border text-sm shrink-0 disabled:opacity-60"
+                          >
+                            {capturingClaimGps
+                              ? "GPS…"
+                              : claimGps.latitude
+                                ? "Refresh GPS"
+                                : "Capture GPS"}
+                          </button>
+                        </div>
+                        {claimGps.latitude ? (
+                          <p className="text-[11px] text-primary">
+                            GPS ready: {claimGps.latitude}, {claimGps.longitude} — must be
+                            within ~250 m of the CBO pin
+                          </p>
+                        ) : (
+                          <p className="text-[11px] text-muted">
+                            Stand at the hotspot, capture GPS, then claim. PIN alone is not
+                            enough.
+                          </p>
+                        )}
                         <button
                           type="button"
                           disabled={claimingId === h.id || !guestReady}
                           onClick={() => claimHotspot(h)}
-                          className="h-10 px-4 bg-primary text-primary-foreground text-sm font-medium disabled:opacity-60 shrink-0"
+                          className="h-10 w-full sm:w-auto px-4 bg-primary text-primary-foreground text-sm font-medium disabled:opacity-60"
                         >
-                          {claimingId === h.id ? "Checking PIN…" : "Claim & start"}
+                          {claimingId === h.id ? "Checking PIN + GPS…" : "Claim & start"}
                         </button>
                       </div>
                     ) : (
@@ -680,7 +740,7 @@ const PlasticCollectorPanel = ({
             </label>
             <button
               type="button"
-              onClick={captureGps}
+              onClick={() => captureGps("proof")}
               className="h-10 px-3 border border-border text-sm shrink-0"
             >
               Capture GPS

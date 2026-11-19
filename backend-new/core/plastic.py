@@ -6,6 +6,7 @@ sponsor-a-kilo, certificates, flood hotspot feed.
 from __future__ import annotations
 
 import logging
+import math
 import re
 import secrets
 import uuid
@@ -13,6 +14,9 @@ from datetime import timedelta
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Optional
 from urllib.parse import quote
+
+# Phone GPS is noisy in dense neighborhoods — match "same place", not exact pin.
+HOTSPOT_PROXIMITY_RADIUS_M = 250
 
 from django.conf import settings as dj_settings
 from django.db import IntegrityError, transaction
@@ -84,6 +88,62 @@ def _claim_pins_match(stored: str, provided) -> bool:
     if not a:
         return False
     return bool(b) and a == b
+
+
+def _haversine_m(lat1, lon1, lat2, lon2) -> float:
+    """Great-circle distance in meters between two WGS84 points."""
+    try:
+        φ1, λ1, φ2, λ2 = map(
+            math.radians,
+            [float(lat1), float(lon1), float(lat2), float(lon2)],
+        )
+    except (TypeError, ValueError):
+        return float("inf")
+    dφ = φ2 - φ1
+    dλ = λ2 - λ1
+    a = math.sin(dφ / 2) ** 2 + math.cos(φ1) * math.cos(φ2) * math.sin(dλ / 2) ** 2
+    return 6371000.0 * 2 * math.asin(math.sqrt(min(1.0, a)))
+
+
+def _proximity_radius_m() -> float:
+    try:
+        return float(
+            getattr(dj_settings, "PLASTIC_HOTSPOT_PROXIMITY_M", HOTSPOT_PROXIMITY_RADIUS_M)
+            or HOTSPOT_PROXIMITY_RADIUS_M
+        )
+    except (TypeError, ValueError):
+        return float(HOTSPOT_PROXIMITY_RADIUS_M)
+
+
+def _gps_near_hotspot(hotspot: PlasticHotspot, lat, lng, *, radius_m: float | None = None):
+    """
+    Returns (ok, distance_m, radius_m, detail_or_empty).
+    Collectors must be within radius of the CBO pin — one physical site.
+    """
+    if hotspot is None or hotspot.latitude is None or hotspot.longitude is None:
+        return False, None, _proximity_radius_m(), "Hotspot has no GPS pin."
+    if lat in (None, "") or lng in (None, ""):
+        return (
+            False,
+            None,
+            _proximity_radius_m(),
+            "Capture GPS at the hotspot before continuing.",
+        )
+    radius = float(radius_m if radius_m is not None else _proximity_radius_m())
+    distance = _haversine_m(hotspot.latitude, hotspot.longitude, lat, lng)
+    if distance == float("inf"):
+        return False, None, radius, "Invalid GPS coordinates."
+    if distance > radius:
+        return (
+            False,
+            round(distance),
+            round(radius),
+            (
+                f"You are about {int(round(distance))} m from the CBO hotspot pin "
+                f"(allowed {int(round(radius))} m). Move closer to the site and try again."
+            ),
+        )
+    return True, round(distance), round(radius), ""
 
 
 def _normalize_phone(value) -> str:
@@ -1305,6 +1365,22 @@ class PlasticHotspotClaimView(APIView):
                     status=status.HTTP_403_FORBIDDEN,
                 )
 
+            # Collector GPS must be near the CBO pin (same physical site).
+            ok, distance_m, radius_m, detail = _gps_near_hotspot(
+                hotspot,
+                request.data.get("latitude"),
+                request.data.get("longitude"),
+            )
+            if not ok:
+                return Response(
+                    {
+                        "detail": detail,
+                        "distance_m": distance_m,
+                        "allowed_radius_m": radius_m,
+                    },
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
         guest_token = hotspot.guest_claim_token or ""
         if user:
             hotspot.status = "claimed"
@@ -1514,6 +1590,19 @@ class PlasticRecoveryCreateView(APIView):
                 )
             elif already_mine and not user and hotspot.guest_claim_token:
                 guest_token = guest_token or hotspot.guest_claim_token
+
+            # Bag GPS must be near the CBO pin (managers may log from desk).
+            if not is_manager:
+                ok, distance_m, radius_m, detail = _gps_near_hotspot(hotspot, lat, lng)
+                if not ok:
+                    return Response(
+                        {
+                            "detail": detail,
+                            "distance_m": distance_m,
+                            "allowed_radius_m": radius_m,
+                        },
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
 
         if not user and not guest_token:
             guest_token = _new_guest_token()
