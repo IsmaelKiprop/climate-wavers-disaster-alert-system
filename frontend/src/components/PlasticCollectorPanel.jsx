@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "react-toastify";
 import { endpoints } from "../utils/endpoints";
@@ -16,6 +16,11 @@ import {
   setPlasticGuestProfile,
   setPlasticGuestProjectSession,
 } from "../utils/plasticGuestSession";
+import {
+  bagSubmittedWhatsappText,
+  certificateWhatsappText,
+  openPlasticWhatsapp,
+} from "../utils/plasticWhatsapp";
 import PlasticBagQrCard from "./PlasticBagQrCard";
 import PlantingProofMediaCarousel, {
   proofMediaFromArrays,
@@ -89,8 +94,18 @@ const PlasticCollectorPanel = ({
   const [myBags, setMyBags] = useState([]);
   const [loadingBags, setLoadingBags] = useState(false);
   const [lastBag, setLastBag] = useState(null);
+  const [whatsappPrompt, setWhatsappPrompt] = useState(null);
   const [offlineCount, setOfflineCount] = useState(0);
   const [tab, setTab] = useState("hotspots");
+  const openedCertWaRef = useRef(null);
+  if (openedCertWaRef.current == null) {
+    try {
+      const raw = sessionStorage.getItem("cw-plastic-wa-certs");
+      openedCertWaRef.current = new Set(raw ? JSON.parse(raw) : []);
+    } catch {
+      openedCertWaRef.current = new Set();
+    }
+  }
 
   useEffect(() => {
     const session = getPlasticGuestProjectSession(projectId);
@@ -183,6 +198,43 @@ const PlasticCollectorPanel = ({
     loadMyBags();
     refreshOffline();
   }, [loadMyBags, refreshOffline]);
+
+  // When a guest bag gets a certificate, open WhatsApp once with the cert link.
+  useEffect(() => {
+    if (authed || !guestPhone.trim()) return;
+    const withCert = myBags.find(
+      (r) =>
+        r.certificate_code &&
+        !openedCertWaRef.current.has(String(r.certificate_code))
+    );
+    if (!withCert) return;
+    const code = String(withCert.certificate_code);
+    openedCertWaRef.current.add(code);
+    try {
+      sessionStorage.setItem(
+        "cw-plastic-wa-certs",
+        JSON.stringify([...openedCertWaRef.current])
+      );
+    } catch {
+      /* ignore */
+    }
+    const verifyUrl =
+      withCert.verify_url || `/verify/plastic/${withCert.certificate_code}`;
+    const text = certificateWhatsappText({
+      name: guestName.trim() || withCert.collector_name,
+      bagId: withCert.bag_id,
+      kg: withCert.kg_verified ?? withCert.kg_claimed,
+      certificateCode: withCert.certificate_code,
+      verifyUrl,
+      projectName: project?.name || withCert.project_name,
+    });
+    const url = openPlasticWhatsapp({ phone: guestPhone, text });
+    setWhatsappPrompt({
+      url,
+      label: `Open WhatsApp for certificate ${withCert.certificate_code}`,
+    });
+    toast.success("Certificate ready — WhatsApp opened, tap Send to share");
+  }, [myBags, authed, guestPhone, guestName, project?.name]);
 
   useEffect(() => {
     const sync = async () => {
@@ -422,6 +474,26 @@ const PlasticCollectorPanel = ({
           status: created?.status || "submitted",
         });
       }
+
+      // Guest: open WhatsApp with prefilled bag message (user still taps Send).
+      if (!authed && guestPhone.trim()) {
+        const projectUrl = `${window.location.origin}/plastic/${projectId}`;
+        const text = bagSubmittedWhatsappText({
+          name: guestName.trim(),
+          bagId: bag,
+          kg: created?.kg_claimed || payload.kg_claimed,
+          polymerType: created?.polymer_type || payload.polymer_type,
+          projectName: project?.name,
+          projectUrl,
+        });
+        const url = openPlasticWhatsapp({ phone: guestPhone, text });
+        setWhatsappPrompt({
+          url,
+          label: bag ? `Open WhatsApp for bag ${bag}` : "Open WhatsApp",
+        });
+        toast.info("WhatsApp opened — tap Send to save your bag message");
+      }
+
       setProofForm((p) => ({
         ...emptyProof,
         hotspot_id: p.hotspot_id,
@@ -496,7 +568,8 @@ const PlasticCollectorPanel = ({
             />
           </label>
           <p className="sm:col-span-2 text-[11px] text-muted">
-            Used for bag ownership and sharing your certificate on WhatsApp.{" "}
+            Used for bag ownership. After you submit a bag (and when your certificate is
+            ready), WhatsApp opens with a prefilled message — you tap Send.{" "}
             <Link
               to={`/login?redirect=${encodeURIComponent(`/plastic/${projectId}`)}`}
               className="text-primary hover:underline"
@@ -810,6 +883,23 @@ const PlasticCollectorPanel = ({
         </form>
       ) : null}
 
+      {whatsappPrompt?.url ? (
+        <div className="border border-border bg-background p-3 flex flex-col sm:flex-row sm:items-center gap-2">
+          <p className="text-sm text-muted flex-1">
+            If WhatsApp did not open, tap below — then tap <span className="text-foreground">Send</span> in
+            WhatsApp.
+          </p>
+          <a
+            href={whatsappPrompt.url}
+            target="_blank"
+            rel="noreferrer"
+            className="h-10 px-4 inline-flex items-center justify-center bg-primary text-primary-foreground text-sm font-medium shrink-0"
+          >
+            {whatsappPrompt.label || "Open WhatsApp"}
+          </a>
+        </div>
+      ) : null}
+
       {tab === "bags" ? (
         <div className="space-y-3">
           {lastBag ? (
@@ -859,7 +949,50 @@ const PlasticCollectorPanel = ({
                       Certificate {r.certificate_code}
                     </Link>
                   ) : null}
-                  {r.whatsapp_share_url ? (
+                  {!authed && guestPhone.trim() ? (
+                    <button
+                      type="button"
+                      className="text-xs text-primary hover:underline text-left"
+                      onClick={() => {
+                        const verifyUrl =
+                          r.verify_url ||
+                          (r.certificate_code
+                            ? `/verify/plastic/${r.certificate_code}`
+                            : "");
+                        const text = r.certificate_code
+                          ? certificateWhatsappText({
+                              name: guestName.trim() || r.collector_name,
+                              bagId: r.bag_id,
+                              kg: r.kg_verified ?? r.kg_claimed,
+                              certificateCode: r.certificate_code,
+                              verifyUrl,
+                              projectName: project?.name || r.project_name,
+                            })
+                          : bagSubmittedWhatsappText({
+                              name: guestName.trim() || r.collector_name,
+                              bagId: r.bag_id,
+                              kg: r.kg_verified ?? r.kg_claimed,
+                              polymerType: r.polymer_type,
+                              projectName: project?.name || r.project_name,
+                              projectUrl: `${window.location.origin}/plastic/${projectId}`,
+                            });
+                        const url = openPlasticWhatsapp({
+                          phone: guestPhone,
+                          text,
+                        });
+                        setWhatsappPrompt({
+                          url,
+                          label: r.certificate_code
+                            ? `Open WhatsApp for ${r.certificate_code}`
+                            : `Open WhatsApp for ${r.bag_id}`,
+                        });
+                      }}
+                    >
+                      {r.certificate_code
+                        ? "Share certificate on WhatsApp"
+                        : "Share bag on WhatsApp"}
+                    </button>
+                  ) : r.whatsapp_share_url ? (
                     <a
                       href={r.whatsapp_share_url}
                       target="_blank"
