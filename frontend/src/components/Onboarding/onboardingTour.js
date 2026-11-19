@@ -2,7 +2,7 @@
  * Single source of truth for the post-signup product tour.
  * Keep aligned with AppNav /app destinations.
  */
-export const ONBOARDING_TOTAL = 16;
+export const ONBOARDING_TOTAL = 17;
 
 export const tour = {
   home: {
@@ -156,7 +156,7 @@ export const tour = {
   },
   plasticPulse: {
     current: 9,
-    next: "/onboarding/bag-scanner",
+    next: "/onboarding/collect-plastic",
     prev: "/onboarding/plant-tree",
     bot: "waverbot1",
     content: [
@@ -168,14 +168,32 @@ export const tour = {
       {
         title: "Partner desk",
         message:
-          "Approved Tree Admins open Plastic Pulse from the sidebar to manage projects and recovery proof.",
+          "Approved Tree Admins open Plastic Pulse from the sidebar to manage projects and CBO verification.",
+      },
+    ],
+  },
+  collectPlastic: {
+    current: 10,
+    next: "/onboarding/bag-scanner",
+    prev: "/onboarding/plastic-pulse",
+    bot: "waverbot1",
+    content: [
+      {
+        title: "Collect in the field",
+        message:
+          "No account needed. On the project page, enter your name and phone, then the CBO claim PIN on site — claim the hotspot and log bag proof with GPS and photos.",
+      },
+      {
+        title: "PIN → bag → certificate",
+        message:
+          "After your PIN matches, CBO verifies bags and recyclers scan intake. Your certificate can be shared on WhatsApp to the phone you gave.",
       },
     ],
   },
   bagScanner: {
-    current: 10,
+    current: 11,
     next: "/onboarding/alert-settings",
-    prev: "/onboarding/plastic-pulse",
+    prev: "/onboarding/collect-plastic",
     bot: "waverbot1",
     content: [
       {
@@ -191,7 +209,7 @@ export const tour = {
     ],
   },
   alertSettings: {
-    current: 11,
+    current: 12,
     next: "/onboarding/disasters",
     prev: "/onboarding/bag-scanner",
     bot: "waverbot1",
@@ -209,7 +227,7 @@ export const tour = {
     ],
   },
   disasters: {
-    current: 12,
+    current: 13,
     next: "/onboarding/responder",
     prev: "/onboarding/alert-settings",
     bot: "waverbot1",
@@ -227,7 +245,7 @@ export const tour = {
     ],
   },
   responder: {
-    current: 13,
+    current: 14,
     next: "/onboarding/champions",
     prev: "/onboarding/disasters",
     bot: "waverbot1",
@@ -245,7 +263,7 @@ export const tour = {
     ],
   },
   champions: {
-    current: 14,
+    current: 15,
     next: "/onboarding/campaigns",
     prev: "/onboarding/responder",
     bot: "waverbot1",
@@ -263,7 +281,7 @@ export const tour = {
     ],
   },
   campaigns: {
-    current: 15,
+    current: 16,
     next: "/onboarding/waverx",
     prev: "/onboarding/champions",
     bot: "waverbot1",
@@ -281,7 +299,7 @@ export const tour = {
     ],
   },
   waverx: {
-    current: 16,
+    current: 17,
     next: "/app",
     prev: "/onboarding/campaigns",
     bot: "Waverbotfull",

@@ -139,6 +139,7 @@ const AppNav = ({ onNavigate, compact = false }) => {
         { to: "/onboarding/profile", label: "Profile", Icon: IoPersonOutline, ActiveIcon: IoPerson },
         { to: "/onboarding/waverx", label: "WaverX", Icon: WaverXIcon, ActiveIcon: WaverXIcon },
         { to: "/onboarding/plant-tree", label: "Plant Trees", Icon: IoLeafOutline, ActiveIcon: IoLeafOutline },
+        { to: "/onboarding/collect-plastic", label: "Collect plastic", Icon: IoLeafOutline, ActiveIcon: IoLeafOutline },
         { to: "/tree-admins/apply", label: "Tree Admin", Icon: IoSettingsOutline, ActiveIcon: IoSettingsOutline },
         { to: "/onboarding/plastic-pulse", label: "Plastic Pulse", Icon: IoSettingsOutline, ActiveIcon: IoSettingsOutline },
         { to: "/onboarding/bag-scanner", label: "Bag scanner", Icon: IoLeafOutline, ActiveIcon: IoLeafOutline },
@@ -174,6 +175,12 @@ const AppNav = ({ onNavigate, compact = false }) => {
         },
         { to: "/app/waverx", label: "WaverX", Icon: WaverXIcon, ActiveIcon: WaverXIcon },
         { to: "/app/plant-tree", label: "Plant Trees", Icon: IoLeafOutline, ActiveIcon: IoLeafOutline },
+        {
+          to: "/app/plastic/collect",
+          label: "Collect plastic",
+          Icon: IoLeafOutline,
+          ActiveIcon: IoLeafOutline,
+        },
         ...(isPlatformStaff()
           ? [
               {

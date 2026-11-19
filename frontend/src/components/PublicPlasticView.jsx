@@ -19,6 +19,7 @@ import PlantingProofMediaCarousel, {
   proofMediaFromArrays,
 } from "./PlantingProofMediaCarousel";
 import PlasticImpactCharts from "./PlasticImpactCharts";
+import PlasticCollectorPanel from "./PlasticCollectorPanel";
 import PublicPage from "./PublicPage";
 import BrandLogo from "./BrandLogo";
 
@@ -55,6 +56,21 @@ const PublicPlasticView = () => {
   }, [project, kg]);
 
   const { exchangeRate, convertedAmount, loading: fxLoading } = useExchangeRate(amountUsd);
+
+  const loadProject = async ({ silent = false } = {}) => {
+    if (!silent) setLoading(true);
+    try {
+      const res = await fetch(apiUrl(endpoints.plasticProject(projectId)));
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Not found");
+      setProject(data);
+    } catch (err) {
+      setProject(null);
+      if (!silent) toast.error(err.message);
+    } finally {
+      if (!silent) setLoading(false);
+    }
+  };
 
   useEffect(() => {
     let alive = true;
@@ -539,6 +555,11 @@ const PublicPlasticView = () => {
               </section>
             ) : null}
 
+            <PlasticCollectorPanel
+              project={project}
+              onProjectRefresh={() => loadProject({ silent: true })}
+            />
+
             <section className="space-y-3">
               <h2 className="text-lg font-semibold text-foreground">Field activity</h2>
               {!hasFieldActivity ? (
@@ -548,8 +569,8 @@ const PublicPlasticView = () => {
                   </p>
                   <p className="text-sm text-muted leading-relaxed">
                     Hotspots (including drain and flood risk sites) and verified bag
-                    recoveries will appear here as {orgName} logs field work. Sponsoring
-                    now funds the first kilos toward the{" "}
+                    recoveries will appear here as {orgName} and community collectors
+                    log field work. Sponsoring now funds the first kilos toward the{" "}
                     {goalKg.toLocaleString()} kg goal.
                   </p>
                 </div>
@@ -609,6 +630,7 @@ const PublicPlasticView = () => {
           {/* Sponsor sidebar */}
           <aside className="lg:sticky lg:top-6 space-y-4">
             <div className="border border-border bg-surface p-4 sm:p-5 space-y-3">
+              <p className="text-xs uppercase tracking-wide text-muted">Support</p>
               <h2 className="font-semibold text-foreground">Sponsor a kilo</h2>
               <p className="text-sm text-muted">
                 Fund verified recovery with {orgName}. Certificate issued after

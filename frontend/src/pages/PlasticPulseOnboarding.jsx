@@ -76,6 +76,12 @@ export default function PlasticPulseOnboarding() {
             Download image
           </a>
           <Link
+            to="/app/plastic/collect"
+            className="h-11 px-4 bg-primary text-primary-foreground inline-flex items-center text-sm font-medium"
+          >
+            Collect plastic (name + phone, or signed in)
+          </Link>
+          <Link
             to="/app/admin/plastic"
             className="h-11 px-4 border border-primary text-primary inline-flex items-center text-sm font-medium"
           >

@@ -41,6 +41,7 @@ const PlasticRecyclerInviteAccept = lazy(
   () => import("./pages/PlasticRecyclerInviteAccept")
 );
 const PlasticPulseOnboarding = lazy(() => import("./pages/PlasticPulseOnboarding"));
+const PlasticCollectorDesk = lazy(() => import("./pages/PlasticCollectorDesk"));
 const DisasterPage = lazy(() => import("./pages/DisasterPage"));
 const Donations = lazy(() => import("./components/Donations"));
 const PlantTree = lazy(() => import("./components/PlantTree"));
@@ -176,6 +177,9 @@ const OnboardingCalendar = lazy(() =>
 );
 const OnboardingPlasticPulse = lazy(() =>
   import("./components/Onboarding").then((m) => ({ default: m.PlasticPulse }))
+);
+const OnboardingCollectPlastic = lazy(() =>
+  import("./components/Onboarding").then((m) => ({ default: m.CollectPlastic }))
 );
 const OnboardingBagScanner = lazy(() =>
   import("./components/Onboarding").then((m) => ({ default: m.BagScanner }))
@@ -334,6 +338,14 @@ function App() {
                 />
                 <Route path="/app/admin/tree-projects" element={<TreeProjectAdmin />} />
                 <Route path="/app/admin/plastic" element={<PlasticProjectAdmin />} />
+                <Route
+                  path="/app/plastic/collect"
+                  element={
+                    <ProtectedRoute>
+                      <PlasticCollectorDesk />
+                    </ProtectedRoute>
+                  }
+                />
                 <Route path="/app/alert-settings" element={<AuthAlertSettings />} />
                 <Route path="/app/responder" element={<AuthResponder />} />
                 <Route path="/app/responder/apply" element={<AuthResponder />} />
@@ -357,6 +369,7 @@ function App() {
                 <Route path="/onboarding/profile" element={<OnboardingProfile />} />
                 <Route path="/onboarding/plant-tree" element={<OnboardingPlantTree />} />
                 <Route path="/onboarding/plastic-pulse" element={<OnboardingPlasticPulse />} />
+                <Route path="/onboarding/collect-plastic" element={<OnboardingCollectPlastic />} />
                 <Route path="/onboarding/bag-scanner" element={<OnboardingBagScanner />} />
                 <Route path="/onboarding/alert-settings" element={<OnboardingAlertSettings />} />
                 <Route path="/onboarding/disasters" element={<OnboardingDisasters />} />

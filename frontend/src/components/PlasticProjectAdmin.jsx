@@ -91,6 +91,7 @@ const PlasticProjectAdmin = () => {
     photo: "",
     severity: "medium",
     drain_related: true,
+    claim_pin: "",
     latitude: "",
     longitude: "",
     location_label: "",
@@ -243,23 +244,29 @@ const PlasticProjectAdmin = () => {
     if (!hotspotForm.latitude || !hotspotForm.longitude) {
       return toast.error("Capture GPS before pinning");
     }
+    const pin = String(hotspotForm.claim_pin || "").replace(/\D/g, "");
+    if (pin.length < 4 || pin.length > 8) {
+      return toast.error("Claim PIN required — 4 to 8 digits for collectors on site");
+    }
     setPinning(true);
     try {
       await api(endpoints.plasticHotspots(selectedId), {
         method: "POST",
         body: {
           ...hotspotForm,
+          claim_pin: pin,
           latitude: Number(hotspotForm.latitude),
           longitude: Number(hotspotForm.longitude),
         },
       });
-      toast.success("Hotspot pinned");
+      toast.success(`Hotspot pinned · share claim PIN ${pin} with collectors`);
       setHotspotForm({
         title: "",
         notes: "",
         photo: "",
         severity: "medium",
         drain_related: true,
+        claim_pin: "",
         latitude: "",
         longitude: "",
         location_label: "",
@@ -535,8 +542,13 @@ const PlasticProjectAdmin = () => {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold text-foreground">Plastic Pulse</h1>
-          <p className="text-sm text-muted mt-1">
-            Hotspots, offline proof, CBO verify, recycler intake — same CBO as Tree Admin.
+          <p className="text-sm text-muted mt-1 max-w-2xl">
+            Same CBO as Tree Admin. Collectors (signed-in or guest with name + phone) claim
+            hotspots with your PIN from{" "}
+            <Link to="/app/plastic/collect" className="text-primary hover:underline">
+              Collect plastic
+            </Link>{" "}
+            or the public project page — you verify here, then recyclers scan intake.
           </p>
         </div>
         {offlineCount > 0 ? (
@@ -715,8 +727,8 @@ const PlasticProjectAdmin = () => {
                 <form onSubmit={pinHotspot} className="space-y-3 border border-border p-4">
                   <h3 className="font-medium">1. Pin hotspot</h3>
                   <p className="text-xs text-muted">
-                    <span className="text-red-500">*</span> Required: GPS. Title and notes are
-                    optional.
+                    <span className="text-red-500">*</span> Required: GPS and claim PIN. Share the
+                    PIN with collectors on site so they can claim and start collecting.
                   </p>
                   <div className="space-y-1">
                     <FieldLabel>Title</FieldLabel>
@@ -725,6 +737,26 @@ const PlasticProjectAdmin = () => {
                       placeholder="e.g. Drain near market"
                       value={hotspotForm.title}
                       onChange={(e) => setHotspotForm((p) => ({ ...p, title: e.target.value }))}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <FieldLabel required hint="Collectors must enter this same PIN to claim.">
+                      Claim PIN
+                    </FieldLabel>
+                    <input
+                      className="w-full h-10 px-3 border border-border bg-background tracking-widest font-mono"
+                      placeholder="e.g. 4821"
+                      inputMode="numeric"
+                      autoComplete="off"
+                      maxLength={8}
+                      value={hotspotForm.claim_pin}
+                      onChange={(e) =>
+                        setHotspotForm((p) => ({
+                          ...p,
+                          claim_pin: e.target.value.replace(/\D/g, "").slice(0, 8),
+                        }))
+                      }
+                      required
                     />
                   </div>
                   <div className="space-y-1">
@@ -972,6 +1004,15 @@ const PlasticProjectAdmin = () => {
                       <span>
                         #{h.id} {h.title || "Hotspot"} · {h.status}
                         {h.drain_related ? " · drain" : ""}
+                        {h.claim_pin ? (
+                          <span className="ml-2 font-mono tracking-widest text-primary">
+                            PIN {h.claim_pin}
+                          </span>
+                        ) : h.has_claim_pin ? (
+                          <span className="ml-2 text-muted">PIN set</span>
+                        ) : (
+                          <span className="ml-2 text-amber-600">no PIN</span>
+                        )}
                       </span>
                       <span className="text-muted">
                         {h.latitude}, {h.longitude}
@@ -1025,7 +1066,25 @@ const PlasticProjectAdmin = () => {
                     <div className="font-medium">{r.bag_id}</div>
                     <div className="text-sm text-muted">
                       {r.kg_claimed} kg · {r.polymer_type} · project #{r.project}
+                      {r.collector_name
+                        ? ` · ${r.collector_name}${r.is_guest ? " (guest)" : ""}`
+                        : ""}
+                      {r.guest_phone
+                        ? ` · ${r.guest_phone}`
+                        : r.guest_phone_hint
+                          ? ` · ${r.guest_phone_hint}`
+                          : ""}
                     </div>
+                    {r.whatsapp_share_url ? (
+                      <a
+                        href={r.whatsapp_share_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-xs text-primary hover:underline"
+                      >
+                        WhatsApp collector
+                      </a>
+                    ) : null}
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <button

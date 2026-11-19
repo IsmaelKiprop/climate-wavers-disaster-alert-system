@@ -61,6 +61,8 @@ export const endpoints = {
     "plasticSponsor": (id) => `/api/v1/plastic/projects/${id}/sponsor/`,
     "plasticHotspotClaim": (id) => `/api/v1/plastic/hotspots/${id}/claim/`,
     "plasticRecoveries": "/api/v1/plastic/recoveries/",
+    "plasticMyRecoveries": "/api/v1/plastic/recoveries/mine/",
+    "plasticGuestRecoveries": "/api/v1/plastic/recoveries/guest/",
     "plasticRecoveryVerify": (id) => `/api/v1/plastic/recoveries/${id}/verify/`,
     "plasticIntakeScan": "/api/v1/plastic/intake/scan/",
     "plasticBag": (bagId) => `/api/v1/plastic/bags/${encodeURIComponent(bagId)}/`,

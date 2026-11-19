@@ -18,6 +18,7 @@ import WaverX from "./WaverX";
 import PlantTree from "./PlantTree";
 import TreeAdmin from "./TreeAdmin";
 import PlasticPulse from "./PlasticPulse";
+import CollectPlastic from "./CollectPlastic";
 import BagScanner from "./BagScanner";
 import AlertSettings from "./AlertSettings";
 import Responder from "./Responder";
@@ -44,6 +45,7 @@ export {
   PlantTree,
   TreeAdmin,
   PlasticPulse,
+  CollectPlastic,
   BagScanner,
   AlertSettings,
   Responder,

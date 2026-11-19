@@ -3095,6 +3095,27 @@ class PlasticHotspot(models.Model):
     drain_related = models.BooleanField(
         default=False, help_text="Blocks drainage / flood corridor"
     )
+    claim_pin = models.CharField(
+        max_length=12,
+        blank=True,
+        default="",
+        help_text="CBO shares this PIN on site; collectors must enter it to claim.",
+    )
+    claimed_guest_name = models.CharField(max_length=120, blank=True, default="")
+    claimed_guest_phone = models.CharField(
+        max_length=32,
+        blank=True,
+        default="",
+        db_index=True,
+        help_text="Normalized phone for guest collectors (no account).",
+    )
+    guest_claim_token = models.CharField(
+        max_length=64,
+        blank=True,
+        default="",
+        db_index=True,
+        help_text="Opaque token returned to guest after PIN match; proves claim ownership.",
+    )
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="open")
     claimed_at = models.DateTimeField(null=True, blank=True)
     cleared_at = models.DateTimeField(null=True, blank=True)
@@ -3231,6 +3252,21 @@ class PlasticRecovery(models.Model):
         null=True,
         blank=True,
         related_name="intakes",
+    )
+    guest_name = models.CharField(max_length=120, blank=True, default="")
+    guest_phone = models.CharField(
+        max_length=32,
+        blank=True,
+        default="",
+        db_index=True,
+        help_text="Normalized phone for guest collectors (no account).",
+    )
+    guest_token = models.CharField(
+        max_length=64,
+        blank=True,
+        default="",
+        db_index=True,
+        help_text="Opaque guest session token for bag lookup without login.",
     )
     client_uuid = models.CharField(
         max_length=64,

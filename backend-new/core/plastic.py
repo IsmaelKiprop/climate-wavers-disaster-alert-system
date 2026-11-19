@@ -73,6 +73,80 @@ def _org_membership(user) -> Optional[TreeAdminMembership]:
     return primary_tree_admin_membership(user)
 
 
+def _normalize_claim_pin(value) -> str:
+    """Digits-only PIN for CBO ↔ collector matching (ignore spaces/dashes)."""
+    return re.sub(r"\D", "", str(value or "").strip())
+
+
+def _claim_pins_match(stored: str, provided) -> bool:
+    a = _normalize_claim_pin(stored)
+    b = _normalize_claim_pin(provided)
+    if not a:
+        return False
+    return bool(b) and a == b
+
+
+def _normalize_phone(value) -> str:
+    """Normalize Kenyan / regional phones to digits (prefer 254…)."""
+    digits = re.sub(r"\D", "", str(value or "").strip())
+    if not digits:
+        return ""
+    if digits.startswith("0") and len(digits) >= 9:
+        digits = "254" + digits.lstrip("0")
+    elif len(digits) == 9 and digits.startswith(("7", "1")):
+        digits = "254" + digits
+    return digits[:32]
+
+
+def _phone_hint(phone: str) -> str:
+    digits = _normalize_phone(phone)
+    if len(digits) < 4:
+        return ""
+    return f"***{digits[-4:]}"
+
+
+def _parse_guest_identity(data) -> tuple[str, str]:
+    name = str(
+        (data or {}).get("guest_name")
+        or (data or {}).get("collector_name")
+        or (data or {}).get("name")
+        or ""
+    ).strip()[:120]
+    phone = _normalize_phone(
+        (data or {}).get("guest_phone")
+        or (data or {}).get("collector_phone")
+        or (data or {}).get("phone")
+        or ""
+    )
+    return name, phone
+
+
+def _new_guest_token() -> str:
+    return uuid.uuid4().hex
+
+
+def _guest_owns_hotspot(hotspot: PlasticHotspot, *, phone: str = "", token: str = "") -> bool:
+    if hotspot.status != "claimed":
+        return False
+    if hotspot.claimed_by_id:
+        return False
+    token = str(token or "").strip()
+    phone = _normalize_phone(phone)
+    if token and hotspot.guest_claim_token and token == hotspot.guest_claim_token:
+        return True
+    if phone and hotspot.claimed_guest_phone and phone == hotspot.claimed_guest_phone:
+        return True
+    return False
+
+
+def _collector_label(recovery: PlasticRecovery) -> str:
+    if recovery.guest_name:
+        return recovery.guest_name.strip()
+    if recovery.submitted_by_id:
+        return _user_display_name(recovery.submitted_by)
+    return "Climate Wavers collector"
+
+
 def _can_manage_project(user, project: PlasticProject) -> bool:
     if not user or not getattr(user, "is_authenticated", False):
         return False
@@ -371,7 +445,7 @@ def _ensure_recovery_certificate(recovery: PlasticRecovery) -> PlasticCertificat
     kg = recovery.kg_verified or recovery.kg_claimed
     if _money(kg) <= 0:
         return None
-    holder = _user_display_name(recovery.submitted_by)
+    holder = _collector_label(recovery)
     email = getattr(recovery.submitted_by, "email", "") if recovery.submitted_by_id else ""
     cert = None
     try:
@@ -408,6 +482,14 @@ def _ensure_recovery_certificate(recovery: PlasticRecovery) -> PlasticCertificat
 
 
 class PlasticHotspotSerializer(serializers.ModelSerializer):
+    has_claim_pin = serializers.SerializerMethodField()
+    claimed_guest_phone_hint = serializers.SerializerMethodField()
+    is_guest_claim = serializers.SerializerMethodField()
+    # Write-only for collectors never see this on public reads unless include_claim_pin.
+    claim_pin = serializers.CharField(
+        required=False, allow_blank=True, max_length=12, write_only=False
+    )
+
     class Meta:
         model = PlasticHotspot
         fields = [
@@ -415,6 +497,9 @@ class PlasticHotspotSerializer(serializers.ModelSerializer):
             "project",
             "created_by",
             "claimed_by",
+            "claimed_guest_name",
+            "claimed_guest_phone_hint",
+            "is_guest_claim",
             "title",
             "notes",
             "photo",
@@ -423,6 +508,8 @@ class PlasticHotspotSerializer(serializers.ModelSerializer):
             "location_label",
             "severity",
             "drain_related",
+            "claim_pin",
+            "has_claim_pin",
             "status",
             "claimed_at",
             "cleared_at",
@@ -433,23 +520,79 @@ class PlasticHotspotSerializer(serializers.ModelSerializer):
             "project",
             "created_by",
             "claimed_by",
+            "claimed_guest_name",
+            "claimed_guest_phone_hint",
+            "is_guest_claim",
             "claimed_at",
             "cleared_at",
             "created_at",
             "status",
+            "has_claim_pin",
         ]
+
+    def get_has_claim_pin(self, obj):
+        return bool(_normalize_claim_pin(getattr(obj, "claim_pin", "")))
+
+    def get_claimed_guest_phone_hint(self, obj):
+        return _phone_hint(getattr(obj, "claimed_guest_phone", ""))
+
+    def get_is_guest_claim(self, obj):
+        return bool(
+            obj.status == "claimed"
+            and not obj.claimed_by_id
+            and (obj.claimed_guest_phone or obj.guest_claim_token)
+        )
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        include_pin = bool(self.context.get("include_claim_pin"))
+        if not include_pin:
+            data.pop("claim_pin", None)
+        else:
+            data["claim_pin"] = getattr(instance, "claim_pin", "") or ""
+        data["has_claim_pin"] = self.get_has_claim_pin(instance)
+        data["claimed_guest_phone_hint"] = self.get_claimed_guest_phone_hint(instance)
+        data["is_guest_claim"] = self.get_is_guest_claim(instance)
+        # Never expose guest claim token or raw phone on nested public reads.
+        data.pop("guest_claim_token", None)
+        data.pop("claimed_guest_phone", None)
+        return data
+
+    def validate_claim_pin(self, value):
+        pin = _normalize_claim_pin(value)
+        if value and not pin:
+            raise serializers.ValidationError("Claim PIN must include digits.")
+        if pin and (len(pin) < 4 or len(pin) > 8):
+            raise serializers.ValidationError("Claim PIN must be 4–8 digits.")
+        return pin
 
 
 class PlasticRecoverySerializer(serializers.ModelSerializer):
+    project_name = serializers.SerializerMethodField()
+    hotspot_title = serializers.SerializerMethodField()
+    certificate_code = serializers.SerializerMethodField()
+    verify_url = serializers.SerializerMethodField()
+    collector_name = serializers.SerializerMethodField()
+    guest_phone_hint = serializers.SerializerMethodField()
+    is_guest = serializers.SerializerMethodField()
+    whatsapp_share_url = serializers.SerializerMethodField()
+
     class Meta:
         model = PlasticRecovery
         fields = [
             "id",
             "project",
+            "project_name",
             "hotspot",
+            "hotspot_title",
             "submitted_by",
             "verified_by",
             "recycler",
+            "guest_name",
+            "guest_phone_hint",
+            "collector_name",
+            "is_guest",
+            "whatsapp_share_url",
             "client_uuid",
             "bag_id",
             "polymer_type",
@@ -467,6 +610,8 @@ class PlasticRecoverySerializer(serializers.ModelSerializer):
             "synced_at",
             "verified_at",
             "intake_at",
+            "certificate_code",
+            "verify_url",
             "created_at",
         ]
         read_only_fields = [
@@ -474,14 +619,90 @@ class PlasticRecoverySerializer(serializers.ModelSerializer):
             "submitted_by",
             "verified_by",
             "recycler",
+            "guest_name",
+            "guest_phone_hint",
+            "collector_name",
+            "is_guest",
+            "whatsapp_share_url",
             "kg_verified",
             "status",
             "reject_reason",
             "synced_at",
             "verified_at",
             "intake_at",
+            "project_name",
+            "hotspot_title",
+            "certificate_code",
+            "verify_url",
             "created_at",
         ]
+
+    def get_collector_name(self, obj):
+        return _collector_label(obj)
+
+    def get_guest_phone_hint(self, obj):
+        return _phone_hint(getattr(obj, "guest_phone", ""))
+
+    def get_is_guest(self, obj):
+        return bool(getattr(obj, "guest_phone", None) or getattr(obj, "guest_name", None))
+
+    def get_whatsapp_share_url(self, obj):
+        if not self.context.get("include_guest_whatsapp"):
+            return ""
+        phone = getattr(obj, "guest_phone", "") or ""
+        if not phone:
+            return ""
+        cert_code = self.get_certificate_code(obj)
+        verify = self.get_verify_url(obj)
+        kg = obj.kg_verified if obj.kg_verified is not None else obj.kg_claimed
+        text = (
+            f"Climate Wavers Plastic Pulse bag {obj.bag_id}: {kg} kg · {obj.status}."
+            + (f" Certificate {cert_code}: {_frontend_base()}{verify}" if cert_code else "")
+        )
+        return _whatsapp_share_url(phone, text)
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        # Never leak guest_token / raw phone on default serialization.
+        data.pop("guest_token", None)
+        data.pop("guest_phone", None)
+        if self.context.get("include_guest_phone"):
+            data["guest_phone"] = getattr(instance, "guest_phone", "") or ""
+        return data
+
+    def get_project_name(self, obj):
+        project = getattr(obj, "project", None)
+        return getattr(project, "name", "") if project else ""
+
+    def get_hotspot_title(self, obj):
+        hotspot = getattr(obj, "hotspot", None)
+        if not hotspot:
+            return ""
+        return (
+            (hotspot.title or "").strip()
+            or (hotspot.location_label or "").strip()
+            or f"Hotspot #{hotspot.id}"
+        )
+
+    def _certificate(self, obj):
+        cache = self.context.setdefault("_cert_cache", {})
+        if obj.id in cache:
+            return cache[obj.id]
+        cert = None
+        if getattr(obj, "status", None) == "intake_confirmed":
+            cert = obj.certificates.order_by("-issued_at").first()
+            if not cert:
+                cert = _ensure_recovery_certificate(obj)
+        cache[obj.id] = cert
+        return cert
+
+    def get_certificate_code(self, obj):
+        cert = self._certificate(obj)
+        return cert.code if cert else ""
+
+    def get_verify_url(self, obj):
+        code = self.get_certificate_code(obj)
+        return f"/verify/plastic/{code}" if code else ""
 
 
 class PlasticRecyclerSerializer(serializers.ModelSerializer):
@@ -865,6 +1086,7 @@ class PlasticProjectListCreateView(APIView):
             "true",
             "yes",
         }
+        include_pin = False
         if mine and request.user.is_authenticated:
             m = _org_membership(request.user)
             org_ids = []
@@ -873,7 +1095,14 @@ class PlasticProjectListCreateView(APIView):
             qs = PlasticProject.objects.filter(
                 Q(organization=request.user) | Q(tree_admin_org_id__in=org_ids)
             ).distinct()
-        return Response(PlasticProjectSerializer(qs[:100], many=True).data)
+            include_pin = True
+        return Response(
+            PlasticProjectSerializer(
+                qs[:100],
+                many=True,
+                context={"request": request, "include_claim_pin": include_pin},
+            ).data
+        )
 
     def post(self, request):
         if not user_has_tree_admin_access(request.user):
@@ -918,9 +1147,19 @@ class PlasticProjectDetailView(APIView):
             )
         except PlasticProject.DoesNotExist:
             return Response({"detail": "Not found."}, status=404)
+        include_pin = bool(
+            request.user
+            and request.user.is_authenticated
+            and _can_manage_project(request.user, project)
+        )
         return Response(
             PlasticProjectSerializer(
-                project, context={"request": request, "include_impact": True}
+                project,
+                context={
+                    "request": request,
+                    "include_impact": True,
+                    "include_claim_pin": include_pin,
+                },
             ).data
         )
 
@@ -938,12 +1177,19 @@ class PlasticProjectDetailView(APIView):
         ser.save()
         return Response(
             PlasticProjectSerializer(
-                project, context={"request": request, "include_impact": True}
+                project,
+                context={
+                    "request": request,
+                    "include_impact": True,
+                    "include_claim_pin": True,
+                },
             ).data
         )
 
 
 class PlasticHotspotCreateView(APIView):
+    """CBO / Tree Admin pins hotspots. Field collectors claim them — they do not pin."""
+
     permission_classes = [IsAuthenticated]
 
     def post(self, request, project_id):
@@ -951,7 +1197,14 @@ class PlasticHotspotCreateView(APIView):
             project = PlasticProject.objects.get(pk=project_id)
         except PlasticProject.DoesNotExist:
             return Response({"detail": "Not found."}, status=404)
-        ser = PlasticHotspotSerializer(data=request.data)
+        if not _can_manage_project(request.user, project):
+            return Response(
+                {"detail": "Only the project CBO can pin hotspots."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        ser = PlasticHotspotSerializer(
+            data=request.data, context={"include_claim_pin": True}
+        )
         ser.is_valid(raise_exception=True)
         lat = ser.validated_data.get("latitude")
         lng = ser.validated_data.get("longitude")
@@ -959,10 +1212,19 @@ class PlasticHotspotCreateView(APIView):
             return Response(
                 {"detail": "latitude and longitude are required."}, status=400
             )
+        pin = _normalize_claim_pin(ser.validated_data.get("claim_pin"))
+        if not pin:
+            return Response(
+                {
+                    "detail": "Claim PIN required (4–8 digits). Share it with collectors on site."
+                },
+                status=400,
+            )
         hotspot = ser.save(
             project=project,
             created_by=request.user,
             status="open",
+            claim_pin=pin,
         )
         for m in TreeAdminMembership.objects.filter(
             org_id=project.tree_admin_org_id
@@ -973,36 +1235,144 @@ class PlasticHotspotCreateView(APIView):
                 hotspot,
             )
         return Response(
-            PlasticHotspotSerializer(hotspot).data, status=status.HTTP_201_CREATED
+            PlasticHotspotSerializer(
+                hotspot, context={"include_claim_pin": True}
+            ).data,
+            status=status.HTTP_201_CREATED,
         )
 
 
 class PlasticHotspotClaimView(APIView):
-    permission_classes = [IsAuthenticated]
+    """
+    Claim a hotspot after CBO claim PIN match.
+    Signed-in collectors OR guests (name + phone) — no account required.
+    """
+
+    permission_classes = [AllowAny]
 
     def post(self, request, hotspot_id):
         try:
             hotspot = PlasticHotspot.objects.select_related("project").get(pk=hotspot_id)
         except PlasticHotspot.DoesNotExist:
             return Response({"detail": "Not found."}, status=404)
+        if hotspot.project.status != "active":
+            return Response({"detail": "Project is not active."}, status=400)
         if hotspot.status not in ("open", "claimed"):
             return Response({"detail": "Hotspot is not claimable."}, status=400)
-        if hotspot.status == "claimed" and hotspot.claimed_by_id not in (
-            None,
-            request.user.id,
-        ):
-            return Response({"detail": "Already claimed by someone else."}, status=409)
-        hotspot.status = "claimed"
-        hotspot.claimed_by = request.user
+
+        user = request.user if getattr(request.user, "is_authenticated", False) else None
+        guest_name, guest_phone = _parse_guest_identity(request.data)
+        guest_token_in = str(
+            request.data.get("guest_token") or request.data.get("token") or ""
+        ).strip()
+
+        already_mine = False
+        if user:
+            already_mine = (
+                hotspot.status == "claimed" and hotspot.claimed_by_id == user.id
+            )
+        if not already_mine:
+            already_mine = _guest_owns_hotspot(
+                hotspot, phone=guest_phone, token=guest_token_in
+            )
+
+        if hotspot.status == "claimed" and not already_mine:
+            # Another account user holds it
+            if hotspot.claimed_by_id and (not user or hotspot.claimed_by_id != user.id):
+                return Response(
+                    {"detail": "Already claimed by someone else."}, status=409
+                )
+            # Another guest holds it
+            if not hotspot.claimed_by_id and (
+                hotspot.claimed_guest_phone or hotspot.guest_claim_token
+            ):
+                return Response(
+                    {"detail": "Already claimed by someone else."}, status=409
+                )
+
+        if not already_mine:
+            provided = request.data.get("claim_pin") or request.data.get("pin") or ""
+            if not _normalize_claim_pin(hotspot.claim_pin):
+                return Response(
+                    {
+                        "detail": "This hotspot has no claim PIN. Ask the CBO to re-pin it."
+                    },
+                    status=400,
+                )
+            if not _claim_pins_match(hotspot.claim_pin, provided):
+                return Response(
+                    {"detail": "Claim PIN does not match the CBO PIN."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
+        guest_token = hotspot.guest_claim_token or ""
+        if user:
+            hotspot.status = "claimed"
+            hotspot.claimed_by = user
+            hotspot.claimed_guest_name = ""
+            hotspot.claimed_guest_phone = ""
+            hotspot.guest_claim_token = ""
+            guest_token = ""
+            label = _user_display_name(user)
+        else:
+            if not guest_name or len(guest_name) < 2:
+                return Response(
+                    {"detail": "Name required for guest collection."}, status=400
+                )
+            if len(guest_phone) < 9:
+                return Response(
+                    {
+                        "detail": "Valid phone required for guest collection (e.g. 07… or +254…)."
+                    },
+                    status=400,
+                )
+            if already_mine and hotspot.guest_claim_token:
+                guest_token = hotspot.guest_claim_token
+            else:
+                guest_token = guest_token_in or _new_guest_token()
+            hotspot.status = "claimed"
+            hotspot.claimed_by = None
+            hotspot.claimed_guest_name = guest_name
+            hotspot.claimed_guest_phone = guest_phone
+            hotspot.guest_claim_token = guest_token
+            label = guest_name
+
         hotspot.claimed_at = timezone.now()
         hotspot.save(
-            update_fields=["status", "claimed_by", "claimed_at", "updated_at"]
+            update_fields=[
+                "status",
+                "claimed_by",
+                "claimed_guest_name",
+                "claimed_guest_phone",
+                "guest_claim_token",
+                "claimed_at",
+                "updated_at",
+            ]
         )
-        return Response(PlasticHotspotSerializer(hotspot).data)
+        if hotspot.project.tree_admin_org_id and not already_mine:
+            for m in TreeAdminMembership.objects.filter(
+                org_id=hotspot.project.tree_admin_org_id, role__in=("owner", "manager")
+            ).select_related("user")[:8]:
+                _notify(
+                    m.user,
+                    f"{label} claimed hotspot on {hotspot.project.name}",
+                    hotspot,
+                )
+        payload = PlasticHotspotSerializer(hotspot).data
+        if guest_token:
+            payload["guest_token"] = guest_token
+            payload["guest_name"] = guest_name or hotspot.claimed_guest_name
+            payload["guest_phone"] = guest_phone or hotspot.claimed_guest_phone
+        return Response(payload)
 
 
 class PlasticRecoveryCreateView(APIView):
-    permission_classes = [IsAuthenticated]
+    """
+    Submit bag proof (GPS + media required).
+    Signed-in collectors/CBO OR guests with name + phone + claim PIN / guest token.
+    """
+
+    permission_classes = [AllowAny]
 
     def post(self, request):
         data = request.data.copy() if hasattr(request.data, "copy") else dict(request.data)
@@ -1011,6 +1381,27 @@ class PlasticRecoveryCreateView(APIView):
             project = PlasticProject.objects.get(pk=int(project_id))
         except (TypeError, ValueError, PlasticProject.DoesNotExist):
             return Response({"detail": "Valid project required."}, status=400)
+        if project.status != "active":
+            return Response({"detail": "Project is not active."}, status=400)
+
+        user = request.user if getattr(request.user, "is_authenticated", False) else None
+        guest_name, guest_phone = _parse_guest_identity(data)
+        guest_token = str(
+            data.get("guest_token") or data.get("token") or ""
+        ).strip()
+
+        if not user:
+            if not guest_name or len(guest_name) < 2:
+                return Response(
+                    {"detail": "Name required for guest collection."}, status=400
+                )
+            if len(guest_phone) < 9:
+                return Response(
+                    {
+                        "detail": "Valid phone required for guest collection (e.g. 07… or +254…)."
+                    },
+                    status=400,
+                )
 
         client_uuid = str(data.get("client_uuid") or "").strip()
         if client_uuid:
@@ -1045,15 +1436,95 @@ class PlasticRecoveryCreateView(APIView):
         }
         hotspot = None
         hotspot_id = data.get("hotspot") or data.get("hotspot_id")
+        if not hotspot_id and not user:
+            return Response(
+                {"detail": "Claim a hotspot with the CBO PIN before logging a bag."},
+                status=400,
+            )
         if hotspot_id:
             hotspot = PlasticHotspot.objects.filter(
                 pk=hotspot_id, project=project
             ).first()
+            if not hotspot:
+                return Response({"detail": "Hotspot not found on this project."}, status=400)
+            is_manager = bool(user and _can_manage_project(user, project))
+            already_mine = bool(user and hotspot.claimed_by_id == user.id)
+            if not already_mine:
+                already_mine = _guest_owns_hotspot(
+                    hotspot, phone=guest_phone, token=guest_token
+                )
+            if not is_manager and not already_mine:
+                provided = data.get("claim_pin") or data.get("pin") or ""
+                if not _claim_pins_match(hotspot.claim_pin, provided):
+                    return Response(
+                        {
+                            "detail": "Enter the CBO claim PIN to collect at this hotspot."
+                        },
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
+                # Auto-claim after successful PIN match so bag is tied to collector.
+                if hotspot.status not in ("open", "claimed"):
+                    return Response(
+                        {"detail": "Hotspot is not claimable."}, status=400
+                    )
+                if hotspot.status == "claimed":
+                    if hotspot.claimed_by_id and (
+                        not user or hotspot.claimed_by_id != user.id
+                    ):
+                        return Response(
+                            {"detail": "Hotspot already claimed by someone else."},
+                            status=409,
+                        )
+                    if (
+                        not hotspot.claimed_by_id
+                        and (hotspot.claimed_guest_phone or hotspot.guest_claim_token)
+                        and not _guest_owns_hotspot(
+                            hotspot, phone=guest_phone, token=guest_token
+                        )
+                    ):
+                        return Response(
+                            {"detail": "Hotspot already claimed by someone else."},
+                            status=409,
+                        )
+                if user:
+                    hotspot.status = "claimed"
+                    hotspot.claimed_by = user
+                    hotspot.claimed_guest_name = ""
+                    hotspot.claimed_guest_phone = ""
+                    hotspot.guest_claim_token = ""
+                    guest_token = ""
+                else:
+                    guest_token = guest_token or hotspot.guest_claim_token or _new_guest_token()
+                    hotspot.status = "claimed"
+                    hotspot.claimed_by = None
+                    hotspot.claimed_guest_name = guest_name
+                    hotspot.claimed_guest_phone = guest_phone
+                    hotspot.guest_claim_token = guest_token
+                hotspot.claimed_at = timezone.now()
+                hotspot.save(
+                    update_fields=[
+                        "status",
+                        "claimed_by",
+                        "claimed_guest_name",
+                        "claimed_guest_phone",
+                        "guest_claim_token",
+                        "claimed_at",
+                        "updated_at",
+                    ]
+                )
+            elif already_mine and not user and hotspot.guest_claim_token:
+                guest_token = guest_token or hotspot.guest_claim_token
+
+        if not user and not guest_token:
+            guest_token = _new_guest_token()
 
         recovery = PlasticRecovery.objects.create(
             project=project,
             hotspot=hotspot,
-            submitted_by=request.user,
+            submitted_by=user,
+            guest_name=guest_name if not user else "",
+            guest_phone=guest_phone if not user else "",
+            guest_token=guest_token if not user else "",
             client_uuid=client_uuid,
             bag_id=bag_id[:64],
             polymer_type=str(data.get("polymer_type") or "mixed")[:20],
@@ -1073,17 +1544,25 @@ class PlasticRecoveryCreateView(APIView):
             recovery.save(update_fields=["status", "updated_at"])
 
         if project.tree_admin_org_id:
+            who = guest_name or ( _user_display_name(user) if user else "Collector" )
             for m in TreeAdminMembership.objects.filter(
                 org_id=project.tree_admin_org_id, role__in=("owner", "manager")
             ).select_related("user")[:10]:
                 _notify(
                     m.user,
-                    f"New plastic recovery proof on {project.name} ({recovery.bag_id})",
+                    f"New plastic recovery proof on {project.name} ({recovery.bag_id}) from {who}",
                     recovery,
                 )
-        return Response(
-            PlasticRecoverySerializer(recovery).data, status=status.HTTP_201_CREATED
-        )
+        payload = PlasticRecoverySerializer(
+            recovery,
+            context={
+                "include_guest_phone": True,
+                "include_guest_whatsapp": True,
+            },
+        ).data
+        if guest_token and not user:
+            payload["guest_token"] = guest_token
+        return Response(payload, status=status.HTTP_201_CREATED)
 
 
 class PlasticRecoveryVerifyView(APIView):
@@ -1271,10 +1750,34 @@ class PlasticIntakeScanView(APIView):
 
                 certificate_code = cert.code if cert else ""
 
-                payload = PlasticRecoverySerializer(recovery).data
+                payload = PlasticRecoverySerializer(
+                    recovery,
+                    context={
+                        "include_guest_phone": True,
+                        "include_guest_whatsapp": True,
+                    },
+                ).data
                 payload["certificate_code"] = certificate_code
                 payload["certificate_emailed"] = False  # emailed on_commit after response
                 payload["project_recovered_kg"] = float(project.recovered_kg or 0)
+                if recovery.guest_phone:
+                    verify_path = (
+                        f"/verify/plastic/{certificate_code}" if certificate_code else ""
+                    )
+                    wa_text = (
+                        f"Climate Wavers Plastic Pulse: bag {recovery.bag_id} intake "
+                        f"confirmed at {kg} kg."
+                        + (
+                            f" Certificate: {_frontend_base()}{verify_path}"
+                            if certificate_code
+                            else ""
+                        )
+                    )
+                    payload["collector_whatsapp_url"] = _whatsapp_share_url(
+                        recovery.guest_phone, wa_text
+                    )
+                    payload["guest_phone"] = recovery.guest_phone
+                    payload["guest_name"] = recovery.guest_name
                 recovery_pk = recovery.pk
 
             # Points after commit — avoids nested-atomic breakage on ledger errors.
@@ -1697,11 +2200,104 @@ class PlasticAdminQueueView(APIView):
             )
         else:
             qs = qs.filter(project__organization=request.user)
-        return Response(PlasticRecoverySerializer(qs[:100], many=True).data)
+        return Response(
+            PlasticRecoverySerializer(
+                qs[:100],
+                many=True,
+                context={
+                    "request": request,
+                    "include_guest_phone": True,
+                    "include_guest_whatsapp": True,
+                },
+            ).data
+        )
+
+
+class PlasticMyRecoveriesView(APIView):
+    """Field collector desk — bags the current user submitted."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        qs = (
+            PlasticRecovery.objects.filter(submitted_by=request.user)
+            .select_related("project", "hotspot")
+            .prefetch_related("certificates")
+            .order_by("-created_at")
+        )
+        project_id = request.query_params.get("project") or request.query_params.get(
+            "project_id"
+        )
+        if project_id:
+            try:
+                qs = qs.filter(project_id=int(project_id))
+            except (TypeError, ValueError):
+                return Response({"detail": "Invalid project."}, status=400)
+        status_filter = str(request.query_params.get("status") or "").strip()
+        if status_filter:
+            allowed = {
+                "queued_offline",
+                "submitted",
+                "cbo_verified",
+                "rejected",
+                "intake_confirmed",
+            }
+            statuses = [s.strip() for s in status_filter.split(",") if s.strip() in allowed]
+            if statuses:
+                qs = qs.filter(status__in=statuses)
+        return Response(
+            PlasticRecoverySerializer(qs[:100], many=True, context={"request": request}).data
+        )
+
+
+class PlasticGuestRecoveriesView(APIView):
+    """Guest collector bag list — phone + guest_token (no account)."""
+
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        phone = _normalize_phone(
+            request.data.get("guest_phone")
+            or request.data.get("phone")
+            or request.query_params.get("phone")
+        )
+        token = str(
+            request.data.get("guest_token")
+            or request.data.get("token")
+            or request.query_params.get("token")
+            or ""
+        ).strip()
+        if len(phone) < 9 or not token:
+            return Response(
+                {"detail": "guest_phone and guest_token are required."}, status=400
+            )
+        qs = (
+            PlasticRecovery.objects.filter(guest_phone=phone, guest_token=token)
+            .select_related("project", "hotspot")
+            .prefetch_related("certificates")
+            .order_by("-created_at")
+        )
+        project_id = request.data.get("project") or request.query_params.get("project")
+        if project_id:
+            try:
+                qs = qs.filter(project_id=int(project_id))
+            except (TypeError, ValueError):
+                return Response({"detail": "Invalid project."}, status=400)
+        return Response(
+            PlasticRecoverySerializer(
+                qs[:100],
+                many=True,
+                context={
+                    "request": request,
+                    "include_guest_phone": True,
+                    "include_guest_whatsapp": True,
+                },
+            ).data
+        )
 
 
 class PlasticBagLookupView(APIView):
-    """Look up a recovery by bag_id for recycler QR intake screens."""
+    """Look up a recovery by bag_id for recycler QR intake screens (or bag owner)."""
 
     permission_classes = [IsAuthenticated]
 
@@ -1719,19 +2315,26 @@ class PlasticBagLookupView(APIView):
         )
         if not recovery:
             return Response({"detail": "Bag not found."}, status=404)
-        if not _can_intake_recovery(request.user, recovery):
+        is_owner = recovery.submitted_by_id == request.user.id
+        can_intake = _can_intake_recovery(request.user, recovery)
+        if not (is_owner or can_intake or request.user.is_staff):
             return Response({"detail": "Forbidden."}, status=403)
         is_cbo = _can_manage_project(request.user, recovery.project) or request.user.is_staff
-        data = PlasticRecoverySerializer(recovery).data
+        data = PlasticRecoverySerializer(
+            recovery, context={"request": request}
+        ).data
         data["project_name"] = recovery.project.name if recovery.project_id else ""
+        data["is_owner"] = is_owner
         if is_cbo:
             data["can_intake"] = recovery.status in ("cbo_verified", "submitted")
-        else:
+        elif can_intake:
             data["can_intake"] = recovery.status == "cbo_verified"
+        else:
+            data["can_intake"] = False
         cert = _ensure_recovery_certificate(recovery)
-        data["certificate_code"] = cert.code if cert else ""
-        if cert:
-            data["verify_url"] = f"/verify/plastic/{cert.code}"
+        data["certificate_code"] = cert.code if cert else data.get("certificate_code") or ""
+        if data["certificate_code"]:
+            data["verify_url"] = f"/verify/plastic/{data['certificate_code']}"
         partner = _recycler_partner_for_project(request.user, recovery.project)
         data["scanner_recycler_id"] = partner.id if partner else None
         data["scan_only"] = bool(partner) and not is_cbo

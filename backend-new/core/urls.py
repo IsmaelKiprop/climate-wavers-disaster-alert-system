@@ -51,6 +51,8 @@ from .plastic import (
     PlasticHotspotClaimView,
     PlasticRecoveryCreateView,
     PlasticRecoveryVerifyView,
+    PlasticMyRecoveriesView,
+    PlasticGuestRecoveriesView,
     PlasticIntakeScanView,
     PlasticBagLookupView,
     PlasticRecyclerListCreateView,
@@ -263,6 +265,16 @@ urlpatterns = [
         name="plastic-hotspot-claim",
     ),
     path("plastic/recoveries/", PlasticRecoveryCreateView.as_view(), name="plastic-recoveries"),
+    path(
+        "plastic/recoveries/mine/",
+        PlasticMyRecoveriesView.as_view(),
+        name="plastic-recoveries-mine",
+    ),
+    path(
+        "plastic/recoveries/guest/",
+        PlasticGuestRecoveriesView.as_view(),
+        name="plastic-recoveries-guest",
+    ),
     path(
         "plastic/recoveries/<int:recovery_id>/verify/",
         PlasticRecoveryVerifyView.as_view(),
