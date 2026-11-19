@@ -29,6 +29,26 @@ async function api(path, { method = "GET", body } = {}) {
   return data;
 }
 
+function FieldLabel({ children, required = false, hint }) {
+  return (
+    <div className="space-y-1">
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="text-xs font-medium text-foreground">
+          {children}
+          {required ? (
+            <span className="text-red-500 ml-0.5" aria-hidden="true">
+              *
+            </span>
+          ) : (
+            <span className="text-muted font-normal ml-1">(optional)</span>
+          )}
+        </span>
+      </div>
+      {hint ? <p className="text-[11px] text-muted leading-snug">{hint}</p> : null}
+    </div>
+  );
+}
+
 const emptyProject = {
   name: "",
   description: "",
@@ -47,10 +67,16 @@ const PlasticProjectAdmin = () => {
   const [selectedId, setSelectedId] = useState(null);
   const [detail, setDetail] = useState(null);
   const [queue, setQueue] = useState([]);
+  const [intakeQueue, setIntakeQueue] = useState([]);
   const [recyclers, setRecyclers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState(emptyProject);
   const [creating, setCreating] = useState(false);
+  const [pinning, setPinning] = useState(false);
+  const [submittingProof, setSubmittingProof] = useState(false);
+  const [verifyingId, setVerifyingId] = useState(null);
+  const [intaking, setIntaking] = useState(false);
+  const [savingRecycler, setSavingRecycler] = useState(false);
   const [tab, setTab] = useState("projects");
   const [offlineCount, setOfflineCount] = useState(0);
 
@@ -106,10 +132,15 @@ const PlasticProjectAdmin = () => {
 
   const loadQueue = useCallback(async () => {
     try {
-      const data = await api(endpoints.plasticAdminQueue);
-      setQueue(Array.isArray(data) ? data : []);
+      const [submitted, verified] = await Promise.all([
+        api(`${endpoints.plasticAdminQueue}?status=submitted`),
+        api(`${endpoints.plasticAdminQueue}?status=cbo_verified`),
+      ]);
+      setQueue(Array.isArray(submitted) ? submitted : []);
+      setIntakeQueue(Array.isArray(verified) ? verified : []);
     } catch {
       setQueue([]);
+      setIntakeQueue([]);
     }
   }, []);
 
@@ -203,6 +234,11 @@ const PlasticProjectAdmin = () => {
   const pinHotspot = async (e) => {
     e.preventDefault();
     if (!selectedId) return toast.error("Select a project first");
+    if (pinning) return;
+    if (!hotspotForm.latitude || !hotspotForm.longitude) {
+      return toast.error("Capture GPS before pinning");
+    }
+    setPinning(true);
     try {
       await api(endpoints.plasticHotspots(selectedId), {
         method: "POST",
@@ -223,9 +259,11 @@ const PlasticProjectAdmin = () => {
         longitude: "",
         location_label: "",
       });
-      loadDetail(selectedId);
+      await loadDetail(selectedId);
     } catch (err) {
       toast.error(err.message);
+    } finally {
+      setPinning(false);
     }
   };
 
@@ -249,6 +287,16 @@ const PlasticProjectAdmin = () => {
   const submitProof = async (e) => {
     e.preventDefault();
     if (!selectedId) return toast.error("Select a project first");
+    if (submittingProof || proofUploading) return;
+    if (!proofForm.latitude || !proofForm.longitude) {
+      return toast.error("Capture GPS before submitting proof");
+    }
+    if (!(proofForm.images?.length || proofForm.videos?.length)) {
+      return toast.error("Add at least one photo or video");
+    }
+    if (!(Number(proofForm.kg_claimed) > 0)) {
+      return toast.error("Enter kg claimed");
+    }
     const payload = {
       project: selectedId,
       hotspot: proofForm.hotspot_id || null,
@@ -263,6 +311,7 @@ const PlasticProjectAdmin = () => {
       videos: proofForm.videos,
       client_uuid: crypto.randomUUID(),
     };
+    setSubmittingProof(true);
     if (!navigator.onLine) {
       enqueuePlasticOfflineProof(payload);
       refreshOffline();
@@ -275,11 +324,13 @@ const PlasticProjectAdmin = () => {
         images: [],
         videos: [],
       }));
+      setSubmittingProof(false);
+      setTab("queue");
       return;
     }
     try {
       await api(endpoints.plasticRecoveries, { method: "POST", body: payload });
-      toast.success("Recovery proof submitted");
+      toast.success("Proof submitted — review in Verify queue");
       setProofForm((p) => ({
         ...p,
         bag_id: "",
@@ -288,31 +339,81 @@ const PlasticProjectAdmin = () => {
         images: [],
         videos: [],
       }));
-      loadQueue();
-      loadDetail(selectedId);
+      await loadQueue();
+      await loadDetail(selectedId);
+      setTab("queue");
     } catch (err) {
       enqueuePlasticOfflineProof(payload);
       refreshOffline();
       toast.warning(`Queued offline: ${err.message}`);
+      setTab("queue");
+    } finally {
+      setSubmittingProof(false);
     }
   };
 
   const verifyRecovery = async (id, action) => {
+    if (verifyingId) return;
+    const row = queue.find((item) => item.id === id);
+    setVerifyingId(id);
     try {
       await api(endpoints.plasticRecoveryVerify(id), {
         method: "POST",
         body: { action },
       });
-      toast.success(action === "reject" ? "Rejected" : "CBO verified");
-      loadQueue();
-      if (selectedId) loadDetail(selectedId);
+      toast.success(
+        action === "reject"
+          ? "Rejected"
+          : "Verified — confirm bag in Recycler intake"
+      );
+      await loadQueue();
+      if (selectedId) await loadDetail(selectedId);
+      if (action !== "reject") {
+        setIntakeBag({
+          bag_id: row?.bag_id || "",
+          kg_verified: String(row?.kg_claimed || ""),
+          recycler_id: "",
+        });
+        setTab("intake");
+      }
     } catch (err) {
       toast.error(err.message);
+    } finally {
+      setVerifyingId(null);
+    }
+  };
+
+  const confirmIntakeRow = async (row) => {
+    if (intaking || !row?.bag_id) return;
+    setIntaking(true);
+    try {
+      const result = await api(endpoints.plasticIntakeScan, {
+        method: "POST",
+        body: {
+          bag_id: row.bag_id,
+          kg_verified: row.kg_verified || row.kg_claimed || undefined,
+        },
+      });
+      toast.success(
+        `Intake confirmed${result.certificate_code ? ` · ${result.certificate_code}` : ""}`
+      );
+      setIntakeBag({ bag_id: "", kg_verified: "", recycler_id: "" });
+      await loadQueue();
+      if (selectedId) await loadDetail(selectedId);
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
+      setIntaking(false);
     }
   };
 
   const scanIntake = async (e) => {
     e.preventDefault();
+    if (intaking) return;
+    if (!String(intakeBag.bag_id || "").trim()) {
+      return toast.error("Enter bag ID");
+    }
+    setIntaking(true);
     try {
       const result = await api(endpoints.plasticIntakeScan, {
         method: "POST",
@@ -326,15 +427,19 @@ const PlasticProjectAdmin = () => {
         `Intake confirmed${result.certificate_code ? ` · ${result.certificate_code}` : ""}`
       );
       setIntakeBag({ bag_id: "", kg_verified: "", recycler_id: "" });
-      loadQueue();
-      if (selectedId) loadDetail(selectedId);
+      await loadQueue();
+      if (selectedId) await loadDetail(selectedId);
     } catch (err) {
       toast.error(err.message);
+    } finally {
+      setIntaking(false);
     }
   };
 
   const createRecycler = async (e) => {
     e.preventDefault();
+    if (savingRecycler) return;
+    setSavingRecycler(true);
     try {
       await api(endpoints.plasticRecyclers, {
         method: "POST",
@@ -347,9 +452,11 @@ const PlasticProjectAdmin = () => {
         contact_phone: "",
         buy_rates: { PET: 20, HDPE: 25, PP: 10 },
       });
-      loadRecyclers();
+      await loadRecyclers();
     } catch (err) {
       toast.error(err.message);
+    } finally {
+      setSavingRecycler(false);
     }
   };
 
@@ -542,49 +649,59 @@ const PlasticProjectAdmin = () => {
                 <form onSubmit={pinHotspot} className="space-y-3 border border-border p-4">
                   <h3 className="font-medium">1. Pin hotspot</h3>
                   <p className="text-xs text-muted">
-                    Mark where plastic is. Allow location when the browser asks.
+                    <span className="text-red-500">*</span> Required: GPS. Title and notes are
+                    optional.
                   </p>
-                  <input
-                    className="w-full h-10 px-3 border border-border bg-background"
-                    placeholder="Title e.g. Drain near market"
-                    value={hotspotForm.title}
-                    onChange={(e) => setHotspotForm((p) => ({ ...p, title: e.target.value }))}
-                  />
-                  <textarea
-                    className="w-full min-h-20 px-3 py-2 border border-border bg-background"
-                    placeholder="Notes"
-                    value={hotspotForm.notes}
-                    onChange={(e) => setHotspotForm((p) => ({ ...p, notes: e.target.value }))}
-                  />
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={() => captureGps("hotspot")}
-                      className="flex-1 min-w-[140px] h-10 border border-border text-sm"
-                    >
-                      Capture GPS
-                    </button>
-                    {proofForm.latitude && proofForm.longitude ? (
+                  <div className="space-y-1">
+                    <FieldLabel>Title</FieldLabel>
+                    <input
+                      className="w-full h-10 px-3 border border-border bg-background"
+                      placeholder="e.g. Drain near market"
+                      value={hotspotForm.title}
+                      onChange={(e) => setHotspotForm((p) => ({ ...p, title: e.target.value }))}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <FieldLabel>Notes</FieldLabel>
+                    <textarea
+                      className="w-full min-h-20 px-3 py-2 border border-border bg-background"
+                      placeholder="Anything useful for the team"
+                      value={hotspotForm.notes}
+                      onChange={(e) => setHotspotForm((p) => ({ ...p, notes: e.target.value }))}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <FieldLabel required>GPS</FieldLabel>
+                    <div className="flex flex-wrap gap-2">
                       <button
                         type="button"
-                        onClick={() => {
-                          setHotspotForm((p) => ({
-                            ...p,
-                            latitude: proofForm.latitude,
-                            longitude: proofForm.longitude,
-                          }));
-                          toast.success("Copied GPS from recovery form");
-                        }}
-                        className="flex-1 min-w-[140px] h-10 border border-primary text-primary text-sm"
+                        onClick={() => captureGps("hotspot")}
+                        className="flex-1 min-w-[140px] h-10 border border-border text-sm"
                       >
-                        Use proof GPS
+                        Capture GPS
                       </button>
-                    ) : null}
+                      {proofForm.latitude && proofForm.longitude ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setHotspotForm((p) => ({
+                              ...p,
+                              latitude: proofForm.latitude,
+                              longitude: proofForm.longitude,
+                            }));
+                            toast.success("Copied GPS from recovery form");
+                          }}
+                          className="flex-1 min-w-[140px] h-10 border border-primary text-primary text-sm"
+                        >
+                          Use proof GPS
+                        </button>
+                      ) : null}
+                    </div>
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     <input
                       className="h-10 px-3 border border-border bg-background"
-                      placeholder="Lat"
+                      placeholder="Lat *"
                       value={hotspotForm.latitude}
                       onChange={(e) =>
                         setHotspotForm((p) => ({ ...p, latitude: e.target.value }))
@@ -593,7 +710,7 @@ const PlasticProjectAdmin = () => {
                     />
                     <input
                       className="h-10 px-3 border border-border bg-background"
-                      placeholder="Lng"
+                      placeholder="Lng *"
                       value={hotspotForm.longitude}
                       onChange={(e) =>
                         setHotspotForm((p) => ({ ...p, longitude: e.target.value }))
@@ -621,73 +738,98 @@ const PlasticProjectAdmin = () => {
                     />
                     Drain / flood corridor
                   </label>
-                  <button type="submit" className="h-10 px-4 bg-primary text-white text-sm">
-                    Pin hotspot
+                  <button
+                    type="submit"
+                    disabled={pinning}
+                    className="h-10 px-4 bg-primary text-white text-sm disabled:opacity-60"
+                  >
+                    {pinning ? "Pinning…" : "Pin hotspot"}
                   </button>
                 </form>
 
                 <form onSubmit={submitProof} className="space-y-3 border border-border p-4">
                   <h3 className="font-medium">2. Submit recovery proof</h3>
                   <p className="text-xs text-muted">
-                    After collecting: GPS + at least one photo + kg. Bag ID optional.
+                    <span className="text-red-500">*</span> Required: GPS, photo/video, and kg.
+                    Bag ID can be left blank.
                   </p>
-                  <select
-                    className="w-full h-10 px-3 border border-border bg-background"
-                    value={proofForm.hotspot_id}
-                    onChange={(e) =>
-                      setProofForm((p) => ({ ...p, hotspot_id: e.target.value }))
-                    }
-                  >
-                    <option value="">No hotspot link</option>
-                    {(detail?.hotspots || []).map((h) => (
-                      <option key={h.id} value={h.id}>
-                        #{h.id} {h.title || h.location_label || h.status}
-                      </option>
-                    ))}
-                  </select>
-                  <div className="grid grid-cols-2 gap-2">
-                    <input
-                      className="h-10 px-3 border border-border bg-background"
-                      placeholder="Bag ID"
-                      value={proofForm.bag_id}
-                      onChange={(e) => setProofForm((p) => ({ ...p, bag_id: e.target.value }))}
-                    />
-                    <input
-                      className="h-10 px-3 border border-border bg-background"
-                      placeholder="Kg claimed"
-                      type="number"
-                      step="0.01"
-                      value={proofForm.kg_claimed}
-                      onChange={(e) =>
-                        setProofForm((p) => ({ ...p, kg_claimed: e.target.value }))
-                      }
-                      required
-                    />
+                  <div className="space-y-1">
+                    <FieldLabel hint="Link this bag to a pinned spot if you have one.">
+                      Hotspot
+                    </FieldLabel>
                     <select
-                      className="h-10 px-3 border border-border bg-background"
-                      value={proofForm.polymer_type}
+                      className="w-full h-10 px-3 border border-border bg-background"
+                      value={proofForm.hotspot_id}
                       onChange={(e) =>
-                        setProofForm((p) => ({ ...p, polymer_type: e.target.value }))
+                        setProofForm((p) => ({ ...p, hotspot_id: e.target.value }))
                       }
                     >
-                      {["mixed", "PET", "HDPE", "PP", "other"].map((t) => (
-                        <option key={t} value={t}>
-                          {t}
+                      <option value="">No hotspot link</option>
+                      {(detail?.hotspots || []).map((h) => (
+                        <option key={h.id} value={h.id}>
+                          #{h.id} {h.title || h.location_label || h.status}
                         </option>
                       ))}
                     </select>
-                    <button
-                      type="button"
-                      onClick={() => captureGps("proof")}
-                      className="h-10 px-3 border border-border text-sm"
-                    >
-                      Capture GPS
-                    </button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <FieldLabel hint="Leave blank — we auto-create a code like BAG-A1B2C3D4.">
+                        Bag ID
+                      </FieldLabel>
+                      <input
+                        className="w-full h-10 px-3 border border-dashed border-border bg-background"
+                        placeholder="Leave blank to auto-create"
+                        value={proofForm.bag_id}
+                        onChange={(e) => setProofForm((p) => ({ ...p, bag_id: e.target.value }))}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <FieldLabel required>Kg claimed</FieldLabel>
+                      <input
+                        className="w-full h-10 px-3 border border-border bg-background"
+                        placeholder="e.g. 5"
+                        type="number"
+                        step="0.01"
+                        min="0.01"
+                        value={proofForm.kg_claimed}
+                        onChange={(e) =>
+                          setProofForm((p) => ({ ...p, kg_claimed: e.target.value }))
+                        }
+                        required
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <FieldLabel>Plastic type</FieldLabel>
+                      <select
+                        className="w-full h-10 px-3 border border-border bg-background"
+                        value={proofForm.polymer_type}
+                        onChange={(e) =>
+                          setProofForm((p) => ({ ...p, polymer_type: e.target.value }))
+                        }
+                      >
+                        {["mixed", "PET", "HDPE", "PP", "other"].map((t) => (
+                          <option key={t} value={t}>
+                            {t}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <FieldLabel required>GPS</FieldLabel>
+                      <button
+                        type="button"
+                        onClick={() => captureGps("proof")}
+                        className="w-full h-10 px-3 border border-border text-sm"
+                      >
+                        Capture GPS
+                      </button>
+                    </div>
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     <input
                       className="h-10 px-3 border border-border bg-background"
-                      placeholder="Lat"
+                      placeholder="Lat *"
                       value={proofForm.latitude}
                       onChange={(e) =>
                         setProofForm((p) => ({ ...p, latitude: e.target.value }))
@@ -696,7 +838,7 @@ const PlasticProjectAdmin = () => {
                     />
                     <input
                       className="h-10 px-3 border border-border bg-background"
-                      placeholder="Lng"
+                      placeholder="Lng *"
                       value={proofForm.longitude}
                       onChange={(e) =>
                         setProofForm((p) => ({ ...p, longitude: e.target.value }))
@@ -704,36 +846,54 @@ const PlasticProjectAdmin = () => {
                       required
                     />
                   </div>
-                  <div className="flex flex-wrap gap-2 text-sm">
-                    <label className="h-10 px-3 border border-border inline-flex items-center cursor-pointer">
-                      Photos
-                      <input
-                        type="file"
-                        accept="image/*"
-                        multiple
-                        className="hidden"
-                        onChange={(e) => uploadProofMedia(e.target.files, "images")}
-                      />
-                    </label>
-                    <label className="h-10 px-3 border border-border inline-flex items-center cursor-pointer">
-                      Videos
-                      <input
-                        type="file"
-                        accept="video/*"
-                        multiple
-                        className="hidden"
-                        onChange={(e) => uploadProofMedia(e.target.files, "videos")}
-                      />
-                    </label>
-                    {proofUploading ? <span className="text-muted self-center">Uploading…</span> : null}
+                  <div className="space-y-1">
+                    <FieldLabel
+                      required
+                      hint="At least one photo or video is required as proof."
+                    >
+                      Media
+                    </FieldLabel>
+                    <div className="flex flex-wrap gap-2 text-sm">
+                      <label className="h-10 px-3 border border-border inline-flex items-center cursor-pointer">
+                        Photos *
+                        <input
+                          type="file"
+                          accept="image/*"
+                          multiple
+                          className="hidden"
+                          onChange={(e) => uploadProofMedia(e.target.files, "images")}
+                        />
+                      </label>
+                      <label className="h-10 px-3 border border-border inline-flex items-center cursor-pointer">
+                        Videos
+                        <input
+                          type="file"
+                          accept="video/*"
+                          multiple
+                          className="hidden"
+                          onChange={(e) => uploadProofMedia(e.target.files, "videos")}
+                        />
+                      </label>
+                      {proofUploading ? (
+                        <span className="text-muted self-center">Uploading…</span>
+                      ) : null}
+                    </div>
                   </div>
                   {proofForm.images.length || proofForm.videos.length ? (
                     <PlantingProofMediaCarousel
                       items={proofMediaFromArrays(proofForm.images, proofForm.videos)}
                     />
                   ) : null}
-                  <button type="submit" className="h-10 px-4 bg-primary text-white text-sm">
-                    Submit proof
+                  <button
+                    type="submit"
+                    disabled={submittingProof || proofUploading}
+                    className="h-10 px-4 bg-primary text-white text-sm disabled:opacity-60"
+                  >
+                    {proofUploading
+                      ? "Uploading…"
+                      : submittingProof
+                        ? "Submitting…"
+                        : "Submit proof"}
                   </button>
                 </form>
               </div>
@@ -766,7 +926,22 @@ const PlasticProjectAdmin = () => {
         <div className="space-y-3">
           <h2 className="font-medium">Awaiting CBO verify</h2>
           {queue.length === 0 ? (
-            <p className="text-sm text-muted">Queue is empty.</p>
+            <div className="text-sm text-muted space-y-2">
+              <p>Queue is empty.</p>
+              <p>
+                If you just pinned a hotspot, go to <button type="button" className="underline text-primary" onClick={() => setTab("field")}>Field</button>,
+                submit proof (photo + kg + GPS), then come back here.
+              </p>
+              {intakeQueue.length > 0 ? (
+                <p>
+                  {intakeQueue.length} bag(s) already verified — open{" "}
+                  <button type="button" className="underline text-primary" onClick={() => setTab("intake")}>
+                    Recycler intake
+                  </button>
+                  .
+                </p>
+              ) : null}
+            </div>
           ) : (
             queue.map((r) => (
               <div key={r.id} className="border border-border p-4 space-y-3">
@@ -780,17 +955,19 @@ const PlasticProjectAdmin = () => {
                   <div className="flex gap-2">
                     <button
                       type="button"
-                      className="h-9 px-3 border border-border text-sm"
+                      className="h-9 px-3 border border-border text-sm disabled:opacity-60"
+                      disabled={Boolean(verifyingId)}
                       onClick={() => verifyRecovery(r.id, "reject")}
                     >
-                      Reject
+                      {verifyingId === r.id ? "…" : "Reject"}
                     </button>
                     <button
                       type="button"
-                      className="h-9 px-3 bg-primary text-white text-sm"
+                      className="h-9 px-3 bg-primary text-white text-sm disabled:opacity-60"
+                      disabled={Boolean(verifyingId)}
                       onClick={() => verifyRecovery(r.id, "approve")}
                     >
-                      Verify
+                      {verifyingId === r.id ? "Verifying…" : "Verify"}
                     </button>
                   </div>
                 </div>
@@ -804,38 +981,97 @@ const PlasticProjectAdmin = () => {
       ) : null}
 
       {tab === "intake" ? (
+        <div className="space-y-6">
+          <div className="space-y-3">
+            <h2 className="font-medium">Awaiting recycler intake</h2>
+            <p className="text-sm text-muted">
+              Bags verified by CBO show here. Tap Confirm, or type Bag ID below.
+            </p>
+            {intakeQueue.length === 0 ? (
+              <p className="text-sm text-muted border border-border p-4">
+                No verified bags waiting. Submit proof on Field, then Verify it first.
+              </p>
+            ) : (
+              intakeQueue.map((r) => (
+                <div key={r.id} className="border border-border p-4 space-y-3">
+                  <div className="flex flex-wrap justify-between gap-2 items-center">
+                    <div>
+                      <div className="font-medium">{r.bag_id}</div>
+                      <div className="text-sm text-muted">
+                        {r.kg_verified || r.kg_claimed} kg · {r.polymer_type} · CBO verified
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={intaking}
+                      className="h-9 px-3 bg-primary text-white text-sm disabled:opacity-60"
+                      onClick={() => confirmIntakeRow(r)}
+                    >
+                      {intaking ? "Confirming…" : "Confirm intake"}
+                    </button>
+                  </div>
+                  <PlantingProofMediaCarousel
+                    items={proofMediaFromArrays(r.images, r.videos)}
+                  />
+                </div>
+              ))
+            )}
+          </div>
+
         <div className="grid lg:grid-cols-2 gap-6">
           <form onSubmit={scanIntake} className="space-y-3 border border-border p-4">
-            <h2 className="font-medium">Recycler QR / bag intake</h2>
-            <input
-              className="w-full h-10 px-3 border border-border bg-background"
-              placeholder="Bag ID"
-              value={intakeBag.bag_id}
-              onChange={(e) => setIntakeBag((p) => ({ ...p, bag_id: e.target.value }))}
-              required
-            />
-            <input
-              className="w-full h-10 px-3 border border-border bg-background"
-              placeholder="Confirmed kg"
-              type="number"
-              step="0.01"
-              value={intakeBag.kg_verified}
-              onChange={(e) => setIntakeBag((p) => ({ ...p, kg_verified: e.target.value }))}
-            />
-            <select
-              className="w-full h-10 px-3 border border-border bg-background"
-              value={intakeBag.recycler_id}
-              onChange={(e) => setIntakeBag((p) => ({ ...p, recycler_id: e.target.value }))}
+            <h2 className="font-medium">Manual bag intake</h2>
+            <p className="text-xs text-muted">
+              <span className="text-red-500">*</span> Bag ID required here (use the code from
+              verify). Kg and recycler are optional.
+            </p>
+            <div className="space-y-1">
+              <FieldLabel
+                required
+                hint="Type the bag code from the verify queue (e.g. BAG-A1B2C3D4)."
+              >
+                Bag ID
+              </FieldLabel>
+              <input
+                className="w-full h-10 px-3 border border-border bg-background"
+                placeholder="e.g. BAG-A1B2C3D4"
+                value={intakeBag.bag_id}
+                onChange={(e) => setIntakeForm((p) => ({ ...p, bag_id: e.target.value }))}
+                required
+              />
+            </div>
+            <div className="space-y-1">
+              <FieldLabel hint="Leave blank to keep the verified kg.">Confirmed kg</FieldLabel>
+              <input
+                className="w-full h-10 px-3 border border-border bg-background"
+                placeholder="Confirmed kg"
+                type="number"
+                step="0.01"
+                value={intakeForm.kg_verified}
+                onChange={(e) => setIntakeForm((p) => ({ ...p, kg_verified: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-1">
+              <FieldLabel>Recycler</FieldLabel>
+              <select
+                className="w-full h-10 px-3 border border-border bg-background"
+                value={intakeForm.recycler_id}
+                onChange={(e) => setIntakeForm((p) => ({ ...p, recycler_id: e.target.value }))}
+              >
+                <option value="">No recycler selected</option>
+                {recyclers.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <button
+              type="submit"
+              disabled={intaking}
+              className="h-10 px-4 bg-primary text-white text-sm disabled:opacity-60"
             >
-              <option value="">Recycler (optional)</option>
-              {recyclers.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.name}
-                </option>
-              ))}
-            </select>
-            <button type="submit" className="h-10 px-4 bg-primary text-white text-sm">
-              Confirm intake
+              {intaking ? "Confirming…" : "Confirm intake"}
             </button>
           </form>
 
@@ -862,8 +1098,12 @@ const PlasticProjectAdmin = () => {
                 setRecyclerForm((p) => ({ ...p, contact_phone: e.target.value }))
               }
             />
-            <button type="submit" className="h-10 px-4 border border-border text-sm">
-              Save recycler
+            <button
+              type="submit"
+              disabled={savingRecycler}
+              className="h-10 px-4 border border-border text-sm disabled:opacity-60"
+            >
+              {savingRecycler ? "Saving…" : "Save recycler"}
             </button>
             <div className="text-xs text-muted space-y-1 pt-2">
               {recyclers.map((r) => (
@@ -873,6 +1113,7 @@ const PlasticProjectAdmin = () => {
               ))}
             </div>
           </form>
+        </div>
         </div>
       ) : null}
     </div>

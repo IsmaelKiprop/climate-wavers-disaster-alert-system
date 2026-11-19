@@ -833,7 +833,7 @@ class PlasticSponsorCheckoutView(APIView):
 
 
 class PlasticAdminQueueView(APIView):
-    """Recoveries awaiting CBO review for the caller's org projects."""
+    """Recoveries for the caller's org. Default: awaiting CBO verify (submitted)."""
 
     permission_classes = [IsAuthenticated]
 
@@ -842,9 +842,20 @@ class PlasticAdminQueueView(APIView):
             return Response({"detail": "Tree Admin required."}, status=403)
         m = _org_membership(request.user)
         org_id = m.org_id if m else None
-        qs = PlasticRecovery.objects.filter(
-            status="submitted"
-        ).select_related("project", "hotspot", "submitted_by")
+        allowed = {
+            "submitted",
+            "cbo_verified",
+            "intake_confirmed",
+            "rejected",
+            "queued_offline",
+        }
+        raw_status = str(request.query_params.get("status") or "submitted").strip()
+        statuses = [s.strip() for s in raw_status.split(",") if s.strip() in allowed]
+        if not statuses:
+            statuses = ["submitted"]
+        qs = PlasticRecovery.objects.filter(status__in=statuses).select_related(
+            "project", "hotspot", "submitted_by"
+        )
         if org_id:
             qs = qs.filter(
                 Q(project__tree_admin_org_id=org_id)
