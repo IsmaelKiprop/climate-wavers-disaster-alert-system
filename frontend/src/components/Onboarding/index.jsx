@@ -6,6 +6,7 @@ import Groups from "./Groups";
 import Campaign from "./Campaign";
 import Chatbot from "./Chatbot";
 import Chat from "./Chat";
+import Calendar from "./Calendar";
 import Disasters from "./Disasters";
 import Notifications from "./Notifications";
 import Profile from "./Profile";
@@ -16,8 +17,11 @@ import Donate from "./Donate";
 import WaverX from "./WaverX";
 import PlantTree from "./PlantTree";
 import TreeAdmin from "./TreeAdmin";
+import PlasticPulse from "./PlasticPulse";
+import BagScanner from "./BagScanner";
 import AlertSettings from "./AlertSettings";
 import Responder from "./Responder";
+import Champions from "./Champions";
 
 export {
   OnboardingLayout,
@@ -31,6 +35,7 @@ export {
   Disasters,
   Chatbot,
   Chat,
+  Calendar,
   Community,
   BotLeg,
   GrabLeg,
@@ -38,6 +43,9 @@ export {
   WaverX,
   PlantTree,
   TreeAdmin,
+  PlasticPulse,
+  BagScanner,
   AlertSettings,
   Responder,
+  Champions,
 };

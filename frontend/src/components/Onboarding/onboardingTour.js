@@ -2,7 +2,7 @@
  * Single source of truth for the post-signup product tour.
  * Keep aligned with AppNav /app destinations.
  */
-export const ONBOARDING_TOTAL = 11;
+export const ONBOARDING_TOTAL = 16;
 
 export const tour = {
   home: {
@@ -79,7 +79,7 @@ export const tour = {
   },
   chat: {
     current: 5,
-    next: "/onboarding/profile",
+    next: "/onboarding/calendar",
     prev: "/onboarding/community",
     bot: "waverbot1",
     content: [
@@ -95,10 +95,28 @@ export const tour = {
       },
     ],
   },
-  profile: {
+  calendar: {
     current: 6,
-    next: "/onboarding/plant-tree",
+    next: "/onboarding/profile",
     prev: "/onboarding/chat",
+    bot: "waverbot1",
+    content: [
+      {
+        title: "Calendar",
+        message:
+          "See planting days, campaigns, and community events in one place so you never miss a climate action.",
+      },
+      {
+        title: "Plan ahead",
+        message:
+          "Open Calendar from the sidebar to track what’s coming up and coordinate with your network.",
+      },
+    ],
+  },
+  profile: {
+    current: 7,
+    next: "/onboarding/plant-tree",
+    prev: "/onboarding/calendar",
     bot: "waverbot1",
     content: [
       {
@@ -114,8 +132,8 @@ export const tour = {
     ],
   },
   plantTree: {
-    current: 7,
-    next: "/onboarding/alert-settings",
+    current: 8,
+    next: "/onboarding/plastic-pulse",
     prev: "/onboarding/profile",
     bot: "waverbot1",
     content: [
@@ -131,10 +149,46 @@ export const tour = {
       },
     ],
   },
-  alertSettings: {
-    current: 8,
-    next: "/onboarding/disasters",
+  plasticPulse: {
+    current: 9,
+    next: "/onboarding/bag-scanner",
     prev: "/onboarding/plant-tree",
+    bot: "waverbot1",
+    content: [
+      {
+        title: "Plastic Pulse",
+        message:
+          "Partners and Tree Admins run plastic recovery projects — track bags, issue certificates, and show verified impact.",
+      },
+      {
+        title: "Partner desk",
+        message:
+          "Approved Tree Admins open Plastic Pulse from the sidebar to manage projects and recovery proof.",
+      },
+    ],
+  },
+  bagScanner: {
+    current: 10,
+    next: "/onboarding/alert-settings",
+    prev: "/onboarding/plastic-pulse",
+    bot: "waverbot1",
+    content: [
+      {
+        title: "Bag scanner",
+        message:
+          "Invited recyclers scan bag QR codes to confirm recovery weight and close the loop on Plastic Pulse bags.",
+      },
+      {
+        title: "Intake when invited",
+        message:
+          "Once you’re approved as a recycler, Bag scanner appears in your sidebar for fast on-site intake.",
+      },
+    ],
+  },
+  alertSettings: {
+    current: 11,
+    next: "/onboarding/disasters",
+    prev: "/onboarding/bag-scanner",
     bot: "waverbot1",
     content: [
       {
@@ -150,7 +204,7 @@ export const tour = {
     ],
   },
   disasters: {
-    current: 9,
+    current: 12,
     next: "/onboarding/responder",
     prev: "/onboarding/alert-settings",
     bot: "waverbot1",
@@ -168,8 +222,8 @@ export const tour = {
     ],
   },
   responder: {
-    current: 10,
-    next: "/onboarding/waverx",
+    current: 13,
+    next: "/onboarding/champions",
     prev: "/onboarding/disasters",
     bot: "waverbot1",
     content: [
@@ -185,21 +239,57 @@ export const tour = {
       },
     ],
   },
-  waverx: {
-    current: 11,
-    next: "/app",
+  champions: {
+    current: 14,
+    next: "/onboarding/campaigns",
     prev: "/onboarding/responder",
+    bot: "waverbot1",
+    content: [
+      {
+        title: "Community Champions",
+        message:
+          "Champions help grow local climate action — apply from the sidebar, then run your Champion Desk once approved.",
+      },
+      {
+        title: "Lead locally",
+        message:
+          "Use the desk to coordinate outreach, support community efforts, and keep neighbors engaged.",
+      },
+    ],
+  },
+  campaigns: {
+    current: 15,
+    next: "/onboarding/waverx",
+    prev: "/onboarding/champions",
+    bot: "waverbot1",
+    content: [
+      {
+        title: "Campaigns",
+        message:
+          "Start or join climate and relief campaigns — set goals, rally support, and track progress with your community.",
+      },
+      {
+        title: "Mobilize together",
+        message:
+          "Open Campaigns from the sidebar to discover active drives or launch one of your own.",
+      },
+    ],
+  },
+  waverx: {
+    current: 16,
+    next: "/app",
+    prev: "/onboarding/campaigns",
     bot: "Waverbotfull",
     content: [
       {
         title: "WaverX",
         message:
-          "Ask Climate Wavers’ assistant for help navigating alerts, planting, and climate questions. WaverX also shares verified alerts and creative climate tips in your feed.",
+          "Ask Climate Wavers’ assistant for help navigating alerts, planting, plastic recovery, and climate questions. WaverX also shares verified alerts and creative climate tips in your feed.",
       },
       {
         title: "You’re ready",
         message:
-          "That’s the tour. Open the app to post, chat, gift trees, and stay alert with your community.",
+          "That’s the tour. Open the app to post, chat, gift trees, scan recovery bags, and stay alert with your community.",
       },
     ],
   },
