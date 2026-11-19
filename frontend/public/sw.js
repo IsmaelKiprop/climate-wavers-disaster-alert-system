@@ -1,5 +1,5 @@
 /* Climate Wavers offline shell — works without mobile data after first visit. */
-const VERSION = "cw-offline-v2";
+const VERSION = "cw-offline-v3";
 const SHELL = [
   "/",
   "/offline.html",
@@ -85,6 +85,22 @@ self.addEventListener("fetch", (event) => {
           const cached = await caches.match(request);
           return cached || offlineResponse();
         })
+    );
+    return;
+  }
+
+  // Hashed app bundles: network-first so deploys are not stuck on old JS.
+  if (url.pathname.startsWith("/assets/")) {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          if (response.ok) {
+            const copy = response.clone();
+            caches.open(VERSION).then((cache) => cache.put(request, copy));
+          }
+          return response;
+        })
+        .catch(async () => (await caches.match(request)) || offlineResponse())
     );
     return;
   }
