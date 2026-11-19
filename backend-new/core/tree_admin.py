@@ -785,6 +785,13 @@ class TreeAdminDonationProofView(APIView):
                 {"detail": "Add at least one photo or video of the planting."},
                 status=400,
             )
+        # Cap mixed media (photos + videos) so payloads stay reasonable
+        max_media = 12
+        if len(images) + len(videos) > max_media:
+            return Response(
+                {"detail": f"You can attach up to {max_media} photos/videos."},
+                status=400,
+            )
 
         note = (request.data.get("note") or request.data.get("content") or "").strip()
         location_label = (request.data.get("location_label") or "").strip()[:255]

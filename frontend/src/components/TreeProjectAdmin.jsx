@@ -8,6 +8,10 @@ import { apiUrl, mediaUrl } from '../config/env';
 import { uploadFiles } from '../services/upload.service';
 import TreeAnalyticsPanel from './TreeAnalyticsPanel';
 import ScheduleClimateEventModal from './ScheduleClimateEventModal';
+import PlantingProofMediaCarousel, {
+  proofMediaFromArrays,
+  splitProofMedia,
+} from './PlantingProofMediaCarousel';
 import {
   formatSpeciesList,
   normalizeTreeSpecies,
@@ -139,8 +143,7 @@ const TreeProjectAdmin = () => {
   const [proofLocationLabel, setProofLocationLabel] = useState('');
   const [proofLat, setProofLat] = useState('');
   const [proofLng, setProofLng] = useState('');
-  const [proofImages, setProofImages] = useState([]);
-  const [proofVideos, setProofVideos] = useState([]);
+  const [proofMedia, setProofMedia] = useState([]);
   const [proofUploading, setProofUploading] = useState(false);
   const [proofSaving, setProofSaving] = useState(false);
   const [proofLocating, setProofLocating] = useState(false);
@@ -483,8 +486,7 @@ const TreeProjectAdmin = () => {
     setProofLocationLabel('');
     setProofLat('');
     setProofLng('');
-    setProofImages([]);
-    setProofVideos([]);
+    setProofMedia([]);
     setProofUploading(false);
     setProofSaving(false);
     setProofLocating(false);
@@ -500,8 +502,12 @@ const TreeProjectAdmin = () => {
     );
     setProofLat(donation?.planting_proof?.latitude ?? '');
     setProofLng(donation?.planting_proof?.longitude ?? '');
-    setProofImages(Array.isArray(donation?.planting_proof?.images) ? donation.planting_proof.images : []);
-    setProofVideos(Array.isArray(donation?.planting_proof?.videos) ? donation.planting_proof.videos : []);
+    setProofMedia(
+      proofMediaFromArrays(
+        donation?.planting_proof?.images,
+        donation?.planting_proof?.videos
+      )
+    );
   };
 
   const captureProofLocation = () => {
@@ -532,23 +538,39 @@ const TreeProjectAdmin = () => {
   const handleProofMediaUpload = async (files) => {
     const list = Array.from(files || []);
     if (!list.length) return;
+    const room = Math.max(0, 12 - proofMedia.length);
+    if (room <= 0) {
+      toast.error('You can add up to 12 photos/videos');
+      return;
+    }
+    const batch = list.slice(0, room);
+    if (batch.length < list.length) {
+      toast.info(`Only ${room} more file(s) can be added`);
+    }
     setProofUploading(true);
     try {
-      const urls = await uploadFiles(list);
+      const urls = await uploadFiles(batch);
       const next = (Array.isArray(urls) ? urls : [urls]).filter(Boolean);
-      const imgs = [];
-      const vids = [];
-      next.forEach((url, i) => {
-        const file = list[i];
+      const added = next.map((url, i) => {
+        const file = batch[i];
         const isVideo =
           (file && String(file.type || '').startsWith('video/')) ||
           /\.(mp4|webm|mov|m4v)(\?|$)/i.test(String(url));
-        if (isVideo) vids.push(url);
-        else imgs.push(url);
+        return {
+          id: `${isVideo ? 'vid' : 'img'}-${Date.now()}-${i}-${url}`,
+          kind: isVideo ? 'video' : 'image',
+          url,
+          name: file?.name || '',
+        };
       });
-      if (imgs.length) setProofImages((prev) => [...prev, ...imgs]);
-      if (vids.length) setProofVideos((prev) => [...prev, ...vids]);
-      toast.success('Media uploaded');
+      if (!added.length) {
+        toast.error('Upload returned no media URLs');
+        return;
+      }
+      setProofMedia((prev) => [...prev, ...added]);
+      toast.success(
+        added.length === 1 ? '1 file added' : `${added.length} files added`
+      );
     } catch (error) {
       console.error(error);
       toast.error('Upload failed');
@@ -559,7 +581,8 @@ const TreeProjectAdmin = () => {
 
   const submitPlantingProof = async () => {
     if (!proofDonation?.id) return;
-    if (!proofImages.length && !proofVideos.length) {
+    const { images, videos } = splitProofMedia(proofMedia);
+    if (!images.length && !videos.length) {
       toast.error('Add at least one photo or video');
       return;
     }
@@ -579,8 +602,8 @@ const TreeProjectAdmin = () => {
             location_label: proofLocationLabel,
             latitude: proofLat === '' ? null : proofLat,
             longitude: proofLng === '' ? null : proofLng,
-            images: proofImages,
-            videos: proofVideos,
+            images,
+            videos,
           }),
         }
       );
@@ -1394,7 +1417,7 @@ Thank you for your understanding! 🌱
 
         {proofDonation ? (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/55">
-            <div className="bg-surface border border-border w-full max-w-lg max-h-[92vh] overflow-y-auto shadow-xl">
+            <div className="bg-surface border border-border w-full max-w-xl max-h-[92vh] overflow-y-auto shadow-xl">
               <div className="sticky top-0 z-10 flex items-start justify-between gap-3 px-4 sm:px-5 py-4 border-b border-border bg-surface">
                 <div>
                   <p className="text-xs uppercase tracking-wide text-muted">Credibility</p>
@@ -1412,47 +1435,21 @@ Thank you for your understanding! 🌱
               </div>
               <div className="p-4 sm:p-5 space-y-4">
                 <div>
-                  <label className={labelClass}>Photos or video from the planting</label>
-                  <input
-                    type="file"
-                    accept="image/*,video/*"
-                    multiple
-                    disabled={proofUploading || proofSaving}
-                    onChange={(e) => {
-                      handleProofMediaUpload(e.target.files);
-                      e.target.value = '';
-                    }}
-                    className="block w-full text-sm text-muted file:mr-3 file:h-10 file:px-3 file:border file:border-border file:bg-background file:text-foreground"
+                  <label className={labelClass}>Photos & videos from the planting</label>
+                  <p className="text-xs text-muted mb-2">
+                    Add several images and videos. Swipe or use arrows to review them in the carousel.
+                  </p>
+                  <PlantingProofMediaCarousel
+                    items={proofMedia}
+                    editable
+                    uploading={proofUploading || proofSaving}
+                    maxItems={12}
+                    onAddFiles={handleProofMediaUpload}
+                    onRemoveAt={(i) =>
+                      setProofMedia((prev) => prev.filter((_, idx) => idx !== i))
+                    }
+                    onClear={() => setProofMedia([])}
                   />
-                  {proofUploading ? <p className="text-xs text-muted mt-1">Uploading…</p> : null}
-                  {(proofImages.length > 0 || proofVideos.length > 0) && (
-                    <div className="mt-3 grid grid-cols-3 gap-2">
-                      {proofImages.map((url) => (
-                        <div key={url} className="relative aspect-square border border-border overflow-hidden bg-background">
-                          <img src={mediaUrl(url) || url} alt="" className="h-full w-full object-cover" />
-                          <button
-                            type="button"
-                            className="absolute top-1 right-1 h-6 w-6 bg-black/70 text-white text-xs"
-                            onClick={() => setProofImages((prev) => prev.filter((u) => u !== url))}
-                          >
-                            x
-                          </button>
-                        </div>
-                      ))}
-                      {proofVideos.map((url) => (
-                        <div key={url} className="relative aspect-square border border-border overflow-hidden bg-background">
-                          <video src={mediaUrl(url) || url} className="h-full w-full object-cover" muted />
-                          <button
-                            type="button"
-                            className="absolute top-1 right-1 h-6 w-6 bg-black/70 text-white text-xs"
-                            onClick={() => setProofVideos((prev) => prev.filter((u) => u !== url))}
-                          >
-                            x
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
                 </div>
 
                 <div>

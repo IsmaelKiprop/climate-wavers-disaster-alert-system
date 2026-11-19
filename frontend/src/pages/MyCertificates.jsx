@@ -10,6 +10,9 @@ import {
 import { toast } from "react-toastify";
 import TreeCertificate from "../components/TreeCertificate";
 import ChampionCertificate from "../components/ChampionCertificate";
+import PlantingProofMediaCarousel, {
+  proofMediaFromArrays,
+} from "../components/PlantingProofMediaCarousel";
 import { getUser } from "../utils/factory";
 import { client } from "../api";
 import { endpoints } from "../utils/endpoints";
@@ -493,32 +496,12 @@ const MyCertificates = () => {
                   </span>
                 </p>
               )}
-              {Array.isArray(proofTree.planting_proof.images) &&
-              proofTree.planting_proof.images.length > 0 ? (
-                <div className="grid grid-cols-2 gap-2">
-                  {proofTree.planting_proof.images.map((url) => (
-                    <img
-                      key={url}
-                      src={url}
-                      alt="Planting"
-                      className="w-full aspect-square object-cover border border-border"
-                    />
-                  ))}
-                </div>
-              ) : null}
-              {Array.isArray(proofTree.planting_proof.videos) &&
-              proofTree.planting_proof.videos.length > 0 ? (
-                <div className="space-y-2">
-                  {proofTree.planting_proof.videos.map((url) => (
-                    <video
-                      key={url}
-                      src={url}
-                      controls
-                      className="w-full border border-border bg-black"
-                    />
-                  ))}
-                </div>
-              ) : null}
+              <PlantingProofMediaCarousel
+                items={proofMediaFromArrays(
+                  proofTree.planting_proof.images,
+                  proofTree.planting_proof.videos
+                )}
+              />
               {proofTree.planted_at ? (
                 <p className="text-xs text-muted">
                   Shared {proofTree.planted_at}

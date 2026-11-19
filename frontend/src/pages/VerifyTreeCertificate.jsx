@@ -2,6 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import PublicPage from "../components/PublicPage";
 import BrandLogo from "../components/BrandLogo";
+import PlantingProofMediaCarousel, {
+  proofMediaFromArrays,
+} from "../components/PlantingProofMediaCarousel";
 import { client } from "../api";
 import { endpoints } from "../utils/endpoints";
 import { SITE } from "../config/site";
@@ -184,21 +187,12 @@ const VerifyTreeCertificate = () => {
             (result.planting_proof?.images?.length || result.planting_proof?.videos?.length) ? (
               <div className="mt-5 border-t border-border pt-5 space-y-3">
                 <p className="text-[11px] uppercase tracking-wide text-muted">Planting proof</p>
-                {result.planting_proof.images?.length ? (
-                  <div className="grid grid-cols-2 gap-2">
-                    {result.planting_proof.images.map((url) => (
-                      <img
-                        key={url}
-                        src={url}
-                        alt="Planting proof"
-                        className="w-full aspect-square object-cover border border-border"
-                      />
-                    ))}
-                  </div>
-                ) : null}
-                {result.planting_proof.videos?.map((url) => (
-                  <video key={url} src={url} controls className="w-full border border-border" />
-                ))}
+                <PlantingProofMediaCarousel
+                  items={proofMediaFromArrays(
+                    result.planting_proof.images,
+                    result.planting_proof.videos
+                  )}
+                />
               </div>
             ) : null}
           </div>
