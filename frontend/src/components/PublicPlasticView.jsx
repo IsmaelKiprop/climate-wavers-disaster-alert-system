@@ -19,6 +19,8 @@ import PlantingProofMediaCarousel, {
   proofMediaFromArrays,
 } from "./PlantingProofMediaCarousel";
 import PlasticImpactCharts from "./PlasticImpactCharts";
+import PlasticProjectImpactMap from "./PlasticProjectImpactMap";
+import PlasticAreaImpactStory from "./PlasticAreaImpactStory";
 import PlasticCollectorPanel from "./PlasticCollectorPanel";
 import PublicPage from "./PublicPage";
 import BrandLogo from "./BrandLogo";
@@ -503,6 +505,10 @@ const PublicPlasticView = () => {
               </ol>
             </section>
 
+            <PlasticProjectImpactMap project={project} />
+
+            <PlasticAreaImpactStory project={project} place={place} />
+
             {/* Progress */}
             <section className="space-y-3">
               <div className="flex justify-between text-sm">
@@ -561,17 +567,18 @@ const PublicPlasticView = () => {
             />
 
             <section className="space-y-3">
-              <h2 className="text-lg font-semibold text-foreground">Field activity</h2>
+              <h2 className="text-lg font-semibold text-foreground">
+                Recent field proof
+              </h2>
               {!hasFieldActivity ? (
                 <div className="border border-border bg-surface p-4 space-y-2">
                   <p className="text-sm text-foreground font-medium">
                     Mapping and recovery are getting started
                   </p>
                   <p className="text-sm text-muted leading-relaxed">
-                    Hotspots (including drain and flood risk sites) and verified bag
-                    recoveries will appear here as {orgName} and community collectors
-                    log field work. Sponsoring now funds the first kilos toward the{" "}
-                    {goalKg.toLocaleString()} kg goal.
+                    Hotspots and verified bag recoveries will appear on the map and here
+                    as {orgName} and community collectors log field work. Sponsoring now
+                    funds the first kilos toward the {goalKg.toLocaleString()} kg goal.
                   </p>
                 </div>
               ) : (
@@ -597,6 +604,11 @@ const PublicPlasticView = () => {
                             <div className="text-muted mt-0.5">
                               {statusLabel(h.status)} · {statusLabel(h.severity)}
                               {h.drain_related ? " · flood/drain risk" : ""}
+                              {h.latitude != null && h.longitude != null
+                                ? ` · ${Number(h.latitude).toFixed(4)}, ${Number(
+                                    h.longitude
+                                  ).toFixed(4)}`
+                                : ""}
                             </div>
                           </div>
                         </li>

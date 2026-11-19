@@ -1036,7 +1036,8 @@ class PlasticProjectSerializer(serializers.ModelSerializer):
         ]
 
     def get_recent_recoveries(self, obj):
-        qs = obj.recoveries.all()[:12]
+        # Enough points for the public cleanup map + proof feed.
+        qs = obj.recoveries.all()[:40]
         return PlasticRecoverySerializer(qs, many=True).data
 
     def get_impact(self, obj):

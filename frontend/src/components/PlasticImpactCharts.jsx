@@ -203,7 +203,8 @@ export default function PlasticImpactCharts({ impact }) {
       <div>
         <h2 className="font-medium text-foreground">Impact</h2>
         <p className="text-sm text-muted mt-0.5">
-          Live recovery, sponsorship, and hotspot progress for this Plastic Pulse project.
+          Charts behind the map — polymers, weekly kilos, and verification status for this
+          cleanup.
         </p>
       </div>
 
