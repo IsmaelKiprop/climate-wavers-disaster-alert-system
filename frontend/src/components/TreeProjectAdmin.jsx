@@ -125,6 +125,13 @@ const TreeProjectAdmin = () => {
   /** Climate Wavers platform admin — only they can verify projects */
   const [canVerifyProjects, setCanVerifyProjects] = useState(false);
   const [treeAdminMe, setTreeAdminMe] = useState(null);
+  const [payoutForm, setPayoutForm] = useState({
+    payout_channel: 'mobile_money',
+    payout_account_name: '',
+    payout_account_number: '',
+    payout_bank_code: 'MPESA',
+  });
+  const [payoutSaving, setPayoutSaving] = useState(false);
   const [donations, setDonations] = useState([]);
   const [donationsLoading, setDonationsLoading] = useState(false);
   const [proofDonation, setProofDonation] = useState(null);
@@ -184,9 +191,57 @@ const TreeProjectAdmin = () => {
     const me = await meRes.json();
     setTreeAdminMe(me);
     setCanVerifyProjects(Boolean(me.can_verify_projects || me.is_platform_admin));
+    const org = me?.memberships?.[0]?.org;
+    if (org) {
+      setPayoutForm({
+        payout_channel: org.payout_channel || 'mobile_money',
+        payout_account_name: org.payout_account_name || '',
+        payout_account_number: org.payout_account_number || '',
+        payout_bank_code: org.payout_bank_code || 'MPESA',
+      });
+    }
     const { setTreeAdminAccess } = await import('../utils/factory');
     setTreeAdminAccess(Boolean(me.has_tree_admin_access));
     return me;
+  };
+
+  const savePayoutDetails = async () => {
+    const token = getAuthToken();
+    if (!token) {
+      toast.error('Please log in first');
+      return;
+    }
+    setPayoutSaving(true);
+    try {
+      const res = await fetch(apiUrl(endpoints.treeAdminMe), {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payoutForm),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(data?.detail || 'Could not save payout details');
+        return;
+      }
+      toast.success('Payout account saved — Climate Wavers will enable auto transfers');
+      if (data?.org) {
+        setTreeAdminMe((prev) => {
+          if (!prev?.memberships?.[0]) return prev;
+          const memberships = [...prev.memberships];
+          memberships[0] = { ...memberships[0], org: { ...memberships[0].org, ...data.org } };
+          return { ...prev, memberships };
+        });
+      } else {
+        await refreshTreeAdminMe(token);
+      }
+    } catch {
+      toast.error('Could not save payout details');
+    } finally {
+      setPayoutSaving(false);
+    }
   };
 
   /** Admin desk always loads only this org's projects (platform admins see all). */
@@ -1078,8 +1133,94 @@ Thank you for your understanding! 🌱
                   : ""}
               </p>
               <p className="mt-1 text-muted">
-                Platform fee on tree purchases: 18%. Project funds receive 82%.
+                Platform fee on tree purchases:{' '}
+                {Number(
+                  treeAdminMe.memberships[0].org.platform_fee_percent ??
+                    treeAdminMe.platform_fee_percent ??
+                    18
+                )}
+                %. Project funds receive{' '}
+                {Number(
+                  treeAdminMe.memberships[0].org.admin_share_percent ??
+                    treeAdminMe.admin_share_percent ??
+                    82
+                )}
+                %.
+                {treeAdminMe.memberships[0].org.default_tree_price != null
+                  ? ` Org default price: $${Number(
+                      treeAdminMe.memberships[0].org.default_tree_price
+                    ).toFixed(2)} / tree.`
+                  : ''}
               </p>
+              <p className="mt-1 text-xs text-muted">
+                Set your own USD price per project or species — each Tree Admin can charge differently.
+              </p>
+              {treeAdminMe.has_tree_admin_access ? (
+                <div className="mt-4 border-t border-border pt-3 space-y-3">
+                  <p className="font-medium text-foreground">Payout account (admin share)</p>
+                  <p className="text-xs text-muted">
+                    After buyers pay, your share can be sent automatically via Paystack to this M-Pesa
+                    or bank account. Auto-pay turns on after Climate Wavers verifies the details.
+                    {treeAdminMe.memberships[0].org.payouts_enabled
+                      ? ' Auto payouts are on.'
+                      : ' Auto payouts are not enabled yet.'}
+                  </p>
+                  <div className="grid sm:grid-cols-2 gap-3">
+                    <label className="text-sm space-y-1">
+                      <span className="text-muted text-xs uppercase tracking-wide">Channel</span>
+                      <select
+                        value={payoutForm.payout_channel}
+                        onChange={(e) =>
+                          setPayoutForm((f) => ({
+                            ...f,
+                            payout_channel: e.target.value,
+                            payout_bank_code:
+                              e.target.value === 'mobile_money' ? 'MPESA' : f.payout_bank_code,
+                          }))
+                        }
+                        className="w-full h-10 px-3 border border-border bg-background"
+                      >
+                        <option value="mobile_money">M-Pesa</option>
+                        <option value="bank">Bank</option>
+                      </select>
+                    </label>
+                    <label className="text-sm space-y-1">
+                      <span className="text-muted text-xs uppercase tracking-wide">Account name</span>
+                      <input
+                        value={payoutForm.payout_account_name}
+                        onChange={(e) =>
+                          setPayoutForm((f) => ({ ...f, payout_account_name: e.target.value }))
+                        }
+                        className="w-full h-10 px-3 border border-border bg-background"
+                        placeholder="Name on M-Pesa / bank"
+                      />
+                    </label>
+                    <label className="text-sm space-y-1 sm:col-span-2">
+                      <span className="text-muted text-xs uppercase tracking-wide">
+                        {payoutForm.payout_channel === 'bank' ? 'Account number' : 'M-Pesa phone'}
+                      </span>
+                      <input
+                        value={payoutForm.payout_account_number}
+                        onChange={(e) =>
+                          setPayoutForm((f) => ({ ...f, payout_account_number: e.target.value }))
+                        }
+                        className="w-full h-10 px-3 border border-border bg-background"
+                        placeholder={
+                          payoutForm.payout_channel === 'bank' ? '0123456789' : '07XXXXXXXX'
+                        }
+                      />
+                    </label>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={payoutSaving}
+                    onClick={savePayoutDetails}
+                    className="h-10 px-4 bg-primary text-primary-foreground text-sm font-medium disabled:opacity-60"
+                  >
+                    {payoutSaving ? 'Saving…' : 'Save payout account'}
+                  </button>
+                </div>
+              ) : null}
               {!treeAdminMe.has_tree_admin_access && treeAdminMe.has_pending ? (
                 <p className="mt-2 text-amber-700 dark:text-amber-400">
                   Application pending. Climate Wavers will approve you in admin
@@ -1639,17 +1780,12 @@ Thank you for your understanding! 🌱
                                     formData.tree_species
                                   ).map((s) => Number(s.price))
                                 ).toFixed(2)}`
-                              : "e.g. 2.00"
+                              : treeAdminMe?.default_tree_price != null
+                                ? `e.g. ${Number(treeAdminMe.default_tree_price).toFixed(2)}`
+                                : 'e.g. 2.00'
                           }
-                          className={`${fieldClass} ${
-                            editingProject?.is_verified && !canVerifyProjects
-                              ? "opacity-70 cursor-not-allowed"
-                              : ""
-                          }`}
+                          className={fieldClass}
                           required={
-                            !(
-                              editingProject?.is_verified && !canVerifyProjects
-                            ) &&
                             !(
                               normalizeTreeSpecies(formData.tree_species)
                                 .length > 0 &&
@@ -1658,26 +1794,12 @@ Thank you for your understanding! 🌱
                               )
                             )
                           }
-                          disabled={
-                            Boolean(editingProject?.is_verified) &&
-                            !canVerifyProjects
-                          }
-                          readOnly={
-                            Boolean(editingProject?.is_verified) &&
-                            !canVerifyProjects
-                          }
                         />
                         <p className="text-xs text-muted mt-1.5">
-                          Optional if every species below has its own USD price
-                          (yours do). Used only as a fallback for unpriced
-                          species.
+                          Your price for this project. Optional if every species
+                          below has its own USD price. Different Tree Admins can
+                          set different prices.
                         </p>
-                        {editingProject?.is_verified && !canVerifyProjects ? (
-                          <p className="text-xs text-muted mt-1.5">
-                            Default pricing is locked after project approval.
-                            Contact Climate Wavers to change it.
-                          </p>
-                        ) : null}
                       </div>
                       <div>
                         <label className={labelClass}>

@@ -108,6 +108,7 @@ from .platform_admin import (
     PlatformAdminTreeProjectVerifyView,
     PlatformAdminTreeDonationsView,
     PlatformAdminTreeDonationCertificateView,
+    PlatformAdminTreeDonationPayoutView,
     PlatformAdminTreeOrgsView,
     PlatformAdminTreeOrgModerateView,
     PlatformAdminResponderPaymentsView,
@@ -458,6 +459,11 @@ urlpatterns = [
     path("platform-admin/tree-projects/", PlatformAdminTreeProjectsView.as_view(), name="platform-admin-tree-projects"),
     path("platform-admin/tree-projects/<int:project_id>/verify/", PlatformAdminTreeProjectVerifyView.as_view(), name="platform-admin-tree-verify"),
     path("platform-admin/tree-donations/", PlatformAdminTreeDonationsView.as_view(), name="platform-admin-tree-donations"),
+    path(
+        "platform-admin/tree-donations/<int:donation_id>/payout/",
+        PlatformAdminTreeDonationPayoutView.as_view(),
+        name="platform-admin-tree-donation-payout",
+    ),
     path(
         "platform-admin/tree-donations/<int:donation_id>/certificate/",
         PlatformAdminTreeDonationCertificateView.as_view(),

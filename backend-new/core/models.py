@@ -737,6 +737,23 @@ class TreeProjectDonation(models.Model):
         db_index=True,
     )
     planted_at = models.DateTimeField(null=True, blank=True)
+    PAYOUT_STATUSES = [
+        ("none", "Not started"),
+        ("skipped", "Skipped"),
+        ("pending", "Pending"),
+        ("success", "Paid out"),
+        ("failed", "Failed"),
+    ]
+    payout_status = models.CharField(
+        max_length=20, choices=PAYOUT_STATUSES, default="none", db_index=True
+    )
+    payout_amount_kes = models.DecimalField(
+        max_digits=12, decimal_places=2, null=True, blank=True
+    )
+    payout_reference = models.CharField(max_length=120, blank=True, default="")
+    payout_transfer_code = models.CharField(max_length=80, blank=True, default="")
+    payout_error = models.CharField(max_length=500, blank=True, default="")
+    payout_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     
     class Meta:
@@ -1906,6 +1923,47 @@ class TreeAdminOrganization(models.Model):
     )
     plan_started_at = models.DateTimeField(null=True, blank=True)
     plan_ends_at = models.DateTimeField(null=True, blank=True)
+    default_tree_price = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Default USD price per tree for new projects (admins can override per project/species)",
+    )
+    platform_fee_rate = models.DecimalField(
+        max_digits=5,
+        decimal_places=4,
+        null=True,
+        blank=True,
+        help_text="Platform fee rate for this org (e.g. 0.18 = 18%). Null uses global default.",
+    )
+    PAYOUT_CHANNELS = [
+        ("mobile_money", "M-Pesa / Mobile money"),
+        ("bank", "Bank account"),
+    ]
+    payouts_enabled = models.BooleanField(
+        default=False,
+        help_text="When true, admin_share is auto-transferred via Paystack after each sale",
+    )
+    payout_channel = models.CharField(
+        max_length=20, choices=PAYOUT_CHANNELS, default="mobile_money", blank=True
+    )
+    payout_account_name = models.CharField(max_length=200, blank=True, default="")
+    payout_account_number = models.CharField(
+        max_length=64,
+        blank=True,
+        default="",
+        help_text="M-Pesa phone (2547…) or bank account number",
+    )
+    payout_bank_code = models.CharField(
+        max_length=32,
+        blank=True,
+        default="MPESA",
+        help_text="MPESA for mobile money, or Paystack bank code for bank payouts",
+    )
+    paystack_recipient_code = models.CharField(
+        max_length=80, blank=True, default="", db_index=True
+    )
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -1932,6 +1990,12 @@ class TreeAdminOrganization(models.Model):
         from .tree_pricing import has_tree_admin_access
 
         return has_tree_admin_access(self)
+
+    @property
+    def effective_platform_fee_rate(self):
+        from .tree_pricing import resolve_platform_fee_rate
+
+        return resolve_platform_fee_rate(self)
 
 
 class TreeAdminMembership(models.Model):

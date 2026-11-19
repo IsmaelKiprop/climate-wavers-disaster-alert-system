@@ -1,6 +1,7 @@
 """Tree Admin org onboarding + desk APIs."""
 
 import re
+from decimal import Decimal
 
 from django.contrib.auth import get_user_model
 from django.db import transaction
@@ -306,6 +307,9 @@ class TreeAdminOrgSerializer(serializers.ModelSerializer):
     plan_label = serializers.SerializerMethodField()
     plan_price_label = serializers.SerializerMethodField()
     max_active_projects = serializers.SerializerMethodField()
+    effective_platform_fee_rate = serializers.SerializerMethodField()
+    platform_fee_percent = serializers.SerializerMethodField()
+    admin_share_percent = serializers.SerializerMethodField()
 
     class Meta:
         model = TreeAdminOrganization
@@ -325,6 +329,16 @@ class TreeAdminOrgSerializer(serializers.ModelSerializer):
             "plan_status",
             "plan_started_at",
             "plan_ends_at",
+            "default_tree_price",
+            "platform_fee_rate",
+            "effective_platform_fee_rate",
+            "platform_fee_percent",
+            "admin_share_percent",
+            "payouts_enabled",
+            "payout_channel",
+            "payout_account_name",
+            "payout_account_number",
+            "payout_bank_code",
             "has_tree_admin_access",
             "plan_label",
             "plan_price_label",
@@ -345,6 +359,23 @@ class TreeAdminOrgSerializer(serializers.ModelSerializer):
 
     def get_max_active_projects(self, obj):
         return plan_meta(obj.plan).get("max_active_projects")
+
+    def get_effective_platform_fee_rate(self, obj):
+        from .tree_pricing import resolve_platform_fee_rate
+
+        return str(resolve_platform_fee_rate(obj))
+
+    def get_platform_fee_percent(self, obj):
+        from .tree_pricing import resolve_platform_fee_rate
+
+        rate = resolve_platform_fee_rate(obj)
+        return float((rate * 100).quantize(Decimal("0.01")))
+
+    def get_admin_share_percent(self, obj):
+        from .tree_pricing import resolve_platform_fee_rate
+
+        rate = resolve_platform_fee_rate(obj)
+        return float(((Decimal("1") - rate) * 100).quantize(Decimal("0.01")))
 
 
 class TreeAdminMembershipSerializer(serializers.ModelSerializer):
@@ -529,12 +560,18 @@ class TreeAdminMeView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        from .tree_pricing import PLATFORM_FEE_RATE, resolve_platform_fee_rate
+
         memberships = list(_memberships_for(request.user))
         approved = [
             m for m in memberships if m.org.verification_status == "approved"
         ]
         has_access = user_has_tree_admin_access(request.user)
         can_verify = user_can_verify_tree_projects(request.user)
+        primary_org = approved[0].org if approved else (
+            memberships[0].org if memberships else None
+        )
+        fee_rate = resolve_platform_fee_rate(primary_org)
         return Response(
             {
                 "memberships": TreeAdminMembershipSerializer(memberships, many=True).data,
@@ -558,9 +595,78 @@ class TreeAdminMeView(APIView):
                     }
                     for key, meta in PLANS.items()
                 },
-                "platform_fee_rate": "0.18",
+                "platform_fee_rate": str(fee_rate),
+                "default_platform_fee_rate": str(PLATFORM_FEE_RATE),
+                "platform_fee_percent": float((fee_rate * 100).quantize(Decimal("0.01"))),
+                "admin_share_percent": float(
+                    ((Decimal("1") - fee_rate) * 100).quantize(Decimal("0.01"))
+                ),
+                "default_tree_price": (
+                    float(primary_org.default_tree_price)
+                    if primary_org and primary_org.default_tree_price is not None
+                    else None
+                ),
             }
         )
+
+    def patch(self, request):
+        """Tree Admin updates their org default seedling price."""
+        membership = primary_tree_admin_membership(request.user)
+        if not membership or not user_has_tree_admin_access(request.user):
+            if not (request.user.is_staff or request.user.is_superuser):
+                return Response({"detail": "Tree Admin access required"}, status=403)
+            membership = _memberships_for(request.user).first()
+        if not membership:
+            return Response({"detail": "No Tree Admin organization"}, status=404)
+        org = membership.org
+        data = request.data or {}
+        updates = []
+        if "default_tree_price" in data:
+            raw = data.get("default_tree_price")
+            if raw in (None, ""):
+                org.default_tree_price = None
+            else:
+                try:
+                    price = Decimal(str(raw))
+                    if price < 0:
+                        return Response({"detail": "default_tree_price must be >= 0"}, status=400)
+                    org.default_tree_price = price.quantize(Decimal("0.01"))
+                except Exception:
+                    return Response({"detail": "Invalid default_tree_price"}, status=400)
+            updates.append("default_tree_price")
+        # Tree Admin may set their own M-Pesa / bank destination (platform enables payouts)
+        if "payout_channel" in data:
+            channel = (data.get("payout_channel") or "").strip()
+            if channel not in ("mobile_money", "bank"):
+                return Response(
+                    {"detail": "payout_channel must be mobile_money or bank"},
+                    status=400,
+                )
+            org.payout_channel = channel
+            updates.append("payout_channel")
+        if "payout_account_name" in data:
+            org.payout_account_name = str(data.get("payout_account_name") or "").strip()[
+                :200
+            ]
+            updates.append("payout_account_name")
+        if "payout_account_number" in data:
+            org.payout_account_number = str(
+                data.get("payout_account_number") or ""
+            ).strip()[:64]
+            updates.append("payout_account_number")
+            org.paystack_recipient_code = ""
+            updates.append("paystack_recipient_code")
+        if "payout_bank_code" in data:
+            org.payout_bank_code = (
+                str(data.get("payout_bank_code") or "MPESA").strip()[:32] or "MPESA"
+            )
+            updates.append("payout_bank_code")
+            if "paystack_recipient_code" not in updates:
+                org.paystack_recipient_code = ""
+                updates.append("paystack_recipient_code")
+        if updates:
+            org.save(update_fields=list(dict.fromkeys(updates + ["updated_at"])))
+        return Response({"org": TreeAdminOrgSerializer(org).data})
 
 
 class TreeAdminDonationsView(APIView):

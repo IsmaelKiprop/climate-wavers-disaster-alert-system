@@ -1508,7 +1508,8 @@ class TreeProjectViewSet(viewsets.ModelViewSet):
                             update_fields=["selected_species", "trees_purchased"]
                         )
                     platform_fee, admin_share, fee_rate = split_tree_payment(
-                        donation.amount
+                        donation.amount,
+                        org=getattr(locked, "tree_admin_org", None),
                     )
                     donation.platform_fee = platform_fee
                     donation.admin_share = admin_share

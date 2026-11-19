@@ -393,7 +393,10 @@ def record_tree_payment(reference, request_user=None, client_data=None):
         metadata=usd_meta,
         kes_amount=amount,
     )
-    platform_fee, admin_share, fee_rate = split_tree_payment(amount_usd)
+    org = getattr(project, "tree_admin_org", None)
+    platform_fee, admin_share, fee_rate = split_tree_payment(
+        amount_usd, org=org
+    )
 
     create_kwargs = {
         "project": project,
@@ -511,6 +514,15 @@ def _attach_points(payload, donation):
         payload["certificate_data"] = cert
     except Exception as exc:
         logger.warning("Certificate hook skipped: %s", exc)
+    try:
+        from .paystack_transfers import payout_on_commit
+
+        if getattr(donation, "id", None) and (
+            getattr(donation, "payment_status", "") or ""
+        ) == "completed":
+            payout_on_commit(donation.id)
+    except Exception as exc:
+        logger.warning("Tree admin payout hook skipped: %s", exc)
     return payload
 
 

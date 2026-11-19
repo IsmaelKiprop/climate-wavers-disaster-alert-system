@@ -281,6 +281,7 @@ class TreeAdminOrganizationAdmin(ModelAdmin):
         "verification_status",
         "plan",
         "plan_status",
+        "payouts_enabled",
         "plan_ends_at",
         "contact_email",
         "created_at",
@@ -289,10 +290,56 @@ class TreeAdminOrganizationAdmin(ModelAdmin):
         "verification_status",
         "plan",
         "plan_status",
+        "payouts_enabled",
         "org_type",
         "country",
     )
-    search_fields = ("name", "city", "contact_email", "contact_phone")
+    search_fields = (
+        "name",
+        "city",
+        "contact_email",
+        "contact_phone",
+        "payout_account_number",
+    )
+    fieldsets = (
+        (
+            None,
+            {
+                "fields": (
+                    "name",
+                    "org_type",
+                    "website",
+                    "country",
+                    "city",
+                    "contact_email",
+                    "contact_phone",
+                    "planting_sites_note",
+                    "verification_status",
+                    "verified_at",
+                    "plan",
+                    "plan_status",
+                    "plan_started_at",
+                    "plan_ends_at",
+                    "default_tree_price",
+                    "platform_fee_rate",
+                    "created_by",
+                )
+            },
+        ),
+        (
+            "Paystack payouts (admin share)",
+            {
+                "fields": (
+                    "payouts_enabled",
+                    "payout_channel",
+                    "payout_account_name",
+                    "payout_account_number",
+                    "payout_bank_code",
+                    "paystack_recipient_code",
+                )
+            },
+        ),
+    )
     actions = [
         "approve_tree_admins",
         "reject_tree_admins",

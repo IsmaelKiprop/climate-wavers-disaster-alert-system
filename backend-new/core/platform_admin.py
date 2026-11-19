@@ -375,6 +375,10 @@ def _user_display_name(u):
 
 
 def serialize_tree_org(o):
+    from decimal import Decimal
+
+    from .tree_pricing import resolve_platform_fee_rate
+
     owner = None
     memberships = list(
         o.memberships.select_related("user").order_by("created_at")[:12]
@@ -399,6 +403,7 @@ def serialize_tree_org(o):
             "name": _user_display_name(u),
             "phone": getattr(u, "phone", None) or "",
         }
+    fee_rate = resolve_platform_fee_rate(o)
     return {
         "id": o.id,
         "name": o.name,
@@ -415,6 +420,23 @@ def serialize_tree_org(o):
         "plan_status": o.plan_status,
         "plan_started_at": o.plan_started_at.isoformat() if o.plan_started_at else None,
         "plan_ends_at": o.plan_ends_at.isoformat() if o.plan_ends_at else None,
+        "default_tree_price": float(o.default_tree_price)
+        if o.default_tree_price is not None
+        else None,
+        "platform_fee_rate": str(o.platform_fee_rate)
+        if o.platform_fee_rate is not None
+        else None,
+        "effective_platform_fee_rate": str(fee_rate),
+        "platform_fee_percent": float((fee_rate * 100).quantize(Decimal("0.01"))),
+        "admin_share_percent": float(
+            ((Decimal("1") - fee_rate) * 100).quantize(Decimal("0.01"))
+        ),
+        "payouts_enabled": bool(getattr(o, "payouts_enabled", False)),
+        "payout_channel": getattr(o, "payout_channel", "") or "mobile_money",
+        "payout_account_name": getattr(o, "payout_account_name", "") or "",
+        "payout_account_number": getattr(o, "payout_account_number", "") or "",
+        "payout_bank_code": getattr(o, "payout_bank_code", "") or "MPESA",
+        "paystack_recipient_code": getattr(o, "paystack_recipient_code", "") or "",
         "seats_used": o.memberships.count(),
         "owner": owner,
         "members": [
@@ -888,6 +910,42 @@ class PlatformAdminTreeDonationsView(APIView):
         return Response({"results": [serialize_donation(d) for d in rows], **page})
 
 
+class PlatformAdminTreeDonationPayoutView(APIView):
+    """Manually retry / force admin_share Paystack transfer for one donation."""
+
+    permission_classes = [IsAuthenticated, IsPlatformStaff]
+
+    def post(self, request, donation_id):
+        donation = (
+            TreeProjectDonation.objects.select_related(
+                "project", "project__tree_admin_org", "donor", "gifted_to"
+            )
+            .filter(id=donation_id)
+            .first()
+        )
+        if not donation:
+            return Response({"detail": "Not found"}, status=404)
+        if (donation.payment_status or "") != "completed":
+            return Response({"detail": "Donation is not completed"}, status=400)
+        from .paystack_transfers import maybe_payout_tree_admin_share
+
+        force = str(request.data.get("force") or "").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        } or request.data.get("force") is True
+        # Allow staff retry of failed/skipped even when global flag is off if force=true
+        result = maybe_payout_tree_admin_share(donation, force=force)
+        donation.refresh_from_db()
+        return Response(
+            {
+                "payout": result,
+                "donation": serialize_donation(donation),
+            }
+        )
+
+
 class PlatformAdminTreeDonationCertificateView(APIView):
     """Preview / download / re-email a branded tree certificate (staff)."""
 
@@ -1028,6 +1086,104 @@ class PlatformAdminTreeOrgModerateView(APIView):
 
             activate_paid_plan(org)
             org.save()
+        elif action == "update_pricing":
+            from decimal import Decimal
+
+            updates = []
+            if "default_tree_price" in request.data:
+                raw = request.data.get("default_tree_price")
+                if raw in (None, ""):
+                    org.default_tree_price = None
+                else:
+                    try:
+                        price = Decimal(str(raw))
+                        if price < 0:
+                            return Response(
+                                {"detail": "default_tree_price must be >= 0"}, status=400
+                            )
+                        org.default_tree_price = price.quantize(Decimal("0.01"))
+                    except Exception:
+                        return Response(
+                            {"detail": "Invalid default_tree_price"}, status=400
+                        )
+                updates.append("default_tree_price")
+            if "platform_fee_rate" in request.data:
+                raw = request.data.get("platform_fee_rate")
+                if raw in (None, ""):
+                    org.platform_fee_rate = None
+                else:
+                    try:
+                        # Accept 0.18 or 18 (percent)
+                        rate = Decimal(str(raw))
+                        if rate >= 1:
+                            rate = rate / Decimal("100")
+                        if not (Decimal("0") <= rate < Decimal("1")):
+                            return Response(
+                                {"detail": "platform_fee_rate must be between 0 and 1"},
+                                status=400,
+                            )
+                        org.platform_fee_rate = rate.quantize(Decimal("0.0001"))
+                    except Exception:
+                        return Response(
+                            {"detail": "Invalid platform_fee_rate"}, status=400
+                        )
+                updates.append("platform_fee_rate")
+            if not updates:
+                return Response(
+                    {"detail": "Provide default_tree_price and/or platform_fee_rate"},
+                    status=400,
+                )
+            org.save(update_fields=updates + ["updated_at"])
+        elif action == "update_payout":
+            updates = []
+            if "payouts_enabled" in request.data:
+                raw = request.data.get("payouts_enabled")
+                org.payouts_enabled = str(raw).strip().lower() in {
+                    "1",
+                    "true",
+                    "yes",
+                    "on",
+                } or raw is True
+                updates.append("payouts_enabled")
+            if "payout_channel" in request.data:
+                channel = (request.data.get("payout_channel") or "").strip()
+                if channel not in ("mobile_money", "bank"):
+                    return Response(
+                        {"detail": "payout_channel must be mobile_money or bank"},
+                        status=400,
+                    )
+                org.payout_channel = channel
+                updates.append("payout_channel")
+            if "payout_account_name" in request.data:
+                org.payout_account_name = str(
+                    request.data.get("payout_account_name") or ""
+                ).strip()[:200]
+                updates.append("payout_account_name")
+            if "payout_account_number" in request.data:
+                org.payout_account_number = str(
+                    request.data.get("payout_account_number") or ""
+                ).strip()[:64]
+                updates.append("payout_account_number")
+                # Force new Paystack recipient when destination changes
+                org.paystack_recipient_code = ""
+                updates.append("paystack_recipient_code")
+            if "payout_bank_code" in request.data:
+                org.payout_bank_code = (
+                    str(request.data.get("payout_bank_code") or "MPESA").strip()[:32]
+                    or "MPESA"
+                )
+                updates.append("payout_bank_code")
+                if "paystack_recipient_code" not in updates:
+                    org.paystack_recipient_code = ""
+                    updates.append("paystack_recipient_code")
+            if not updates:
+                return Response(
+                    {
+                        "detail": "Provide payouts_enabled and/or payout account fields"
+                    },
+                    status=400,
+                )
+            org.save(update_fields=list(dict.fromkeys(updates + ["updated_at"])))
         else:
             return Response({"detail": "Unknown action"}, status=400)
         return Response({"org": serialize_tree_org(org)})

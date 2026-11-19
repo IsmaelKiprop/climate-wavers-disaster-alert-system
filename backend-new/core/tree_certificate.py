@@ -1095,6 +1095,14 @@ def serialize_donation_rich(d) -> Dict[str, Any]:
         "created_at": d.created_at.isoformat() if d.created_at else None,
         "admin_share": float(getattr(d, "admin_share", 0) or 0),
         "platform_fee": float(getattr(d, "platform_fee", 0) or 0),
+        "payout_status": getattr(d, "payout_status", "") or "none",
+        "payout_amount_kes": float(d.payout_amount_kes)
+        if getattr(d, "payout_amount_kes", None) is not None
+        else None,
+        "payout_reference": getattr(d, "payout_reference", "") or "",
+        "payout_transfer_code": getattr(d, "payout_transfer_code", "") or "",
+        "payout_error": getattr(d, "payout_error", "") or "",
+        "payout_at": d.payout_at.isoformat() if getattr(d, "payout_at", None) else None,
     }
 
 

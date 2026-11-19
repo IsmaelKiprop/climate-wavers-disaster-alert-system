@@ -118,6 +118,8 @@ export const endpoints = {
     "platformAdminTreeDonations": "/api/v1/platform-admin/tree-donations/",
     "platformAdminTreeDonationCertificate": (id) =>
       `/api/v1/platform-admin/tree-donations/${id}/certificate/`,
+    "platformAdminTreeDonationPayout": (id) =>
+      `/api/v1/platform-admin/tree-donations/${id}/payout/`,
     "platformAdminTreeOrgs": "/api/v1/platform-admin/tree-admin-orgs/",
     "platformAdminTreeOrgModerate": (id) => `/api/v1/platform-admin/tree-admin-orgs/${id}/moderate/`,
     "platformAdminResponderPayments": "/api/v1/platform-admin/responder-payments/",

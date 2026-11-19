@@ -26,6 +26,17 @@ const TreesPayments = () => {
   const [selectedId, setSelectedId] = useState(null);
   const [certBusy, setCertBusy] = useState(null);
   const [certPreview, setCertPreview] = useState(null);
+  const [orgPriceDraft, setOrgPriceDraft] = useState("");
+  const [orgFeeDraft, setOrgFeeDraft] = useState("");
+  const [pricingBusy, setPricingBusy] = useState(false);
+  const [payoutDraft, setPayoutDraft] = useState({
+    payouts_enabled: false,
+    payout_channel: "mobile_money",
+    payout_account_name: "",
+    payout_account_number: "",
+    payout_bank_code: "MPESA",
+  });
+  const [payoutBusy, setPayoutBusy] = useState(false);
 
   const fetchCertificatePng = async (donationId) => {
     const data = await client.run(
@@ -152,6 +163,49 @@ const TreesPayments = () => {
 
   const selected = rows.find((r) => r.id === selectedId) || null;
 
+  useEffect(() => {
+    if (tab !== "orgs" || !selected) {
+      setOrgPriceDraft("");
+      setOrgFeeDraft("");
+      setPayoutDraft({
+        payouts_enabled: false,
+        payout_channel: "mobile_money",
+        payout_account_name: "",
+        payout_account_number: "",
+        payout_bank_code: "MPESA",
+      });
+      return;
+    }
+    setOrgPriceDraft(
+      selected.default_tree_price != null ? String(selected.default_tree_price) : ""
+    );
+    setOrgFeeDraft(
+      selected.platform_fee_percent != null
+        ? String(selected.platform_fee_percent)
+        : selected.effective_platform_fee_rate != null
+          ? String(Number(selected.effective_platform_fee_rate) * 100)
+          : "18"
+    );
+    setPayoutDraft({
+      payouts_enabled: Boolean(selected.payouts_enabled),
+      payout_channel: selected.payout_channel || "mobile_money",
+      payout_account_name: selected.payout_account_name || "",
+      payout_account_number: selected.payout_account_number || "",
+      payout_bank_code: selected.payout_bank_code || "MPESA",
+    });
+  }, [
+    tab,
+    selectedId,
+    selected?.default_tree_price,
+    selected?.platform_fee_percent,
+    selected?.effective_platform_fee_rate,
+    selected?.payouts_enabled,
+    selected?.payout_channel,
+    selected?.payout_account_name,
+    selected?.payout_account_number,
+    selected?.payout_bank_code,
+  ]);
+
   const moderateOrg = async (id, action) => {
     setBusyId(id);
     try {
@@ -175,6 +229,82 @@ const TreesPayments = () => {
       refreshCounts?.();
     } catch (err) {
       toast.error(err?.response?.data?.detail || "Failed");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const saveOrgPricing = async (id) => {
+    setPricingBusy(true);
+    try {
+      const payload = {
+        action: "update_pricing",
+        default_tree_price: orgPriceDraft === "" ? null : orgPriceDraft,
+        platform_fee_rate: orgFeeDraft === "" ? null : orgFeeDraft,
+      };
+      const data = await client.run(
+        "post",
+        endpoints.platformAdminTreeOrgModerate(id),
+        payload,
+        true
+      );
+      toast.success("Pricing updated for this Tree Admin");
+      if (data?.org) {
+        setRows((prev) => prev.map((r) => (r.id === id ? { ...r, ...data.org } : r)));
+      } else {
+        await load();
+      }
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "Could not save pricing");
+    } finally {
+      setPricingBusy(false);
+    }
+  };
+
+  const saveOrgPayout = async (id) => {
+    setPayoutBusy(true);
+    try {
+      const data = await client.run(
+        "post",
+        endpoints.platformAdminTreeOrgModerate(id),
+        { action: "update_payout", ...payoutDraft },
+        true
+      );
+      toast.success("Payout details saved");
+      if (data?.org) {
+        setRows((prev) => prev.map((r) => (r.id === id ? { ...r, ...data.org } : r)));
+      } else {
+        await load();
+      }
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "Could not save payout details");
+    } finally {
+      setPayoutBusy(false);
+    }
+  };
+
+  const retryDonationPayout = async (id) => {
+    setBusyId(id);
+    try {
+      const data = await client.run(
+        "post",
+        endpoints.platformAdminTreeDonationPayout(id),
+        { force: true },
+        true
+      );
+      const status = data?.payout?.status || data?.donation?.payout_status;
+      if (data?.payout?.ok || status === "success") {
+        toast.success("Admin share payout sent");
+      } else {
+        toast.error(data?.payout?.detail || data?.donation?.payout_error || `Payout ${status || "failed"}`);
+      }
+      if (data?.donation) {
+        setRows((prev) => prev.map((r) => (r.id === id ? { ...r, ...data.donation } : r)));
+      } else {
+        await load();
+      }
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "Payout retry failed");
     } finally {
       setBusyId(null);
     }
@@ -392,6 +522,151 @@ const TreesPayments = () => {
           <DetailField label="Submitted">
             {selected.created_at ? new Date(selected.created_at).toLocaleString() : "—"}
           </DetailField>
+          <DetailField label="Default tree price">
+            {selected.default_tree_price != null
+              ? `$${Number(selected.default_tree_price).toFixed(2)} USD`
+              : "Not set (project sets its own)"}
+          </DetailField>
+          <DetailField label="Platform fee">
+            {selected.platform_fee_percent != null
+              ? `${selected.platform_fee_percent}% (admin keeps ${selected.admin_share_percent}%)`
+              : "18% default"}
+          </DetailField>
+        </div>
+        <div className="border-t border-border pt-4 space-y-3">
+          <p className="text-[11px] uppercase tracking-wide text-muted">
+            Pricing for this Tree Admin
+          </p>
+          <p className="text-xs text-muted">
+            Each org can have its own default seedling price and platform fee. Projects can still override price per species.
+          </p>
+          <div className="grid sm:grid-cols-2 gap-3">
+            <label className="text-sm space-y-1">
+              <span className="text-muted text-xs uppercase tracking-wide">Default USD / tree</span>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={orgPriceDraft}
+                onChange={(e) => setOrgPriceDraft(e.target.value)}
+                className="w-full h-10 px-3 border border-border bg-background"
+                placeholder="e.g. 2.00"
+              />
+            </label>
+            <label className="text-sm space-y-1">
+              <span className="text-muted text-xs uppercase tracking-wide">Platform fee %</span>
+              <input
+                type="number"
+                min="0"
+                max="99"
+                step="0.1"
+                value={orgFeeDraft}
+                onChange={(e) => setOrgFeeDraft(e.target.value)}
+                className="w-full h-10 px-3 border border-border bg-background"
+                placeholder="e.g. 18"
+              />
+            </label>
+          </div>
+          <button
+            type="button"
+            disabled={pricingBusy}
+            onClick={() => saveOrgPricing(selected.id)}
+            className="h-10 px-4 bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-60"
+          >
+            {pricingBusy ? "Saving…" : "Save pricing"}
+          </button>
+        </div>
+        <div className="border-t border-border pt-4 space-y-3">
+          <p className="text-[11px] uppercase tracking-wide text-muted">
+            Auto payout (admin share → M-Pesa / bank)
+          </p>
+          <p className="text-xs text-muted">
+            After each completed tree sale, Paystack transfers the admin share in KES.
+            Requires <code className="text-[11px]">PAYSTACK_TRANSFER_ENABLED=true</code> on the API
+            and settled Paystack balance.
+          </p>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={payoutDraft.payouts_enabled}
+              onChange={(e) =>
+                setPayoutDraft((d) => ({ ...d, payouts_enabled: e.target.checked }))
+              }
+            />
+            Enable auto payouts for this org
+          </label>
+          <div className="grid sm:grid-cols-2 gap-3">
+            <label className="text-sm space-y-1">
+              <span className="text-muted text-xs uppercase tracking-wide">Channel</span>
+              <select
+                value={payoutDraft.payout_channel}
+                onChange={(e) =>
+                  setPayoutDraft((d) => ({
+                    ...d,
+                    payout_channel: e.target.value,
+                    payout_bank_code:
+                      e.target.value === "mobile_money" ? "MPESA" : d.payout_bank_code,
+                  }))
+                }
+                className="w-full h-10 px-3 border border-border bg-background"
+              >
+                <option value="mobile_money">M-Pesa</option>
+                <option value="bank">Bank (KEPSS)</option>
+              </select>
+            </label>
+            <label className="text-sm space-y-1">
+              <span className="text-muted text-xs uppercase tracking-wide">
+                {payoutDraft.payout_channel === "bank" ? "Bank code" : "Bank code"}
+              </span>
+              <input
+                value={payoutDraft.payout_bank_code}
+                onChange={(e) =>
+                  setPayoutDraft((d) => ({ ...d, payout_bank_code: e.target.value }))
+                }
+                className="w-full h-10 px-3 border border-border bg-background"
+                placeholder={payoutDraft.payout_channel === "bank" ? "e.g. 01" : "MPESA"}
+              />
+            </label>
+            <label className="text-sm space-y-1">
+              <span className="text-muted text-xs uppercase tracking-wide">Account name</span>
+              <input
+                value={payoutDraft.payout_account_name}
+                onChange={(e) =>
+                  setPayoutDraft((d) => ({ ...d, payout_account_name: e.target.value }))
+                }
+                className="w-full h-10 px-3 border border-border bg-background"
+                placeholder="As registered on M-Pesa / bank"
+              />
+            </label>
+            <label className="text-sm space-y-1">
+              <span className="text-muted text-xs uppercase tracking-wide">
+                {payoutDraft.payout_channel === "bank" ? "Account number" : "M-Pesa phone"}
+              </span>
+              <input
+                value={payoutDraft.payout_account_number}
+                onChange={(e) =>
+                  setPayoutDraft((d) => ({ ...d, payout_account_number: e.target.value }))
+                }
+                className="w-full h-10 px-3 border border-border bg-background"
+                placeholder={
+                  payoutDraft.payout_channel === "bank" ? "0123456789" : "07XXXXXXXX"
+                }
+              />
+            </label>
+          </div>
+          {selected.paystack_recipient_code ? (
+            <p className="text-xs text-muted font-mono">
+              Recipient: {selected.paystack_recipient_code}
+            </p>
+          ) : null}
+          <button
+            type="button"
+            disabled={payoutBusy}
+            onClick={() => saveOrgPayout(selected.id)}
+            className="h-10 px-4 bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-60"
+          >
+            {payoutBusy ? "Saving…" : "Save payout details"}
+          </button>
         </div>
         {selected.planting_sites_note ? (
           <div className="border-t border-border pt-4">
@@ -434,6 +709,9 @@ const TreesPayments = () => {
           <DetailField label="Type / status">{[selected.project_type, selected.status].filter(Boolean).join(" · ") || "—"}</DetailField>
           <DetailField label="Location">{[selected.city, selected.country].filter(Boolean).join(", ") || "—"}</DetailField>
           <DetailField label="Trees">{`${selected.trees_planted ?? 0} / ${selected.target_trees ?? "—"}`}</DetailField>
+          <DetailField label="Tree price">
+            {selected.tree_price != null ? `$${Number(selected.tree_price).toFixed(2)} USD` : "—"}
+          </DetailField>
           <DetailField label="Contact">{[selected.contact_person, selected.contact_email, selected.contact_phone].filter(Boolean).join(" · ") || "—"}</DetailField>
           <DetailField label="Website">
             {selected.organization_website ? (
@@ -526,10 +804,41 @@ const TreesPayments = () => {
               : "Not yet"}
           </DetailField>
           <DetailField label="Created">{selected.created_at ? new Date(selected.created_at).toLocaleString() : "—"}</DetailField>
+          <DetailField label="Admin share payout">
+            <StatusBadge
+              value={selected.payout_status || "none"}
+              tone={
+                selected.payout_status === "success"
+                  ? "ok"
+                  : selected.payout_status === "failed"
+                    ? "bad"
+                    : "warn"
+              }
+            />
+          </DetailField>
+          <DetailField label="Payout amount">
+            {selected.payout_amount_kes != null
+              ? `${selected.payout_amount_kes} KES`
+              : "—"}
+          </DetailField>
+          <DetailField label="Payout transfer">
+            <span className="font-mono text-xs">
+              {selected.payout_transfer_code || selected.payout_reference || "—"}
+            </span>
+          </DetailField>
+          <DetailField label="Payout error">{selected.payout_error || "—"}</DetailField>
         </div>
-        {!certReady ? (
+        {certReady ? (
+          <div className="border-t border-border pt-3">
+            <ConfirmAction
+              label="Retry admin payout"
+              busy={busyId === selected.id}
+              onConfirm={() => retryDonationPayout(selected.id)}
+            />
+          </div>
+        ) : (
           <p className="text-xs text-muted">Preview / download unlock after payment status is completed.</p>
-        ) : null}
+        )}
       </DetailPanel>
     );
   } else if (selected && tab === "payments") {

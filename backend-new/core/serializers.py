@@ -906,18 +906,7 @@ class TreeProjectCreateSerializer(serializers.ModelSerializer):
         if "tree_species" in attrs or self.instance is None:
             attrs["tree_species"] = species
 
-        # Approved projects: Tree Admins cannot change pricing
-        if (
-            self.instance is not None
-            and getattr(self.instance, "is_verified", False)
-            and "tree_price" in attrs
-        ):
-            from .tree_admin import user_can_verify_tree_projects
-
-            request = self.context.get("request")
-            user = getattr(request, "user", None) if request else None
-            if not user_can_verify_tree_projects(user):
-                attrs.pop("tree_price", None)
+        # Tree Admins may set their own project/species prices (different orgs, different prices).
         return attrs
 
     def to_representation(self, instance):
@@ -934,6 +923,11 @@ class TreeProjectCreateSerializer(serializers.ModelSerializer):
             validated_data['tree_admin_org'] = tree_admin_org
             if not validated_data.get('organization_name'):
                 validated_data['organization_name'] = tree_admin_org.name
+            # Inherit org default price when project price omitted
+            if validated_data.get("tree_price") in (None, ""):
+                default_price = getattr(tree_admin_org, "default_tree_price", None)
+                if default_price is not None:
+                    validated_data["tree_price"] = default_price
         return super().create(validated_data)
 
 

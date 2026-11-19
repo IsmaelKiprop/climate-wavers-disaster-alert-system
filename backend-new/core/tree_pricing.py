@@ -114,10 +114,33 @@ def max_active_projects(org) -> Optional[int]:
     return plan_meta(org.plan).get("max_active_projects")
 
 
-def split_tree_payment(amount) -> Tuple[Decimal, Decimal, Decimal]:
+def resolve_platform_fee_rate(org=None) -> Decimal:
+    """Per-org fee rate when set; otherwise global PLATFORM_FEE_RATE."""
+    if org is not None:
+        raw = getattr(org, "platform_fee_rate", None)
+        if raw is not None and str(raw).strip() != "":
+            try:
+                rate = Decimal(str(raw))
+                if Decimal("0") <= rate < Decimal("1"):
+                    return rate.quantize(Decimal("0.0001"))
+            except Exception:
+                pass
+    return PLATFORM_FEE_RATE
+
+
+def split_tree_payment(amount, fee_rate=None, org=None) -> Tuple[Decimal, Decimal, Decimal]:
     """Return (platform_fee, admin_share, fee_rate) for a gross payment amount."""
     gross = Decimal(str(amount or 0)).quantize(Decimal("0.01"))
-    rate = PLATFORM_FEE_RATE
+    if fee_rate is not None and str(fee_rate).strip() != "":
+        try:
+            rate = Decimal(str(fee_rate))
+            if not (Decimal("0") <= rate < Decimal("1")):
+                rate = resolve_platform_fee_rate(org)
+        except Exception:
+            rate = resolve_platform_fee_rate(org)
+    else:
+        rate = resolve_platform_fee_rate(org)
+    rate = rate.quantize(Decimal("0.0001"))
     platform_fee = (gross * rate).quantize(Decimal("0.01"))
     admin_share = (gross - platform_fee).quantize(Decimal("0.01"))
     return platform_fee, admin_share, rate
@@ -211,12 +234,17 @@ def project_funds_raised_usd(project) -> Decimal:
     from .models import TreeProjectDonation
 
     total = Decimal("0.00")
+    org = getattr(project, "tree_admin_org", None)
     qs = TreeProjectDonation.objects.filter(
         project_id=project.pk, payment_status="completed"
     ).only("amount", "admin_share", "selected_species", "trees_purchased")
     for donation in qs:
+        stored = getattr(donation, "admin_share", None)
+        if stored is not None and Decimal(str(stored)) > 0:
+            total += Decimal(str(stored))
+            continue
         usd_gross = donation_amount_usd(donation, project)
-        _fee, admin_share_usd, _rate = split_tree_payment(usd_gross)
+        _fee, admin_share_usd, _rate = split_tree_payment(usd_gross, org=org)
         total += admin_share_usd
     return total.quantize(Decimal("0.01"))
 
