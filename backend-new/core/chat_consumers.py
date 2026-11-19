@@ -182,6 +182,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
         media_url = (payload.get("media_url") or "").strip()
         media_type = (payload.get("media_type") or "").strip().lower()
         mentions = payload.get("mentions") or []
+        reply_to_id = payload.get("reply_to_id", payload.get("reply_to"))
         client_id = (payload.get("client_id") or "")[:64]
         try:
             conversation_id = int(conversation_id)
@@ -208,6 +209,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
             media_url=media_url,
             media_type=media_type,
             mentions=mentions,
+            reply_to_id=reply_to_id,
         )
         if not msg:
             await self.send_json(
@@ -367,11 +369,13 @@ class ChatConsumer(AsyncWebsocketConsumer):
         media_url="",
         media_type="",
         mentions=None,
+        reply_to_id=None,
     ):
         from .chat import (
             _normalize_mentions,
             message_dict,
             notify_after_chat_message,
+            resolve_reply_to,
             user_can_access,
         )
         from .models import ChatMessage, Conversation, ConversationMember
@@ -387,7 +391,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 ChatMessage.objects.filter(
                     conversation=conv, sender=self.user, client_id=client_id
                 )
-                .select_related("sender")
+                .select_related("sender", "reply_to", "reply_to__sender")
                 .first()
             )
             if existing:
@@ -400,6 +404,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
         if not media_url:
             media_type = ""
         mention_rows = _normalize_mentions(mentions)
+        reply_to = resolve_reply_to(conv, reply_to_id)
 
         ConversationMember.objects.get_or_create(conversation=conv, user=self.user)
         msg = ChatMessage.objects.create(
@@ -409,7 +414,12 @@ class ChatConsumer(AsyncWebsocketConsumer):
             media_url=media_url,
             media_type=media_type,
             mentions=mention_rows,
+            reply_to=reply_to,
             client_id=client_id or "",
+        )
+        msg = (
+            ChatMessage.objects.select_related("sender", "reply_to", "reply_to__sender")
+            .get(id=msg.id)
         )
         Conversation.objects.filter(id=conv.id).update(updated_at=timezone.now())
         ConversationMember.objects.filter(

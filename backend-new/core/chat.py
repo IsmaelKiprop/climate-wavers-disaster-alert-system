@@ -302,8 +302,42 @@ def notify_after_chat_message(msg, sender=None):
     notify_chat_message_recipients(msg, sender=sender)
 
 
+def reply_preview_dict(msg):
+    if not msg:
+        return None
+    deleted = bool(msg.is_deleted)
+    return {
+        "id": msg.id,
+        "body": "" if deleted else (msg.body or ""),
+        "media_url": "" if deleted else (msg.media_url or ""),
+        "media_type": "" if deleted else (msg.media_type or ""),
+        "is_deleted": deleted,
+        "sender": user_public_dict(msg.sender) if getattr(msg, "sender_id", None) else None,
+    }
+
+
+def resolve_reply_to(conversation, reply_to_id):
+    if reply_to_id in (None, "", False):
+        return None
+    try:
+        return (
+            ChatMessage.objects.select_related("sender")
+            .filter(
+                id=int(reply_to_id),
+                conversation_id=conversation.id,
+                is_deleted=False,
+            )
+            .first()
+        )
+    except (TypeError, ValueError):
+        return None
+
+
 def message_dict(msg, current_user_id=None):
     deleted = bool(msg.is_deleted)
+    reply = None
+    if not deleted and getattr(msg, "reply_to_id", None):
+        reply = reply_preview_dict(getattr(msg, "reply_to", None))
     return {
         "id": msg.id,
         "conversation_id": msg.conversation_id,
@@ -311,6 +345,8 @@ def message_dict(msg, current_user_id=None):
         "media_url": "" if deleted else (msg.media_url or ""),
         "media_type": "" if deleted else (msg.media_type or ""),
         "mentions": [] if deleted else (msg.mentions or []),
+        "reply_to_id": None if deleted else (msg.reply_to_id or None),
+        "reply_to": reply,
         "is_deleted": deleted,
         "client_id": msg.client_id or None,
         "created_at": msg.created_at.isoformat() if msg.created_at else None,
@@ -806,7 +842,9 @@ class ChatMessageListCreateView(APIView):
         except (TypeError, ValueError):
             limit = 50
 
-        qs = ChatMessage.objects.filter(conversation=conv).select_related("sender")
+        qs = ChatMessage.objects.filter(conversation=conv).select_related(
+            "sender", "reply_to", "reply_to__sender"
+        )
         if before:
             try:
                 qs = qs.filter(id__lt=int(before))
@@ -838,6 +876,10 @@ class ChatMessageListCreateView(APIView):
         if not media_url:
             media_type = ""
         mentions = _normalize_mentions(request.data.get("mentions"))
+        reply_to = resolve_reply_to(
+            conv,
+            request.data.get("reply_to_id", request.data.get("reply_to")),
+        )
         if not body and not media_url:
             return Response({"detail": "Message body or media is required"}, status=400)
         if len(body) > 4000:
@@ -849,7 +891,7 @@ class ChatMessageListCreateView(APIView):
         if client_id:
             existing = ChatMessage.objects.filter(
                 conversation=conv, sender=request.user, client_id=client_id
-            ).select_related("sender").first()
+            ).select_related("sender", "reply_to", "reply_to__sender").first()
             if existing:
                 return Response(message_dict(existing, request.user.id))
 
@@ -861,7 +903,12 @@ class ChatMessageListCreateView(APIView):
             media_url=media_url,
             media_type=media_type,
             mentions=mentions,
+            reply_to=reply_to,
             client_id=client_id,
+        )
+        msg = (
+            ChatMessage.objects.select_related("sender", "reply_to", "reply_to__sender")
+            .get(id=msg.id)
         )
         Conversation.objects.filter(id=conv.id).update(updated_at=timezone.now())
         ConversationMember.objects.filter(

@@ -75,6 +75,7 @@ export const ChatProvider = ({ children }) => {
         media_url: extra.media_url || "",
         media_type: extra.media_type || "",
         mentions: Array.isArray(extra.mentions) ? extra.mentions : [],
+        reply_to_id: extra.reply_to_id || null,
       }),
     [send]
   );

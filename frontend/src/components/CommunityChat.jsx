@@ -3,6 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import LazyEmojiPicker from "./LazyEmojiPicker";
 import {
   IoArrowBack,
+  IoArrowUndoOutline,
   IoAttachOutline,
   IoChatbubblesOutline,
   IoCheckmark,
@@ -181,6 +182,17 @@ function formatRecordingClock(totalSeconds) {
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
+function replySnippet(msg) {
+  if (!msg) return "";
+  if (msg.is_deleted) return "Original message deleted";
+  if (msg.body) return msg.body;
+  if (msg.media_type === "image") return "Photo";
+  if (msg.media_type === "video") return "Video";
+  if (msg.media_type === "audio") return "Audio";
+  if (msg.media_url) return "Attachment";
+  return "Message";
+}
+
 function previewLabel(msg) {
   if (!msg) return "Say hello";
   if (msg.body) return msg.body;
@@ -291,6 +303,7 @@ const CommunityChat = () => {
   const [incomingCall, setIncomingCall] = useState(null);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [replyingTo, setReplyingTo] = useState(null);
 
   const bottomRef = useRef(null);
   const draftRef = useRef(null);
@@ -585,6 +598,7 @@ const CommunityChat = () => {
     setShowEmoji(false);
     setMentionOpen(false);
     setPendingMentions([]);
+    setReplyingTo(null);
     setPendingMedia((prev) => {
       if (prev?.preview?.startsWith("blob:")) URL.revokeObjectURL(prev.preview);
       return null;
@@ -1101,27 +1115,54 @@ const CommunityChat = () => {
     requestAnimationFrame(() => draftRef.current?.focus());
   };
 
-  const onPickMedia = async (event) => {
-    const file = event.target.files?.[0];
-    event.target.value = "";
+  const attachMediaFile = (file) => {
     if (!file) return;
     if (file.size > 25 * 1024 * 1024) {
+      toast.error("File is too large (max 25MB).");
       return;
     }
     unlockNotificationSound();
-    if (pendingMedia?.preview?.startsWith("blob:")) {
-      URL.revokeObjectURL(pendingMedia.preview);
-    }
     const kind = mediaKindFromFile(file);
-    setPendingMedia({
-      file,
-      kind,
-      preview:
-        kind === "image" || kind === "audio"
-          ? URL.createObjectURL(file)
-          : "",
-      name: file.name,
+    setPendingMedia((prev) => {
+      if (prev?.preview?.startsWith("blob:")) {
+        URL.revokeObjectURL(prev.preview);
+      }
+      return {
+        file,
+        kind,
+        preview:
+          kind === "image" || kind === "audio"
+            ? URL.createObjectURL(file)
+            : "",
+        name: file.name || (kind === "image" ? "pasted-image.png" : "attachment"),
+      };
     });
+  };
+
+  const onPickMedia = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    attachMediaFile(file);
+  };
+
+  const onPasteDraft = (event) => {
+    const items = event.clipboardData?.items;
+    if (!items?.length) return;
+    for (const item of items) {
+      if (!item?.type?.startsWith("image/")) continue;
+      const file = item.getAsFile();
+      if (!file) continue;
+      event.preventDefault();
+      const ext = (item.type.split("/")[1] || "png").replace("jpeg", "jpg");
+      const named =
+        file.name && file.name !== "image.png"
+          ? file
+          : new File([file], `pasted-image-${Date.now()}.${ext}`, {
+              type: item.type || file.type || "image/png",
+            });
+      attachMediaFile(named);
+      return;
+    }
   };
 
   const clearPendingMedia = () => {
@@ -1129,6 +1170,29 @@ const CommunityChat = () => {
       URL.revokeObjectURL(pendingMedia.preview);
     }
     setPendingMedia(null);
+  };
+
+  const startReplyTo = (msg) => {
+    if (!msg || msg.is_deleted) return;
+    const id = msg.id;
+    if (!id || String(id).startsWith("tmp_") || Number(id) <= 0) return;
+    unlockNotificationSound();
+    setReplyingTo(msg);
+    setShowEmoji(false);
+    requestAnimationFrame(() => draftRef.current?.focus());
+  };
+
+  const clearReplyTo = () => setReplyingTo(null);
+
+  const scrollToMessage = (messageId) => {
+    if (!messageId) return;
+    const el = document.getElementById(`chat-msg-${messageId}`);
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    el.classList.add("ring-2", "ring-primary");
+    window.setTimeout(() => {
+      el.classList.remove("ring-2", "ring-primary");
+    }, 1200);
   };
 
   const stopRecordingTracks = () => {
@@ -1323,6 +1387,9 @@ const CommunityChat = () => {
     const mentions = pendingMentions.filter((m) =>
       body.toLowerCase().includes(`@${(m.username || "").toLowerCase()}`)
     );
+    const replyTarget = replyingTo;
+    const replyToId =
+      replyTarget?.id && Number(replyTarget.id) > 0 ? Number(replyTarget.id) : null;
     const optimistic = {
       id: `tmp_${clientId}`,
       conversation_id: activeId,
@@ -1330,6 +1397,17 @@ const CommunityChat = () => {
       media_url,
       media_type,
       mentions,
+      reply_to_id: replyToId,
+      reply_to: replyTarget
+        ? {
+            id: replyTarget.id,
+            body: replyTarget.body || "",
+            media_url: replyTarget.media_url || "",
+            media_type: replyTarget.media_type || "",
+            is_deleted: Boolean(replyTarget.is_deleted),
+            sender: replyTarget.sender || null,
+          }
+        : null,
       client_id: clientId,
       created_at: new Date().toISOString(),
       sender: {
@@ -1347,6 +1425,7 @@ const CommunityChat = () => {
     setDraft("");
     setPendingMentions([]);
     clearPendingMedia();
+    clearReplyTo();
     setShowEmoji(false);
     setMentionOpen(false);
     if (typingActiveRef.current && sendTyping) {
@@ -1354,7 +1433,12 @@ const CommunityChat = () => {
       sendTyping(activeId, false);
     }
 
-    const extra = { media_url, media_type, mentions };
+    const extra = {
+      media_url,
+      media_type,
+      mentions,
+      reply_to_id: replyToId,
+    };
     const viaSocket = sendMessage?.(activeId, body, clientId, extra);
     if (!viaSocket) {
       try {
@@ -1773,17 +1857,38 @@ const CommunityChat = () => {
                   {group.items.map((msg) => {
                     const mine =
                       msg.is_mine || Number(msg.sender?.id) === Number(me?.id);
+                    const quoted = msg.reply_to;
+                    const mediaOnly = Boolean(msg.media_url && !msg.body && !quoted);
+                    const canReply =
+                      Boolean(msg.id) &&
+                      !String(msg.id).startsWith("tmp_") &&
+                      Number(msg.id) > 0 &&
+                      !msg.is_deleted;
                     return (
                       <div
                         key={msg.id || msg.client_id}
-                        className={`flex ${mine ? "justify-end" : "justify-start"}`}
+                        id={msg.id ? `chat-msg-${msg.id}` : undefined}
+                        className={`group/msg flex items-end gap-1 ${
+                          mine ? "justify-end" : "justify-start"
+                        }`}
                       >
+                        {mine && canReply ? (
+                          <button
+                            type="button"
+                            onClick={() => startReplyTo(msg)}
+                            className="mb-1 min-h-8 min-w-8 flex items-center justify-center text-muted opacity-100 sm:opacity-0 sm:group-hover/msg:opacity-100 hover:text-foreground transition-opacity"
+                            aria-label="Reply"
+                            title="Reply"
+                          >
+                            <IoArrowUndoOutline size={16} />
+                          </button>
+                        ) : null}
                         <div
                           className={`max-w-[85%] sm:max-w-[70%] overflow-hidden border ${
                             mine
                               ? "bg-primary text-primary-foreground border-primary"
                               : "bg-surface text-foreground border-border"
-                          } ${msg.media_url && !msg.body ? "p-0" : "px-3 py-2"}`}
+                          } ${mediaOnly ? "p-0" : "px-3 py-2"}`}
                         >
                           {!mine && activeConversation.conversation_type !== "dm" ? (
                             msg.sender?.id ? (
@@ -1791,7 +1896,7 @@ const CommunityChat = () => {
                                 to={profilePath(msg.sender.id)}
                                 className={`text-[11px] font-medium mb-0.5 block hover:underline px-3 pt-2 ${
                                   mine ? "text-primary-foreground/80" : "text-primary"
-                                } ${msg.media_url && !msg.body ? "" : "px-0 pt-0"}`}
+                                } ${mediaOnly ? "" : "px-0 pt-0"}`}
                                 onClick={(e) => e.stopPropagation()}
                               >
                                 {displayName(msg.sender)}
@@ -1805,6 +1910,35 @@ const CommunityChat = () => {
                                 {displayName(msg.sender)}
                               </p>
                             )
+                          ) : null}
+                          {quoted ? (
+                            <button
+                              type="button"
+                              onClick={() => scrollToMessage(quoted.id)}
+                              className={`mb-1.5 w-full text-left border-l-2 px-2 py-1 ${
+                                mine
+                                  ? "border-primary-foreground/70 bg-black/15"
+                                  : "border-primary bg-background/80"
+                              }`}
+                              style={{ borderRadius: 4 }}
+                            >
+                              <span
+                                className={`block text-[11px] font-semibold truncate ${
+                                  mine ? "text-primary-foreground" : "text-primary"
+                                }`}
+                              >
+                                {displayName(quoted.sender)}
+                              </span>
+                              <span
+                                className={`block text-[11px] truncate ${
+                                  mine
+                                    ? "text-primary-foreground/80"
+                                    : "text-muted"
+                                }`}
+                              >
+                                {replySnippet(quoted)}
+                              </span>
+                            </button>
                           ) : null}
                           {msg.media_url ? (
                             <div
@@ -1951,7 +2085,7 @@ const CommunityChat = () => {
                           ) : null}
                           <p
                             className={`mt-1 flex items-center justify-end gap-1 text-[10px] ${
-                              msg.media_url && !msg.body ? "px-3 pb-2" : ""
+                              mediaOnly ? "px-3 pb-2" : ""
                             } ${mine ? "text-primary-foreground/80" : "text-muted"}`}
                           >
                             <span>{formatClock(msg.created_at)}</span>
@@ -1967,6 +2101,17 @@ const CommunityChat = () => {
                             ) : null}
                           </p>
                         </div>
+                        {!mine && canReply ? (
+                          <button
+                            type="button"
+                            onClick={() => startReplyTo(msg)}
+                            className="mb-1 min-h-8 min-w-8 flex items-center justify-center text-muted opacity-100 sm:opacity-0 sm:group-hover/msg:opacity-100 hover:text-foreground transition-opacity"
+                            aria-label="Reply"
+                            title="Reply"
+                          >
+                            <IoArrowUndoOutline size={16} />
+                          </button>
+                        ) : null}
                       </div>
                     );
                   })}
@@ -2068,7 +2213,36 @@ const CommunityChat = () => {
             <form
               onSubmit={submitMessage}
               className="shrink-0 border-t border-border bg-surface p-3 space-y-2"
+              onPaste={onPasteDraft}
             >
+              {replyingTo ? (
+                <div className="flex items-start gap-2 border border-border bg-background px-3 py-2">
+                  <span className="mt-0.5 text-primary shrink-0">
+                    <IoArrowUndoOutline size={16} />
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => scrollToMessage(replyingTo.id)}
+                    className="min-w-0 flex-1 text-left border-l-2 border-primary pl-2"
+                  >
+                    <span className="block text-xs font-semibold text-primary truncate">
+                      {displayName(replyingTo.sender)}
+                    </span>
+                    <span className="block text-xs text-muted truncate">
+                      {replySnippet(replyingTo)}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={clearReplyTo}
+                    className="min-h-8 min-w-8 flex items-center justify-center text-muted"
+                    aria-label="Cancel reply"
+                  >
+                    <IoClose size={16} />
+                  </button>
+                </div>
+              ) : null}
+
               {pendingMedia ? (
                 <div className="flex items-center gap-3 border border-border bg-background px-3 py-2">
                   {pendingMedia.kind === "audio" && pendingMedia.preview ? (
@@ -2215,6 +2389,7 @@ const CommunityChat = () => {
                     rows={1}
                     value={draft}
                     onChange={(e) => onDraftChange(e.target.value)}
+                    onPaste={onPasteDraft}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" && !e.shiftKey) {
                         e.preventDefault();
@@ -2223,9 +2398,14 @@ const CommunityChat = () => {
                       if (e.key === "Escape") {
                         setShowEmoji(false);
                         setMentionOpen(false);
+                        if (replyingTo) clearReplyTo();
                       }
                     }}
-                    placeholder="Type a message · @ to mention"
+                    placeholder={
+                      replyingTo
+                        ? `Reply to ${displayName(replyingTo.sender)}…`
+                        : "Type a message · @ to mention"
+                    }
                     className="flex-1 min-h-11 max-h-32 resize-none border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-primary"
                   />
                   <button

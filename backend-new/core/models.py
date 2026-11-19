@@ -2150,6 +2150,13 @@ class ChatMessage(models.Model):
         max_length=16, choices=MEDIA_TYPE_CHOICES, blank=True, default=""
     )
     mentions = models.JSONField(default=list, blank=True)
+    reply_to = models.ForeignKey(
+        "self",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="replies",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     edited_at = models.DateTimeField(null=True, blank=True)
     is_deleted = models.BooleanField(default=False)
