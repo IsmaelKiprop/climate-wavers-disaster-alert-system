@@ -1020,7 +1020,7 @@ const CommunityChat = () => {
   const mentionCandidates = useMemo(() => {
     if (!mentionOpen) return [];
     const q = mentionQuery.toLowerCase();
-    return (roomMembers || [])
+    const people = (roomMembers || [])
       .filter((person) => Number(person.id) !== Number(me?.id))
       .filter((person) => {
         if (!q) return true;
@@ -1028,6 +1028,19 @@ const CommunityChat = () => {
         return hay.includes(q);
       })
       .slice(0, 8);
+    const allOption =
+      !q || "all".startsWith(q)
+        ? [
+            {
+              id: 0,
+              username: "all",
+              first_name: "Everyone",
+              last_name: "",
+              kind: "all",
+            },
+          ]
+        : [];
+    return [...allOption, ...people];
   }, [mentionOpen, mentionQuery, roomMembers, me?.id]);
 
   const giftSuggestions = useMemo(() => {
@@ -2629,23 +2642,31 @@ const CommunityChat = () => {
                   style={{ borderRadius: 8 }}
                 >
                   {mentionCandidates.map((person) => (
-                    <li key={person.id}>
+                    <li key={`${person.kind || "user"}-${person.id}-${person.username}`}>
                       <button
                         type="button"
                         onClick={() => insertMention(person)}
                         className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-surface"
                       >
-                        <img
-                          src={avatarUrl(person)}
-                          alt=""
-                          className="h-7 w-7 rounded-full object-cover"
-                        />
+                        {person.kind === "all" ? (
+                          <span className="h-7 w-7 rounded-full bg-primary text-primary-foreground inline-flex items-center justify-center shrink-0">
+                            <IoPeopleOutline size={14} />
+                          </span>
+                        ) : (
+                          <img
+                            src={avatarUrl(person)}
+                            alt=""
+                            className="h-7 w-7 rounded-full object-cover"
+                          />
+                        )}
                         <span className="min-w-0">
                           <span className="block text-sm font-medium truncate">
-                            {displayName(person)}
+                            {person.kind === "all" ? "Everyone" : displayName(person)}
                           </span>
                           <span className="block text-xs text-muted truncate">
-                            @{person.username}
+                            {person.kind === "all"
+                              ? "@all · notify room (app + email)"
+                              : `@${person.username}`}
                           </span>
                         </span>
                       </button>

@@ -130,6 +130,7 @@ class PostViewSet(viewsets.ModelViewSet):
         """
         Override perform_create to save the post and extract hashtags from the content.
         """
+        from . import social_email
         from .signals import send_to_websocket
 
         mentions_raw = self.request.data.get("mentions", [])
@@ -140,15 +141,27 @@ class PostViewSet(viewsets.ModelViewSet):
                 mentions_raw = []
         mentions = []
         seen = set()
+        mention_all = False
+        content_text = str(
+            self.request.data.get("content")
+            or serializer.validated_data.get("content")
+            or ""
+        )
+        if re.search(r"(?:^|\s)@all\b", content_text, flags=re.IGNORECASE):
+            mention_all = True
         if isinstance(mentions_raw, list):
             for item in mentions_raw[:30]:
                 if not isinstance(item, dict):
+                    continue
+                kind = str(item.get("kind") or "user").lower()
+                username = str(item.get("username") or "").strip().lower()
+                if kind == "all" or username == "all":
+                    mention_all = True
                     continue
                 try:
                     mid = int(item.get("id"))
                 except (TypeError, ValueError):
                     continue
-                kind = str(item.get("kind") or "user").lower()
                 if kind not in {"user", "group"}:
                     kind = "user"
                 key = f"{kind}:{mid}"
@@ -165,12 +178,23 @@ class PostViewSet(viewsets.ModelViewSet):
                         "slug": str(item.get("slug") or "")[:140],
                     }
                 )
+        if mention_all:
+            mentions.append(
+                {
+                    "id": 0,
+                    "username": "all",
+                    "first_name": "Everyone",
+                    "last_name": "",
+                    "kind": "all",
+                    "slug": "",
+                }
+            )
 
         post = serializer.save(user=self.request.user, mentions=mentions)
         post.hashtags = post.extract_hashtags(post.content)
         post.save(update_fields=["hashtags", "updated_at"])
 
-        # Notify tagged people (skip groups / self).
+        # Notify tagged people / @all (in-app + email). Skip groups / self.
         try:
             User = get_user_model()
             actor = self.request.user
@@ -180,21 +204,39 @@ class PostViewSet(viewsets.ModelViewSet):
             )
             preview = (post.content or "")[:160]
             ct = ContentType.objects.get_for_model(Post)
-            user_ids = [
-                item["id"]
-                for item in mentions
-                if item.get("kind") == "user"
-                and item.get("id")
-                and item.get("id") != getattr(actor, "id", None)
-            ]
-            recipients = {
-                u.id: u for u in User.objects.filter(id__in=user_ids)
-            }
-            for uid in user_ids:
-                recipient = recipients.get(uid)
-                if not recipient:
-                    continue
+            visibility = (post.visibility or "Everyone").strip()
+
+            if mention_all:
+                qs = User.objects.exclude(id=actor.id).filter(is_active=True)
+                if visibility == "Friends":
+                    friend_ids = set(
+                        Follow.objects.filter(follower=actor).values_list(
+                            "following_id", flat=True
+                        )
+                    ) | set(
+                        Follow.objects.filter(following=actor).values_list(
+                            "follower_id", flat=True
+                        )
+                    )
+                    qs = qs.filter(id__in=friend_ids)
+                # Safety cap so one post cannot blast unlimited mail.
+                recipients = list(qs.order_by("-date_joined")[:300])
+                notice_text = f"{display} mentioned everyone in a post"
+                email_subject = f"{display} tagged @all on Climate Wavers"
+            else:
+                user_ids = [
+                    item["id"]
+                    for item in mentions
+                    if item.get("kind") == "user"
+                    and item.get("id")
+                    and item.get("id") != getattr(actor, "id", None)
+                ]
+                recipients = list(User.objects.filter(id__in=user_ids, is_active=True))
                 notice_text = f"{display} mentioned you in a post"
+                email_subject = f"{display} mentioned you on Climate Wavers"
+
+            post_link = social_email.post_url(post.id)
+            for recipient in recipients:
                 notification = Notification.objects.create(
                     user=recipient,
                     notification_type="mention",
@@ -211,7 +253,15 @@ class PostViewSet(viewsets.ModelViewSet):
                     content={
                         "post_id": post.id,
                         "content": preview,
+                        "mention_all": mention_all,
                     },
+                )
+                social_email.send_social_email(
+                    recipient,
+                    subject=email_subject,
+                    message=f"{notice_text}: {preview}",
+                    link=post_link,
+                    headline="You were mentioned on Climate Wavers",
                 )
         except Exception:
             pass

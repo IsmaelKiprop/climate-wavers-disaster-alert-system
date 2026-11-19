@@ -455,7 +455,22 @@ const ModernPostCreator = ({ type = "post", postId, parentId, closeModal }) => {
           .filter((g) => g.username);
       }
 
-      setMentionResults([...users, ...groups].slice(0, 12));
+      const qLower = q.toLowerCase();
+      const allOption =
+        !qLower || "all".startsWith(qLower)
+          ? [
+              {
+                id: 0,
+                username: "all",
+                first_name: "Everyone",
+                last_name: "",
+                name: "Everyone on Climate Wavers",
+                kind: "all",
+              },
+            ]
+          : [];
+
+      setMentionResults([...allOption, ...users, ...groups].slice(0, 12));
     } catch {
       if (reqId === mentionSearchRef.current) setMentionResults([]);
     } finally {
@@ -498,11 +513,12 @@ const ModernPostCreator = ({ type = "post", postId, parentId, closeModal }) => {
     }
     setValue("content", next, { shouldDirty: true });
     setPendingMentions((prev) => {
+      const kind = person.kind || "user";
       if (
         prev.some(
           (m) =>
-            Number(m.id) === Number(person.id) &&
-            (m.kind || "user") === (person.kind || "user")
+            (m.kind || "user") === kind &&
+            (kind === "all" || Number(m.id) === Number(person.id))
         )
       ) {
         return prev;
@@ -510,11 +526,11 @@ const ModernPostCreator = ({ type = "post", postId, parentId, closeModal }) => {
       return [
         ...prev,
         {
-          id: person.id,
+          id: kind === "all" ? 0 : person.id,
           username: handle,
           first_name: person.first_name || person.name || "",
           last_name: person.last_name || "",
-          kind: person.kind || "user",
+          kind,
           slug: person.slug || "",
           href: person.href || "",
         },
@@ -574,11 +590,24 @@ const ModernPostCreator = ({ type = "post", postId, parentId, closeModal }) => {
       formData.append('content', data.content);
       formData.append('visibility', data.visibility || 'Everyone');
       formData.append('font_family', fontFamily || DEFAULT_POST_FONT);
-      const mentionsForPost = pendingMentions.filter((m) =>
-        String(data.content || "")
-          .toLowerCase()
-          .includes(`@${String(m.username || "").toLowerCase()}`)
-      );
+      const contentLower = String(data.content || "").toLowerCase();
+      const mentionsForPost = pendingMentions.filter((m) => {
+        const handle = String(m.username || "").toLowerCase();
+        if (m.kind === "all" || handle === "all") {
+          return /(?:^|\s)@all\b/.test(contentLower);
+        }
+        return handle && contentLower.includes(`@${handle}`);
+      });
+      if (/(?:^|\s)@all\b/.test(contentLower) && !mentionsForPost.some((m) => m.kind === "all")) {
+        mentionsForPost.push({
+          id: 0,
+          username: "all",
+          first_name: "Everyone",
+          last_name: "",
+          kind: "all",
+          slug: "",
+        });
+      }
       formData.append("mentions", JSON.stringify(mentionsForPost));
 
       if (data.location) {
@@ -816,13 +845,17 @@ const ModernPostCreator = ({ type = "post", postId, parentId, closeModal }) => {
                 ) : null}
                 <ul>
                   {mentionResults.map((person) => (
-                    <li key={`${person.kind}-${person.id}`}>
+                    <li key={`${person.kind}-${person.id}-${person.username}`}>
                       <button
                         type="button"
                         onClick={() => insertMention(person)}
                         className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-surface"
                       >
-                        {person.kind === "group" ? (
+                        {person.kind === "all" ? (
+                          <span className="h-8 w-8 rounded-full bg-primary text-primary-foreground inline-flex items-center justify-center shrink-0">
+                            <IoPeopleOutline size={18} />
+                          </span>
+                        ) : person.kind === "group" ? (
                           <span className="h-8 w-8 rounded-full bg-primary/15 text-primary inline-flex items-center justify-center shrink-0">
                             <IoPeopleCircleOutline size={18} />
                           </span>
@@ -835,14 +868,18 @@ const ModernPostCreator = ({ type = "post", postId, parentId, closeModal }) => {
                         )}
                         <span className="min-w-0">
                           <span className="block text-sm font-medium truncate">
-                            {person.kind === "group"
-                              ? person.name || displayPersonName(person)
-                              : displayPersonName(person)}
+                            {person.kind === "all"
+                              ? "Everyone"
+                              : person.kind === "group"
+                                ? person.name || displayPersonName(person)
+                                : displayPersonName(person)}
                           </span>
                           <span className="block text-xs text-muted truncate">
-                            {person.kind === "group"
-                              ? `Group · @${person.username}`
-                              : `@${person.username}`}
+                            {person.kind === "all"
+                              ? "@all · notify everyone (app + email)"
+                              : person.kind === "group"
+                                ? `Group · @${person.username}`
+                                : `@${person.username}`}
                           </span>
                         </span>
                       </button>

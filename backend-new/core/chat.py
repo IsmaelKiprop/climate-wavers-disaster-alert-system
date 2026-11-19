@@ -139,24 +139,47 @@ def _email_chat_notice(recipient, *, subject, message, conversation_id):
 def notify_chat_mentions(msg, sender=None):
     """Create in-app (+ websocket + email) notifications for @mentioned users."""
     try:
-        mentions = msg.mentions or []
-        if not mentions:
-            return
+        import re
 
+        mentions = list(msg.mentions or [])
         sender = sender or msg.sender
         if not sender:
             return
 
+        body = msg.body or ""
+        mention_all = bool(
+            re.search(r"(?:^|\s)@all\b", body, flags=re.IGNORECASE)
+        ) or any(
+            (
+                isinstance(item, dict)
+                and (
+                    str(item.get("kind") or "").lower() == "all"
+                    or str(item.get("username") or "").lower() == "all"
+                )
+            )
+            for item in mentions
+        )
+
         mention_ids = []
-        for item in mentions:
-            try:
-                uid = int(item.get("id") if isinstance(item, dict) else item)
-            except (TypeError, ValueError, AttributeError):
-                continue
-            if uid == sender.id:
-                continue
-            if uid not in mention_ids:
-                mention_ids.append(uid)
+        if mention_all:
+            # Everyone in this conversation (except sender).
+            mention_ids = list(
+                ConversationMember.objects.filter(conversation_id=msg.conversation_id)
+                .exclude(user_id=sender.id)
+                .values_list("user_id", flat=True)[:300]
+            )
+        else:
+            if not mentions:
+                return
+            for item in mentions:
+                try:
+                    uid = int(item.get("id") if isinstance(item, dict) else item)
+                except (TypeError, ValueError, AttributeError):
+                    continue
+                if uid == sender.id or uid <= 0:
+                    continue
+                if uid not in mention_ids:
+                    mention_ids.append(uid)
         if not mention_ids:
             return
 
@@ -165,7 +188,7 @@ def notify_chat_mentions(msg, sender=None):
         from .models import Notification
         from .signals import send_to_websocket
 
-        recipients = list(User.objects.filter(id__in=mention_ids))
+        recipients = list(User.objects.filter(id__in=mention_ids, is_active=True))
         if not recipients:
             return
 
@@ -177,9 +200,19 @@ def notify_chat_mentions(msg, sender=None):
             "message_id": msg.id,
             "content": preview,
             "actor": user_public_dict(sender),
+            "mention_all": mention_all,
         }
         ct = ContentType.objects.get_for_model(ChatMessage)
-        notice_text = f"{display} mentioned you in chat"
+        notice_text = (
+            f"{display} mentioned everyone in chat"
+            if mention_all
+            else f"{display} mentioned you in chat"
+        )
+        email_subject = (
+            f"{display} tagged @all on Climate Wavers"
+            if mention_all
+            else f"{display} mentioned you on Climate Wavers"
+        )
 
         for recipient in recipients:
             notification = Notification.objects.create(
@@ -199,7 +232,7 @@ def notify_chat_mentions(msg, sender=None):
             )
             _email_chat_notice(
                 recipient,
-                subject=f"{display} mentioned you on Climate Wavers",
+                subject=email_subject,
                 message=f"{notice_text}: {preview}",
                 conversation_id=msg.conversation_id,
             )
