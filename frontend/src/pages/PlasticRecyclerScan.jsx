@@ -43,12 +43,16 @@ const PlasticRecyclerScan = () => {
   const [me, setMe] = useState(null);
 
   const videoRef = useRef(null);
+  const canvasRef = useRef(null);
   const streamRef = useRef(null);
   const rafRef = useRef(null);
   const detectorRef = useRef(null);
+  const jsQRRef = useRef(null);
   const lastScanRef = useRef("");
+  const scanActiveRef = useRef(false);
 
   const stopCamera = useCallback(() => {
+    scanActiveRef.current = false;
     if (rafRef.current) {
       cancelAnimationFrame(rafRef.current);
       rafRef.current = null;
@@ -56,6 +60,9 @@ const PlasticRecyclerScan = () => {
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
     }
     detectorRef.current = null;
     setScanning(false);
@@ -122,52 +129,117 @@ const PlasticRecyclerScan = () => {
   const scanOnly = Boolean(me?.scan_only);
   const partnerName = me?.partners?.[0]?.name;
 
+  const runDetectLoop = useCallback(() => {
+    const tick = async () => {
+      if (!scanActiveRef.current || !videoRef.current) return;
+      const video = videoRef.current;
+      if (video.readyState < 2) {
+        rafRef.current = requestAnimationFrame(tick);
+        return;
+      }
+      try {
+        let raw = "";
+        if (detectorRef.current) {
+          const codes = await detectorRef.current.detect(video);
+          raw = codes?.[0]?.rawValue || "";
+        } else if (jsQRRef.current && canvasRef.current) {
+          const canvas = canvasRef.current;
+          const w = Math.min(video.videoWidth || 480, 480);
+          const h = Math.min(video.videoHeight || 480, 480);
+          if (w > 0 && h > 0) {
+            canvas.width = w;
+            canvas.height = h;
+            const ctx = canvas.getContext("2d", { willReadFrequently: true });
+            ctx.drawImage(video, 0, 0, w, h);
+            const image = ctx.getImageData(0, 0, w, h);
+            const code = jsQRRef.current(image.data, w, h, {
+              inversionAttempts: "dontInvert",
+            });
+            raw = code?.data || "";
+          }
+        }
+        if (raw && raw !== lastScanRef.current) {
+          const parsed = parseBagIdFromScan(raw);
+          if (parsed) {
+            lastScanRef.current = raw;
+            toast.success(`Scanned ${parsed}`);
+            stopCamera();
+            applyBag(parsed);
+            return;
+          }
+        }
+      } catch {
+        /* keep scanning */
+      }
+      rafRef.current = requestAnimationFrame(tick);
+    };
+    rafRef.current = requestAnimationFrame(tick);
+  }, [applyBag, stopCamera]);
+
   const startCamera = async () => {
     setScanHint("");
     setError("");
-    if (!("BarcodeDetector" in window)) {
-      setScanHint(
-        "This browser can’t scan in-app. Use your phone camera on the bag QR, or type the Bag ID."
-      );
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setScanHint("Camera not available. Type the Bag ID, or open the bag QR with your phone camera.");
       return;
     }
+
     try {
-      const Detector = window.BarcodeDetector;
-      detectorRef.current = new Detector({ formats: ["qr_code"] });
+      // Mount <video> first, then attach the stream (avoids black preview on phones).
+      setScanning(true);
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: "environment" } },
+        video: {
+          facingMode: { ideal: "environment" },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
         audio: false,
       });
       streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-      }
-      setScanning(true);
 
-      const tick = async () => {
-        if (!detectorRef.current || !videoRef.current) return;
+      const video = videoRef.current;
+      if (!video) {
+        setScanHint("Camera view failed to load. Try again.");
+        stopCamera();
+        return;
+      }
+
+      video.setAttribute("playsinline", "true");
+      video.setAttribute("webkit-playsinline", "true");
+      video.muted = true;
+      video.srcObject = stream;
+      await video.play();
+
+      detectorRef.current = null;
+      jsQRRef.current = null;
+      if ("BarcodeDetector" in window) {
         try {
-          const codes = await detectorRef.current.detect(videoRef.current);
-          if (codes?.length) {
-            const raw = codes[0].rawValue || "";
-            if (raw && raw !== lastScanRef.current) {
-              lastScanRef.current = raw;
-              const parsed = parseBagIdFromScan(raw);
-              if (parsed) {
-                toast.success(`Scanned ${parsed}`);
-                stopCamera();
-                applyBag(parsed);
-                return;
-              }
-            }
-          }
+          detectorRef.current = new window.BarcodeDetector({ formats: ["qr_code"] });
         } catch {
-          /* keep scanning */
+          detectorRef.current = null;
         }
-        rafRef.current = requestAnimationFrame(tick);
-      };
-      rafRef.current = requestAnimationFrame(tick);
+      }
+      if (!detectorRef.current) {
+        try {
+          const mod = await import("jsqr");
+          jsQRRef.current = mod.default || mod;
+          setScanHint("Point the camera at the bag QR.");
+        } catch {
+          setScanHint(
+            "Live QR decode isn’t supported here — use your phone camera app on the bag QR, or type the Bag ID."
+          );
+        }
+      } else {
+        setScanHint("Point the camera at the bag QR.");
+      }
+
+      lastScanRef.current = "";
+      scanActiveRef.current = true;
+      if (detectorRef.current || jsQRRef.current) {
+        runDetectLoop();
+      }
     } catch (err) {
       setScanHint(err?.message || "Camera permission denied");
       stopCamera();
@@ -256,14 +328,16 @@ const PlasticRecyclerScan = () => {
             ) : null}
           </div>
           {scanHint ? <p className="text-xs text-amber-600 dark:text-amber-300">{scanHint}</p> : null}
-          {scanning ? (
+          <div className={scanning ? "relative" : "hidden"}>
             <video
               ref={videoRef}
               className="w-full aspect-square object-cover bg-black"
               playsInline
               muted
+              autoPlay
             />
-          ) : null}
+            <canvas ref={canvasRef} className="hidden" aria-hidden="true" />
+          </div>
         </div>
 
         <form onSubmit={onManualLookup} className="space-y-2 border border-border p-4">

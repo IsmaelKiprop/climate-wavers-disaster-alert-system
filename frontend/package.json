@@ -38,6 +38,7 @@
     "javascript-time-ago": "^2.5.10",
     "js-cookie": "^3.0.5",
     "jspdf": "^3.0.3",
+    "jsqr": "^1.4.0",
     "leaflet": "^1.9.4",
     "loader-utils": "3.2.1",
     "minimatch": "^3.0.5",
