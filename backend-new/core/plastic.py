@@ -147,6 +147,19 @@ def _invite_urls(token: str) -> dict:
     return {"invite_path": path, "invite_url": invite_url}
 
 
+def _safe_email(value: str) -> str:
+    email = str(value or "").strip()[:254]
+    if not email or "@" not in email:
+        return ""
+    try:
+        from django.core.validators import validate_email
+
+        validate_email(email)
+        return email
+    except Exception:
+        return ""
+
+
 def _issue_certificate(
     *,
     project: PlasticProject,
@@ -164,7 +177,7 @@ def _issue_certificate(
         sponsorship=sponsorship,
         kg=_money(kg),
         holder_name=(holder_name or "")[:200],
-        holder_email=(holder_email or "")[:254],
+        holder_email=_safe_email(holder_email),
     )
     if sponsorship is not None:
         sponsorship.certificate_id = code
@@ -173,6 +186,52 @@ def _issue_certificate(
             update_fields=["certificate_id", "certificate_issued_at"]
         )
     return cert
+
+
+def _ensure_recovery_certificate(recovery: PlasticRecovery) -> PlasticCertificate | None:
+    """Issue a certificate if intake is done but none exists yet."""
+    existing = recovery.certificates.order_by("-issued_at").first()
+    if existing:
+        return existing
+    if recovery.status != "intake_confirmed":
+        return None
+    kg = recovery.kg_verified or recovery.kg_claimed
+    if _money(kg) <= 0:
+        return None
+    holder = ""
+    email = ""
+    if recovery.submitted_by_id:
+        submitter = recovery.submitted_by
+        holder = (
+            (submitter.get_full_name() if submitter else "")
+            or (submitter.username if submitter else "")
+        )
+        email = (submitter.email if submitter else "") or ""
+    try:
+        return _issue_certificate(
+            project=recovery.project,
+            kg=kg,
+            holder_name=holder,
+            holder_email=email,
+            recovery=recovery,
+        )
+    except Exception:
+        logger.exception(
+            "Plastic certificate backfill failed for bag %s", recovery.bag_id
+        )
+        try:
+            return _issue_certificate(
+                project=recovery.project,
+                kg=kg,
+                holder_name=holder or "Climate Wavers recovery",
+                holder_email="",
+                recovery=recovery,
+            )
+        except Exception:
+            logger.exception(
+                "Plastic certificate retry failed for bag %s", recovery.bag_id
+            )
+            return None
 
 
 # ---------- serializers ----------
@@ -695,7 +754,7 @@ class PlasticIntakeScanView(APIView):
                 )
                 if recovery.status == "intake_confirmed":
                     payload = PlasticRecoverySerializer(recovery).data
-                    cert = recovery.certificates.order_by("-issued_at").first()
+                    cert = _ensure_recovery_certificate(recovery)
                     payload["certificate_code"] = cert.code if cert else ""
                     payload["points_earned"] = 0
                     payload["project_recovered_kg"] = float(
@@ -766,30 +825,7 @@ class PlasticIntakeScanView(APIView):
                         status="cleared", cleared_at=timezone.now()
                     )
 
-                cert = None
-                try:
-                    if not recovery.certificates.exists():
-                        holder = ""
-                        email = ""
-                        if recovery.submitted_by_id:
-                            submitter = recovery.submitted_by
-                            holder = (
-                                (submitter.get_full_name() if submitter else "")
-                                or (submitter.username if submitter else "")
-                            )
-                            email = (submitter.email if submitter else "") or ""
-                        cert = _issue_certificate(
-                            project=project,
-                            kg=kg,
-                            holder_name=holder,
-                            holder_email=email,
-                            recovery=recovery,
-                        )
-                except Exception:
-                    logger.exception(
-                        "Plastic certificate issue failed for bag %s", recovery.bag_id
-                    )
-                    cert = None
+                cert = _ensure_recovery_certificate(recovery)
 
                 _notify(
                     recovery.submitted_by,
@@ -797,12 +833,7 @@ class PlasticIntakeScanView(APIView):
                     recovery,
                 )
 
-                certificate_code = ""
-                if cert:
-                    certificate_code = cert.code
-                else:
-                    existing = recovery.certificates.order_by("-issued_at").first()
-                    certificate_code = existing.code if existing else ""
+                certificate_code = cert.code if cert else ""
 
                 payload = PlasticRecoverySerializer(recovery).data
                 payload["certificate_code"] = certificate_code
@@ -1260,8 +1291,10 @@ class PlasticBagLookupView(APIView):
             data["can_intake"] = recovery.status in ("cbo_verified", "submitted")
         else:
             data["can_intake"] = recovery.status == "cbo_verified"
-        cert = recovery.certificates.order_by("-issued_at").first()
+        cert = _ensure_recovery_certificate(recovery)
         data["certificate_code"] = cert.code if cert else ""
+        if cert:
+            data["verify_url"] = f"/verify/plastic/{cert.code}"
         partner = _recycler_partner_for_project(request.user, recovery.project)
         data["scanner_recycler_id"] = partner.id if partner else None
         data["scan_only"] = bool(partner) and not is_cbo
