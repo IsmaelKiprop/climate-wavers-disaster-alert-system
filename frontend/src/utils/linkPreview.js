@@ -97,5 +97,43 @@ export async function resolveLocalLinkPreview(url) {
     }
   }
 
-  return null;
+  const path = (parsed.pathname || "/").replace(/\/+$/, "") || "/";
+  const pathPreviews = {
+    "/": {
+      title: "Climate Wavers",
+      description:
+        "Community climate alerts, chats, tree gifts, and local action — built with FlowOps Africa.",
+    },
+    "/plastic-pulse": {
+      title: "Plastic Pulse · Climate Wavers",
+      description: "Partner onboarding for plastic recovery and recycling on Climate Wavers.",
+    },
+    "/app": {
+      title: "Climate Wavers app",
+      description: "Open your feed, chats, alerts, and tree projects on Climate Wavers.",
+    },
+    "/about": {
+      title: "About Climate Wavers",
+      description: "Learn how Climate Wavers connects communities for climate action.",
+    },
+  };
+  const known = pathPreviews[path];
+  if (known) {
+    return {
+      url: `${SITE.url}${path === "/" ? "" : path}`,
+      title: known.title,
+      description: known.description,
+      image: `${SITE.url}/og-image.jpg`,
+      siteName: "Climate Wavers",
+    };
+  }
+
+  // Any other page on our domain still gets a branded card.
+  return {
+    url: parsed.href,
+    title: "Climate Wavers",
+    description: "Open this page on Climate Wavers.",
+    image: `${SITE.url}/og-image.jpg`,
+    siteName: "Climate Wavers",
+  };
 }
