@@ -1,8 +1,8 @@
 import { useForm } from "react-hook-form";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { endpoints } from "../utils/endpoints";
-import { getUser, getAuthToken } from "../utils/factory";
+import { getUser, getAuthToken, avatarUrl } from "../utils/factory";
 import { uploadFiles } from "../services/upload.service";
 import { 
   IoSend, 
@@ -17,7 +17,9 @@ import {
   IoVideocamOutline,
   IoEarthOutline,
   IoPeopleOutline,
+  IoPeopleCircleOutline,
   IoTextOutline,
+  IoAtOutline,
 } from "react-icons/io5";
 import { toast } from "react-toastify";
 import { env } from "../config/env";
@@ -28,6 +30,7 @@ import {
 } from "../utils/formatLocation";
 import PostFontPicker from "./PostFontPicker";
 import PostMediaCarousel from "./PostMediaCarousel";
+import ChatLinkPreview from "./ChatLinkPreview";
 import { DEFAULT_POST_FONT, postFontStyle } from "../utils/postFonts";
 import {
   createMediaItem,
@@ -35,6 +38,20 @@ import {
   revokeMediaItems,
 } from "../utils/postMedia";
 import UserAvatar from "./UserAvatar";
+
+function displayPersonName(person) {
+  if (!person) return "Member";
+  const full = `${person.first_name || ""} ${person.last_name || ""}`.trim();
+  return full || person.username || person.name || "Member";
+}
+
+function unwrapList(payload) {
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload?.results)) return payload.results;
+  if (Array.isArray(payload?.groups)) return payload.groups;
+  if (Array.isArray(payload?.data)) return payload.data;
+  return [];
+}
 
 const MAX_MEDIA = 10;
 
@@ -56,12 +73,19 @@ const ModernPostCreator = ({ type = "post", postId, parentId, closeModal }) => {
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showLocationPicker, setShowLocationPicker] = useState(false);
   const [showFontPicker, setShowFontPicker] = useState(false);
+  const [showMentionPicker, setShowMentionPicker] = useState(false);
   const [composerOpen, setComposerOpen] = useState(false);
   const [selectedLocation, setSelectedLocation] = useState(null);
   const [locationAddress, setLocationAddress] = useState(null);
   const [fontFamily, setFontFamily] = useState(DEFAULT_POST_FONT);
+  const [pendingMentions, setPendingMentions] = useState([]);
+  const [mentionOpen, setMentionOpen] = useState(false);
+  const [mentionQuery, setMentionQuery] = useState("");
+  const [mentionResults, setMentionResults] = useState([]);
+  const [mentionLoading, setMentionLoading] = useState(false);
   const mediaInputRef = useRef(null);
   const textareaRef = useRef(null);
+  const mentionSearchRef = useRef(0);
   const content = watch("content", "");
   const visibility = watch("visibility", "Everyone");
   const displayName =
@@ -72,6 +96,8 @@ const ModernPostCreator = ({ type = "post", postId, parentId, closeModal }) => {
     composerOpen ||
     Boolean(content?.trim()) ||
     Boolean(mediaItems.length || audioPreview || selectedLocation);
+
+  const taggedChips = useMemo(() => pendingMentions.slice(0, 8), [pendingMentions]);
 
   useEffect(() => {
     const sync = () => setUserState(getUser() || null);
@@ -365,6 +391,165 @@ const ModernPostCreator = ({ type = "post", postId, parentId, closeModal }) => {
     setValue('content', newContent);
   };
 
+  const searchMentions = useCallback(async (query) => {
+    const q = String(query || "").trim();
+    const token = getAuthToken();
+    if (!token) {
+      setMentionResults([]);
+      return;
+    }
+    const reqId = ++mentionSearchRef.current;
+    setMentionLoading(true);
+    try {
+      const headers = { Authorization: `Bearer ${token}` };
+      const [usersRes, groupsRes] = await Promise.all([
+        fetch(
+          `${env.backendUrl}${endpoints.searchUsers}?q=${encodeURIComponent(q || "a")}`,
+          { headers }
+        ),
+        fetch(`${env.backendUrl}${endpoints.groups}`, { headers }),
+      ]);
+      if (reqId !== mentionSearchRef.current) return;
+
+      let users = [];
+      if (usersRes.ok) {
+        const data = await usersRes.json();
+        users = unwrapList(data)
+          .filter((u) => Number(u.id) !== Number(user?.id))
+          .slice(0, 8)
+          .map((u) => ({
+            id: u.id,
+            username: u.username || "",
+            first_name: u.first_name || "",
+            last_name: u.last_name || "",
+            kind: "user",
+            profile_picture: u.profile_picture || u.profile_pic || "",
+          }));
+      }
+
+      let groups = [];
+      if (groupsRes.ok) {
+        const data = await groupsRes.json();
+        const qLower = q.toLowerCase();
+        groups = unwrapList(data)
+          .filter((g) => {
+            if (!qLower) return true;
+            const hay = `${g.name || ""} ${g.slug || ""}`.toLowerCase();
+            return hay.includes(qLower);
+          })
+          .slice(0, 6)
+          .map((g) => ({
+            id: g.id,
+            username: String(g.slug || g.name || "")
+              .replace(/\s+/g, "_")
+              .replace(/[^a-zA-Z0-9_.]/g, "")
+              .slice(0, 40),
+            first_name: g.name || "",
+            last_name: "",
+            name: g.name || "",
+            slug: g.slug || "",
+            kind: "group",
+            href: "/app/groups",
+            cover_image: g.cover_image || "",
+          }))
+          .filter((g) => g.username);
+      }
+
+      setMentionResults([...users, ...groups].slice(0, 12));
+    } catch {
+      if (reqId === mentionSearchRef.current) setMentionResults([]);
+    } finally {
+      if (reqId === mentionSearchRef.current) setMentionLoading(false);
+    }
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!mentionOpen && !showMentionPicker) return undefined;
+    const t = window.setTimeout(() => {
+      void searchMentions(mentionQuery);
+    }, 220);
+    return () => window.clearTimeout(t);
+  }, [mentionOpen, showMentionPicker, mentionQuery, searchMentions]);
+
+  const insertMention = (person) => {
+    if (!person) return;
+    const handle =
+      person.username ||
+      String(person.name || "")
+        .replace(/\s+/g, "_")
+        .replace(/[^a-zA-Z0-9_.]/g, "");
+    if (!handle) return;
+
+    const el = textareaRef.current;
+    const current = watch("content") || "";
+    const cursor = el?.selectionStart ?? current.length;
+    const upto = current.slice(0, cursor);
+    const match = upto.match(/(?:^|\s)@([a-zA-Z0-9_.]*)$/);
+    let next = current;
+    if (match) {
+      const prefix = current.slice(
+        0,
+        match.index + (match[0].startsWith(" ") ? 1 : 0)
+      );
+      const suffix = current.slice(cursor);
+      next = `${prefix}@${handle} ${suffix}`;
+    } else {
+      next = `${current}${current.endsWith(" ") || !current ? "" : " "}@${handle} `;
+    }
+    setValue("content", next, { shouldDirty: true });
+    setPendingMentions((prev) => {
+      if (
+        prev.some(
+          (m) =>
+            Number(m.id) === Number(person.id) &&
+            (m.kind || "user") === (person.kind || "user")
+        )
+      ) {
+        return prev;
+      }
+      return [
+        ...prev,
+        {
+          id: person.id,
+          username: handle,
+          first_name: person.first_name || person.name || "",
+          last_name: person.last_name || "",
+          kind: person.kind || "user",
+          slug: person.slug || "",
+          href: person.href || "",
+        },
+      ];
+    });
+    setMentionOpen(false);
+    setShowMentionPicker(false);
+    setMentionQuery("");
+    requestAnimationFrame(() => {
+      if (!textareaRef.current) return;
+      textareaRef.current.focus();
+      const pos = next.length;
+      textareaRef.current.setSelectionRange(pos, pos);
+    });
+  };
+
+  const onContentChange = (event) => {
+    contentRegister.onChange(event);
+    const value = event.target.value || "";
+    const cursor = event.target.selectionStart ?? value.length;
+    const upto = value.slice(0, cursor);
+    const match = upto.match(/(?:^|\s)@([a-zA-Z0-9_.]*)$/);
+    if (match) {
+      setMentionOpen(true);
+      setShowMentionPicker(true);
+      setMentionQuery(match[1] || "");
+      setShowEmojiPicker(false);
+      setShowLocationPicker(false);
+      setShowFontPicker(false);
+    } else if (!showMentionPicker) {
+      setMentionOpen(false);
+      setMentionQuery("");
+    }
+  };
+
   // Form submission
   const onSubmit = async (data) => {
     console.log("Form submitted with data:", data);
@@ -389,6 +574,12 @@ const ModernPostCreator = ({ type = "post", postId, parentId, closeModal }) => {
       formData.append('content', data.content);
       formData.append('visibility', data.visibility || 'Everyone');
       formData.append('font_family', fontFamily || DEFAULT_POST_FONT);
+      const mentionsForPost = pendingMentions.filter((m) =>
+        String(data.content || "")
+          .toLowerCase()
+          .includes(`@${String(m.username || "").toLowerCase()}`)
+      );
+      formData.append("mentions", JSON.stringify(mentionsForPost));
 
       if (data.location) {
         formData.append('location', data.location);
@@ -446,6 +637,11 @@ const ModernPostCreator = ({ type = "post", postId, parentId, closeModal }) => {
       setSuggestedHashtags([]);
       setContentAnalysis(null);
       setFontFamily(DEFAULT_POST_FONT);
+      setPendingMentions([]);
+      setMentionOpen(false);
+      setShowMentionPicker(false);
+      setMentionQuery("");
+      setMentionResults([]);
       setComposerOpen(false);
       setIsDisabled(false);
 
@@ -563,8 +759,15 @@ const ModernPostCreator = ({ type = "post", postId, parentId, closeModal }) => {
                 contentRegister.ref(el);
                 textareaRef.current = el;
               }}
+              onChange={onContentChange}
               onFocus={() => setComposerOpen(true)}
-              placeholder={`What's on your mind, ${user?.first_name || displayName}?`}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") {
+                  setMentionOpen(false);
+                  setShowMentionPicker(false);
+                }
+              }}
+              placeholder={`What's on your mind, ${user?.first_name || displayName}? · @ to tag`}
               rows={4}
               className="w-full min-h-[120px] md:min-h-[140px] resize-none border-0 bg-transparent text-foreground placeholder:text-muted text-lg leading-relaxed focus:outline-none"
               style={postFontStyle(fontFamily)}
@@ -583,6 +786,94 @@ const ModernPostCreator = ({ type = "post", postId, parentId, closeModal }) => {
                 <IoWarningOutline size={14} />
                 {errors.content.message}
               </p>
+            ) : null}
+
+            {(mentionOpen || showMentionPicker) && (
+              <div className="mb-3 border border-border bg-background max-h-52 overflow-y-auto">
+                <div className="px-3 py-2 border-b border-border flex items-center justify-between gap-2">
+                  <p className="text-xs font-medium text-foreground">
+                    Tag people or groups
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMentionOpen(false);
+                      setShowMentionPicker(false);
+                    }}
+                    className="text-muted hover:text-foreground"
+                    aria-label="Close mentions"
+                  >
+                    <IoCloseOutline size={16} />
+                  </button>
+                </div>
+                {mentionLoading && !mentionResults.length ? (
+                  <p className="px-3 py-3 text-xs text-muted">Searching…</p>
+                ) : null}
+                {!mentionLoading && mentionResults.length === 0 ? (
+                  <p className="px-3 py-3 text-xs text-muted">
+                    No matches. Try another name or group.
+                  </p>
+                ) : null}
+                <ul>
+                  {mentionResults.map((person) => (
+                    <li key={`${person.kind}-${person.id}`}>
+                      <button
+                        type="button"
+                        onClick={() => insertMention(person)}
+                        className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-surface"
+                      >
+                        {person.kind === "group" ? (
+                          <span className="h-8 w-8 rounded-full bg-primary/15 text-primary inline-flex items-center justify-center shrink-0">
+                            <IoPeopleCircleOutline size={18} />
+                          </span>
+                        ) : (
+                          <img
+                            src={avatarUrl(person)}
+                            alt=""
+                            className="h-8 w-8 rounded-full object-cover bg-surface shrink-0"
+                          />
+                        )}
+                        <span className="min-w-0">
+                          <span className="block text-sm font-medium truncate">
+                            {person.kind === "group"
+                              ? person.name || displayPersonName(person)
+                              : displayPersonName(person)}
+                          </span>
+                          <span className="block text-xs text-muted truncate">
+                            {person.kind === "group"
+                              ? `Group · @${person.username}`
+                              : `@${person.username}`}
+                          </span>
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {taggedChips.length ? (
+              <div className="mb-3 flex flex-wrap gap-1.5">
+                {taggedChips.map((m) => (
+                  <span
+                    key={`${m.kind || "user"}-${m.id}`}
+                    className="inline-flex items-center gap-1 px-2 py-1 text-xs border border-border bg-background text-foreground"
+                  >
+                    {m.kind === "group" ? (
+                      <IoPeopleCircleOutline size={12} className="text-primary" />
+                    ) : (
+                      <IoAtOutline size={12} className="text-primary" />
+                    )}
+                    @{m.username}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+
+            {content?.trim() ? (
+              <div className="mb-3">
+                <ChatLinkPreview text={content} />
+              </div>
             ) : null}
           </div>
 
@@ -776,11 +1067,30 @@ const ModernPostCreator = ({ type = "post", postId, parentId, closeModal }) => {
               <button
                 type="button"
                 className={toolBtn}
+                title="Tag people or groups"
+                aria-pressed={showMentionPicker}
+                onClick={() => {
+                  setShowMentionPicker((v) => !v);
+                  setMentionOpen(true);
+                  setMentionQuery("");
+                  setShowEmojiPicker(false);
+                  setShowLocationPicker(false);
+                  setShowFontPicker(false);
+                  void searchMentions("");
+                }}
+              >
+                <IoAtOutline size={22} className="text-primary" />
+              </button>
+              <button
+                type="button"
+                className={toolBtn}
                 title="Emoji"
                 onClick={() => {
                   setShowEmojiPicker((v) => !v);
                   setShowLocationPicker(false);
                   setShowFontPicker(false);
+                  setShowMentionPicker(false);
+                  setMentionOpen(false);
                 }}
               >
                 <IoHappyOutline size={22} className="text-primary" />
@@ -793,6 +1103,8 @@ const ModernPostCreator = ({ type = "post", postId, parentId, closeModal }) => {
                   handleLocationClick();
                   setShowEmojiPicker(false);
                   setShowFontPicker(false);
+                  setShowMentionPicker(false);
+                  setMentionOpen(false);
                 }}
               >
                 <IoLocationOutline size={22} className="text-primary" />
@@ -806,6 +1118,8 @@ const ModernPostCreator = ({ type = "post", postId, parentId, closeModal }) => {
                   setShowFontPicker((v) => !v);
                   setShowEmojiPicker(false);
                   setShowLocationPicker(false);
+                  setShowMentionPicker(false);
+                  setMentionOpen(false);
                 }}
               >
                 <IoTextOutline size={22} className="text-primary" />

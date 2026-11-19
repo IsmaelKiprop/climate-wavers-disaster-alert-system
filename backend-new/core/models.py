@@ -60,6 +60,7 @@ class Post(models.Model):
     title = models.CharField(max_length=200, blank=True, null=True)
     content = models.TextField()
     hashtags = models.CharField(max_length=255, blank=True, null=True)
+    mentions = models.JSONField(default=list, blank=True)
     image = models.TextField(blank=True, null=True)
     video = models.TextField(blank=True, null=True)
     audio = models.TextField(blank=True, null=True, help_text="Audio media URL")

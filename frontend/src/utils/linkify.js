@@ -58,12 +58,19 @@ export function tokenizeRichText(text, { mentions = [] } = {}) {
     } else if (raw.startsWith("@")) {
       const handle = raw.slice(1).toLowerCase();
       const person = mentionByHandle.get(handle);
-      // Treat any @handle as a mention; link when we know the user id.
+      // Treat any @handle as a mention; link when we know the user/group.
+      const href =
+        person?.href ||
+        (person?.kind === "group"
+          ? "/app/groups"
+          : person?.id
+            ? profilePath(person.id)
+            : "");
       parts.push({
         type: "mention",
         value: raw,
-        userId: person?.id || null,
-        href: person?.id ? profilePath(person.id) : "",
+        userId: person?.kind === "group" ? null : person?.id || null,
+        href,
       });
     } else {
       const href = normalizeExternalHref(raw);

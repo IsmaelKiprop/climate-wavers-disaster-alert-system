@@ -130,9 +130,91 @@ class PostViewSet(viewsets.ModelViewSet):
         """
         Override perform_create to save the post and extract hashtags from the content.
         """
-        post = serializer.save(user=self.request.user)
+        from .signals import send_to_websocket
+
+        mentions_raw = self.request.data.get("mentions", [])
+        if isinstance(mentions_raw, str):
+            try:
+                mentions_raw = json.loads(mentions_raw)
+            except (TypeError, ValueError, json.JSONDecodeError):
+                mentions_raw = []
+        mentions = []
+        seen = set()
+        if isinstance(mentions_raw, list):
+            for item in mentions_raw[:30]:
+                if not isinstance(item, dict):
+                    continue
+                try:
+                    mid = int(item.get("id"))
+                except (TypeError, ValueError):
+                    continue
+                kind = str(item.get("kind") or "user").lower()
+                if kind not in {"user", "group"}:
+                    kind = "user"
+                key = f"{kind}:{mid}"
+                if key in seen:
+                    continue
+                seen.add(key)
+                mentions.append(
+                    {
+                        "id": mid,
+                        "username": str(item.get("username") or "")[:150],
+                        "first_name": str(item.get("first_name") or "")[:150],
+                        "last_name": str(item.get("last_name") or "")[:150],
+                        "kind": kind,
+                        "slug": str(item.get("slug") or "")[:140],
+                    }
+                )
+
+        post = serializer.save(user=self.request.user, mentions=mentions)
         post.hashtags = post.extract_hashtags(post.content)
-        post.save()
+        post.save(update_fields=["hashtags", "updated_at"])
+
+        # Notify tagged people (skip groups / self).
+        try:
+            User = get_user_model()
+            actor = self.request.user
+            display = (
+                f"{getattr(actor, 'first_name', '')} {getattr(actor, 'last_name', '')}".strip()
+                or getattr(actor, "username", "Someone")
+            )
+            preview = (post.content or "")[:160]
+            ct = ContentType.objects.get_for_model(Post)
+            user_ids = [
+                item["id"]
+                for item in mentions
+                if item.get("kind") == "user"
+                and item.get("id")
+                and item.get("id") != getattr(actor, "id", None)
+            ]
+            recipients = {
+                u.id: u for u in User.objects.filter(id__in=user_ids)
+            }
+            for uid in user_ids:
+                recipient = recipients.get(uid)
+                if not recipient:
+                    continue
+                notice_text = f"{display} mentioned you in a post"
+                notification = Notification.objects.create(
+                    user=recipient,
+                    notification_type="mention",
+                    object_id=post.id,
+                    content_type=ct,
+                    message=notice_text,
+                )
+                send_to_websocket(
+                    notification.id,
+                    recipient.username,
+                    notice_text,
+                    actor,
+                    "mention",
+                    content={
+                        "post_id": post.id,
+                        "content": preview,
+                    },
+                )
+        except Exception:
+            pass
 
     def update(self, request, *args, **kwargs):
         """Only the post owner can edit."""

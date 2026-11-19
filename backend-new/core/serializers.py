@@ -252,6 +252,21 @@ class PostSerializer(serializers.ModelSerializer):
     video = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     audio = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     location = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    mentions = serializers.JSONField(required=False, default=list)
+
+    def validate_mentions(self, value):
+        if value in (None, ""):
+            return []
+        if isinstance(value, str):
+            try:
+                import json
+
+                value = json.loads(value)
+            except (TypeError, ValueError):
+                return []
+        if not isinstance(value, list):
+            return []
+        return value[:30]
 
     def _annotated_flag(self, obj, field_name):
         if field_name not in obj.__dict__:

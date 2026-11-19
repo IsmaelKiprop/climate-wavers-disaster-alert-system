@@ -11,6 +11,7 @@ import PostEditPanel from "./PostEditPanel";
 import PropTypes from "prop-types";
 import ImageLightbox from "./ImageLightbox";
 import LinkifiedText from "./LinkifiedText";
+import ChatLinkPreview from "./ChatLinkPreview";
 import PostMediaViewer from "./PostMediaViewer";
 import { postFontStyle } from "../utils/postFonts";
 import UserAvatar from "./UserAvatar";
@@ -321,16 +322,21 @@ const Posts = ({
                         {post?.user?.is_verified ? <ClimateVerifiedBadge size="sm" /> : null}
                       </div>
                       {post?.content ? (
-                        <p
-                          className="text-sm text-foreground leading-snug whitespace-pre-wrap break-words"
-                          style={postFontStyle(post?.font_family)}
-                        >
-                          <LinkifiedText
-                            text={post.content}
-                            linkClassName="text-primary font-medium underline underline-offset-2 break-all hover:text-primary-dark"
-                            hashtagClassName="text-primary font-medium hover:text-primary-dark"
-                          />
-                        </p>
+                        <div>
+                          <p
+                            className="text-sm text-foreground leading-snug whitespace-pre-wrap break-words"
+                            style={postFontStyle(post?.font_family)}
+                          >
+                            <LinkifiedText
+                              text={post.content}
+                              mentions={post.mentions || []}
+                              linkClassName="text-primary font-medium underline underline-offset-2 break-all hover:text-primary-dark"
+                              hashtagClassName="text-primary font-medium hover:text-primary-dark"
+                              mentionClassName="text-primary font-semibold underline underline-offset-2"
+                            />
+                          </p>
+                          <ChatLinkPreview text={post.content} />
+                        </div>
                       ) : null}
                       {post?.location ? (
                         <p className="mt-1 text-xs text-muted truncate">📍 {post.location}</p>
@@ -478,10 +484,13 @@ const Posts = ({
               >
                 <LinkifiedText
                   text={post?.content || ""}
+                  mentions={post?.mentions || []}
                   linkClassName="text-primary font-semibold underline underline-offset-2 break-all hover:text-primary-dark"
                   hashtagClassName="text-primary font-semibold hover:text-primary-dark transition-colors duration-200"
+                  mentionClassName="text-primary font-semibold underline underline-offset-2 hover:text-primary-dark"
                 />
               </p>
+              <ChatLinkPreview text={post?.content || ""} />
               </button>
               )}
               {editingId !== post.id && (post?.image || post?.video) && (
