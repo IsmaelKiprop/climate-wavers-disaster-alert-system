@@ -22,6 +22,7 @@ import {
   IoShieldCheckmarkOutline,
   IoStop,
   IoTrashOutline,
+  IoEllipsisHorizontal,
 } from "react-icons/io5";
 import { toast } from "react-toastify";
 import JitsiMeetEmbed from "./JitsiMeetEmbed";
@@ -216,6 +217,8 @@ function bubbleRadius(mine, clusteredPrev, clusteredNext) {
   };
 }
 
+const CHAT_QUICK_REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🙏", "🔥", "🎉"];
+
 function previewLabel(msg) {
   if (!msg) return "Say hello";
   if (msg.body) return msg.body;
@@ -289,6 +292,7 @@ const CommunityChat = () => {
     sendMessage,
     sendTyping,
     markRead,
+    reactToMessage,
     seedOnline,
     isOnline,
     lastSeenMap,
@@ -327,6 +331,7 @@ const CommunityChat = () => {
   const [isRecording, setIsRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [replyingTo, setReplyingTo] = useState(null);
+  const [messageMenuId, setMessageMenuId] = useState(null);
 
   const bottomRef = useRef(null);
   const draftRef = useRef(null);
@@ -618,10 +623,29 @@ const CommunityChat = () => {
   }, []);
 
   useEffect(() => {
+    if (!messageMenuId) return undefined;
+    const onPointer = (event) => {
+      const target = event.target;
+      if (target?.closest?.("[data-chat-msg-menu]")) return;
+      setMessageMenuId(null);
+    };
+    const onKey = (event) => {
+      if (event.key === "Escape") setMessageMenuId(null);
+    };
+    document.addEventListener("pointerdown", onPointer);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onPointer);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [messageMenuId]);
+
+  useEffect(() => {
     setShowEmoji(false);
     setMentionOpen(false);
     setPendingMentions([]);
     setReplyingTo(null);
+    setMessageMenuId(null);
     setPendingMedia((prev) => {
       if (prev?.preview?.startsWith("blob:")) URL.revokeObjectURL(prev.preview);
       return null;
@@ -875,6 +899,20 @@ const CommunityChat = () => {
               },
             };
           })
+        );
+      }
+
+      if (event === "message_reaction" && payload) {
+        const convId = Number(payload.conversation_id);
+        const mid = Number(payload.message_id);
+        if (!mid) return;
+        if (Number(activeIdRef.current) !== convId) return;
+        setMessages((prev) =>
+          prev.map((m) =>
+            Number(m.id) === mid
+              ? { ...m, reactions: payload.reactions || [] }
+              : m
+          )
         );
       }
 
@@ -1201,11 +1239,77 @@ const CommunityChat = () => {
     if (!id || String(id).startsWith("tmp_") || Number(id) <= 0) return;
     unlockNotificationSound();
     setReplyingTo(msg);
+    setMessageMenuId(null);
     setShowEmoji(false);
     requestAnimationFrame(() => draftRef.current?.focus());
   };
 
   const clearReplyTo = () => setReplyingTo(null);
+
+  const applyLocalReaction = (messageId, emoji) => {
+    setMessages((prev) =>
+      prev.map((m) => {
+        if (Number(m.id) !== Number(messageId)) return m;
+        const current = Array.isArray(m.reactions) ? [...m.reactions] : [];
+        const mineEmoji = current.find((r) => r.mine)?.emoji;
+        let next = current
+          .map((r) => {
+            if (!r.mine) return { ...r };
+            const count = Math.max(0, (r.count || 1) - 1);
+            if (count === 0) return null;
+            return { ...r, count, mine: false };
+          })
+          .filter(Boolean);
+
+        if (mineEmoji !== emoji) {
+          const existing = next.find((r) => r.emoji === emoji);
+          if (existing) {
+            next = next.map((r) =>
+              r.emoji === emoji
+                ? { ...r, count: (r.count || 0) + 1, mine: true }
+                : r
+            );
+          } else {
+            next = [...next, { emoji, count: 1, mine: true }];
+          }
+        }
+        next.sort(
+          (a, b) => b.count - a.count || String(a.emoji).localeCompare(b.emoji)
+        );
+        return { ...m, reactions: next };
+      })
+    );
+  };
+
+  const reactToChatMessage = async (msg, emoji) => {
+    if (!msg?.id || !activeId || !emoji) return;
+    const messageId = Number(msg.id);
+    if (!messageId) return;
+    unlockNotificationSound();
+    setMessageMenuId(null);
+    applyLocalReaction(messageId, emoji);
+
+    const viaSocket = reactToMessage?.(activeId, messageId, emoji);
+    if (viaSocket) return;
+    try {
+      const res = await client.run(
+        "post",
+        endpoints.chatMessageReact(activeId, messageId),
+        { emoji },
+        true
+      );
+      if (res?.reactions) {
+        setMessages((prev) =>
+          prev.map((m) =>
+            Number(m.id) === messageId ? { ...m, reactions: res.reactions } : m
+          )
+        );
+      }
+    } catch {
+      // Reload thread reactions on failure by refetching is heavy; leave optimistic.
+      toast.error("Could not update reaction.");
+    }
+  };
 
   const scrollToMessage = (messageId) => {
     if (!messageId) return;
@@ -1906,11 +2010,13 @@ const CommunityChat = () => {
                     const mediaOnly = Boolean(
                       msg.media_url && !msg.body && !quoted && isVisual
                     );
-                    const canReply =
+                    const canAct =
                       Boolean(msg.id) &&
                       !String(msg.id).startsWith("tmp_") &&
                       Number(msg.id) > 0 &&
                       !msg.is_deleted;
+                    const menuOpen = Number(messageMenuId) === Number(msg.id);
+                    const reactions = Array.isArray(msg.reactions) ? msg.reactions : [];
                     const showSender =
                       !mine &&
                       activeConversation.conversation_type !== "dm" &&
@@ -1921,25 +2027,71 @@ const CommunityChat = () => {
                         id={msg.id ? `chat-msg-${msg.id}` : undefined}
                         className={`group/msg relative flex items-end gap-1.5 transition-[box-shadow] ${
                           mine ? "justify-end" : "justify-start"
-                        } ${clusteredPrev ? "mt-0.5" : "mt-2.5"}`}
+                        } ${clusteredPrev ? "mt-0.5" : "mt-2.5"} ${
+                          reactions.length ? "mb-1" : ""
+                        }`}
                         onDoubleClick={() => {
-                          if (canReply) startReplyTo(msg);
+                          if (canAct) startReplyTo(msg);
                         }}
                       >
                         <div className="relative max-w-[85%] sm:max-w-[72%]">
-                          {canReply ? (
-                            <button
-                              type="button"
-                              onClick={() => startReplyTo(msg)}
-                              className={`absolute top-1 z-[2] min-h-7 min-w-7 inline-flex items-center justify-center border border-border bg-surface text-muted shadow-sm opacity-100 sm:opacity-0 sm:group-hover/msg:opacity-100 hover:text-foreground transition-opacity ${
+                          {canAct ? (
+                            <div
+                              data-chat-msg-menu
+                              className={`absolute top-1 z-[3] flex flex-col items-center gap-1 ${
                                 mine ? "-left-3" : "-right-3"
                               }`}
-                              style={{ borderRadius: 999 }}
-                              aria-label="Reply"
-                              title="Reply"
                             >
-                              <IoArrowUndoOutline size={14} />
-                            </button>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setMessageMenuId(menuOpen ? null : msg.id)
+                                }
+                                className={`min-h-7 min-w-7 inline-flex items-center justify-center border border-border bg-surface text-muted shadow-sm hover:text-foreground transition-opacity ${
+                                  menuOpen
+                                    ? "opacity-100 text-foreground"
+                                    : "opacity-100 sm:opacity-0 sm:group-hover/msg:opacity-100"
+                                }`}
+                                style={{ borderRadius: 999 }}
+                                aria-label="Message actions"
+                                title="Reply or react"
+                                aria-expanded={menuOpen}
+                              >
+                                <IoEllipsisHorizontal size={14} />
+                              </button>
+                              {menuOpen ? (
+                                <div
+                                  className={`absolute top-8 z-[4] w-[220px] border border-border bg-surface shadow-lg p-2 animate-[fadeIn_160ms_ease-out] ${
+                                    mine ? "left-0" : "right-0"
+                                  }`}
+                                  style={{ borderRadius: 10 }}
+                                >
+                                  <div className="flex flex-wrap gap-1 mb-2">
+                                    {CHAT_QUICK_REACTIONS.map((emoji) => (
+                                      <button
+                                        key={emoji}
+                                        type="button"
+                                        onClick={() => reactToChatMessage(msg, emoji)}
+                                        className="min-h-9 min-w-9 text-lg leading-none hover:bg-background"
+                                        style={{ borderRadius: 8 }}
+                                        aria-label={`React ${emoji}`}
+                                      >
+                                        {emoji}
+                                      </button>
+                                    ))}
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => startReplyTo(msg)}
+                                    className="w-full min-h-9 px-2.5 text-sm font-medium inline-flex items-center gap-2 hover:bg-background text-foreground"
+                                    style={{ borderRadius: 8 }}
+                                  >
+                                    <IoArrowUndoOutline size={16} className="text-primary" />
+                                    Reply
+                                  </button>
+                                </div>
+                              ) : null}
+                            </div>
                           ) : null}
                         <div
                           className={`overflow-hidden border shadow-[0_1px_0_rgba(0,0,0,0.04)] ${
@@ -2198,6 +2350,43 @@ const CommunityChat = () => {
                             ) : null}
                           </p>
                         </div>
+                        {reactions.length ? (
+                          <div
+                            className={`absolute -bottom-3 z-[1] flex flex-wrap gap-1 max-w-full ${
+                              mine ? "right-1 justify-end" : "left-1 justify-start"
+                            }`}
+                          >
+                            {reactions.map((reaction) => (
+                              <button
+                                key={reaction.emoji}
+                                type="button"
+                                disabled={!canAct}
+                                onClick={() =>
+                                  canAct &&
+                                  reactToChatMessage(msg, reaction.emoji)
+                                }
+                                className={`min-h-6 px-1.5 inline-flex items-center gap-1 text-[12px] border shadow-sm ${
+                                  reaction.mine
+                                    ? "border-primary bg-primary/15 text-foreground"
+                                    : "border-border bg-surface text-foreground"
+                                }`}
+                                style={{ borderRadius: 999 }}
+                                title={
+                                  reaction.mine
+                                    ? "Remove your reaction"
+                                    : "Add this reaction"
+                                }
+                              >
+                                <span>{reaction.emoji}</span>
+                                {reaction.count > 1 ? (
+                                  <span className="text-[10px] font-semibold tabular-nums text-muted">
+                                    {reaction.count}
+                                  </span>
+                                ) : null}
+                              </button>
+                            ))}
+                          </div>
+                        ) : null}
                         </div>
                       </div>
                     );

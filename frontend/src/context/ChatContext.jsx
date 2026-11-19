@@ -97,6 +97,16 @@ export const ChatProvider = ({ children }) => {
     [send]
   );
 
+  const reactToMessage = useCallback(
+    (conversationId, messageId, emoji) =>
+      send("react_message", {
+        conversation_id: Number(conversationId),
+        message_id: Number(messageId),
+        emoji,
+      }),
+    [send]
+  );
+
   const applyPresence = useCallback((payload) => {
     if (!payload?.user_id) return;
     const id = Number(payload.user_id);
@@ -226,6 +236,7 @@ export const ChatProvider = ({ children }) => {
       sendMessage,
       sendTyping,
       markRead,
+      reactToMessage,
       seedOnline,
       isOnline: (userId) => onlineIds.has(Number(userId)),
     }),
@@ -239,6 +250,7 @@ export const ChatProvider = ({ children }) => {
       sendMessage,
       sendTyping,
       markRead,
+      reactToMessage,
       seedOnline,
     ]
   );

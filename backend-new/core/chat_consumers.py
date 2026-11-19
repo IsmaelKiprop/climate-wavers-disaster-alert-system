@@ -104,6 +104,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
             "join": self._handle_join,
             "leave": self._handle_leave,
             "send_message": self._handle_send_message,
+            "react_message": self._handle_react_message,
             "typing_start": self._handle_typing_start,
             "typing_stop": self._handle_typing_stop,
             "mark_read": self._handle_mark_read,
@@ -227,6 +228,50 @@ class ChatConsumer(AsyncWebsocketConsumer):
             await self.channel_layer.group_send(f"chat_user_{uid}", event)
         if await self._is_community(conversation_id):
             await self.channel_layer.group_send(f"chat_{conversation_id}", event)
+
+    async def _handle_react_message(self, payload):
+        conversation_id = payload.get("conversation_id")
+        message_id = payload.get("message_id")
+        emoji = payload.get("emoji") or ""
+        try:
+            conversation_id = int(conversation_id)
+            message_id = int(message_id)
+        except (TypeError, ValueError):
+            await self.send_json(
+                {
+                    "event": "error",
+                    "payload": {"detail": "conversation_id and message_id required"},
+                }
+            )
+            return
+
+        result = await self._toggle_reaction(conversation_id, message_id, emoji)
+        if not result:
+            await self.send_json(
+                {"event": "error", "payload": {"detail": "Forbidden or not found"}}
+            )
+            return
+        if result.get("action") == "invalid":
+            await self.send_json(
+                {
+                    "event": "error",
+                    "payload": {
+                        "detail": "Unsupported emoji",
+                        "allowed": result.get("allowed") or [],
+                    },
+                }
+            )
+            return
+
+        member_ids = await self._member_ids(conversation_id)
+        event = {
+            "type": "chat.event",
+            "event": "message_reaction",
+            "payload": result,
+        }
+        for uid in member_ids:
+            await self.channel_layer.group_send(f"chat_user_{uid}", event)
+        await self.channel_layer.group_send(f"chat_{conversation_id}", event)
 
     async def _handle_typing_start(self, payload):
         await self._broadcast_typing(payload, True)
@@ -429,6 +474,40 @@ class ChatConsumer(AsyncWebsocketConsumer):
         msg.conversation = conv
         notify_after_chat_message(msg, sender=self.user)
         return message_dict(msg, self.user_id)
+
+    @database_sync_to_async
+    def _toggle_reaction(self, conversation_id, message_id, emoji):
+        from .chat import (
+            CHAT_REACTION_EMOJIS,
+            toggle_chat_reaction,
+            user_can_access,
+        )
+        from .models import ChatMessage, Conversation
+
+        try:
+            conv = Conversation.objects.get(id=conversation_id)
+        except Conversation.DoesNotExist:
+            return None
+        if not user_can_access(self.user, conv):
+            return None
+        try:
+            msg = ChatMessage.objects.get(
+                id=message_id, conversation=conv, is_deleted=False
+            )
+        except ChatMessage.DoesNotExist:
+            return None
+
+        reactions, action = toggle_chat_reaction(msg, self.user, emoji)
+        if action == "invalid":
+            return {"action": "invalid", "allowed": list(CHAT_REACTION_EMOJIS)}
+        return {
+            "conversation_id": conv.id,
+            "message_id": msg.id,
+            "reactions": reactions,
+            "action": action,
+            "emoji": (emoji or "").strip(),
+            "user_id": self.user_id,
+        }
 
     @database_sync_to_async
     def _mark_read(self, conversation_id, message_id):

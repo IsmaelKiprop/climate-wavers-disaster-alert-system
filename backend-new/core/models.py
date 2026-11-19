@@ -2173,6 +2173,32 @@ class ChatMessage(models.Model):
         return f"msg {self.id} in {self.conversation_id}"
 
 
+class ChatMessageReaction(models.Model):
+    """One emoji reaction per user per chat message (WhatsApp-style)."""
+
+    message = models.ForeignKey(
+        ChatMessage,
+        on_delete=models.CASCADE,
+        related_name="reactions",
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="chat_reactions",
+    )
+    emoji = models.CharField(max_length=16)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("message", "user")
+        indexes = [
+            models.Index(fields=["message", "emoji"]),
+        ]
+
+    def __str__(self):
+        return f"{self.emoji} on msg {self.message_id} by {self.user_id}"
+
+
 class UserChatPresence(models.Model):
     """Persisted last-seen; online state is primarily from Channels."""
 

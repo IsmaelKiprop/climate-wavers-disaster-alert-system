@@ -15,12 +15,15 @@ from rest_framework.views import APIView
 
 from .models import (
     ChatMessage,
+    ChatMessageReaction,
     Conversation,
     ConversationMember,
     ResponderMembership,
     SocialGroupMembership,
     UserChatPresence,
 )
+
+CHAT_REACTION_EMOJIS = ("👍", "❤️", "😂", "😮", "😢", "🙏", "🔥", "🎉")
 
 User = get_user_model()
 
@@ -333,6 +336,59 @@ def resolve_reply_to(conversation, reply_to_id):
         return None
 
 
+def reactions_summary(msg, current_user_id=None):
+    """Group reactions by emoji for API/WS payloads."""
+    rows = list(getattr(msg, "_prefetched_objects_cache", {}).get("reactions") or [])
+    if not rows:
+        try:
+            rows = list(msg.reactions.all())
+        except Exception:
+            rows = []
+    buckets = {}
+    for row in rows:
+        emoji = (row.emoji or "").strip()
+        if not emoji:
+            continue
+        bucket = buckets.setdefault(emoji, {"emoji": emoji, "count": 0, "mine": False})
+        bucket["count"] += 1
+        if current_user_id and row.user_id == current_user_id:
+            bucket["mine"] = True
+    # Stable order: most reacted first, then emoji.
+    return sorted(
+        buckets.values(),
+        key=lambda item: (-item["count"], item["emoji"]),
+    )
+
+
+def toggle_chat_reaction(msg, user, emoji):
+    """
+    WhatsApp-style: one reaction per user.
+    Same emoji again removes; different emoji replaces.
+    Returns (reactions_list, action) where action is added|removed|replaced.
+    """
+    emoji = (emoji or "").strip()
+    if emoji not in CHAT_REACTION_EMOJIS:
+        return None, "invalid"
+    existing = ChatMessageReaction.objects.filter(message=msg, user=user).first()
+    if existing and existing.emoji == emoji:
+        existing.delete()
+        action = "removed"
+    elif existing:
+        existing.emoji = emoji
+        existing.save(update_fields=["emoji"])
+        action = "replaced"
+    else:
+        ChatMessageReaction.objects.create(message=msg, user=user, emoji=emoji)
+        action = "added"
+    # Refresh relation for summary.
+    msg = (
+        ChatMessage.objects.filter(id=msg.id)
+        .prefetch_related("reactions")
+        .first()
+    )
+    return reactions_summary(msg, user.id), action
+
+
 def message_dict(msg, current_user_id=None):
     deleted = bool(msg.is_deleted)
     reply = None
@@ -347,6 +403,7 @@ def message_dict(msg, current_user_id=None):
         "mentions": [] if deleted else (msg.mentions or []),
         "reply_to_id": None if deleted else (msg.reply_to_id or None),
         "reply_to": reply,
+        "reactions": [] if deleted else reactions_summary(msg, current_user_id),
         "is_deleted": deleted,
         "client_id": msg.client_id or None,
         "created_at": msg.created_at.isoformat() if msg.created_at else None,
@@ -642,7 +699,7 @@ def broadcast_chat_event(conversation_id, event_type, payload, *, member_user_id
     # Typing/read use the conversation room.
     # Messages: personal hubs for DMs/responder; community also hits the room
     # so every connected chat client hears it even before first open.
-    if event_type == "message":
+    if event_type in {"message", "message_reaction"}:
         conv = Conversation.objects.filter(id=conversation_id).only(
             "conversation_type"
         ).first()
@@ -656,6 +713,11 @@ def broadcast_chat_event(conversation_id, event_type, payload, *, member_user_id
         for uid in ids or []:
             async_to_sync(channel_layer.group_send)(f"chat_user_{uid}", event)
         if conv and conv.conversation_type == "community":
+            async_to_sync(channel_layer.group_send)(
+                f"chat_{conversation_id}", event
+            )
+        # Also fan out to the room so open threads refresh instantly.
+        if event_type == "message_reaction":
             async_to_sync(channel_layer.group_send)(
                 f"chat_{conversation_id}", event
             )
@@ -842,8 +904,10 @@ class ChatMessageListCreateView(APIView):
         except (TypeError, ValueError):
             limit = 50
 
-        qs = ChatMessage.objects.filter(conversation=conv).select_related(
-            "sender", "reply_to", "reply_to__sender"
+        qs = (
+            ChatMessage.objects.filter(conversation=conv)
+            .select_related("sender", "reply_to", "reply_to__sender")
+            .prefetch_related("reactions")
         )
         if before:
             try:
@@ -920,6 +984,49 @@ class ChatMessageListCreateView(APIView):
         payload = message_dict(msg, request.user.id)
         broadcast_chat_event(conv.id, "message", payload)
         return Response(payload, status=201)
+
+
+class ChatMessageReactView(APIView):
+    """Toggle an emoji reaction on a chat message."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, conversation_id, message_id):
+        try:
+            conv = Conversation.objects.get(id=conversation_id)
+        except Conversation.DoesNotExist:
+            return Response({"detail": "Not found"}, status=404)
+        if not user_can_access(request.user, conv):
+            return Response({"detail": "Forbidden"}, status=403)
+
+        try:
+            msg = ChatMessage.objects.get(
+                id=message_id, conversation=conv, is_deleted=False
+            )
+        except ChatMessage.DoesNotExist:
+            return Response({"detail": "Message not found"}, status=404)
+
+        emoji = request.data.get("emoji") or ""
+        reactions, action = toggle_chat_reaction(msg, request.user, emoji)
+        if action == "invalid":
+            return Response(
+                {
+                    "detail": "Unsupported emoji",
+                    "allowed": list(CHAT_REACTION_EMOJIS),
+                },
+                status=400,
+            )
+
+        payload = {
+            "conversation_id": conv.id,
+            "message_id": msg.id,
+            "reactions": reactions,
+            "action": action,
+            "emoji": (emoji or "").strip(),
+            "user_id": request.user.id,
+        }
+        broadcast_chat_event(conv.id, "message_reaction", payload)
+        return Response(payload)
 
 
 class ChatConversationMembersView(APIView):

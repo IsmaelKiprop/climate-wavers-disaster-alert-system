@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { toast } from "react-toastify";
 import PublicPage from "../components/PublicPage";
 import BrandLogo from "../components/BrandLogo";
 import PlantingProofMediaCarousel, {
@@ -7,6 +8,7 @@ import PlantingProofMediaCarousel, {
 } from "../components/PlantingProofMediaCarousel";
 import { endpoints } from "../utils/endpoints";
 import { apiUrl } from "../config/env";
+import { downloadPlasticCertificatePdf } from "../utils/plasticCertificatePdf";
 
 const VerifyPlasticCertificate = () => {
   const { code: pathCode } = useParams();
@@ -17,6 +19,7 @@ const VerifyPlasticCertificate = () => {
   const [loading, setLoading] = useState(Boolean(initial));
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
+  const [downloading, setDownloading] = useState(false);
 
   const lookupCode = useMemo(
     () => (pathCode || searchParams.get("code") || "").trim(),
@@ -125,14 +128,34 @@ const VerifyPlasticCertificate = () => {
                 </dd>
               </div>
             </dl>
-            {result.project ? (
-              <Link
-                to={`/plastic/${result.project}`}
-                className="text-sm text-primary underline inline-block"
+            <div className="flex flex-wrap gap-2 pt-1">
+              <button
+                type="button"
+                disabled={downloading}
+                className="h-10 px-4 bg-primary text-white text-sm disabled:opacity-60"
+                onClick={() => {
+                  try {
+                    setDownloading(true);
+                    downloadPlasticCertificatePdf(result, { recovery });
+                    toast.success("PDF downloaded");
+                  } catch (err) {
+                    toast.error(err?.message || "Could not create PDF");
+                  } finally {
+                    setDownloading(false);
+                  }
+                }}
               >
-                View project
-              </Link>
-            ) : null}
+                {downloading ? "Preparing…" : "Download PDF"}
+              </button>
+              {result.project ? (
+                <Link
+                  to={`/plastic/${result.project}`}
+                  className="h-10 px-4 border border-border text-sm inline-flex items-center"
+                >
+                  View project
+                </Link>
+              ) : null}
+            </div>
             {recovery?.images || recovery?.videos ? (
               <PlantingProofMediaCarousel
                 items={proofMediaFromArrays(recovery.images, recovery.videos)}
