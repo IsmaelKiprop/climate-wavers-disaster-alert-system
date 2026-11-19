@@ -15,7 +15,7 @@
     var muted = '#6b7280';
     var base = (typeof siteUrl !== 'undefined' && siteUrl) ? siteUrl : 'https://alerts.flowops.africa';
     var logo = (typeof logoUrl !== 'undefined' && logoUrl) ? logoUrl : (base + '/logo.jpg');
-    var hero = (typeof hero_image !== 'undefined' && hero_image) ? hero_image : (base + '/environment.jpg');
+    var hero = (typeof hero_image !== 'undefined' && hero_image) ? hero_image : (base + '/og-image.jpg');
     var greet = (typeof name !== 'undefined' && name) ? name : ((typeof first_name !== 'undefined' && first_name) ? first_name : 'there');
     var title = (typeof headline !== 'undefined' && headline) ? headline : ((typeof subject !== 'undefined' && subject) ? subject : 'A note from Climate Wavers');
     var ctaLabel = (typeof cta_text !== 'undefined' && cta_text) ? cta_text : 'Open Climate Wavers';
@@ -24,6 +24,11 @@
     var year = new Date().getFullYear();
     var raw = String(typeof content !== 'undefined' ? content : '');
     var blocks = raw.replace(/\r\n/g, '\n').trim().split(/\n\s*\n/);
+    var previewKind = (typeof preview_kind !== 'undefined' && preview_kind) ? preview_kind : '';
+    var previewTitle = (typeof preview_title !== 'undefined' && preview_title) ? preview_title : '';
+    var previewDescription = (typeof preview_description !== 'undefined' && preview_description) ? preview_description : '';
+    var previewSite = (typeof preview_site_name !== 'undefined' && preview_site_name) ? preview_site_name : 'Climate Wavers';
+    var previewUrl = (typeof preview_url !== 'undefined' && preview_url) ? preview_url : ctaHref;
     function esc(s) {
       return String(s == null ? '' : s)
         .replace(/&/g, '&amp;')
@@ -51,7 +56,26 @@
           </tr>
           <tr>
             <td style="background:#ffffff;border:1px solid #111111;border-radius:6px;overflow:hidden;">
-              <img src="<%= hero %>" width="560" alt="" style="display:block;width:100%;max-width:560px;height:auto;border:0;" />
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-bottom:1px solid #e5e7eb;">
+                <tr>
+                  <td>
+                    <a href="<%= previewUrl %>" style="display:block;text-decoration:none;border:0;">
+                      <img src="<%= hero %>" width="560" height="294" alt="" style="display:block;width:100%;max-width:560px;height:294px;object-fit:cover;object-position:center;border:0;background:#0b3d40;" />
+                    </a>
+                  </td>
+                </tr>
+                <% if ((previewKind === 'link' || previewTitle || previewDescription) && (previewTitle || previewDescription)) { %>
+                <tr>
+                  <td style="padding:14px 16px;border-top:1px solid #e5e7eb;background:#f9fafb;font-family:Arial,Helvetica,sans-serif;">
+                    <a href="<%= previewUrl %>" style="display:block;text-decoration:none;color:inherit;">
+                      <div style="font-size:11px;letter-spacing:0.06em;text-transform:uppercase;color:<%= muted %>;margin:0 0 6px;"><%= esc(previewSite) %></div>
+                      <% if (previewTitle) { %><div style="margin:0 0 4px;font-size:16px;line-height:1.35;font-weight:700;color:<%= ink %>;"><%= esc(previewTitle) %></div><% } %>
+                      <% if (previewDescription) { %><div style="margin:0;font-size:13px;line-height:1.45;color:<%= muted %>;"><%= esc(previewDescription) %></div><% } %>
+                    </a>
+                  </td>
+                </tr>
+                <% } %>
+              </table>
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
                 <tr>
                   <td style="padding:28px 28px 8px;font-family:Arial,Helvetica,sans-serif;">

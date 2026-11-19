@@ -77,6 +77,14 @@
       "destination": "/api/share-plastic-pulse"
     },
     {
+      "source": "/share/page",
+      "destination": "/api/share-page"
+    },
+    {
+      "source": "/share/page/",
+      "destination": "/api/share-page"
+    },
+    {
       "source": "/plastic-pulse",
       "has": [
         {
@@ -97,6 +105,138 @@
         }
       ],
       "destination": "/api/share-plastic-pulse"
+    },
+    {
+      "source": "/about",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": "(?i).*(whatsapp|facebookexternalhit|facebot|twitterbot|linkedinbot|slackbot|discordbot|telegrambot|embedly|pinterest|quora link preview|googlebot|bingbot|applebot|yandexbot|duckduckbot|bot|crawler|spider).*"
+        }
+      ],
+      "destination": "/api/share-page?path=/about"
+    },
+    {
+      "source": "/impact",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": "(?i).*(whatsapp|facebookexternalhit|facebot|twitterbot|linkedinbot|slackbot|discordbot|telegrambot|embedly|pinterest|quora link preview|googlebot|bingbot|applebot|yandexbot|duckduckbot|bot|crawler|spider).*"
+        }
+      ],
+      "destination": "/api/share-page?path=/impact"
+    },
+    {
+      "source": "/faq",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": "(?i).*(whatsapp|facebookexternalhit|facebot|twitterbot|linkedinbot|slackbot|discordbot|telegrambot|embedly|pinterest|quora link preview|googlebot|bingbot|applebot|yandexbot|duckduckbot|bot|crawler|spider).*"
+        }
+      ],
+      "destination": "/api/share-page?path=/faq"
+    },
+    {
+      "source": "/contact",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": "(?i).*(whatsapp|facebookexternalhit|facebot|twitterbot|linkedinbot|slackbot|discordbot|telegrambot|embedly|pinterest|quora link preview|googlebot|bingbot|applebot|yandexbot|duckduckbot|bot|crawler|spider).*"
+        }
+      ],
+      "destination": "/api/share-page?path=/contact"
+    },
+    {
+      "source": "/pricing",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": "(?i).*(whatsapp|facebookexternalhit|facebot|twitterbot|linkedinbot|slackbot|discordbot|telegrambot|embedly|pinterest|quora link preview|googlebot|bingbot|applebot|yandexbot|duckduckbot|bot|crawler|spider).*"
+        }
+      ],
+      "destination": "/api/share-page?path=/pricing"
+    },
+    {
+      "source": "/consulting",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": "(?i).*(whatsapp|facebookexternalhit|facebot|twitterbot|linkedinbot|slackbot|discordbot|telegrambot|embedly|pinterest|quora link preview|googlebot|bingbot|applebot|yandexbot|duckduckbot|bot|crawler|spider).*"
+        }
+      ],
+      "destination": "/api/share-page?path=/consulting"
+    },
+    {
+      "source": "/support",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": "(?i).*(whatsapp|facebookexternalhit|facebot|twitterbot|linkedinbot|slackbot|discordbot|telegrambot|embedly|pinterest|quora link preview|googlebot|bingbot|applebot|yandexbot|duckduckbot|bot|crawler|spider).*"
+        }
+      ],
+      "destination": "/api/share-page?path=/support"
+    },
+    {
+      "source": "/disasters",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": "(?i).*(whatsapp|facebookexternalhit|facebot|twitterbot|linkedinbot|slackbot|discordbot|telegrambot|embedly|pinterest|quora link preview|googlebot|bingbot|applebot|yandexbot|duckduckbot|bot|crawler|spider).*"
+        }
+      ],
+      "destination": "/api/share-page?path=/disasters"
+    },
+    {
+      "source": "/disasters/:id",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": "(?i).*(whatsapp|facebookexternalhit|facebot|twitterbot|linkedinbot|slackbot|discordbot|telegrambot|embedly|pinterest|quora link preview|googlebot|bingbot|applebot|yandexbot|duckduckbot|bot|crawler|spider).*"
+        }
+      ],
+      "destination": "/api/share-page?path=/disasters"
+    },
+    {
+      "source": "/champions",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": "(?i).*(whatsapp|facebookexternalhit|facebot|twitterbot|linkedinbot|slackbot|discordbot|telegrambot|embedly|pinterest|quora link preview|googlebot|bingbot|applebot|yandexbot|duckduckbot|bot|crawler|spider).*"
+        }
+      ],
+      "destination": "/api/share-page?path=/champions"
+    },
+    {
+      "source": "/app",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": "(?i).*(whatsapp|facebookexternalhit|facebot|twitterbot|linkedinbot|slackbot|discordbot|telegrambot|embedly|pinterest|quora link preview|googlebot|bingbot|applebot|yandexbot|duckduckbot|bot|crawler|spider).*"
+        }
+      ],
+      "destination": "/api/share-page?path=/app"
+    },
+    {
+      "source": "/app/calendar",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": "(?i).*(whatsapp|facebookexternalhit|facebot|twitterbot|linkedinbot|slackbot|discordbot|telegrambot|embedly|pinterest|quora link preview|googlebot|bingbot|applebot|yandexbot|duckduckbot|bot|crawler|spider).*"
+        }
+      ],
+      "destination": "/api/share-page?path=/app/calendar"
     },
     {
       "source": "/u/:id",

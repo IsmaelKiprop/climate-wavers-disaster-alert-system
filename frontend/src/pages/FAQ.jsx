@@ -43,9 +43,11 @@ const FAQ = () => {
 
   return (
     <PublicPage
-      title="FAQ"
+      title="FAQ · Climate Wavers"
       description="Answers about live USGS and NASA data, FlowOps research, accounts, and tree campaigns."
       keywords="Climate Wavers FAQ, USGS NASA disaster alerts, FlowOps Africa, tree campaigns help"
+      path="/faq"
+      image="/og-image.jpg"
       structuredData={{
         "@context": "https://schema.org",
         "@type": "FAQPage",

@@ -5,9 +5,11 @@ import { SITE } from "../config/site";
 const AboutPage = () => {
   return (
     <PublicPage
-      title="About"
+      title="About Climate Wavers"
       description={`${SITE.name} is the live disaster platform from ${SITE.org.name} in ${SITE.org.city}. Official feeds now. Verified alerts as the endgame.`}
       keywords="about Climate Wavers, FlowOps Africa, Nairobi disaster alerts, alert verification"
+      path="/about"
+      image="/climate-action-network.jpg"
       wide
       structuredData={{
         "@context": "https://schema.org",

@@ -23,6 +23,8 @@ const ImpactPage = () => {
 
   return (
     <PublicPage
+      path="/impact"
+      image="/environment.jpg"
       title="Impact"
       description="Live USGS and NASA events plus tree-planting records currently shown on Climate Wavers."
       keywords="Climate Wavers impact, disaster monitoring Africa, tree planting impact, USGS NASA alerts"

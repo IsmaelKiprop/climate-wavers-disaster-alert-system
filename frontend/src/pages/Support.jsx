@@ -32,8 +32,10 @@ const TOPICS = [
 const Support = () => {
   return (
     <PublicPage
-      title="Help"
+      title="Support · Climate Wavers"
       description="Help using the live map, accounts, and campaigns."
+      path="/support"
+      image="/community-respond.jpg"
     >
       <h1 className="text-3xl sm:text-4xl font-semibold">Help</h1>
       <p className="mt-3 text-muted">

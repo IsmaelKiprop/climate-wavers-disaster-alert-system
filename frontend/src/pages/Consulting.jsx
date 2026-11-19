@@ -28,8 +28,10 @@ const SERVICES = [
 const Consulting = () => {
   return (
     <PublicPage
-      title="Consulting"
+      title="Consulting · Climate Wavers"
       description={`${SITE.name} helps groups run live disaster monitoring and tree campaigns.`}
+      path="/consulting"
+      image="/ai-disaster.jpg"
     >
       <h1 className="text-3xl sm:text-4xl font-semibold">Consulting</h1>
       <p className="mt-3 text-muted">

@@ -2,6 +2,7 @@ import { client } from "../api";
 import { endpoints } from "./endpoints";
 import { SITE } from "../config/site";
 import { tokenizeRichText } from "./linkify";
+import { normalizeOgPath, resolveOgCatalogPage } from "./ogPagesCatalog";
 
 /** First http(s) URLs found in message text (max 3). */
 export function extractUrls(text, limit = 3) {
@@ -22,6 +23,14 @@ function siteHost() {
   } catch {
     return "alerts.flowops.africa";
   }
+}
+
+function absoluteSiteAsset(pathOrUrl) {
+  const value = String(pathOrUrl || "").trim();
+  if (!value) return `${SITE.url}/og-image.jpg`;
+  if (value.startsWith("http://") || value.startsWith("https://")) return value;
+  if (value.startsWith("//")) return `https:${value}`;
+  return `${SITE.url}${value.startsWith("/") ? value : `/${value}`}`;
 }
 
 /** Client fallback when the Vercel edge preview API is unavailable (local Vite). */
@@ -97,43 +106,13 @@ export async function resolveLocalLinkPreview(url) {
     }
   }
 
-  const path = (parsed.pathname || "/").replace(/\/+$/, "") || "/";
-  const pathPreviews = {
-    "/": {
-      title: "Climate Wavers",
-      description:
-        "Community climate alerts, chats, tree gifts, and local action — built with FlowOps Africa.",
-    },
-    "/plastic-pulse": {
-      title: "Plastic Pulse · Climate Wavers",
-      description: "Partner onboarding for plastic recovery and recycling on Climate Wavers.",
-    },
-    "/app": {
-      title: "Climate Wavers app",
-      description: "Open your feed, chats, alerts, and tree projects on Climate Wavers.",
-    },
-    "/about": {
-      title: "About Climate Wavers",
-      description: "Learn how Climate Wavers connects communities for climate action.",
-    },
-  };
-  const known = pathPreviews[path];
-  if (known) {
-    return {
-      url: `${SITE.url}${path === "/" ? "" : path}`,
-      title: known.title,
-      description: known.description,
-      image: `${SITE.url}/og-image.jpg`,
-      siteName: "Climate Wavers",
-    };
-  }
-
-  // Any other page on our domain still gets a branded card.
+  const path = normalizeOgPath(parsed.pathname || "/");
+  const known = resolveOgCatalogPage(path);
   return {
-    url: parsed.href,
-    title: "Climate Wavers",
-    description: "Open this page on Climate Wavers.",
-    image: `${SITE.url}/og-image.jpg`,
+    url: `${SITE.url}${known.path === "/" ? "" : known.path}`,
+    title: known.title,
+    description: known.description,
+    image: absoluteSiteAsset(known.image),
     siteName: "Climate Wavers",
   };
 }

@@ -16,8 +16,10 @@ const PricingPage = () => {
 
   return (
     <PublicPage
-      title="Pricing"
+      title="Pricing · Climate Wavers"
       description="Free community alerts. RapidBrief and Tree Admin pilots. Supporters fund trees with an 18% platform fee."
+      path="/pricing"
+      image="/og-image.jpg"
       wide
     >
       <p className="text-xs font-medium uppercase tracking-wide text-muted">

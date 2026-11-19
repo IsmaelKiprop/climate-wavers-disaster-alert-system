@@ -18,8 +18,10 @@ const ContactUs = () => {
 
   return (
     <PublicPage
-      title="Contact"
+      title="Contact Climate Wavers"
       description={`Reach ${SITE.name} at ${SITE.emails.hello}.`}
+      path="/contact"
+      image="/community-respond.jpg"
       wide
     >
       <h1 className="text-3xl sm:text-4xl font-semibold">Contact us</h1>

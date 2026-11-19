@@ -7,7 +7,8 @@ import { SITE } from "../config/site";
 const PREVIEW_JPG = "/docs/Climate_Wavers_Plastic_Pulse_Onboarding_One_Pager.jpg";
 const PREVIEW_PDF = "/docs/Climate_Wavers_Plastic_Pulse_Onboarding_One_Pager.pdf";
 const OG_IMAGE = "/docs/plastic-pulse-og.jpg";
-const SHARE_URL = `${SITE.url}/plastic-pulse`;
+// Cache-buster so WhatsApp re-fetches OG after share-HTML fixes.
+const SHARE_URL = `${SITE.url}/plastic-pulse?v=pp2`;
 
 const STEPS = [
   "Spot hotspot (GPS + photo)",
