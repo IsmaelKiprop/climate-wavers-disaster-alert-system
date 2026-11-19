@@ -159,4 +159,28 @@ export async function fetchUsdToKesRate() {
   return rate;
 }
 
+/** KES amount charged at checkout (whole shillings). */
+export function usdToKesAmount(usd, rate) {
+  const u = Number(usd);
+  const r = Number(rate);
+  if (!Number.isFinite(u) || !Number.isFinite(r) || r <= 0) return null;
+  return Math.round(u * r);
+}
+
+export function formatKes(amount) {
+  if (amount == null || !Number.isFinite(Number(amount))) return null;
+  return `KSh ${Number(amount).toLocaleString(undefined, {
+    maximumFractionDigits: 0,
+  })}`;
+}
+
+export function formatUsdKesRate(rate) {
+  const r = Number(rate);
+  if (!Number.isFinite(r) || r <= 0) return null;
+  return `1 USD = KSh ${r.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
 export { FALLBACK_USD_KES };

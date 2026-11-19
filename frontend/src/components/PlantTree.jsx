@@ -652,7 +652,7 @@ const PlantTree = () => {
             role="presentation"
           >
             <div
-              className="w-full sm:max-w-4xl max-h-[92dvh] sm:max-h-[90vh] overflow-y-auto border border-border bg-surface sm:mx-4"
+              className="relative w-full sm:max-w-4xl max-h-[92dvh] sm:max-h-[90vh] flex flex-col border border-border bg-surface sm:mx-4 overflow-hidden"
               style={{
                 borderTopLeftRadius: 12,
                 borderTopRightRadius: 12,
@@ -662,7 +662,8 @@ const PlantTree = () => {
               aria-modal="true"
               aria-labelledby="project-details-title"
             >
-              <div className="sticky top-0 z-10 border-b border-border bg-surface px-4 sm:px-6 py-3 sm:py-4 flex items-start sm:items-center justify-between gap-3">
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              <div className="sticky top-0 z-20 border-b border-border bg-surface px-4 sm:px-6 py-3 sm:py-4 flex items-start sm:items-center justify-between gap-3">
                 <h2
                   id="project-details-title"
                   className="text-lg sm:text-xl md:text-2xl font-semibold text-foreground leading-snug min-w-0 pr-1"
@@ -1005,14 +1006,15 @@ const PlantTree = () => {
                 </div>
               </div>
             </div>
+            </div>
 
             {galleryIndex != null && gallery[galleryIndex] ? (
               <div
-                className="fixed inset-0 z-[60] flex flex-col bg-black/92"
+                className="fixed inset-0 z-[80] flex flex-col bg-black/92"
                 onClick={() => setGalleryIndex(null)}
                 role="presentation"
               >
-                <div className="flex items-center justify-between px-3 sm:px-4 py-3 text-white">
+                <div className="flex items-center justify-between px-3 sm:px-4 py-3 text-white shrink-0">
                   <p className="text-sm tabular-nums">
                     {galleryIndex + 1} / {gallery.length}
                   </p>

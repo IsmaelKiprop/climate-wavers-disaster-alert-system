@@ -6,7 +6,11 @@ import PaymentSuccess from './PaymentSuccess';
 import { apiUrl } from '../config/env';
 import { client } from '../api';
 import { endpoints } from '../utils/endpoints';
-import { fetchUsdToKesRateDetailed } from '../utils/exchangeRate';
+import {
+  fetchUsdToKesRateDetailed,
+  formatUsdKesRate,
+  usdToKesAmount,
+} from '../utils/exchangeRate';
 import { getAuthToken, getUser } from '../utils/factory';
 import {
   normalizeTreeSpecies,
@@ -74,11 +78,10 @@ const TreePayment = ({
     setTotalAmount(Number(total.toFixed(2)));
   }, [selectedSpecies, treeData?.price, treeData?.tree_species]);
 
-  // Recalculate exchange rate when total amount changes
+  // Recalculate KES when cart total or live rate changes
   useEffect(() => {
     if (exchangeRate && totalAmount > 0) {
-      const converted = totalAmount * exchangeRate;
-      setConvertedAmount(converted);
+      setConvertedAmount(usdToKesAmount(totalAmount, exchangeRate));
     }
   }, [totalAmount, exchangeRate]);
 
@@ -113,7 +116,7 @@ const TreePayment = ({
       setExchangeRate(usdToKesRate);
 
       const amountToConvert = totalAmount > 0 ? totalAmount : treeData.price;
-      setConvertedAmount(amountToConvert * usdToKesRate);
+      setConvertedAmount(usdToKesAmount(amountToConvert, usdToKesRate));
       if (!live) {
         toast.warn(
           "Live market rate unavailable — using an approximate KES rate. Refresh before paying."
@@ -831,18 +834,18 @@ const TreePayment = ({
                     <div className="text-sm text-gray-500">
                       Loading exchange rate...
                     </div>
-                  ) : convertedAmount ? (
+                  ) : convertedAmount != null ? (
                     <div className="text-sm text-gray-600">
-                      ≈ KSh{convertedAmount.toLocaleString(undefined, {maximumFractionDigits: 0})}
+                      ≈ KSh{Number(convertedAmount).toLocaleString()}
                     </div>
                   ) : null}
                 </div>
               </div>
-              {exchangeRate && (
+              {exchangeRate ? (
                 <div className="text-xs text-gray-500 mb-2">
-                  Exchange rate: 1 USD = {exchangeRate.toFixed(2)} KES
+                  {formatUsdKesRate(exchangeRate)} · live market
                 </div>
-              )}
+              ) : null}
               <p className="text-sm text-gray-600">
                 Includes tree planting, maintenance, and certificate
                 {totalQuantity > 1 && ` for ${totalQuantity} trees`}

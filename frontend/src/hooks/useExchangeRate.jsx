@@ -1,9 +1,11 @@
-import { useState, useEffect } from "react";
-import { fetchUsdToKesRateDetailed } from "../utils/exchangeRate";
+import { useState, useEffect, useMemo } from "react";
+import {
+  fetchUsdToKesRateDetailed,
+  usdToKesAmount,
+} from "../utils/exchangeRate";
 
 export const useExchangeRate = (usdAmount) => {
   const [exchangeRate, setExchangeRate] = useState(null);
-  const [convertedAmount, setConvertedAmount] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [live, setLive] = useState(false);
@@ -23,11 +25,6 @@ export const useExchangeRate = (usdAmount) => {
         setExchangeRate(result.rate);
         setLive(Boolean(result.live));
         setSource(result.source || null);
-        if (usdAmount) {
-          setConvertedAmount(usdAmount * result.rate);
-        } else {
-          setConvertedAmount(null);
-        }
       } catch (err) {
         if (!alive) return;
         console.error("Failed to fetch exchange rate:", err);
@@ -41,7 +38,12 @@ export const useExchangeRate = (usdAmount) => {
     return () => {
       alive = false;
     };
-  }, [usdAmount]);
+  }, []);
+
+  const convertedAmount = useMemo(() => {
+    if (usdAmount == null || usdAmount === "") return null;
+    return usdToKesAmount(usdAmount, exchangeRate);
+  }, [usdAmount, exchangeRate]);
 
   return {
     exchangeRate,
