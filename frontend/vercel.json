@@ -77,12 +77,42 @@
       "destination": "/api/share-plastic-pulse"
     },
     {
+      "source": "/share/plastic/:id(\\d+)",
+      "destination": "/api/share-plastic-project?id=:id"
+    },
+    {
+      "source": "/share/plastic/:id(\\d+)/",
+      "destination": "/api/share-plastic-project?id=:id"
+    },
+    {
       "source": "/share/page",
       "destination": "/api/share-page"
     },
     {
       "source": "/share/page/",
       "destination": "/api/share-page"
+    },
+    {
+      "source": "/plastic/:id(\\d+)",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": "(?i).*(whatsapp|facebookexternalhit|facebot|twitterbot|linkedinbot|slackbot|discordbot|telegrambot|embedly|pinterest|quora link preview|googlebot|bingbot|applebot|yandexbot|duckduckbot|bot|crawler|spider).*"
+        }
+      ],
+      "destination": "/api/share-plastic-project?id=:id"
+    },
+    {
+      "source": "/plastic/:id(\\d+)/",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": "(?i).*(whatsapp|facebookexternalhit|facebot|twitterbot|linkedinbot|slackbot|discordbot|telegrambot|embedly|pinterest|quora link preview|googlebot|bingbot|applebot|yandexbot|duckduckbot|bot|crawler|spider).*"
+        }
+      ],
+      "destination": "/api/share-plastic-project?id=:id"
     },
     {
       "source": "/plastic-pulse",

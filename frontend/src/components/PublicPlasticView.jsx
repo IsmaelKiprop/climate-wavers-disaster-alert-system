@@ -87,7 +87,8 @@ const PublicPlasticView = () => {
     document.body.appendChild(script);
   }, []);
 
-  const shareUrl = `${window.location.origin}/plastic/${projectId}`;
+  // Cache-buster so WhatsApp re-fetches project-specific OG after deploy.
+  const shareUrl = `${window.location.origin}/plastic/${projectId}?v=pl1`;
 
   const orgName =
     project?.organization_display_name ||
@@ -247,6 +248,17 @@ const PublicPlasticView = () => {
       ? (Number(project.recovered_kg || 0) / Number(project.goal_kg)) * 100
       : 0
   );
+  const recoveredKg = Number(project.recovered_kg || 0);
+  const goalKg = Number(project.goal_kg || 0);
+  const aboutText =
+    project.description ||
+    project.short_description ||
+    `${orgName} is running a Plastic Pulse recovery project${
+      place ? ` in ${place}` : ""
+    }. Sponsor verified kilos to fund collection, sorting, and flood-drain cleanup — every gift issues a certificate you can share.`;
+  const hasHotspots = (project.hotspots || []).length > 0;
+  const hasRecoveries = (project.recent_recoveries || []).length > 0;
+  const hasFieldActivity = hasHotspots || hasRecoveries;
 
   return (
     <PublicPage
@@ -263,7 +275,11 @@ const PublicPlasticView = () => {
       <div className="space-y-8">
         {/* Hero */}
         <section className="border border-border bg-surface overflow-hidden">
-          <div className="relative h-48 sm:h-64 bg-[var(--cw-overlay-soft)]">
+          <div
+            className={`relative min-h-[14rem] sm:min-h-[18rem] ${
+              coverUrl ? "bg-[var(--cw-overlay-soft)]" : "bg-primary"
+            }`}
+          >
             {coverUrl ? (
               <img
                 src={coverUrl}
@@ -271,25 +287,79 @@ const PublicPlasticView = () => {
                 className="absolute inset-0 w-full h-full object-cover"
               />
             ) : (
-              <div className="absolute inset-0 flex items-center justify-center">
-                <IoLeafOutline className="text-primary/40" size={72} />
+              <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden>
+                <IoLeafOutline
+                  className="absolute -right-6 -top-4 text-primary-foreground/15"
+                  size={220}
+                />
+                <IoLeafOutline
+                  className="absolute -left-10 bottom-0 text-primary-foreground/10 rotate-12"
+                  size={160}
+                />
               </div>
             )}
-            <div className="absolute inset-0 bg-black/45" />
-            <div className="absolute bottom-0 left-0 right-0 p-4 sm:p-6 text-white">
-              <p className="text-[11px] uppercase tracking-wide text-white/80 mb-1">
-                Plastic Pulse
-              </p>
-              <h1 className="text-2xl sm:text-3xl font-semibold leading-tight">
-                {project.name}
-              </h1>
-              {place ? (
-                <p className="mt-1.5 text-sm text-white/85 inline-flex items-center gap-1.5">
-                  <IoLocationOutline size={14} />
-                  {place}
-                  {project.flood_zone_flag ? " · Drain / flood focus" : ""}
+            {coverUrl ? <div className="absolute inset-0 bg-black/45" /> : null}
+            <div
+              className={`relative z-[1] flex flex-col justify-end gap-4 p-4 sm:p-6 min-h-[14rem] sm:min-h-[18rem] ${
+                coverUrl ? "text-white" : "text-primary-foreground"
+              }`}
+            >
+              <div>
+                <p
+                  className={`text-[11px] uppercase tracking-wide mb-1 ${
+                    coverUrl ? "text-white/80" : "text-primary-foreground/80"
+                  }`}
+                >
+                  Plastic Pulse
                 </p>
-              ) : null}
+                <h1 className="text-2xl sm:text-3xl font-semibold leading-tight">
+                  {project.name}
+                </h1>
+                {place ? (
+                  <p
+                    className={`mt-1.5 text-sm inline-flex items-center gap-1.5 ${
+                      coverUrl ? "text-white/85" : "text-primary-foreground/90"
+                    }`}
+                  >
+                    <IoLocationOutline size={14} />
+                    {place}
+                    {project.flood_zone_flag ? " · Drain / flood focus" : ""}
+                  </p>
+                ) : null}
+              </div>
+              <div
+                className={`grid grid-cols-3 gap-2 sm:gap-3 border-t pt-3 ${
+                  coverUrl ? "border-white/25" : "border-primary-foreground/25"
+                }`}
+              >
+                {[
+                  {
+                    label: "Recovered",
+                    value: `${recoveredKg.toLocaleString()} kg`,
+                  },
+                  {
+                    label: "Goal",
+                    value: `${goalKg.toLocaleString()} kg`,
+                  },
+                  {
+                    label: "Sponsor",
+                    value: `$${project.sponsor_price_usd_per_kg}/kg`,
+                  },
+                ].map((stat) => (
+                  <div key={stat.label}>
+                    <p
+                      className={`text-[10px] sm:text-[11px] uppercase tracking-wide ${
+                        coverUrl ? "text-white/70" : "text-primary-foreground/70"
+                      }`}
+                    >
+                      {stat.label}
+                    </p>
+                    <p className="text-sm sm:text-base font-semibold mt-0.5">
+                      {stat.value}
+                    </p>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
 
@@ -371,29 +441,60 @@ const PublicPlasticView = () => {
 
         <div className="grid lg:grid-cols-[1.4fr_1fr] gap-8 items-start">
           <div className="space-y-8 min-w-0">
-            {(project.short_description || project.description) && (
-              <section>
-                <h2 className="text-lg font-semibold text-foreground mb-2">About</h2>
-                <p className="text-muted leading-relaxed whitespace-pre-wrap">
-                  {project.description || project.short_description}
+            <section>
+              <h2 className="text-lg font-semibold text-foreground mb-2">About</h2>
+              <p className="text-muted leading-relaxed whitespace-pre-wrap">
+                {aboutText}
+              </p>
+              {project.contact_person ? (
+                <p className="text-sm text-muted mt-3">
+                  Contact:{" "}
+                  <span className="text-foreground">{project.contact_person}</span>
                 </p>
-                {project.contact_person ? (
-                  <p className="text-sm text-muted mt-3">
-                    Contact:{" "}
-                    <span className="text-foreground">{project.contact_person}</span>
-                  </p>
-                ) : null}
-              </section>
-            )}
+              ) : null}
+            </section>
+
+            <section className="border border-border bg-surface p-4 sm:p-5 space-y-3">
+              <h2 className="text-lg font-semibold text-foreground">
+                How sponsorship works
+              </h2>
+              <ol className="grid sm:grid-cols-3 gap-3 text-sm">
+                {[
+                  {
+                    step: "1",
+                    title: "Pick kilos",
+                    body: "Choose how many kilograms you want to fund at the project rate.",
+                  },
+                  {
+                    step: "2",
+                    title: "Fund recovery",
+                    body: "Your gift pays verified collection, sorting, and drain cleanup.",
+                  },
+                  {
+                    step: "3",
+                    title: "Get a certificate",
+                    body: "After payment you receive a shareable Plastic Pulse certificate.",
+                  },
+                ].map((item) => (
+                  <li key={item.step} className="border border-border bg-background p-3">
+                    <p className="text-[11px] uppercase tracking-wide text-primary mb-1">
+                      Step {item.step}
+                    </p>
+                    <p className="font-medium text-foreground">{item.title}</p>
+                    <p className="text-muted mt-1 text-[13px] leading-snug">{item.body}</p>
+                  </li>
+                ))}
+              </ol>
+            </section>
 
             {/* Progress */}
             <section className="space-y-3">
               <div className="flex justify-between text-sm">
                 <span className="font-medium text-foreground">
-                  {Number(project.recovered_kg || 0).toLocaleString()} kg recovered
+                  {recoveredKg.toLocaleString()} kg recovered
                 </span>
                 <span className="text-muted">
-                  Goal {Number(project.goal_kg || 0).toLocaleString()} kg
+                  Goal {goalKg.toLocaleString()} kg
                 </span>
               </div>
               <div className="h-2.5 bg-border overflow-hidden">
@@ -439,59 +540,68 @@ const PublicPlasticView = () => {
             ) : null}
 
             <section className="space-y-3">
-              <h2 className="text-lg font-semibold text-foreground">Hotspots</h2>
-              {(project.hotspots || []).length === 0 ? (
-                <p className="text-sm text-muted">No hotspots yet.</p>
+              <h2 className="text-lg font-semibold text-foreground">Field activity</h2>
+              {!hasFieldActivity ? (
+                <div className="border border-border bg-surface p-4 space-y-2">
+                  <p className="text-sm text-foreground font-medium">
+                    Mapping and recovery are getting started
+                  </p>
+                  <p className="text-sm text-muted leading-relaxed">
+                    Hotspots (including drain and flood risk sites) and verified bag
+                    recoveries will appear here as {orgName} logs field work. Sponsoring
+                    now funds the first kilos toward the{" "}
+                    {goalKg.toLocaleString()} kg goal.
+                  </p>
+                </div>
               ) : (
-                <ul className="space-y-2">
-                  {project.hotspots.map((h) => (
-                    <li
-                      key={h.id}
-                      className="border border-border bg-surface p-3 text-sm flex gap-3"
-                    >
-                      {h.photo ? (
-                        <img
-                          src={h.photo}
-                          alt=""
-                          className="h-14 w-14 object-cover border border-border shrink-0"
-                        />
-                      ) : null}
-                      <div className="min-w-0">
-                        <div className="font-medium text-foreground">
-                          {h.title || h.location_label || `Hotspot #${h.id}`}
+                <div className="space-y-6">
+                  {hasHotspots ? (
+                    <ul className="space-y-2">
+                      {project.hotspots.map((h) => (
+                        <li
+                          key={h.id}
+                          className="border border-border bg-surface p-3 text-sm flex gap-3"
+                        >
+                          {h.photo ? (
+                            <img
+                              src={h.photo}
+                              alt=""
+                              className="h-14 w-14 object-cover border border-border shrink-0"
+                            />
+                          ) : null}
+                          <div className="min-w-0">
+                            <div className="font-medium text-foreground">
+                              {h.title || h.location_label || `Hotspot #${h.id}`}
+                            </div>
+                            <div className="text-muted mt-0.5">
+                              {statusLabel(h.status)} · {statusLabel(h.severity)}
+                              {h.drain_related ? " · flood/drain risk" : ""}
+                            </div>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                  {hasRecoveries
+                    ? project.recent_recoveries.map((r) => (
+                        <div
+                          key={r.id}
+                          className="border border-border bg-surface p-3 space-y-2"
+                        >
+                          <div className="text-sm flex justify-between gap-2">
+                            <span className="text-foreground">
+                              {r.bag_id} · {r.kg_verified || r.kg_claimed} kg ·{" "}
+                              {statusLabel(r.status)}
+                            </span>
+                            <span className="text-muted">{r.polymer_type}</span>
+                          </div>
+                          <PlantingProofMediaCarousel
+                            items={proofMediaFromArrays(r.images, r.videos)}
+                          />
                         </div>
-                        <div className="text-muted mt-0.5">
-                          {statusLabel(h.status)} · {statusLabel(h.severity)}
-                          {h.drain_related ? " · flood/drain risk" : ""}
-                        </div>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </section>
-
-            <section className="space-y-3">
-              <h2 className="text-lg font-semibold text-foreground">
-                Recent recoveries
-              </h2>
-              {(project.recent_recoveries || []).length === 0 ? (
-                <p className="text-sm text-muted">No recoveries yet.</p>
-              ) : (
-                project.recent_recoveries.map((r) => (
-                  <div key={r.id} className="border border-border bg-surface p-3 space-y-2">
-                    <div className="text-sm flex justify-between gap-2">
-                      <span className="text-foreground">
-                        {r.bag_id} · {r.kg_verified || r.kg_claimed} kg ·{" "}
-                        {statusLabel(r.status)}
-                      </span>
-                      <span className="text-muted">{r.polymer_type}</span>
-                    </div>
-                    <PlantingProofMediaCarousel
-                      items={proofMediaFromArrays(r.images, r.videos)}
-                    />
-                  </div>
-                ))
+                      ))
+                    : null}
+                </div>
               )}
             </section>
           </div>

@@ -144,6 +144,51 @@ def resolve_site_link_preview(url):
     og = f"{base}/og-image.jpg"
     path = (parsed.pathname or "/").rstrip("/") or "/"
 
+    plastic_match = re.match(r"^/plastic/(\d+)", path)
+    if plastic_match:
+        try:
+            from .models import PlasticProject
+
+            plastic = PlasticProject.objects.filter(
+                id=int(plastic_match.group(1))
+            ).select_related("tree_admin_org", "organization").first()
+        except Exception:
+            plastic = None
+        if plastic:
+            org = getattr(plastic, "tree_admin_org", None)
+            org_name = (
+                (getattr(org, "name", None) or "").strip()
+                or (plastic.organization_name or "").strip()
+                or "Climate Wavers partner"
+            )
+            cover = (
+                _http_url(getattr(plastic, "cover_image", None))
+                or f"{base}/docs/plastic-pulse-og.jpg"
+            )
+            recovered = float(plastic.recovered_kg or 0)
+            goal = float(plastic.goal_kg or 0)
+            desc = (
+                plastic.short_description
+                or plastic.description
+                or f"Led by {org_name}"
+            )
+            if goal > 0:
+                desc = f"{desc} · {recovered:g}/{goal:g} kg recovered"
+            return {
+                "url": f"{base}/plastic/{plastic.id}",
+                "title": f"{plastic.name} · Plastic Pulse",
+                "description": re.sub(r"\s+", " ", str(desc)).strip()[:180],
+                "image": cover,
+                "site_name": "Climate Wavers",
+            }
+        return {
+            "url": f"{base}/plastic/{plastic_match.group(1)}",
+            "title": "Plastic Pulse · Climate Wavers",
+            "description": "Sponsor verified plastic recovery on Climate Wavers.",
+            "image": f"{base}/docs/plastic-pulse-og.jpg",
+            "site_name": "Climate Wavers",
+        }
+
     project_match = re.match(r"^/p/(\d+)", path)
     if project_match:
         try:

@@ -75,6 +75,50 @@ export async function resolveLocalLinkPreview(url) {
     }
   }
 
+  const plasticMatch = parsed.pathname.match(/^\/plastic\/(\d+)/);
+  if (plasticMatch) {
+    try {
+      const project = await client.run(
+        "get",
+        endpoints.plasticProject(plasticMatch[1]),
+        {},
+        false,
+        false,
+        false,
+        false
+      );
+      const org =
+        project?.organization_display_name ||
+        project?.organization_name ||
+        "Climate Wavers partner";
+      const recovered = Number(project?.recovered_kg || 0);
+      const goal = Number(project?.goal_kg || 0);
+      return {
+        url: `${SITE.url}/plastic/${plasticMatch[1]}`,
+        title: `${project?.name || "Plastic project"} · Plastic Pulse`,
+        description: String(
+          project?.short_description ||
+            project?.description ||
+            `${org}${goal > 0 ? ` · ${recovered}/${goal} kg recovered` : ""}`
+        ).slice(0, 180),
+        image:
+          project?.cover_image_url ||
+          project?.cover_image ||
+          project?.organization_logo_url ||
+          `${SITE.url}/docs/plastic-pulse-og.jpg`,
+        siteName: "Climate Wavers",
+      };
+    } catch {
+      return {
+        url: `${SITE.url}/plastic/${plasticMatch[1]}`,
+        title: "Plastic Pulse · Climate Wavers",
+        description: "Sponsor verified plastic recovery on Climate Wavers.",
+        image: `${SITE.url}/docs/plastic-pulse-og.jpg`,
+        siteName: "Climate Wavers",
+      };
+    }
+  }
+
   const profileMatch = parsed.pathname.match(/^\/u\/(\d+)/);
   if (profileMatch) {
     try {
