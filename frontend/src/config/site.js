@@ -30,6 +30,7 @@ export const FOOTER_INFORMATION = [
   { to: "/transparency-report", label: "Transparency Report" },
   { to: "/verify/champion", label: "Verify Champion Certificate" },
   { to: "/verify/tree", label: "Verify Tree Certificate" },
+  { to: "/plastic-pulse", label: "Plastic Pulse Onboarding" },
   { to: "/faq", label: "FAQ" },
   { to: "/privacy-policy", label: "Privacy Policy" },
 ];

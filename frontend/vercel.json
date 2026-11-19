@@ -69,6 +69,36 @@
       "destination": "/api/share-gift?id=:id"
     },
     {
+      "source": "/share/plastic-pulse",
+      "destination": "/api/share-plastic-pulse"
+    },
+    {
+      "source": "/share/plastic-pulse/",
+      "destination": "/api/share-plastic-pulse"
+    },
+    {
+      "source": "/plastic-pulse",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": "(?i).*(whatsapp|facebookexternalhit|facebot|twitterbot|linkedinbot|slackbot|discordbot|telegrambot|embedly|pinterest|quora link preview|googlebot|bingbot|applebot|yandexbot|duckduckbot|bot|crawler|spider).*"
+        }
+      ],
+      "destination": "/api/share-plastic-pulse"
+    },
+    {
+      "source": "/plastic-pulse/",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": "(?i).*(whatsapp|facebookexternalhit|facebot|twitterbot|linkedinbot|slackbot|discordbot|telegrambot|embedly|pinterest|quora link preview|googlebot|bingbot|applebot|yandexbot|duckduckbot|bot|crawler|spider).*"
+        }
+      ],
+      "destination": "/api/share-plastic-pulse"
+    },
+    {
       "source": "/u/:id",
       "has": [
         {

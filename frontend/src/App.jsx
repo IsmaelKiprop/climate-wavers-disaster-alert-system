@@ -36,6 +36,7 @@ const ChampionDirectoryPage = lazy(() => import("./pages/ChampionDirectoryPage")
 const VerifyChampionCertificate = lazy(() => import("./pages/VerifyChampionCertificate"));
 const VerifyTreeCertificate = lazy(() => import("./pages/VerifyTreeCertificate"));
 const VerifyPlasticCertificate = lazy(() => import("./pages/VerifyPlasticCertificate"));
+const PlasticPulseOnboarding = lazy(() => import("./pages/PlasticPulseOnboarding"));
 const DisasterPage = lazy(() => import("./pages/DisasterPage"));
 const Donations = lazy(() => import("./components/Donations"));
 const PlantTree = lazy(() => import("./components/PlantTree"));
@@ -238,6 +239,7 @@ function App() {
               <Route path="/verify/tree/:code" element={<VerifyTreeCertificate />} />
               <Route path="/verify/plastic" element={<VerifyPlasticCertificate />} />
               <Route path="/verify/plastic/:code" element={<VerifyPlasticCertificate />} />
+              <Route path="/plastic-pulse" element={<PlasticPulseOnboarding />} />
               <Route path="/project" element={<PublicProjectView />} />
               <Route path="/p/:projectId" element={<PublicProjectView />} />
               <Route path="/plastic/:projectId" element={<PublicPlasticView />} />
