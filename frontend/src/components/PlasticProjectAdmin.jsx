@@ -518,7 +518,7 @@ const PlasticProjectAdmin = () => {
             <p className="text-sm text-muted">Select or create a project first.</p>
           ) : (
             <>
-              <div className="border border-border p-4">
+              <div className="border border-border p-4 space-y-2">
                 <div className="flex flex-wrap justify-between gap-2">
                   <div>
                     <h2 className="font-medium">{detail?.name || `Project #${selectedId}`}</h2>
@@ -530,14 +530,23 @@ const PlasticProjectAdmin = () => {
                     Open public page
                   </Link>
                 </div>
+                <p className="text-xs text-muted">
+                  Field order: <span className="text-foreground">1) Pin hotspot</span> →{" "}
+                  <span className="text-foreground">2) Submit proof</span> (GPS + photo + kg) →{" "}
+                  <span className="text-foreground">3) Verify queue</span> →{" "}
+                  <span className="text-foreground">4) Recycler intake</span>
+                </p>
               </div>
 
               <div className="grid lg:grid-cols-2 gap-6">
                 <form onSubmit={pinHotspot} className="space-y-3 border border-border p-4">
-                  <h3 className="font-medium">Pin hotspot</h3>
+                  <h3 className="font-medium">1. Pin hotspot</h3>
+                  <p className="text-xs text-muted">
+                    Mark where plastic is. Allow location when the browser asks.
+                  </p>
                   <input
                     className="w-full h-10 px-3 border border-border bg-background"
-                    placeholder="Title"
+                    placeholder="Title e.g. Drain near market"
                     value={hotspotForm.title}
                     onChange={(e) => setHotspotForm((p) => ({ ...p, title: e.target.value }))}
                   />
@@ -547,9 +556,16 @@ const PlasticProjectAdmin = () => {
                     value={hotspotForm.notes}
                     onChange={(e) => setHotspotForm((p) => ({ ...p, notes: e.target.value }))}
                   />
-                  <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => captureGps("hotspot")}
+                    className="w-full h-10 border border-border text-sm"
+                  >
+                    Capture GPS for hotspot
+                  </button>
+                  <div className="grid grid-cols-2 gap-2">
                     <input
-                      className="flex-1 h-10 px-3 border border-border bg-background"
+                      className="h-10 px-3 border border-border bg-background"
                       placeholder="Lat"
                       value={hotspotForm.latitude}
                       onChange={(e) =>
@@ -558,7 +574,7 @@ const PlasticProjectAdmin = () => {
                       required
                     />
                     <input
-                      className="flex-1 h-10 px-3 border border-border bg-background"
+                      className="h-10 px-3 border border-border bg-background"
                       placeholder="Lng"
                       value={hotspotForm.longitude}
                       onChange={(e) =>
@@ -566,14 +582,16 @@ const PlasticProjectAdmin = () => {
                       }
                       required
                     />
-                    <button
-                      type="button"
-                      onClick={() => captureGps("hotspot")}
-                      className="h-10 px-3 border border-border text-sm"
-                    >
-                      GPS
-                    </button>
                   </div>
+                  {!hotspotForm.latitude || !hotspotForm.longitude ? (
+                    <p className="text-xs text-amber-600 dark:text-amber-300">
+                      Lat/Lng required — tap Capture GPS first.
+                    </p>
+                  ) : (
+                    <p className="text-xs text-primary">
+                      GPS ready: {hotspotForm.latitude}, {hotspotForm.longitude}
+                    </p>
+                  )}
                   <label className="flex items-center gap-2 text-sm">
                     <input
                       type="checkbox"
@@ -590,7 +608,10 @@ const PlasticProjectAdmin = () => {
                 </form>
 
                 <form onSubmit={submitProof} className="space-y-3 border border-border p-4">
-                  <h3 className="font-medium">Submit recovery proof</h3>
+                  <h3 className="font-medium">2. Submit recovery proof</h3>
+                  <p className="text-xs text-muted">
+                    After collecting: GPS + at least one photo + kg. Bag ID optional.
+                  </p>
                   <select
                     className="w-full h-10 px-3 border border-border bg-background"
                     value={proofForm.hotspot_id}
