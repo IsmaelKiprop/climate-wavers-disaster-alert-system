@@ -7,10 +7,7 @@ import PlasticBagQrCard from "../components/PlasticBagQrCard";
 import { endpoints } from "../utils/endpoints";
 import { getAuthToken } from "../utils/factory";
 import { apiUrl } from "../config/env";
-import {
-  flushPlasticOfflineProofs,
-  listPlasticOfflineProofs,
-} from "../utils/plasticOfflineQueue";
+import PlasticOfflineSyncBanner from "../components/PlasticOfflineSyncBanner";
 
 async function api(path, { method = "GET", body } = {}) {
   const token = getAuthToken();
@@ -39,12 +36,7 @@ const PlasticCollectorDesk = () => {
   const [detail, setDetail] = useState(null);
   const [myBags, setMyBags] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [offlineCount, setOfflineCount] = useState(0);
   const [view, setView] = useState("projects");
-
-  const refreshOffline = useCallback(() => {
-    setOfflineCount(listPlasticOfflineProofs().length);
-  }, []);
 
   const loadProjects = useCallback(async () => {
     const data = await api(endpoints.plasticProjects);
@@ -77,7 +69,6 @@ const PlasticCollectorDesk = () => {
       try {
         const list = await loadProjects();
         await loadMyBags();
-        refreshOffline();
         setSelectedId((prev) => prev || list[0]?.id || null);
       } catch (err) {
         toast.error(err.message || "Could not load Plastic Pulse projects");
@@ -85,31 +76,13 @@ const PlasticCollectorDesk = () => {
         setLoading(false);
       }
     })();
-  }, [loadProjects, loadMyBags, refreshOffline]);
+  }, [loadProjects, loadMyBags]);
 
   useEffect(() => {
     if (selectedId) {
       loadDetail(selectedId).catch(() => setDetail(null));
     }
   }, [selectedId, loadDetail]);
-
-  useEffect(() => {
-    const sync = async () => {
-      if (!navigator.onLine) return;
-      const { synced } = await flushPlasticOfflineProofs(async (payload) =>
-        api(endpoints.plasticRecoveries, { method: "POST", body: payload })
-      );
-      if (synced.length) {
-        toast.success(`Synced ${synced.length} offline bag(s)`);
-        loadMyBags();
-        if (selectedId) loadDetail(selectedId);
-      }
-      refreshOffline();
-    };
-    window.addEventListener("online", sync);
-    sync();
-    return () => window.removeEventListener("online", sync);
-  }, [loadMyBags, loadDetail, selectedId, refreshOffline]);
 
   const selected = detail || projects.find((p) => p.id === selectedId);
 
@@ -122,11 +95,13 @@ const PlasticCollectorDesk = () => {
           Signed-in collectors use this desk. Walk-in guests can collect without an account
           on any public project page (`/plastic/:id`) with name, phone, and the CBO claim PIN.
         </p>
-        {offlineCount > 0 ? (
-          <p className="text-xs text-amber-700 dark:text-amber-400">
-            {offlineCount} bag(s) queued offline — will sync when you are online
-          </p>
-        ) : null}
+        <PlasticOfflineSyncBanner
+          noun="bag"
+          onSynced={() => {
+            loadMyBags();
+            if (selectedId) loadDetail(selectedId);
+          }}
+        />
       </header>
 
       <div className="flex gap-1 border-b border-border">
@@ -301,6 +276,7 @@ const PlasticCollectorDesk = () => {
                 <PlasticCollectorPanel
                   project={selected}
                   showProjectLink
+                  showOfflineBanner={false}
                   onProjectRefresh={() => {
                     loadDetail(selectedId);
                     loadMyBags();

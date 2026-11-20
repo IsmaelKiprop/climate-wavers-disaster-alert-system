@@ -11,9 +11,9 @@ import PlantingProofMediaCarousel, {
 import PlasticBagQrCard from "./PlasticBagQrCard";
 import {
   enqueuePlasticOfflineProof,
-  flushPlasticOfflineProofs,
-  listPlasticOfflineProofs,
+  isPlasticNetworkError,
 } from "../utils/plasticOfflineQueue";
+import PlasticOfflineSyncBanner from "./PlasticOfflineSyncBanner";
 
 async function api(path, { method = "GET", body } = {}) {
   const token = getAuthToken();
@@ -26,7 +26,16 @@ async function api(path, { method = "GET", body } = {}) {
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.detail || data.message || "Request failed");
+  if (!res.ok) {
+    const err = new Error(
+      (typeof data.detail === "string" && data.detail) ||
+        data.message ||
+        "Request failed"
+    );
+    err.status = res.status;
+    err.data = data;
+    throw err;
+  }
   return data;
 }
 
@@ -79,7 +88,6 @@ const PlasticProjectAdmin = () => {
   const [intaking, setIntaking] = useState(false);
   const [savingRecycler, setSavingRecycler] = useState(false);
   const [tab, setTab] = useState("projects");
-  const [offlineCount, setOfflineCount] = useState(0);
   const [lastBagLabel, setLastBagLabel] = useState(null);
   const [qrBagId, setQrBagId] = useState(null);
   const [invitingId, setInvitingId] = useState(null);
@@ -117,10 +125,6 @@ const PlasticProjectAdmin = () => {
     contact_phone: "",
     buy_rates: { PET: 20, HDPE: 25, PP: 10 },
   });
-
-  const refreshOffline = useCallback(() => {
-    setOfflineCount(listPlasticOfflineProofs().length);
-  }, []);
 
   const loadProjects = useCallback(async () => {
     const data = await api(`${endpoints.plasticProjects}?mine=1`);
@@ -160,37 +164,17 @@ const PlasticProjectAdmin = () => {
       setLoading(true);
       try {
         await Promise.all([loadProjects(), loadQueue(), loadRecyclers()]);
-        refreshOffline();
       } catch (err) {
         toast.error(err.message || "Failed to load Plastic Pulse");
       } finally {
         setLoading(false);
       }
     })();
-  }, [loadProjects, loadQueue, loadRecyclers, refreshOffline]);
+  }, [loadProjects, loadQueue, loadRecyclers]);
 
   useEffect(() => {
     if (selectedId) loadDetail(selectedId).catch(() => setDetail(null));
   }, [selectedId, loadDetail]);
-
-  useEffect(() => {
-    const sync = async () => {
-      if (!navigator.onLine) return;
-      const { synced, remaining } = await flushPlasticOfflineProofs(async (payload) =>
-        api(endpoints.plasticRecoveries, { method: "POST", body: payload })
-      );
-      if (synced.length) {
-        toast.success(`Synced ${synced.length} offline proof(s)`);
-        loadQueue();
-        if (selectedId) loadDetail(selectedId);
-      }
-      refreshOffline();
-      return remaining;
-    };
-    window.addEventListener("online", sync);
-    sync();
-    return () => window.removeEventListener("online", sync);
-  }, [loadQueue, loadDetail, selectedId, refreshOffline]);
 
   const createProject = async (e) => {
     e.preventDefault();
@@ -326,7 +310,6 @@ const PlasticProjectAdmin = () => {
     setSubmittingProof(true);
     if (!navigator.onLine) {
       enqueuePlasticOfflineProof(payload);
-      refreshOffline();
       toast.info("Saved offline — will sync when online");
       setProofForm((p) => ({
         ...p,
@@ -372,10 +355,13 @@ const PlasticProjectAdmin = () => {
       await loadDetail(selectedId);
       setTab("queue");
     } catch (err) {
-      enqueuePlasticOfflineProof(payload);
-      refreshOffline();
-      toast.warning(`Queued offline: ${err.message}`);
-      setTab("queue");
+      if (isPlasticNetworkError(err)) {
+        enqueuePlasticOfflineProof(payload);
+        toast.warning(`Queued offline: ${err.message || "network error"}`);
+        setTab("queue");
+      } else {
+        toast.error(err.message || "Could not submit proof");
+      }
     } finally {
       setSubmittingProof(false);
     }
@@ -551,25 +537,13 @@ const PlasticProjectAdmin = () => {
             or the public project page — you verify here, then recyclers scan intake.
           </p>
         </div>
-        {offlineCount > 0 ? (
-          <div className="text-sm px-3 py-2 border border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-200">
-            {offlineCount} proof(s) waiting to sync
-            <button
-              type="button"
-              className="ml-3 underline"
-              onClick={async () => {
-                const { synced } = await flushPlasticOfflineProofs(async (payload) =>
-                  api(endpoints.plasticRecoveries, { method: "POST", body: payload })
-                );
-                if (synced.length) toast.success(`Synced ${synced.length}`);
-                refreshOffline();
-                loadQueue();
-              }}
-            >
-              Sync now
-            </button>
-          </div>
-        ) : null}
+        <PlasticOfflineSyncBanner
+          noun="proof"
+          onSynced={() => {
+            loadQueue();
+            if (selectedId) loadDetail(selectedId);
+          }}
+        />
       </div>
 
       <div className="flex flex-wrap gap-2 border-b border-border pb-2">

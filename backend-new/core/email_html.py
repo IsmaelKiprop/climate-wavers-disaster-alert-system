@@ -71,14 +71,16 @@ def _preview_block(
     preview_url: str = "",
 ) -> str:
     """
-    In-app-style preview: landscape image (≈ OG 1.91:1) with optional
-    link-card title/description under the image.
+    In-app-style preview: full-width hero (complete poster / media, no crop)
+    with optional link-card title/description under the image.
     """
     href = (preview_url or "").strip()
+    # height:auto + no object-fit:cover so posters (e.g. Plastic Pulse) are
+    # not clipped at the email card edges. Email clients handle this reliably.
     img = (
-        f'<img src="{_escape(hero)}" width="560" height="294" alt="" '
-        f'style="display:block;width:100%;max-width:560px;height:294px;'
-        f'object-fit:cover;object-position:center;border:0;background:#0b3d40;" />'
+        f'<img src="{_escape(hero)}" width="560" alt="" '
+        f'style="display:block;width:100%;max-width:560px;height:auto;'
+        f'border:0;background:#0b3d40;" />'
     )
     if href:
         img = (

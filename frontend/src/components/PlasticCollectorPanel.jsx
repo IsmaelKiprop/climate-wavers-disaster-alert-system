@@ -7,9 +7,9 @@ import { apiUrl } from "../config/env";
 import { uploadFiles } from "../services/upload.service";
 import {
   enqueuePlasticOfflineProof,
-  flushPlasticOfflineProofs,
-  listPlasticOfflineProofs,
+  isPlasticNetworkError,
 } from "../utils/plasticOfflineQueue";
+import PlasticOfflineSyncBanner from "./PlasticOfflineSyncBanner";
 import {
   getPlasticGuestProfile,
   getPlasticGuestProjectSession,
@@ -37,7 +37,16 @@ async function api(path, { method = "GET", body } = {}) {
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.detail || data.message || "Request failed");
+  if (!res.ok) {
+    const err = new Error(
+      (typeof data.detail === "string" && data.detail) ||
+        data.message ||
+        "Request failed"
+    );
+    err.status = res.status;
+    err.data = data;
+    throw err;
+  }
   return data;
 }
 
@@ -69,6 +78,7 @@ const PlasticCollectorPanel = ({
   onProjectRefresh,
   showProjectLink = false,
   compact = false,
+  showOfflineBanner = true,
 }) => {
   const user = getUser();
   const authed = Boolean(getAuthToken());
@@ -95,7 +105,6 @@ const PlasticCollectorPanel = ({
   const [loadingBags, setLoadingBags] = useState(false);
   const [lastBag, setLastBag] = useState(null);
   const [whatsappPrompt, setWhatsappPrompt] = useState(null);
-  const [offlineCount, setOfflineCount] = useState(0);
   const [tab, setTab] = useState("hotspots");
   const openedCertWaRef = useRef(null);
   if (openedCertWaRef.current == null) {
@@ -150,14 +159,6 @@ const PlasticCollectorPanel = ({
     [hotspots, ownsHotspot]
   );
 
-  const refreshOffline = useCallback(() => {
-    setOfflineCount(
-      listPlasticOfflineProofs().filter(
-        (item) => !projectId || Number(item.project) === Number(projectId)
-      ).length
-    );
-  }, [projectId]);
-
   const persistGuest = useCallback(() => {
     setPlasticGuestProfile({ guest_name: guestName, guest_phone: guestPhone });
   }, [guestName, guestPhone]);
@@ -196,8 +197,7 @@ const PlasticCollectorPanel = ({
 
   useEffect(() => {
     loadMyBags();
-    refreshOffline();
-  }, [loadMyBags, refreshOffline]);
+  }, [loadMyBags]);
 
   // When a guest bag gets a certificate, open WhatsApp once with the cert link.
   useEffect(() => {
@@ -235,31 +235,6 @@ const PlasticCollectorPanel = ({
     });
     toast.success("Certificate ready — WhatsApp opened, tap Send to share");
   }, [myBags, authed, guestPhone, guestName, project?.name]);
-
-  useEffect(() => {
-    const sync = async () => {
-      if (!navigator.onLine) return;
-      const { synced } = await flushPlasticOfflineProofs(async (payload) =>
-        api(endpoints.plasticRecoveries, { method: "POST", body: payload })
-      );
-      if (synced.length) {
-        toast.success(`Synced ${synced.length} offline bag(s)`);
-        const firstGuest = synced.find((row) => row?.guest_token);
-        if (firstGuest?.guest_token && projectId) {
-          setGuestToken(firstGuest.guest_token);
-          setPlasticGuestProjectSession(projectId, {
-            guest_token: firstGuest.guest_token,
-          });
-        }
-        loadMyBags();
-        onProjectRefresh?.();
-      }
-      refreshOffline();
-    };
-    window.addEventListener("online", sync);
-    sync();
-    return () => window.removeEventListener("online", sync);
-  }, [loadMyBags, onProjectRefresh, refreshOffline, projectId]);
 
   const readDeviceGps = () =>
     new Promise((resolve, reject) => {
@@ -440,7 +415,6 @@ const PlasticCollectorPanel = ({
     setSubmitting(true);
     if (!navigator.onLine) {
       enqueuePlasticOfflineProof(payload);
-      refreshOffline();
       toast.info("Saved offline — will sync when you are back online");
       setProofForm(emptyProof);
       setSubmitting(false);
@@ -503,10 +477,14 @@ const PlasticCollectorPanel = ({
       onProjectRefresh?.();
       setTab("bags");
     } catch (err) {
-      enqueuePlasticOfflineProof(payload);
-      refreshOffline();
-      toast.warning(`Queued offline: ${err.message}`);
-      setTab("bags");
+      // Only queue when connectivity failed — validation errors must stay visible.
+      if (isPlasticNetworkError(err)) {
+        enqueuePlasticOfflineProof(payload);
+        toast.warning(`Queued offline: ${err.message || "network error"}`);
+        setTab("bags");
+      } else {
+        toast.error(err.message || "Could not submit bag");
+      }
     } finally {
       setSubmitting(false);
     }
@@ -586,10 +564,21 @@ const PlasticCollectorPanel = ({
         </p>
       )}
 
-      {offlineCount > 0 ? (
-        <p className="text-xs text-amber-700 dark:text-amber-400">
-          {offlineCount} bag(s) waiting to sync when you are online
-        </p>
+      {showOfflineBanner ? (
+        <PlasticOfflineSyncBanner
+          noun="bag"
+          onSynced={(synced) => {
+            const firstGuest = synced.find((row) => row?.guest_token);
+            if (firstGuest?.guest_token && projectId) {
+              setGuestToken(firstGuest.guest_token);
+              setPlasticGuestProjectSession(projectId, {
+                guest_token: firstGuest.guest_token,
+              });
+            }
+            loadMyBags();
+            onProjectRefresh?.();
+          }}
+        />
       ) : null}
 
       <div className="flex gap-1 border-b border-border">

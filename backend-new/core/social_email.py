@@ -78,15 +78,23 @@ def _cloudinary_video_still(video_url):
 
 def _email_fit_image(url):
     """
-    Prefer a landscape, email-friendly Cloudinary crop (≈ OG 1200×630).
+    Scale Cloudinary images for email width without cropping.
+    c_limit fits within max width; posters stay complete (no c_fill crop).
     Leaves non-Cloudinary URLs unchanged.
     """
     src = _http_url(url)
     if not src or "res.cloudinary.com" not in src:
         return src
-    # Insert c_fill,w_1120,h_588,f_auto,q_auto after /upload/
-    if "/upload/" in src and "/upload/c_fill," not in src:
-        return src.replace("/upload/", "/upload/c_fill,w_1120,h_588,f_auto,q_auto/", 1)
+    # Avoid re-transforming URLs that already have a crop/scale transform.
+    if "/upload/" in src and "/upload/c_" not in src:
+        return src.replace("/upload/", "/upload/c_limit,w_1120,f_auto,q_auto/", 1)
+    # Older emails used c_fill (crops edges) — rewrite to c_limit so posters show fully.
+    if "/upload/c_fill,w_1120,h_588," in src:
+        return src.replace(
+            "/upload/c_fill,w_1120,h_588,",
+            "/upload/c_limit,w_1120,",
+            1,
+        )
     return src
 
 
