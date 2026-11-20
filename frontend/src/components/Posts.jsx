@@ -8,6 +8,8 @@ import { IoChatboxEllipsesOutline } from "react-icons/io5";
 import { PiBookmark, PiBookmarkFill } from "react-icons/pi";
 import PostOwnerMenu from "./PostOwnerMenu";
 import PostEditPanel from "./PostEditPanel";
+import PostImpressions from "./PostImpressions";
+import PostImpressionRoot from "./PostImpressionRoot";
 import PropTypes from "prop-types";
 import ImageLightbox from "./ImageLightbox";
 import LinkifiedText from "./LinkifiedText";
@@ -420,8 +422,10 @@ const Posts = ({
     <div className="space-y-6 max-w-4xl mx-auto">
       {sortedPosts.length > 0 ? (
         sortedPosts.map((post) => (
-          <div
+          <PostImpressionRoot
             key={`${post?.user?.id || 'unknown'}_${post?.id || 'unknown'}`}
+            post={post}
+            enabled={type === "post"}
             className="bg-surface shadow-lg border border-border hover:shadow-xl transition-shadow duration-300 hover:border-primary/40 group"
           >
             <div className="p-6 pb-4 flex items-start justify-between gap-2">
@@ -537,6 +541,10 @@ const Posts = ({
                 
               </div>
             </div>
+            <PostImpressions
+              post={post}
+              className="px-6 py-2.5 border-t border-border"
+            />
             <div className="flex items-center justify-between px-6 py-4 border-t border-border bg-surface-muted/40">
               <button
                 type="button"
@@ -618,7 +626,7 @@ const Posts = ({
               </button>
               
             </div>
-          </div>
+          </PostImpressionRoot>
         ))
       ) : null}
       {mediaPreview?.src ? (

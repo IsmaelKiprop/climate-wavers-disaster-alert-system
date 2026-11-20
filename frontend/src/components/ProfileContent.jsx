@@ -12,6 +12,8 @@ import { postFontStyle } from "../utils/postFonts";
 import PostOwnerMenu from "./PostOwnerMenu";
 import PostEditPanel from "./PostEditPanel";
 import PostMediaViewer from "./PostMediaViewer";
+import PostImpressions from "./PostImpressions";
+import PostImpressionRoot from "./PostImpressionRoot";
 import { parsePostImages } from "../utils/postMedia";
 
 const PostImageFallback = ({ image, alt = "Post image", className = "" }) => {
@@ -102,7 +104,10 @@ const ProfileContent = ({ content, type, onLike, onUnlike, onRepost, onUnrepost,
     switch (type) {
       case "post":
         return (
-          <div className="bg-surface rounded-2xl shadow-lg border border-border hover:shadow-xl transition-all duration-300 hover:border-primary/30 group">
+          <PostImpressionRoot
+            post={content}
+            className="bg-surface rounded-2xl shadow-lg border border-border hover:shadow-xl transition-all duration-300 hover:border-primary/30 group"
+          >
             <div className="p-6">
               <div className="flex items-start justify-between gap-3 mb-4">
                 <div className="flex items-center space-x-3 min-w-0">
@@ -184,6 +189,7 @@ const ProfileContent = ({ content, type, onLike, onUnlike, onRepost, onUnrepost,
                 )}
               </div>
 
+              <PostImpressions post={content} className="pb-3" />
               <div className="flex items-center justify-between pt-4 border-t border-gray-100">
                 <div className="flex items-center space-x-8">
                   <button
@@ -220,7 +226,7 @@ const ProfileContent = ({ content, type, onLike, onUnlike, onRepost, onUnrepost,
                 </div>
               </div>
             </div>
-          </div>
+          </PostImpressionRoot>
         );
 
       case "comment":

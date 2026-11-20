@@ -471,8 +471,11 @@ class ViewSerializer(serializers.ModelSerializer):
     class Meta:
         model = View
         fields = "__all__"
+        read_only_fields = ("user", "created_at")
 
     def get_content_type(self, obj):
+        if not obj.content_type_id:
+            return None
         return 'post' if obj.content_type.model == 'post' else 'comments'
 
 

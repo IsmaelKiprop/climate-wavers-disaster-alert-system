@@ -8,6 +8,7 @@ export const endpoints = {
     "emailcode": "/api/v1/auth/verify-email/",
     "resendVerification": "/api/v1/auth/resend-verification/",
     "post": "/api/v1/post/",
+    "views": "/api/v1/views/",
     "comments": "/api/v1/comments/",
     "follow": "/api/v1/follows/",
     "followIds": "/api/v1/follows/ids/",

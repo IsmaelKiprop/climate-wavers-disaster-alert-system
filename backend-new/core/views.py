@@ -544,6 +544,39 @@ class PostViewSet(viewsets.ModelViewSet):
         Bookmark.objects.filter(user=request.user, post=post).delete()
         return Response({"status": "bookmark removed"})
 
+    @action(detail=True, methods=["post"], permission_classes=[IsAuthenticated])
+    def view(self, request, pk=None):
+        """
+        Record a LinkedIn-style impression when a post is shown in feed.
+        Counts at most once per viewer per post per calendar day.
+        Authors viewing their own posts are not counted.
+        """
+        post = self.get_object()
+        user = request.user
+        total = post.views.count()
+
+        if post.user_id == user.id:
+            return Response(
+                {"status": "skipped_own_post", "total_views": total},
+                status=status.HTTP_200_OK,
+            )
+
+        today_start = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        already = View.objects.filter(
+            user=user, post=post, created_at__gte=today_start
+        ).exists()
+        if already:
+            return Response(
+                {"status": "already_recorded", "total_views": total},
+                status=status.HTTP_200_OK,
+            )
+
+        View.objects.create(user=user, post=post, content_object=post)
+        return Response(
+            {"status": "impression_recorded", "total_views": total + 1},
+            status=status.HTTP_201_CREATED,
+        )
+
 
 # Demo / org accounts that should not dominate "Popular accounts"
 ORG_USERNAME_BLOCKLIST = {
@@ -1101,6 +1134,9 @@ class ViewViewSet(viewsets.ModelViewSet):
     queryset = View.objects.all()
     serializer_class = ViewSerializer
     permission_classes = [IsAuthenticated]
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
 
 
 # ViewSet for Bookmark model

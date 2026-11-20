@@ -40,6 +40,7 @@ export const usePostMutations = () => {
     unrepostMutation: useCreateMutation(`${BACKENDURL}/api/v1/`, "unrepost"),
     saveMutation: useCreateMutation(`${BACKENDURL}/api/v1/`, "bookmark"),
     unsaveMutation: useCreateMutation(`${BACKENDURL}/api/v1/`, "unbookmark"),
+    viewMutation: useCreateMutation(`${BACKENDURL}/api/v1/`, "view"),
   };
 };
 
