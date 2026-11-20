@@ -105,7 +105,6 @@ const PlasticProjectAdmin = () => {
   const [verifyingId, setVerifyingId] = useState(null);
   const [intaking, setIntaking] = useState(false);
   const [savingRecycler, setSavingRecycler] = useState(false);
-  const [savingZoneId, setSavingZoneId] = useState(null);
   const [dispatching, setDispatching] = useState(false);
   const [tab, setTab] = useState("projects");
   const [lastBagLabel, setLastBagLabel] = useState(null);
@@ -185,14 +184,14 @@ const PlasticProjectAdmin = () => {
   }, []);
 
   const loadRecyclers = useCallback(async () => {
-    const data = await api(endpoints.plasticRecyclers);
+    const data = await api(`${endpoints.plasticRecyclers}?approved=1`);
     setRecyclers(Array.isArray(data) ? data : []);
   }, []);
 
   const loadDirectory = useCallback(async (city) => {
-    const q = new URLSearchParams({ city, small_lots: "1" });
-    const data = await api(`${endpoints.plasticRecyclerDirectory}?${q}`);
-    setDirectory(Array.isArray(data?.recyclers) ? data.recyclers : []);
+    const q = new URLSearchParams({ city, small_lots: "1", approved: "1" });
+    const data = await api(`${endpoints.plasticRecyclers}?${q}`);
+    setDirectory(Array.isArray(data) ? data : []);
   }, []);
 
   const loadDispatches = useCallback(async (projectId) => {
@@ -244,6 +243,16 @@ const PlasticProjectAdmin = () => {
       }
     })();
   }, [tab, selectedId, loadDetail, loadDispatches]);
+
+  useEffect(() => {
+    const zones = detail?.holding_zones || [];
+    if (!zones.length || dispatchForm.holding_zone_id) return;
+    const withStock = zones.find((z) => Number(z.inventory_kg || 0) > 0);
+    const pick = withStock || zones[0];
+    if (pick?.id) {
+      setDispatchForm((p) => ({ ...p, holding_zone_id: String(pick.id) }));
+    }
+  }, [detail?.holding_zones, dispatchForm.holding_zone_id]);
 
   const createProject = async (e) => {
     e.preventDefault();
@@ -468,7 +477,7 @@ const PlasticProjectAdmin = () => {
       toast.success(
         action === "reject"
           ? "Rejected"
-          : "Verified — confirm bag in Recycler intake"
+          : "Verified — stock added to a holding zone. Offer it in Direct sales."
       );
       await loadQueue();
       if (selectedId) await loadDetail(selectedId);
@@ -608,34 +617,18 @@ const PlasticProjectAdmin = () => {
     }
   };
 
-  const saveZoneInventory = async (zone, inventoryKg) => {
-    if (!zone?.id || savingZoneId) return;
-    setSavingZoneId(zone.id);
-    try {
-      await api(endpoints.plasticHoldingZone(zone.id), {
-        method: "PATCH",
-        body: { inventory_kg: Number(inventoryKg) || 0 },
-      });
-      toast.success(`${zone.name} inventory updated`);
-      if (selectedId) await loadDetail(selectedId);
-    } catch (err) {
-      toast.error(err.message);
-    } finally {
-      setSavingZoneId(null);
-    }
-  };
-
   const createDispatch = async (e) => {
     e.preventDefault();
     if (!selectedId || dispatching) return;
-    if (!dispatchForm.recycler_id) return toast.error("Pick a recycler");
+    if (!dispatchForm.holding_zone_id) return toast.error("Pick a holding zone");
+    if (!dispatchForm.recycler_id) return toast.error("Pick an approved recycler");
     if (!Number(dispatchForm.kg)) return toast.error("Enter kg to dispatch");
     setDispatching(true);
     try {
       const created = await api(endpoints.plasticDispatches(selectedId), {
         method: "POST",
         body: {
-          holding_zone_id: dispatchForm.holding_zone_id || undefined,
+          holding_zone_id: Number(dispatchForm.holding_zone_id),
           recycler_id: Number(dispatchForm.recycler_id),
           polymer_type: dispatchForm.polymer_type,
           kg: Number(dispatchForm.kg),
@@ -648,12 +641,9 @@ const PlasticProjectAdmin = () => {
       const col = created?.collector_share_kes;
       toast.success(
         plat != null && col != null
-          ? `Offer created · CW KES ${plat} / collectors KES ${col}`
-          : "Marketplace offer created"
+          ? `Offer created · CW KES ${plat} / collectors KES ${col}. Recycler pays on desk.`
+          : "Marketplace offer created — recycler pays on desk"
       );
-      if (created?.whatsapp_url) {
-        window.open(created.whatsapp_url, "_blank", "noopener,noreferrer");
-      }
       setDispatchForm((p) => ({ ...p, kg: "", notes: "" }));
       await Promise.all([loadDispatches(selectedId), loadDetail(selectedId)]);
     } catch (err) {
@@ -676,23 +666,6 @@ const PlasticProjectAdmin = () => {
     }
   };
 
-  const settleDispatch = async (dispatch, action) => {
-    try {
-      await api(endpoints.plasticDispatchSettle(dispatch.id), {
-        method: "POST",
-        body: { action },
-      });
-      toast.success(
-        action === "recycler_paid"
-          ? "Recycler payment to Climate Wavers recorded"
-          : "Collector share marked paid"
-      );
-      await loadDispatches(selectedId);
-    } catch (err) {
-      toast.error(err.message);
-    }
-  };
-
   const toggleCollectionDay = (day) => {
     setForm((p) => {
       const days = new Set(p.collection_days || []);
@@ -703,11 +676,13 @@ const PlasticProjectAdmin = () => {
   };
 
   const holdingZones = detail?.holding_zones || [];
-  const partnerRecyclers = recyclers.filter((r) => !r.is_directory);
-  const saleRecyclers = [
-    ...partnerRecyclers,
-    ...directory.filter((d) => !partnerRecyclers.some((p) => p.id === d.id)),
-  ];
+  const saleRecyclers = (() => {
+    const byId = new Map();
+    for (const r of [...recyclers, ...directory]) {
+      if (r?.id != null && !byId.has(r.id)) byId.set(r.id, r);
+    }
+    return Array.from(byId.values());
+  })();
 
   if (loading) {
     return <div className="p-6 text-muted">Loading Plastic Pulse…</div>;
@@ -720,11 +695,8 @@ const PlasticProjectAdmin = () => {
           <h1 className="text-2xl font-semibold text-foreground">Plastic Pulse</h1>
           <p className="text-sm text-muted mt-1 max-w-2xl">
             Ground ops: ~120 kg/week · 3 holding zones · Mon/Wed/Sat. Climate Wavers is the
-            marketplace: recyclers pay us, we split with collectors. Collect from{" "}
-            <Link to="/app/plastic/collect" className="text-primary hover:underline">
-              Collect plastic
-            </Link>
-            , then settle in Direct sales.{" "}
+            marketplace: recyclers pay us (Paystack), we split with collectors. Collect →
+            Verify queue (stock zones) → Direct sales (offer) → recycler pays on desk.{" "}
             <Link to="/plastic/recyclers" className="text-primary hover:underline">
               Recycler directory
             </Link>
@@ -919,10 +891,13 @@ const PlasticProjectAdmin = () => {
                   {Math.round(100 - Number(detail?.marketplace_fee_rate ?? 0.2) * 100)}% to
                   collectors
                 </p>
+                <p className="text-xs text-muted">
+                  Stock is read-only here — it increases when you verify recoveries in
+                  Verify queue.
+                </p>
                 {holdingZones.length === 0 ? (
                   <p className="text-sm text-muted">
-                    No zones yet — reopen this tab after creating the project, or call
-                    holding-zones API to seed HZ-1…3.
+                    No zones yet — reopen this tab after creating the project.
                   </p>
                 ) : (
                   <div className="grid md:grid-cols-3 gap-3">
@@ -931,20 +906,12 @@ const PlasticProjectAdmin = () => {
                         <div className="font-medium text-sm">
                           {zone.code || "HZ"} · {zone.name}
                         </div>
-                        <label className="block text-xs text-muted">
-                          Inventory kg
-                          <input
-                            className="mt-1 w-full h-9 px-2 border border-border bg-background"
-                            type="number"
-                            step="0.01"
-                            defaultValue={Number(zone.inventory_kg || 0)}
-                            key={`${zone.id}-${zone.inventory_kg}`}
-                            onBlur={(e) => saveZoneInventory(zone, e.target.value)}
-                          />
-                        </label>
+                        <p className="text-2xl font-semibold tabular-nums">
+                          {Number(zone.inventory_kg || 0)}{" "}
+                          <span className="text-sm font-normal text-muted">kg</span>
+                        </p>
                         <p className="text-[11px] text-muted">
                           {(zone.materials || []).slice(0, 4).join(", ") || "plastic"}
-                          {savingZoneId === zone.id ? " · saving…" : ""}
                         </p>
                       </div>
                     ))}
@@ -974,8 +941,9 @@ const PlasticProjectAdmin = () => {
                 >
                   <h2 className="font-medium">Offer lot (recycler pays CW)</h2>
                   <p className="text-xs text-muted">
-                    Deducts zone inventory, quotes total to Climate Wavers, and opens
-                    WhatsApp. Default split: 20% platform / 80% collectors.
+                    Deducts zone stock and opens an offer. Recycler accepts and pays on
+                    Marketplace desk (Paystack). Default split: 20% platform / 80%
+                    collectors.
                   </p>
                   <select
                     className="w-full h-10 px-3 border border-border bg-background"
@@ -986,8 +954,9 @@ const PlasticProjectAdmin = () => {
                         holding_zone_id: e.target.value,
                       }))
                     }
+                    required
                   >
-                    <option value="">No zone (manual)</option>
+                    <option value="">Select holding zone</option>
                     {holdingZones.map((z) => (
                       <option key={z.id} value={z.id}>
                         {z.name} ({Number(z.inventory_kg || 0)} kg)
@@ -1002,7 +971,7 @@ const PlasticProjectAdmin = () => {
                     }
                     required
                   >
-                    <option value="">Select recycler</option>
+                    <option value="">Select approved recycler</option>
                     {saleRecyclers.map((r) => (
                       <option key={r.id} value={r.id}>
                         {r.city ? `${r.city} · ` : ""}
@@ -1109,9 +1078,16 @@ const PlasticProjectAdmin = () => {
                   </div>
                   {directory.length === 0 ? (
                     <p className="text-sm text-muted">
-                      Empty — run{" "}
-                      <code className="text-xs">seed_plastic_recyclers</code> on the
-                      backend.
+                      No approved small-lot yards in {directoryCity} yet. Recyclers apply
+                      at{" "}
+                      <Link
+                        to="/plastic/recycler-onboard"
+                        className="text-primary hover:underline"
+                      >
+                        /plastic/recycler-onboard
+                      </Link>
+                      ; Climate Wavers superadmin approves in Platform Admin → Plastic
+                      recyclers.
                     </p>
                   ) : (
                     directory.slice(0, 8).map((r) => (
@@ -1207,25 +1183,6 @@ const PlasticProjectAdmin = () => {
                             {st}
                           </button>
                         ))}
-                        {d.payment_status !== "received" && d.total_kes != null ? (
-                          <button
-                            type="button"
-                            className="h-8 px-2 bg-primary text-white text-xs"
-                            onClick={() => settleDispatch(d, "recycler_paid")}
-                          >
-                            Recycler paid CW
-                          </button>
-                        ) : null}
-                        {d.payment_status === "received" &&
-                        d.collector_payout_status !== "paid" ? (
-                          <button
-                            type="button"
-                            className="h-8 px-2 bg-primary text-white text-xs"
-                            onClick={() => settleDispatch(d, "collectors_paid")}
-                          >
-                            Paid collectors
-                          </button>
-                        ) : null}
                       </div>
                     </div>
                   ))
@@ -1257,8 +1214,9 @@ const PlasticProjectAdmin = () => {
                 <p className="text-xs text-muted">
                   Field order: <span className="text-foreground">1) Pin hotspot</span> →{" "}
                   <span className="text-foreground">2) Submit proof</span> (GPS + photo + kg) →{" "}
-                  <span className="text-foreground">3) Verify queue</span> →{" "}
-                  <span className="text-foreground">4) Recycler intake</span>
+                  <span className="text-foreground">3) Verify queue</span> (stocks a
+                  holding zone) → <span className="text-foreground">4) Direct sales</span>{" "}
+                  (offer lot → recycler pays CW on desk)
                 </p>
               </div>
 
@@ -1606,9 +1564,13 @@ const PlasticProjectAdmin = () => {
               </p>
               {intakeQueue.length > 0 ? (
                 <p>
-                  {intakeQueue.length} bag(s) already verified — open{" "}
-                  <button type="button" className="underline text-primary" onClick={() => setTab("intake")}>
-                    Recycler intake
+                  {intakeQueue.length} bag(s) already verified and stocked — offer lots in{" "}
+                  <button
+                    type="button"
+                    className="underline text-primary"
+                    onClick={() => setTab("direct")}
+                  >
+                    Direct sales
                   </button>
                   .
                 </p>
@@ -1690,7 +1652,7 @@ const PlasticProjectAdmin = () => {
         <div className="space-y-6">
           <div className="space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <h2 className="font-medium">Awaiting recycler intake</h2>
+              <h2 className="font-medium">Bag scan (optional)</h2>
               <Link
                 to="/plastic/intake"
                 className="h-9 px-3 bg-primary text-white text-sm inline-flex items-center"
@@ -1699,7 +1661,8 @@ const PlasticProjectAdmin = () => {
               </Link>
             </div>
             <p className="text-sm text-muted">
-              Scan the bag QR, tap Confirm here, or type Bag ID below.
+              Optional physical bag confirm when a yard receives stock. Marketplace sales
+              (pay CW) happen in Direct sales → recycler desk / Paystack.
             </p>
             {intakeQueue.length === 0 ? (
               <p className="text-sm text-muted border border-border p-4">

@@ -2302,10 +2302,17 @@ class PlasticRecyclerListCreateView(APIView):
             "true",
             "yes",
         }
+        approved_only = str(
+            request.query_params.get("approved")
+            or request.query_params.get("marketplace")
+            or ""
+        ).lower() in {"1", "true", "yes"}
         if city:
             qs = qs.filter(city__iexact=city)
         if small_lots:
             qs = qs.filter(accepts_small_lots=True)
+        if approved_only:
+            qs = qs.filter(onboarding_status="approved")
         if directory:
             qs = qs.filter(is_directory=True)
         elif (
@@ -2429,8 +2436,18 @@ class PlasticHoldingZoneDetailView(APIView):
         if not _can_manage_project(request.user, zone.project):
             return Response({"detail": "Forbidden."}, status=403)
 
-        # Inventory changes go through the ledger so stock stays auditable.
+        # Manual stock edits: staff only. CBO stock comes from verified recoveries.
         if "inventory_kg" in request.data:
+            if not (request.user.is_staff or request.user.is_superuser):
+                return Response(
+                    {
+                        "detail": (
+                            "Inventory is set by verified recoveries. "
+                            "Only Climate Wavers staff can adjust manually."
+                        )
+                    },
+                    status=403,
+                )
             try:
                 target = _money(request.data.get("inventory_kg"))
                 delta = _money(target - zone.inventory_kg)
@@ -2495,21 +2512,34 @@ class PlasticDispatchListCreateView(APIView):
         ).first()
         if not recycler:
             return Response({"detail": "Recycler required."}, status=400)
+        if recycler.onboarding_status != "approved":
+            return Response(
+                {
+                    "detail": (
+                        "Recycler must be approved by Climate Wavers superadmin "
+                        "before marketplace offers."
+                    )
+                },
+                status=400,
+            )
 
         kg = _dec(request.data.get("kg"))
         if kg <= 0:
             return Response({"detail": "kg must be > 0."}, status=400)
 
-        zone = None
         zone_id = request.data.get("holding_zone") or request.data.get("holding_zone_id")
-        if zone_id:
-            zone = (
-                PlasticHoldingZone.objects.select_for_update()
-                .filter(pk=zone_id, project=project)
-                .first()
+        if not zone_id:
+            return Response(
+                {"detail": "Holding zone required — offer from verified stock."},
+                status=400,
             )
-            if not zone:
-                return Response({"detail": "Holding zone not found."}, status=404)
+        zone = (
+            PlasticHoldingZone.objects.select_for_update()
+            .filter(pk=zone_id, project=project)
+            .first()
+        )
+        if not zone:
+            return Response({"detail": "Holding zone not found."}, status=404)
 
         price = request.data.get("price_kes_per_kg")
         price_dec = _money(price) if price not in (None, "") else None
@@ -2668,7 +2698,17 @@ class PlasticInventoryLedgerView(APIView):
         )
 
     def post(self, request, project_id):
-        """Manual inventory adjustment."""
+        """Manual inventory adjustment — staff only."""
+        if not (request.user.is_staff or request.user.is_superuser):
+            return Response(
+                {
+                    "detail": (
+                        "Inventory is set by verified recoveries. "
+                        "Only Climate Wavers staff can adjust manually."
+                    )
+                },
+                status=403,
+            )
         try:
             project = PlasticProject.objects.get(pk=project_id)
         except PlasticProject.DoesNotExist:
@@ -3000,8 +3040,8 @@ class PlasticDispatchCheckoutView(APIView):
 
 class PlasticDispatchSettleView(APIView):
     """
-    Record marketplace money movement:
-    - action=recycler_paid → recycler paid Climate Wavers
+    Record marketplace money movement (staff / Paystack webhook path):
+    - action=recycler_paid → override when Paystack already recorded payment
     - action=collectors_paid → CW paid collectors/CBO their share
     """
 
@@ -3017,13 +3057,23 @@ class PlasticDispatchSettleView(APIView):
         )
         if not dispatch:
             return Response({"detail": "Not found."}, status=404)
-        if not _can_manage_project(request.user, dispatch.project):
-            return Response({"detail": "Forbidden."}, status=403)
 
         action = str(request.data.get("action") or "").strip().lower()
         now = timezone.now()
+        is_staff = bool(request.user.is_staff or request.user.is_superuser)
 
         if action in {"recycler_paid", "mark_received"}:
+            # Source of truth is Paystack; CBO cannot mark platform payment.
+            if not is_staff:
+                return Response(
+                    {
+                        "detail": (
+                            "Recycler payment is recorded by Paystack. "
+                            "Only Climate Wavers staff can override."
+                        )
+                    },
+                    status=403,
+                )
             if dispatch.total_kes is None:
                 return Response(
                     {"detail": "Set price/kg before recording payment."}, status=400
@@ -3050,6 +3100,15 @@ class PlasticDispatchSettleView(APIView):
             return Response(PlasticDispatchSerializer(dispatch).data)
 
         if action in {"collectors_paid", "mark_collector_paid"}:
+            if not is_staff:
+                return Response(
+                    {
+                        "detail": (
+                            "Collector payouts are recorded by Climate Wavers staff."
+                        )
+                    },
+                    status=403,
+                )
             if dispatch.payment_status != "received":
                 return Response(
                     {"detail": "Record recycler payment to Climate Wavers first."},
