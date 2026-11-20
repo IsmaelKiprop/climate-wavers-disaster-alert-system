@@ -69,6 +69,7 @@ export const endpoints = {
     "plasticIntakeScan": "/api/v1/plastic/intake/scan/",
     "plasticBag": (bagId) => `/api/v1/plastic/bags/${encodeURIComponent(bagId)}/`,
     "plasticRecyclers": "/api/v1/plastic/recyclers/",
+    "plasticRecyclerDirectory": "/api/v1/plastic/recyclers/directory/",
     "plasticRecyclerInvite": (id) => `/api/v1/plastic/recyclers/${id}/invite/`,
     "plasticRecyclerInviteRevoke": (id) => `/api/v1/plastic/recyclers/${id}/invite/revoke/`,
     "plasticRecyclerInviteDetail": (token) =>
@@ -76,6 +77,25 @@ export const endpoints = {
     "plasticRecyclerInviteAccept": (token) =>
       `/api/v1/plastic/recycler-invites/${encodeURIComponent(token)}/accept/`,
     "plasticRecyclerMe": "/api/v1/plastic/recycler/me/",
+    "plasticHoldingZones": (projectId) =>
+      `/api/v1/plastic/projects/${projectId}/holding-zones/`,
+    "plasticHoldingZone": (zoneId) => `/api/v1/plastic/holding-zones/${zoneId}/`,
+    "plasticDispatches": (projectId) =>
+      `/api/v1/plastic/projects/${projectId}/dispatches/`,
+    "plasticDispatchStatus": (dispatchId) =>
+      `/api/v1/plastic/dispatches/${dispatchId}/status/`,
+    "plasticDispatchSettle": (dispatchId) =>
+      `/api/v1/plastic/dispatches/${dispatchId}/settle/`,
+    "plasticDispatchAccept": (dispatchId) =>
+      `/api/v1/plastic/dispatches/${dispatchId}/accept/`,
+    "plasticDispatchCheckout": (dispatchId) =>
+      `/api/v1/plastic/dispatches/${dispatchId}/checkout/`,
+    "plasticInventory": (projectId) =>
+      `/api/v1/plastic/projects/${projectId}/inventory/`,
+    "plasticRecyclerApply": "/api/v1/plastic/recyclers/apply/",
+    "plasticRecyclerApplications": "/api/v1/plastic/recyclers/applications/",
+    "plasticRecyclerApprove": (id) => `/api/v1/plastic/recyclers/${id}/approve/`,
+    "plasticRecyclerOffers": "/api/v1/plastic/recycler/offers/",
     "plasticCertificate": (code) => `/api/v1/plastic/certificates/${encodeURIComponent(code)}/`,
     "plasticFloodHotspots": "/api/v1/plastic/flood-hotspots/",
     "plasticAdminQueue": "/api/v1/plastic/admin/queue/",

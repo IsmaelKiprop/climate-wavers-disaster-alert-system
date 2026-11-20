@@ -5,6 +5,7 @@ export { default as UserDetail } from "./pages/UserDetail";
 export { default as Content } from "./pages/Content";
 export { default as Disasters } from "./pages/Disasters";
 export { default as TreesPayments } from "./pages/TreesPayments";
+export { default as PlasticRecyclers } from "./pages/PlasticRecyclers";
 export { default as Champions } from "./pages/Champions";
 export { default as Responders } from "./pages/Responders";
 export { default as Calendar } from "./pages/Calendar";

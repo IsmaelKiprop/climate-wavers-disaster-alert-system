@@ -828,6 +828,93 @@ def record_plastic_sponsorship(reference, request_user=None, client_data=None):
     }
 
 
+def record_plastic_dispatch_payment(reference, request_user=None, client_data=None):
+    """Recycler Paystack payment for a Plastic Pulse marketplace lot (pays Climate Wavers)."""
+    from django.utils import timezone
+
+    from .models import PlasticDispatch
+    from .plastic import split_plastic_marketplace_sale
+
+    reference = str(reference or "").strip()
+    if not reference:
+        raise PaymentRecordError("Missing payment reference.")
+
+    client_data = client_data or {}
+    existing = PlasticDispatch.objects.filter(payment_reference=reference).first()
+    if existing and existing.payment_status == "received":
+        return {
+            "success": True,
+            "message": "Marketplace lot already paid.",
+            "payment_reference": existing.payment_reference,
+            "dispatch_id": existing.id,
+            "product": "plastic_dispatch",
+        }
+
+    payment = _verify_with_paystack(reference)
+    metadata = payment.get("metadata") or {}
+    if not isinstance(metadata, dict):
+        metadata = {}
+
+    dispatch_id = (
+        _metadata_value(metadata, "plastic_dispatch_id")
+        or _metadata_value(metadata, "dispatch_id")
+        or client_data.get("plastic_dispatch_id")
+        or client_data.get("dispatch_id")
+    )
+    try:
+        dispatch = PlasticDispatch.objects.select_related("project", "recycler").get(
+            pk=int(dispatch_id)
+        )
+    except (TypeError, ValueError, PlasticDispatch.DoesNotExist) as exc:
+        raise PaymentRecordError("Marketplace dispatch not found.", 404) from exc
+
+    if dispatch.payment_status == "received":
+        if not dispatch.payment_reference:
+            dispatch.payment_reference = reference
+            dispatch.save(update_fields=["payment_reference", "updated_at"])
+        return {
+            "success": True,
+            "message": "Marketplace lot already paid.",
+            "payment_reference": dispatch.payment_reference or reference,
+            "dispatch_id": dispatch.id,
+            "product": "plastic_dispatch",
+        }
+
+    if dispatch.total_kes is None:
+        raise PaymentRecordError("Dispatch has no total amount.")
+
+    if dispatch.platform_share_kes is None or dispatch.collector_share_kes is None:
+        platform, collectors, rate = split_plastic_marketplace_sale(
+            dispatch.total_kes,
+            dispatch.fee_rate or dispatch.project.marketplace_fee_rate,
+        )
+        dispatch.platform_share_kes = platform
+        dispatch.collector_share_kes = collectors
+        dispatch.fee_rate = rate
+
+    now = timezone.now()
+    dispatch.payment_status = "received"
+    dispatch.payment_reference = reference
+    dispatch.payment_received_at = now
+    if dispatch.collector_payout_status == "none":
+        dispatch.collector_payout_status = "pending"
+    if dispatch.status == "offered":
+        dispatch.status = "accepted"
+        dispatch.accepted_at = dispatch.accepted_at or now
+    dispatch.save()
+
+    return {
+        "success": True,
+        "message": "Recycler payment recorded. Climate Wavers will pay collectors.",
+        "payment_reference": reference,
+        "dispatch_id": dispatch.id,
+        "total_kes": float(dispatch.total_kes or 0),
+        "platform_share_kes": float(dispatch.platform_share_kes or 0),
+        "collector_share_kes": float(dispatch.collector_share_kes or 0),
+        "product": "plastic_dispatch",
+    }
+
+
 def record_paystack_charge(reference, request_user=None, client_data=None):
     """
     Route a verified Paystack reference to tree donation, plastic, or RapidBrief billing.
@@ -837,6 +924,8 @@ def record_paystack_charge(reference, request_user=None, client_data=None):
     product = str(client_data.get("product") or "").strip().lower()
     if product in {"rapidbrief", "responder_plan", "rapidbrief_plan"}:
         return record_rapidbrief_payment(reference, request_user, client_data)
+    if product in {"plastic_dispatch", "plastic_lot", "marketplace_plastic"}:
+        return record_plastic_dispatch_payment(reference, request_user, client_data)
     if product in {"plastic", "plastic_pulse", "sponsor_plastic"}:
         return record_plastic_sponsorship(reference, request_user, client_data)
 
@@ -850,6 +939,8 @@ def record_paystack_charge(reference, request_user=None, client_data=None):
             "rapidbrief_plan",
         }:
             return record_rapidbrief_payment(reference, request_user, client_data)
+        if ptype in {"plastic_dispatch", "plastic_lot", "marketplace_plastic"}:
+            return record_plastic_dispatch_payment(reference, request_user, client_data)
         if ptype in {"plastic", "plastic_pulse", "sponsor_plastic"}:
             return record_plastic_sponsorship(reference, request_user, client_data)
     except PaymentRecordError:

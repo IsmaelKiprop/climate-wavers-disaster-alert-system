@@ -53,10 +53,13 @@ from .models import (
     PlatformAdminInvite,
     PlasticProject,
     PlasticHotspot,
+    PlasticHoldingZone,
+    PlasticInventoryLedger,
     PlasticRecovery,
     PlasticCertificate,
     PlasticSponsorship,
     PlasticRecyclerPartner,
+    PlasticDispatch,
 )
 from .pricing import verification_priority
 from unfold.admin import ModelAdmin
@@ -767,12 +770,60 @@ class PlasticRecyclerPartnerAdmin(ModelAdmin):
     list_display = (
         "name",
         "city",
+        "is_directory",
+        "onboarding_status",
+        "accepts_small_lots",
         "invite_status",
         "linked_user",
         "is_active",
         "created_at",
     )
-    list_filter = ("is_active", "invite_status")
-    search_fields = ("name", "contact_phone", "contact_email", "invite_token")
+    list_filter = (
+        "is_active",
+        "is_directory",
+        "onboarding_status",
+        "accepts_small_lots",
+        "invite_status",
+        "city",
+    )
+    search_fields = ("name", "contact_phone", "contact_email", "invite_token", "city")
+
+
+@admin.register(PlasticHoldingZone)
+class PlasticHoldingZoneAdmin(ModelAdmin):
+    list_display = ("name", "code", "project", "inventory_kg", "is_active", "sort_order")
+    list_filter = ("is_active",)
+    search_fields = ("name", "code", "location_label")
+
+
+@admin.register(PlasticInventoryLedger)
+class PlasticInventoryLedgerAdmin(ModelAdmin):
+    list_display = (
+        "id",
+        "project",
+        "holding_zone",
+        "reason",
+        "delta_kg",
+        "balance_after_kg",
+        "created_at",
+    )
+    list_filter = ("reason",)
+    search_fields = ("notes",)
+
+
+@admin.register(PlasticDispatch)
+class PlasticDispatchAdmin(ModelAdmin):
+    list_display = (
+        "id",
+        "project",
+        "recycler",
+        "kg",
+        "polymer_type",
+        "status",
+        "payment_status",
+        "created_at",
+    )
+    list_filter = ("status", "payment_status", "polymer_type")
+    search_fields = ("notes", "contact_phone", "payment_reference")
 
 

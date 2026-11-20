@@ -7,6 +7,7 @@ import { PageHeader, StatStrip } from "../shared";
 const QUICK = [
   { to: "/app/platform-admin/champions", label: "Review champions", key: "pending_champions" },
   { to: "/app/platform-admin/trees", label: "Tree Admin orgs", key: "pending_tree_orgs" },
+  { to: "/app/platform-admin/plastic", label: "Plastic recyclers", key: "pending_plastic_recyclers" },
   { to: "/app/platform-admin/responders", label: "Responder orgs", key: "pending_responder_orgs" },
   { to: "/app/platform-admin/content", label: "Donation posts", key: "pending_donation_posts" },
   { to: "/app/platform-admin/disasters", label: "Open disasters", key: "open_disasters" },
@@ -47,6 +48,7 @@ const Overview = () => {
     { label: "Users", value: merged.users_total },
     { label: "Pending champions", value: merged.pending_champions },
     { label: "Pending Tree Admins", value: merged.pending_tree_orgs },
+    { label: "Pending plastic recyclers", value: merged.pending_plastic_recyclers },
     { label: "Pending responders", value: merged.pending_responder_orgs },
     { label: "Open disasters", value: merged.open_disasters },
     { label: "Unverified projects", value: merged.unverified_projects },

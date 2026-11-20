@@ -44,14 +44,23 @@ const PaymentSuccess = () => {
       throw new Error(result.message || 'Payment verification failed.');
     }
     const details = result.certificate_data || {};
-    const isPlastic =
-      (result.product || stored.product || '').toString().toLowerCase() === 'plastic';
+    const productRaw = (result.product || stored.product || '')
+      .toString()
+      .toLowerCase();
+    const isPlasticLot = [
+      'plastic_dispatch',
+      'plastic_lot',
+      'marketplace_plastic',
+    ].includes(productRaw);
+    const isPlastic = productRaw === 'plastic' || isPlasticLot;
     setPaymentData({
       reference,
-      amount: Number(details.amount || result.amount_usd || 0),
+      amount: Number(
+        details.amount || result.amount_usd || result.total_kes || stored.amount_kes || 0
+      ),
       trees: Number(details.trees_planted || 1),
       kgSponsored: Number(result.kg_sponsored || stored.kg_sponsored || 0),
-      product: isPlastic ? 'plastic' : 'tree',
+      product: isPlasticLot ? 'plastic_dispatch' : isPlastic ? 'plastic' : 'tree',
       certificateId: details.certificate_id || result.certificate_id || '',
       certificateEmailed: Boolean(
         result.certificate_emailed_at || details.emailed
@@ -60,15 +69,20 @@ const PaymentSuccess = () => {
       species: details.species || details.tree_type || '',
       giftedTo: details.gifted_to || '',
       projectId: result.project_id || stored.plastic_project_id || stored.project_id,
+      dispatchId: result.dispatch_id || stored.plastic_dispatch_id,
+      collectorShare: result.collector_share_kes,
+      platformShare: result.platform_share_kes,
     });
     setError('');
     sessionStorage.removeItem(`cw-pay-${reference}`);
     toast.success(
-      isPlastic
-        ? 'Plastic sponsorship saved. Your impact certificate is ready.'
-        : result.certificate_emailed_at || details.emailed
-          ? 'Payment saved. Your tree certificate is on its way by email.'
-          : 'Payment saved. Your trees are on your dashboard.'
+      isPlasticLot
+        ? 'Lot payment recorded. Climate Wavers will pay collectors.'
+        : isPlastic
+          ? 'Plastic sponsorship saved. Your impact certificate is ready.'
+          : result.certificate_emailed_at || details.emailed
+            ? 'Payment saved. Your tree certificate is on its way by email.'
+            : 'Payment saved. Your trees are on your dashboard.'
     );
   };
 
@@ -361,7 +375,9 @@ const PaymentSuccess = () => {
             
             <button
               onClick={() => {
-                if (paymentData?.product === 'plastic' && paymentData?.projectId) {
+                if (paymentData?.product === 'plastic_dispatch') {
+                  navigate('/plastic/desk');
+                } else if (paymentData?.product === 'plastic' && paymentData?.projectId) {
                   navigate(`/plastic/${paymentData.projectId}`);
                 } else if (paymentData?.product === 'plastic' && paymentData?.certificateId) {
                   navigate(`/verify/plastic/${encodeURIComponent(paymentData.certificateId)}`);
@@ -372,7 +388,11 @@ const PaymentSuccess = () => {
               className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200 flex items-center justify-center"
             >
               <IoLeaf className="w-5 h-5 mr-2" />
-              {paymentData?.product === 'plastic' ? 'View Plastic Project' : 'Plant More Trees'}
+              {paymentData?.product === 'plastic_dispatch'
+                ? 'Recycler desk'
+                : paymentData?.product === 'plastic'
+                  ? 'View Plastic Project'
+                  : 'Plant More Trees'}
             </button>
           </div>
 

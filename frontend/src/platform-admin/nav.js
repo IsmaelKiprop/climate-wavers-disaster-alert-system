@@ -4,6 +4,7 @@ export const PLATFORM_ADMIN_NAV = [
   { id: "content", label: "Content", to: "/app/platform-admin/content", badge: "pending_donation_posts" },
   { id: "disasters", label: "Disasters", to: "/app/platform-admin/disasters", badge: "open_disasters" },
   { id: "trees", label: "Trees & payments", to: "/app/platform-admin/trees", badge: "pending_tree_orgs" },
+  { id: "plastic", label: "Plastic recyclers", to: "/app/platform-admin/plastic", badge: "pending_plastic_recyclers" },
   { id: "champions", label: "Champions", to: "/app/platform-admin/champions", badge: "pending_champions" },
   { id: "responders", label: "Responders", to: "/app/platform-admin/responders", badge: "pending_responder_orgs" },
   { id: "calendar", label: "Calendar", to: "/app/platform-admin/calendar", badge: null },

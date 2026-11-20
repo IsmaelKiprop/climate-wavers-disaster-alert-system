@@ -1,6 +1,6 @@
 """
-Wavers Plastic Pulse — projects, hotspots, recoveries, recycler intake,
-sponsor-a-kilo, certificates, flood hotspot feed.
+Wavers Plastic Pulse — projects, hotspots, holding zones, recoveries,
+direct recycler dispatches, recycler intake, sponsor-a-kilo, certificates.
 """
 
 from __future__ import annotations
@@ -32,13 +32,123 @@ logger = logging.getLogger(__name__)
 from .models import (
     Notification,
     PlasticCertificate,
+    PlasticDispatch,
+    PlasticHoldingZone,
     PlasticHotspot,
+    PlasticInventoryLedger,
     PlasticProject,
     PlasticRecovery,
     PlasticRecyclerPartner,
     PlasticSponsorship,
     TreeAdminMembership,
 )
+
+DEFAULT_COLLECTION_DAYS = ["mon", "wed", "sat"]
+DEFAULT_HOLDING_ZONE_MATERIALS = ["plastic", "paper_bags", "PET", "HDPE", "LDPE", "PP"]
+DEFAULT_MARKETPLACE_FEE_RATE = Decimal("0.20")
+
+
+def _clamp_fee_rate(value) -> Decimal:
+    rate = _dec(value, str(DEFAULT_MARKETPLACE_FEE_RATE))
+    if rate < 0:
+        return Decimal("0")
+    if rate > Decimal("0.5"):
+        return Decimal("0.5")
+    return rate.quantize(Decimal("0.0001"))
+
+
+def split_plastic_marketplace_sale(total_kes, fee_rate=None) -> tuple:
+    """
+    Recycler pays Climate Wavers; CW keeps platform share and pays collectors.
+    Returns (platform_share, collector_share, fee_rate).
+    """
+    total = _money(total_kes)
+    rate = _clamp_fee_rate(
+        fee_rate if fee_rate is not None else DEFAULT_MARKETPLACE_FEE_RATE
+    )
+    platform = _money(total * rate)
+    collectors = _money(total - platform)
+    return platform, collectors, rate
+
+
+def _ensure_default_holding_zones(project: PlasticProject) -> list:
+    """Ground ops baseline: 3 holding zones per CBO project."""
+    existing = list(project.holding_zones.all().order_by("sort_order", "id"))
+    if existing:
+        return existing
+    created = []
+    for i in range(1, 4):
+        created.append(
+            PlasticHoldingZone.objects.create(
+                project=project,
+                name=f"Holding zone {i}",
+                code=f"HZ-{i}",
+                materials=list(DEFAULT_HOLDING_ZONE_MATERIALS),
+                inventory_kg=Decimal("0"),
+                sort_order=i,
+            )
+        )
+    return created
+
+
+def _pick_holding_zone(project: PlasticProject, zone_id=None) -> PlasticHoldingZone:
+    zones = _ensure_default_holding_zones(project)
+    if zone_id:
+        for z in zones:
+            if z.id == int(zone_id):
+                return z
+        raise ValueError("Holding zone not found.")
+    # Fill the lightest zone first (even load across 3 sites).
+    return min(zones, key=lambda z: (float(z.inventory_kg or 0), z.sort_order, z.id))
+
+
+def _bump_polymer_inventory(zone: PlasticHoldingZone, polymer: str, delta: Decimal):
+    polymer = str(polymer or "mixed")
+    data = dict(zone.inventory_by_polymer or {})
+    current = _dec(data.get(polymer, 0))
+    nxt = _money(current + delta)
+    if nxt < 0:
+        nxt = Decimal("0.00")
+    data[polymer] = float(nxt)
+    zone.inventory_by_polymer = data
+
+
+def apply_inventory_delta(
+    *,
+    zone: PlasticHoldingZone,
+    delta_kg,
+    reason: str,
+    polymer_type: str = "mixed",
+    user=None,
+    recovery=None,
+    dispatch=None,
+    notes: str = "",
+) -> PlasticInventoryLedger:
+    """Atomically adjust zone stock and write a ledger row."""
+    delta = _money(delta_kg)
+    zone = PlasticHoldingZone.objects.select_for_update().get(pk=zone.pk)
+    new_bal = _money(zone.inventory_kg + delta)
+    if new_bal < 0:
+        raise ValueError(
+            f"Insufficient inventory in {zone.name}: have {zone.inventory_kg} kg."
+        )
+    zone.inventory_kg = new_bal
+    _bump_polymer_inventory(zone, polymer_type, delta)
+    zone.save(update_fields=["inventory_kg", "inventory_by_polymer", "updated_at"])
+    return PlasticInventoryLedger.objects.create(
+        project_id=zone.project_id,
+        holding_zone=zone,
+        recovery=recovery,
+        dispatch=dispatch,
+        created_by=user if getattr(user, "is_authenticated", False) else None,
+        delta_kg=delta,
+        balance_after_kg=new_bal,
+        polymer_type=str(polymer_type or "mixed")[:20],
+        reason=reason,
+        notes=str(notes or "")[:255],
+    )
+
+
 from .tree_admin import primary_tree_admin_membership, user_has_tree_admin_access
 from .tree_pricing import resolve_platform_fee_rate, split_tree_payment
 
@@ -645,6 +755,7 @@ class PlasticRecoverySerializer(serializers.ModelSerializer):
             "project_name",
             "hotspot",
             "hotspot_title",
+            "holding_zone",
             "submitted_by",
             "verified_by",
             "recycler",
@@ -765,8 +876,155 @@ class PlasticRecoverySerializer(serializers.ModelSerializer):
         return f"/verify/plastic/{code}" if code else ""
 
 
+class PlasticHoldingZoneSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PlasticHoldingZone
+        fields = [
+            "id",
+            "project",
+            "name",
+            "code",
+            "location_label",
+            "latitude",
+            "longitude",
+            "materials",
+            "inventory_kg",
+            "inventory_by_polymer",
+            "notes",
+            "is_active",
+            "sort_order",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "project", "created_at", "updated_at"]
+
+
+class PlasticDispatchSerializer(serializers.ModelSerializer):
+    recycler_name = serializers.CharField(source="recycler.name", read_only=True)
+    recycler_city = serializers.CharField(source="recycler.city", read_only=True)
+    recycler_phone = serializers.CharField(source="recycler.contact_phone", read_only=True)
+    holding_zone_name = serializers.SerializerMethodField()
+    whatsapp_url = serializers.SerializerMethodField()
+    split_summary = serializers.SerializerMethodField()
+
+    class Meta:
+        model = PlasticDispatch
+        fields = [
+            "id",
+            "project",
+            "holding_zone",
+            "holding_zone_name",
+            "recycler",
+            "recycler_name",
+            "recycler_city",
+            "recycler_phone",
+            "polymer_type",
+            "kg",
+            "price_kes_per_kg",
+            "total_kes",
+            "fee_rate",
+            "platform_share_kes",
+            "collector_share_kes",
+            "payment_status",
+            "payment_reference",
+            "payment_received_at",
+            "collector_payout_status",
+            "collector_payout_phone",
+            "collector_payout_reference",
+            "collector_paid_at",
+            "split_summary",
+            "status",
+            "pickup_day",
+            "notes",
+            "contact_phone",
+            "whatsapp_url",
+            "offered_at",
+            "accepted_at",
+            "delivered_at",
+            "settled_at",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = [
+            "id",
+            "project",
+            "total_kes",
+            "fee_rate",
+            "platform_share_kes",
+            "collector_share_kes",
+            "payment_status",
+            "payment_received_at",
+            "collector_payout_status",
+            "collector_paid_at",
+            "split_summary",
+            "holding_zone_name",
+            "recycler_name",
+            "recycler_city",
+            "recycler_phone",
+            "whatsapp_url",
+            "offered_at",
+            "accepted_at",
+            "delivered_at",
+            "settled_at",
+            "created_at",
+            "updated_at",
+        ]
+
+    def get_holding_zone_name(self, obj):
+        if not obj.holding_zone_id:
+            return ""
+        return getattr(obj.holding_zone, "name", "") or ""
+
+    def get_split_summary(self, obj):
+        total = float(obj.total_kes or 0)
+        platform = float(obj.platform_share_kes or 0)
+        collectors = float(obj.collector_share_kes or 0)
+        rate = float(obj.fee_rate or 0)
+        return {
+            "model": "climate_wavers_marketplace",
+            "description": (
+                "Recycler pays Climate Wavers; platform keeps fee and pays collectors."
+            ),
+            "total_kes": total,
+            "platform_share_kes": platform,
+            "collector_share_kes": collectors,
+            "fee_rate": rate,
+            "fee_percent": round(rate * 100, 2),
+        }
+
+    def get_whatsapp_url(self, obj):
+        phone = obj.contact_phone or getattr(obj.recycler, "contact_phone", "") or ""
+        fee_pct = int(float(obj.fee_rate or 0) * 100)
+        msg = (
+            f"Climate Wavers Plastic Pulse — marketplace offer\n"
+            f"(Recycler pays Climate Wavers; we pay collectors.)\n"
+            f"Project: {obj.project.name}\n"
+            f"{obj.kg} kg {obj.polymer_type}"
+            + (
+                f" @ KES {obj.price_kes_per_kg}/kg = KES {obj.total_kes}"
+                if obj.total_kes is not None
+                else (
+                    f" @ KES {obj.price_kes_per_kg}/kg"
+                    if obj.price_kes_per_kg is not None
+                    else ""
+                )
+            )
+            + (
+                f"\nPay Climate Wavers: KES {obj.total_kes}"
+                f" (platform {fee_pct}% / collectors {100 - fee_pct}%)"
+                if obj.total_kes is not None
+                else ""
+            )
+            + (f"\nPickup day: {obj.pickup_day}" if obj.pickup_day else "")
+            + (f"\nZone: {obj.holding_zone.name}" if obj.holding_zone_id else "")
+            + (f"\n{obj.notes}" if obj.notes else "")
+        )
+        return _whatsapp_share_url(phone, msg)
+
+
 class PlasticRecyclerSerializer(serializers.ModelSerializer):
     scan_access = serializers.SerializerMethodField()
+    marketplace_ready = serializers.SerializerMethodField()
 
     class Meta:
         model = PlasticRecyclerPartner
@@ -776,10 +1034,21 @@ class PlasticRecyclerSerializer(serializers.ModelSerializer):
             "organization",
             "contact_email",
             "contact_phone",
+            "website",
+            "address",
             "city",
             "latitude",
             "longitude",
             "buy_rates",
+            "materials_accepted",
+            "min_buy_kg",
+            "accepts_small_lots",
+            "notes",
+            "is_directory",
+            "onboarding_status",
+            "application_message",
+            "applied_at",
+            "reviewed_at",
             "is_active",
             "linked_user",
             "invite_status",
@@ -787,6 +1056,7 @@ class PlasticRecyclerSerializer(serializers.ModelSerializer):
             "invited_at",
             "invite_accepted_at",
             "scan_access",
+            "marketplace_ready",
             "created_at",
         ]
         read_only_fields = [
@@ -797,11 +1067,47 @@ class PlasticRecyclerSerializer(serializers.ModelSerializer):
             "invited_at",
             "invite_accepted_at",
             "scan_access",
+            "marketplace_ready",
+            "onboarding_status",
+            "applied_at",
+            "reviewed_at",
+            "is_directory",
             "created_at",
         ]
 
     def get_scan_access(self, obj):
-        return bool(obj.linked_user_id and obj.invite_status == "accepted" and obj.is_active)
+        return bool(
+            obj.linked_user_id
+            and obj.invite_status == "accepted"
+            and obj.is_active
+            and obj.onboarding_status in ("approved", "none")
+        )
+
+    def get_marketplace_ready(self, obj):
+        return bool(getattr(obj, "marketplace_ready", False))
+
+
+class PlasticInventoryLedgerSerializer(serializers.ModelSerializer):
+    holding_zone_name = serializers.CharField(source="holding_zone.name", read_only=True)
+    bag_id = serializers.CharField(source="recovery.bag_id", read_only=True, default="")
+
+    class Meta:
+        model = PlasticInventoryLedger
+        fields = [
+            "id",
+            "project",
+            "holding_zone",
+            "holding_zone_name",
+            "recovery",
+            "bag_id",
+            "dispatch",
+            "delta_kg",
+            "balance_after_kg",
+            "polymer_type",
+            "reason",
+            "notes",
+            "created_at",
+        ]
 
 
 def build_plastic_project_impact(project: PlasticProject) -> dict:
@@ -963,6 +1269,7 @@ def _looks_like_email(value: str) -> bool:
 class PlasticProjectSerializer(serializers.ModelSerializer):
     progress_percentage = serializers.FloatField(read_only=True)
     hotspots = PlasticHotspotSerializer(many=True, read_only=True)
+    holding_zones = PlasticHoldingZoneSerializer(many=True, read_only=True)
     recent_recoveries = serializers.SerializerMethodField()
     impact = serializers.SerializerMethodField()
     organization_display_name = serializers.SerializerMethodField()
@@ -1000,6 +1307,9 @@ class PlasticProjectSerializer(serializers.ModelSerializer):
             "sponsor_price_usd_per_kg",
             "scrap_pet_kes_per_kg",
             "scrap_hdpe_kes_per_kg",
+            "collection_days",
+            "weekly_target_kg",
+            "marketplace_fee_rate",
             "cover_image",
             "cover_image_url",
             "gallery",
@@ -1010,6 +1320,7 @@ class PlasticProjectSerializer(serializers.ModelSerializer):
             "contact_phone",
             "progress_percentage",
             "hotspots",
+            "holding_zones",
             "recent_recoveries",
             "impact",
             "created_at",
@@ -1022,6 +1333,7 @@ class PlasticProjectSerializer(serializers.ModelSerializer):
             "recovered_kg",
             "progress_percentage",
             "hotspots",
+            "holding_zones",
             "recent_recoveries",
             "impact",
             "organization_display_name",
@@ -1172,7 +1484,12 @@ class PlasticProjectListCreateView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
         m = _org_membership(request.user)
-        ser = PlasticProjectSerializer(data=request.data)
+        payload = dict(request.data)
+        if not payload.get("collection_days"):
+            payload["collection_days"] = list(DEFAULT_COLLECTION_DAYS)
+        if payload.get("weekly_target_kg") in (None, ""):
+            payload["weekly_target_kg"] = 120
+        ser = PlasticProjectSerializer(data=payload)
         ser.is_valid(raise_exception=True)
         org_name = (
             ser.validated_data.get("organization_name")
@@ -1184,8 +1501,13 @@ class PlasticProjectListCreateView(APIView):
             tree_admin_org=m.org if m else None,
             organization_name=org_name,
         )
+        _ensure_default_holding_zones(project)
+        project.refresh_from_db()
         return Response(
-            PlasticProjectSerializer(project).data, status=status.HTTP_201_CREATED
+            PlasticProjectSerializer(
+                project, context={"request": request, "include_claim_pin": True}
+            ).data,
+            status=status.HTTP_201_CREATED,
         )
 
 
@@ -1200,6 +1522,7 @@ class PlasticProjectDetailView(APIView):
                 )
                 .prefetch_related(
                     "hotspots",
+                    "holding_zones",
                     "recoveries",
                     "sponsorships",
                     "certificates",
@@ -1749,27 +2072,48 @@ class PlasticRecoveryVerifyView(APIView):
         if kg <= 0:
             return Response({"detail": "kg_verified must be > 0."}, status=400)
 
-        recovery.status = "cbo_verified"
-        recovery.kg_verified = kg
-        recovery.verified_by = request.user
-        recovery.verified_at = timezone.now()
-        recovery.reject_reason = ""
-        recovery.save(
-            update_fields=[
-                "status",
-                "kg_verified",
-                "verified_by",
-                "verified_at",
-                "reject_reason",
-                "updated_at",
-            ]
-        )
+        zone_id = request.data.get("holding_zone") or request.data.get("holding_zone_id")
+        try:
+            with transaction.atomic():
+                recovery.status = "cbo_verified"
+                recovery.kg_verified = kg
+                recovery.verified_by = request.user
+                recovery.verified_at = timezone.now()
+                recovery.reject_reason = ""
+                zone = _pick_holding_zone(recovery.project, zone_id)
+                recovery.holding_zone = zone
+                recovery.save(
+                    update_fields=[
+                        "status",
+                        "kg_verified",
+                        "verified_by",
+                        "verified_at",
+                        "reject_reason",
+                        "holding_zone",
+                        "updated_at",
+                    ]
+                )
+                apply_inventory_delta(
+                    zone=zone,
+                    delta_kg=kg,
+                    reason="verify_in",
+                    polymer_type=recovery.polymer_type,
+                    user=request.user,
+                    recovery=recovery,
+                    notes=f"Bag {recovery.bag_id} verified into stock",
+                )
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=400)
         _notify(
             recovery.submitted_by,
-            f"Plastic recovery {recovery.bag_id} verified by CBO. Await recycler intake.",
+            f"Plastic recovery {recovery.bag_id} verified · stocked in {zone.name}.",
             recovery,
         )
-        return Response(PlasticRecoverySerializer(recovery).data)
+        payload = PlasticRecoverySerializer(recovery).data
+        payload["holding_zone_id"] = zone.id
+        payload["holding_zone_name"] = zone.name
+        payload["holding_zone_inventory_kg"] = float(zone.inventory_kg)
+        return Response(payload)
 
 
 class PlasticIntakeScanView(APIView):
@@ -1947,15 +2291,38 @@ class PlasticRecyclerListCreateView(APIView):
 
     def get(self, request):
         qs = PlasticRecyclerPartner.objects.filter(is_active=True)
-        # Authenticated CBO sees only their org partners when possible
-        if (
+        city = str(request.query_params.get("city") or "").strip()
+        directory = str(request.query_params.get("directory") or "").lower() in {
+            "1",
+            "true",
+            "yes",
+        }
+        small_lots = str(request.query_params.get("small_lots") or "").lower() in {
+            "1",
+            "true",
+            "yes",
+        }
+        if city:
+            qs = qs.filter(city__iexact=city)
+        if small_lots:
+            qs = qs.filter(accepts_small_lots=True)
+        if directory:
+            qs = qs.filter(is_directory=True)
+        elif (
             request.user
             and request.user.is_authenticated
             and user_has_tree_admin_access(request.user)
         ):
+            # CBO partners + public directory (for direct-to-recycler matching)
             m = _org_membership(request.user)
             if m and m.org_id:
-                qs = qs.filter(Q(organization_id=m.org_id) | Q(created_by=request.user))
+                qs = qs.filter(
+                    Q(organization_id=m.org_id)
+                    | Q(created_by=request.user)
+                    | Q(is_directory=True)
+                )
+        else:
+            qs = qs.filter(is_directory=True)
         return Response(PlasticRecyclerSerializer(qs, many=True).data)
 
     def post(self, request):
@@ -1967,9 +2334,751 @@ class PlasticRecyclerListCreateView(APIView):
         partner = ser.save(
             created_by=request.user,
             organization=m.org if m else None,
+            is_directory=False,
         )
         return Response(
             PlasticRecyclerSerializer(partner).data, status=status.HTTP_201_CREATED
+        )
+
+
+class PlasticRecyclerDirectoryView(APIView):
+    """Public Kenya recycler directory filtered by city (direct sales research)."""
+
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        qs = PlasticRecyclerPartner.objects.filter(is_active=True, is_directory=True)
+        city = str(request.query_params.get("city") or "").strip()
+        if city:
+            qs = qs.filter(city__iexact=city)
+        small_lots = str(request.query_params.get("small_lots") or "").lower() in {
+            "1",
+            "true",
+            "yes",
+        }
+        if small_lots:
+            qs = qs.filter(accepts_small_lots=True)
+        cities = sorted(
+            {
+                (c or "").strip()
+                for c in PlasticRecyclerPartner.objects.filter(
+                    is_active=True, is_directory=True
+                )
+                .exclude(city="")
+                .values_list("city", flat=True)
+            },
+            key=lambda x: x.lower(),
+        )
+        return Response(
+            {
+                "cities": cities,
+                "count": qs.count(),
+                "recyclers": PlasticRecyclerSerializer(qs, many=True).data,
+                "ground_notes": {
+                    "typical_cbo_weekly_kg": 120,
+                    "holding_zones": 3,
+                    "collection_days": DEFAULT_COLLECTION_DAYS,
+                    "marketplace_model": (
+                        "Recycler pays Climate Wavers; platform fee split to collectors."
+                    ),
+                    "default_fee_rate": float(DEFAULT_MARKETPLACE_FEE_RATE),
+                    "tip": (
+                        "Prefer accepts_small_lots=true yards for ~40 kg/zone lots; "
+                        "large factories often want 1+ tonne/week."
+                    ),
+                },
+            }
+        )
+
+
+class PlasticHoldingZoneListCreateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, project_id):
+        try:
+            project = PlasticProject.objects.get(pk=project_id)
+        except PlasticProject.DoesNotExist:
+            return Response({"detail": "Not found."}, status=404)
+        if not _can_manage_project(request.user, project):
+            return Response({"detail": "Forbidden."}, status=403)
+        zones = _ensure_default_holding_zones(project)
+        return Response(PlasticHoldingZoneSerializer(zones, many=True).data)
+
+    def post(self, request, project_id):
+        try:
+            project = PlasticProject.objects.get(pk=project_id)
+        except PlasticProject.DoesNotExist:
+            return Response({"detail": "Not found."}, status=404)
+        if not _can_manage_project(request.user, project):
+            return Response({"detail": "Forbidden."}, status=403)
+        ser = PlasticHoldingZoneSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        zone = ser.save(project=project)
+        return Response(
+            PlasticHoldingZoneSerializer(zone).data, status=status.HTTP_201_CREATED
+        )
+
+
+class PlasticHoldingZoneDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, zone_id):
+        zone = PlasticHoldingZone.objects.select_related("project").filter(pk=zone_id).first()
+        if not zone:
+            return Response({"detail": "Not found."}, status=404)
+        if not _can_manage_project(request.user, zone.project):
+            return Response({"detail": "Forbidden."}, status=403)
+
+        # Inventory changes go through the ledger so stock stays auditable.
+        if "inventory_kg" in request.data:
+            try:
+                target = _money(request.data.get("inventory_kg"))
+                delta = _money(target - zone.inventory_kg)
+                if delta != 0:
+                    with transaction.atomic():
+                        apply_inventory_delta(
+                            zone=zone,
+                            delta_kg=delta,
+                            reason="adjust",
+                            polymer_type=str(
+                                request.data.get("polymer_type") or "mixed"
+                            ),
+                            user=request.user,
+                            notes=str(request.data.get("notes") or "Zone inventory edit")[
+                                :255
+                            ],
+                        )
+                zone.refresh_from_db()
+            except ValueError as exc:
+                return Response({"detail": str(exc)}, status=400)
+
+        payload = {
+            k: v
+            for k, v in dict(request.data).items()
+            if k not in {"inventory_kg", "inventory_by_polymer"}
+        }
+        if payload:
+            ser = PlasticHoldingZoneSerializer(zone, data=payload, partial=True)
+            ser.is_valid(raise_exception=True)
+            ser.save()
+            zone.refresh_from_db()
+        return Response(PlasticHoldingZoneSerializer(zone).data)
+
+
+class PlasticDispatchListCreateView(APIView):
+    """Climate Wavers marketplace: recycler pays platform; CW splits with collectors."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, project_id):
+        try:
+            project = PlasticProject.objects.get(pk=project_id)
+        except PlasticProject.DoesNotExist:
+            return Response({"detail": "Not found."}, status=404)
+        if not _can_manage_project(request.user, project):
+            return Response({"detail": "Forbidden."}, status=403)
+        qs = project.dispatches.select_related("recycler", "holding_zone").all()[:100]
+        return Response(PlasticDispatchSerializer(qs, many=True).data)
+
+    @transaction.atomic
+    def post(self, request, project_id):
+        try:
+            project = PlasticProject.objects.select_for_update().get(pk=project_id)
+        except PlasticProject.DoesNotExist:
+            return Response({"detail": "Not found."}, status=404)
+        if not _can_manage_project(request.user, project):
+            return Response({"detail": "Forbidden."}, status=403)
+
+        recycler_id = request.data.get("recycler") or request.data.get("recycler_id")
+        recycler = PlasticRecyclerPartner.objects.filter(
+            pk=recycler_id, is_active=True
+        ).first()
+        if not recycler:
+            return Response({"detail": "Recycler required."}, status=400)
+
+        kg = _dec(request.data.get("kg"))
+        if kg <= 0:
+            return Response({"detail": "kg must be > 0."}, status=400)
+
+        zone = None
+        zone_id = request.data.get("holding_zone") or request.data.get("holding_zone_id")
+        if zone_id:
+            zone = (
+                PlasticHoldingZone.objects.select_for_update()
+                .filter(pk=zone_id, project=project)
+                .first()
+            )
+            if not zone:
+                return Response({"detail": "Holding zone not found."}, status=404)
+
+        price = request.data.get("price_kes_per_kg")
+        price_dec = _money(price) if price not in (None, "") else None
+        if price_dec is None and isinstance(recycler.buy_rates, dict):
+            polymer = str(request.data.get("polymer_type") or "mixed")
+            rate = recycler.buy_rates.get(polymer) or recycler.buy_rates.get("mixed")
+            if rate is not None:
+                price_dec = _money(rate)
+
+        total = _money(kg * price_dec) if price_dec is not None else None
+        fee_override = request.data.get("fee_rate")
+        fee_source = (
+            fee_override
+            if fee_override not in (None, "")
+            else getattr(project, "marketplace_fee_rate", None)
+        )
+        platform_share = collector_share = None
+        fee_rate = _clamp_fee_rate(
+            fee_source if fee_source not in (None, "") else DEFAULT_MARKETPLACE_FEE_RATE
+        )
+        if total is not None:
+            platform_share, collector_share, fee_rate = split_plastic_marketplace_sale(
+                total, fee_rate
+            )
+
+        polymer = str(request.data.get("polymer_type") or "mixed")
+        try:
+            dispatch = PlasticDispatch.objects.create(
+                project=project,
+                holding_zone=zone,
+                recycler=recycler,
+                created_by=request.user,
+                polymer_type=polymer,
+                kg=kg,
+                price_kes_per_kg=price_dec,
+                total_kes=total,
+                fee_rate=fee_rate,
+                platform_share_kes=platform_share,
+                collector_share_kes=collector_share,
+                payment_status="pending",
+                collector_payout_status="none",
+                collector_payout_phone=str(
+                    request.data.get("collector_payout_phone") or ""
+                ).strip()[:40],
+                status="offered",
+                pickup_day=str(request.data.get("pickup_day") or "").strip().lower()[:16],
+                notes=str(request.data.get("notes") or "").strip(),
+                contact_phone=str(
+                    request.data.get("contact_phone") or recycler.contact_phone or ""
+                ).strip(),
+                offered_at=timezone.now(),
+            )
+            if zone:
+                apply_inventory_delta(
+                    zone=zone,
+                    delta_kg=-kg,
+                    reason="dispatch_out",
+                    polymer_type=polymer,
+                    user=request.user,
+                    dispatch=dispatch,
+                    notes=f"Marketplace offer #{dispatch.id} to {recycler.name}",
+                )
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=400)
+
+        return Response(
+            PlasticDispatchSerializer(dispatch).data, status=status.HTTP_201_CREATED
+        )
+
+
+class PlasticDispatchStatusView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, dispatch_id):
+        dispatch = (
+            PlasticDispatch.objects.select_related("project", "recycler", "holding_zone")
+            .filter(pk=dispatch_id)
+            .first()
+        )
+        if not dispatch:
+            return Response({"detail": "Not found."}, status=404)
+        if not _can_manage_project(request.user, dispatch.project):
+            return Response({"detail": "Forbidden."}, status=403)
+
+        new_status = str(request.data.get("status") or "").strip().lower()
+        allowed = {c[0] for c in PlasticDispatch.STATUS_CHOICES}
+        if new_status not in allowed:
+            return Response({"detail": "Invalid status."}, status=400)
+
+        with transaction.atomic():
+            if new_status == "cancelled" and dispatch.status not in (
+                "cancelled",
+                "settled",
+                "delivered",
+            ):
+                if dispatch.holding_zone_id:
+                    zone = (
+                        PlasticHoldingZone.objects.select_for_update()
+                        .filter(pk=dispatch.holding_zone_id)
+                        .first()
+                    )
+                    if zone:
+                        apply_inventory_delta(
+                            zone=zone,
+                            delta_kg=dispatch.kg,
+                            reason="dispatch_cancel",
+                            polymer_type=dispatch.polymer_type,
+                            user=request.user,
+                            dispatch=dispatch,
+                            notes=f"Restored from cancelled offer #{dispatch.id}",
+                        )
+
+            dispatch.status = new_status
+            now = timezone.now()
+            update_fields = ["status", "updated_at"]
+            if new_status == "accepted":
+                dispatch.accepted_at = now
+                update_fields.append("accepted_at")
+            elif new_status == "delivered":
+                dispatch.delivered_at = now
+                update_fields.append("delivered_at")
+            elif new_status == "settled":
+                dispatch.settled_at = now
+                update_fields.append("settled_at")
+            dispatch.save(update_fields=update_fields)
+
+        return Response(PlasticDispatchSerializer(dispatch).data)
+
+
+class PlasticInventoryLedgerView(APIView):
+    """CBO inventory movements for a project."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, project_id):
+        try:
+            project = PlasticProject.objects.get(pk=project_id)
+        except PlasticProject.DoesNotExist:
+            return Response({"detail": "Not found."}, status=404)
+        if not _can_manage_project(request.user, project):
+            return Response({"detail": "Forbidden."}, status=403)
+        zones = _ensure_default_holding_zones(project)
+        entries = (
+            PlasticInventoryLedger.objects.filter(project=project)
+            .select_related("holding_zone", "recovery")
+            .all()[:100]
+        )
+        return Response(
+            {
+                "zones": PlasticHoldingZoneSerializer(zones, many=True).data,
+                "ledger": PlasticInventoryLedgerSerializer(entries, many=True).data,
+                "total_inventory_kg": float(
+                    sum((z.inventory_kg or 0) for z in zones)
+                ),
+            }
+        )
+
+    def post(self, request, project_id):
+        """Manual inventory adjustment."""
+        try:
+            project = PlasticProject.objects.get(pk=project_id)
+        except PlasticProject.DoesNotExist:
+            return Response({"detail": "Not found."}, status=404)
+        if not _can_manage_project(request.user, project):
+            return Response({"detail": "Forbidden."}, status=403)
+        zone_id = request.data.get("holding_zone") or request.data.get("holding_zone_id")
+        try:
+            zone = _pick_holding_zone(project, zone_id)
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=400)
+        delta = _money(request.data.get("delta_kg") or request.data.get("kg") or 0)
+        if delta == 0:
+            return Response({"detail": "delta_kg required."}, status=400)
+        try:
+            with transaction.atomic():
+                entry = apply_inventory_delta(
+                    zone=zone,
+                    delta_kg=delta,
+                    reason="adjust",
+                    polymer_type=str(request.data.get("polymer_type") or "mixed"),
+                    user=request.user,
+                    notes=str(request.data.get("notes") or "Manual adjust")[:255],
+                )
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=400)
+        return Response(PlasticInventoryLedgerSerializer(entry).data, status=201)
+
+
+class PlasticRecyclerApplyView(APIView):
+    """
+    Self-serve recycler onboarding.
+    Logged-in user applies (or claims a directory listing) → pending approval.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        data = request.data or {}
+        claim_id = data.get("directory_recycler_id") or data.get("claim_recycler_id")
+        name = str(data.get("name") or "").strip()[:200]
+        city = str(data.get("city") or "").strip()[:100]
+        phone = _normalize_phone(data.get("contact_phone") or data.get("phone") or "")
+        email = str(data.get("contact_email") or data.get("email") or "").strip()[:200]
+        address = str(data.get("address") or "").strip()
+        website = str(data.get("website") or "").strip()[:200]
+        message = str(data.get("application_message") or data.get("message") or "").strip()
+        materials = data.get("materials_accepted") or []
+        buy_rates = data.get("buy_rates") if isinstance(data.get("buy_rates"), dict) else {}
+        accepts_small = str(data.get("accepts_small_lots", "true")).lower() not in {
+            "0",
+            "false",
+            "no",
+        }
+
+        existing = _recycler_partners_for_user(request.user).first()
+        if existing and existing.onboarding_status in ("applied", "approved"):
+            return Response(
+                {
+                    "detail": f"Already {existing.onboarding_status}.",
+                    "recycler": PlasticRecyclerSerializer(existing).data,
+                },
+                status=400,
+            )
+
+        partner = None
+        if claim_id:
+            partner = PlasticRecyclerPartner.objects.filter(pk=claim_id).first()
+            if not partner:
+                return Response({"detail": "Directory recycler not found."}, status=404)
+            if partner.linked_user_id and partner.linked_user_id != request.user.id:
+                return Response(
+                    {"detail": "This directory listing is already claimed."}, status=400
+                )
+            name = name or partner.name
+            city = city or partner.city
+            phone = phone or _normalize_phone(partner.contact_phone)
+            email = email or partner.contact_email
+
+        if not name:
+            return Response({"detail": "Company name required."}, status=400)
+        if not city:
+            return Response({"detail": "City required."}, status=400)
+        if not phone and not email:
+            return Response({"detail": "Phone or email required."}, status=400)
+
+        now = timezone.now()
+        if partner is None:
+            partner = PlasticRecyclerPartner(created_by=request.user)
+
+        partner.name = name
+        partner.city = city
+        partner.contact_phone = phone or partner.contact_phone
+        partner.contact_email = email or partner.contact_email
+        partner.address = address or partner.address
+        partner.website = website or partner.website
+        if materials:
+            partner.materials_accepted = materials
+        if buy_rates:
+            partner.buy_rates = buy_rates
+        partner.accepts_small_lots = accepts_small
+        partner.application_message = message
+        partner.onboarding_status = "applied"
+        partner.applied_at = now
+        partner.linked_user = request.user
+        partner.invite_status = "pending"
+        partner.is_active = True
+        if partner.is_directory is False and claim_id:
+            partner.is_directory = True
+        partner.save()
+
+        _notify(
+            request.user,
+            f"Recycler application for {partner.name} submitted. Await Climate Wavers superadmin approval.",
+            partner,
+        )
+        return Response(
+            {
+                "ok": True,
+                "status": "applied",
+                "recycler": PlasticRecyclerSerializer(partner).data,
+                "next": (
+                    "Climate Wavers superadmin will approve your yard, "
+                    "then you can open Marketplace desk."
+                ),
+            },
+            status=201,
+        )
+
+
+class PlasticRecyclerApproveView(APIView):
+    """Platform superadmin / staff only — approve or reject recycler applications."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, recycler_id):
+        if not (request.user.is_staff or request.user.is_superuser):
+            return Response(
+                {"detail": "Platform superadmin required."}, status=403
+            )
+        partner = PlasticRecyclerPartner.objects.filter(pk=recycler_id).first()
+        if not partner:
+            return Response({"detail": "Not found."}, status=404)
+
+        decision = str(request.data.get("decision") or "approve").strip().lower()
+        now = timezone.now()
+        if decision in {"reject", "rejected"}:
+            partner.onboarding_status = "rejected"
+            partner.reviewed_at = now
+            partner.reviewed_by = request.user
+            partner.invite_status = "revoked"
+            partner.save(
+                update_fields=[
+                    "onboarding_status",
+                    "reviewed_at",
+                    "reviewed_by",
+                    "invite_status",
+                    "updated_at",
+                ]
+            )
+            if partner.linked_user_id:
+                _notify(
+                    partner.linked_user,
+                    f"Recycler application for {partner.name} was rejected.",
+                    partner,
+                )
+            return Response(PlasticRecyclerSerializer(partner).data)
+
+        partner.onboarding_status = "approved"
+        partner.reviewed_at = now
+        partner.reviewed_by = request.user
+        partner.invite_status = "accepted"
+        partner.invite_accepted_at = now
+        partner.is_active = True
+        if not partner.is_directory:
+            partner.is_directory = True
+        partner.save()
+        if partner.linked_user_id:
+            _notify(
+                partner.linked_user,
+                f"{partner.name} approved on Plastic Pulse. Open Recycler desk to buy lots.",
+                partner,
+            )
+        return Response(PlasticRecyclerSerializer(partner).data)
+
+
+class PlasticRecyclerApplicationsView(APIView):
+    """Pending recycler applications — platform superadmin / staff only."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if not (request.user.is_staff or request.user.is_superuser):
+            return Response(
+                {"detail": "Platform superadmin required."}, status=403
+            )
+        status_filter = str(request.query_params.get("status") or "applied").strip()
+        qs = PlasticRecyclerPartner.objects.all()
+        if status_filter and status_filter != "all":
+            qs = qs.filter(onboarding_status=status_filter)
+        return Response(PlasticRecyclerSerializer(qs[:100], many=True).data)
+
+
+class PlasticRecyclerOffersView(APIView):
+    """Marketplace offers for the logged-in approved recycler."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        partners = list(
+            _recycler_partners_for_user(request.user).filter(
+                onboarding_status="approved", invite_status="accepted"
+            )
+        )
+        if not partners:
+            return Response(
+                {
+                    "is_recycler": False,
+                    "offers": [],
+                    "detail": "No approved recycler profile. Apply at /plastic/recycler-onboard.",
+                }
+            )
+        ids = [p.id for p in partners]
+        offers = (
+            PlasticDispatch.objects.filter(recycler_id__in=ids)
+            .exclude(status="cancelled")
+            .select_related("project", "holding_zone", "recycler")
+            .all()[:100]
+        )
+        return Response(
+            {
+                "is_recycler": True,
+                "partners": PlasticRecyclerSerializer(partners, many=True).data,
+                "offers": PlasticDispatchSerializer(offers, many=True).data,
+            }
+        )
+
+
+class PlasticDispatchAcceptView(APIView):
+    """Recycler accepts a marketplace offer."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, dispatch_id):
+        dispatch = (
+            PlasticDispatch.objects.select_related("recycler", "project")
+            .filter(pk=dispatch_id)
+            .first()
+        )
+        if not dispatch:
+            return Response({"detail": "Not found."}, status=404)
+        partners = _recycler_partners_for_user(request.user).filter(
+            pk=dispatch.recycler_id,
+            onboarding_status="approved",
+            invite_status="accepted",
+        )
+        if not partners.exists() and not request.user.is_staff:
+            return Response({"detail": "Forbidden."}, status=403)
+        if dispatch.status not in ("offered", "accepted"):
+            return Response(
+                {"detail": f"Cannot accept from status {dispatch.status}."}, status=400
+            )
+        if dispatch.status != "accepted":
+            dispatch.status = "accepted"
+            dispatch.accepted_at = timezone.now()
+            dispatch.save(update_fields=["status", "accepted_at", "updated_at"])
+        return Response(PlasticDispatchSerializer(dispatch).data)
+
+
+class PlasticDispatchCheckoutView(APIView):
+    """
+    Recycler Paystack checkout: pays Climate Wavers for the lot (KES).
+    Completion via paystack product=plastic_dispatch.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, dispatch_id):
+        dispatch = (
+            PlasticDispatch.objects.select_related("recycler", "project")
+            .filter(pk=dispatch_id)
+            .first()
+        )
+        if not dispatch:
+            return Response({"detail": "Not found."}, status=404)
+        partners = _recycler_partners_for_user(request.user).filter(
+            pk=dispatch.recycler_id,
+            onboarding_status="approved",
+        )
+        if not partners.exists() and not request.user.is_staff:
+            return Response({"detail": "Forbidden."}, status=403)
+        if dispatch.payment_status == "received":
+            return Response({"detail": "Already paid."}, status=400)
+        if dispatch.total_kes is None or dispatch.total_kes <= 0:
+            return Response({"detail": "Offer has no price."}, status=400)
+        if dispatch.status == "cancelled":
+            return Response({"detail": "Offer cancelled."}, status=400)
+        if dispatch.status == "offered":
+            dispatch.status = "accepted"
+            dispatch.accepted_at = timezone.now()
+            dispatch.save(update_fields=["status", "accepted_at", "updated_at"])
+
+        reference = f"PLASTIC-LOT-{dispatch.id}-{uuid.uuid4().hex[:10].upper()}"
+        amount_kes = float(dispatch.total_kes)
+        return Response(
+            {
+                "success": True,
+                "reference": reference,
+                "dispatch_id": dispatch.id,
+                "amount_kes": amount_kes,
+                "product": "plastic_dispatch",
+                "currency": "KES",
+                "metadata": {
+                    "product": "plastic_dispatch",
+                    "plastic_dispatch_id": str(dispatch.id),
+                    "plastic_project_id": str(dispatch.project_id),
+                    "recycler_id": str(dispatch.recycler_id),
+                    "kg": str(dispatch.kg),
+                    "amount_kes": str(amount_kes),
+                },
+                "split": {
+                    "platform_share_kes": float(dispatch.platform_share_kes or 0),
+                    "collector_share_kes": float(dispatch.collector_share_kes or 0),
+                    "fee_rate": float(dispatch.fee_rate or 0),
+                },
+            }
+        )
+
+
+class PlasticDispatchSettleView(APIView):
+    """
+    Record marketplace money movement:
+    - action=recycler_paid → recycler paid Climate Wavers
+    - action=collectors_paid → CW paid collectors/CBO their share
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    @transaction.atomic
+    def post(self, request, dispatch_id):
+        dispatch = (
+            PlasticDispatch.objects.select_related("project", "recycler", "holding_zone")
+            .select_for_update()
+            .filter(pk=dispatch_id)
+            .first()
+        )
+        if not dispatch:
+            return Response({"detail": "Not found."}, status=404)
+        if not _can_manage_project(request.user, dispatch.project):
+            return Response({"detail": "Forbidden."}, status=403)
+
+        action = str(request.data.get("action") or "").strip().lower()
+        now = timezone.now()
+
+        if action in {"recycler_paid", "mark_received"}:
+            if dispatch.total_kes is None:
+                return Response(
+                    {"detail": "Set price/kg before recording payment."}, status=400
+                )
+            if dispatch.platform_share_kes is None or dispatch.collector_share_kes is None:
+                platform, collectors, rate = split_plastic_marketplace_sale(
+                    dispatch.total_kes,
+                    dispatch.fee_rate or dispatch.project.marketplace_fee_rate,
+                )
+                dispatch.platform_share_kes = platform
+                dispatch.collector_share_kes = collectors
+                dispatch.fee_rate = rate
+            dispatch.payment_status = "received"
+            dispatch.payment_reference = str(
+                request.data.get("payment_reference") or dispatch.payment_reference or ""
+            ).strip()[:120]
+            dispatch.payment_received_at = now
+            if dispatch.collector_payout_status == "none":
+                dispatch.collector_payout_status = "pending"
+            phone = str(request.data.get("collector_payout_phone") or "").strip()
+            if phone:
+                dispatch.collector_payout_phone = phone[:40]
+            dispatch.save()
+            return Response(PlasticDispatchSerializer(dispatch).data)
+
+        if action in {"collectors_paid", "mark_collector_paid"}:
+            if dispatch.payment_status != "received":
+                return Response(
+                    {"detail": "Record recycler payment to Climate Wavers first."},
+                    status=400,
+                )
+            dispatch.collector_payout_status = "paid"
+            dispatch.collector_payout_reference = str(
+                request.data.get("collector_payout_reference")
+                or dispatch.collector_payout_reference
+                or ""
+            ).strip()[:120]
+            phone = str(request.data.get("collector_payout_phone") or "").strip()
+            if phone:
+                dispatch.collector_payout_phone = phone[:40]
+            dispatch.collector_paid_at = now
+            dispatch.status = "settled"
+            dispatch.settled_at = now
+            dispatch.save()
+            return Response(PlasticDispatchSerializer(dispatch).data)
+
+        return Response(
+            {
+                "detail": "action must be recycler_paid or collectors_paid.",
+                "model": (
+                    "Recycler pays Climate Wavers → CW keeps platform share → "
+                    "CW pays collectors."
+                ),
+            },
+            status=400,
         )
 
 
@@ -2153,7 +3262,7 @@ class PlasticRecyclerInviteAcceptView(APIView):
 
 
 class PlasticRecyclerMeView(APIView):
-    """Current user's scan-only recycler profile (if any)."""
+    """Current user's recycler profile (onboarding + marketplace + scan)."""
 
     permission_classes = [IsAuthenticated]
 
@@ -2166,15 +3275,21 @@ class PlasticRecyclerMeView(APIView):
                 {
                     "is_recycler": False,
                     "scan_only": False,
+                    "marketplace_ready": False,
                     "partners": [],
+                    "onboard_path": "/plastic/recycler-onboard",
                 }
             )
+        ready = any(getattr(p, "marketplace_ready", False) for p in partners)
         return Response(
             {
                 "is_recycler": True,
                 "scan_only": _is_scan_only_recycler(request.user),
+                "marketplace_ready": ready,
                 "partners": PlasticRecyclerSerializer(partners, many=True).data,
                 "scan_path": "/plastic/intake",
+                "desk_path": "/plastic/desk",
+                "onboard_path": "/plastic/recycler-onboard",
             }
         )
 

@@ -67,10 +67,24 @@ const emptyProject = {
   region: "",
   country: "Kenya",
   goal_kg: 100,
+  weekly_target_kg: 120,
+  collection_days: ["mon", "wed", "sat"],
   sponsor_price_usd_per_kg: 1,
   flood_zone_flag: true,
   cover_image: "",
 };
+
+const COLLECTION_DAY_OPTIONS = [
+  ["mon", "Mon"],
+  ["tue", "Tue"],
+  ["wed", "Wed"],
+  ["thu", "Thu"],
+  ["fri", "Fri"],
+  ["sat", "Sat"],
+  ["sun", "Sun"],
+];
+
+const DIRECTORY_CITIES = ["Eldoret", "Nairobi", "Mombasa", "Kisumu"];
 
 const PlasticProjectAdmin = () => {
   const [projects, setProjects] = useState([]);
@@ -79,6 +93,10 @@ const PlasticProjectAdmin = () => {
   const [queue, setQueue] = useState([]);
   const [intakeQueue, setIntakeQueue] = useState([]);
   const [recyclers, setRecyclers] = useState([]);
+  const [directory, setDirectory] = useState([]);
+  const [directoryCity, setDirectoryCity] = useState("Eldoret");
+  const [dispatches, setDispatches] = useState([]);
+  const [inventory, setInventory] = useState(null);
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState(emptyProject);
   const [creating, setCreating] = useState(false);
@@ -87,12 +105,23 @@ const PlasticProjectAdmin = () => {
   const [verifyingId, setVerifyingId] = useState(null);
   const [intaking, setIntaking] = useState(false);
   const [savingRecycler, setSavingRecycler] = useState(false);
+  const [savingZoneId, setSavingZoneId] = useState(null);
+  const [dispatching, setDispatching] = useState(false);
   const [tab, setTab] = useState("projects");
   const [lastBagLabel, setLastBagLabel] = useState(null);
   const [qrBagId, setQrBagId] = useState(null);
   const [invitingId, setInvitingId] = useState(null);
   const [lastInvite, setLastInvite] = useState(null);
   const [reopeningId, setReopeningId] = useState(null);
+  const [dispatchForm, setDispatchForm] = useState({
+    holding_zone_id: "",
+    recycler_id: "",
+    polymer_type: "mixed",
+    kg: "",
+    price_kes_per_kg: "",
+    pickup_day: "sat",
+    notes: "",
+  });
 
   const [hotspotForm, setHotspotForm] = useState({
     title: "",
@@ -160,22 +189,61 @@ const PlasticProjectAdmin = () => {
     setRecyclers(Array.isArray(data) ? data : []);
   }, []);
 
+  const loadDirectory = useCallback(async (city) => {
+    const q = new URLSearchParams({ city, small_lots: "1" });
+    const data = await api(`${endpoints.plasticRecyclerDirectory}?${q}`);
+    setDirectory(Array.isArray(data?.recyclers) ? data.recyclers : []);
+  }, []);
+
+  const loadDispatches = useCallback(async (projectId) => {
+    if (!projectId) {
+      setDispatches([]);
+      return;
+    }
+    const data = await api(endpoints.plasticDispatches(projectId));
+    setDispatches(Array.isArray(data) ? data : []);
+  }, []);
+
   useEffect(() => {
     (async () => {
       setLoading(true);
       try {
-        await Promise.all([loadProjects(), loadQueue(), loadRecyclers()]);
+        await Promise.all([
+          loadProjects(),
+          loadQueue(),
+          loadRecyclers(),
+          loadDirectory(directoryCity),
+        ]);
       } catch (err) {
         toast.error(err.message || "Failed to load Plastic Pulse");
       } finally {
         setLoading(false);
       }
     })();
-  }, [loadProjects, loadQueue, loadRecyclers]);
+  }, [loadProjects, loadQueue, loadRecyclers, loadDirectory, directoryCity]);
 
   useEffect(() => {
-    if (selectedId) loadDetail(selectedId).catch(() => setDetail(null));
-  }, [selectedId, loadDetail]);
+    if (selectedId) {
+      loadDetail(selectedId).catch(() => setDetail(null));
+      loadDispatches(selectedId).catch(() => setDispatches([]));
+    }
+  }, [selectedId, loadDetail, loadDispatches]);
+
+  useEffect(() => {
+    if (tab !== "direct" || !selectedId) return;
+    (async () => {
+      try {
+        // Seeds HZ-1…3 for older projects that predate holding zones.
+        await api(endpoints.plasticHoldingZones(selectedId));
+        const inv = await api(endpoints.plasticInventory(selectedId));
+        setInventory(inv);
+        await loadDetail(selectedId);
+        await loadDispatches(selectedId);
+      } catch {
+        /* ignore */
+      }
+    })();
+  }, [tab, selectedId, loadDetail, loadDispatches]);
 
   const createProject = async (e) => {
     e.preventDefault();
@@ -186,14 +254,18 @@ const PlasticProjectAdmin = () => {
         body: {
           ...form,
           goal_kg: Number(form.goal_kg) || 0,
+          weekly_target_kg: Number(form.weekly_target_kg) || 120,
+          collection_days: form.collection_days?.length
+            ? form.collection_days
+            : ["mon", "wed", "sat"],
           sponsor_price_usd_per_kg: Number(form.sponsor_price_usd_per_kg) || 1,
         },
       });
-      toast.success("Plastic project created");
+      toast.success("Plastic project created · 3 holding zones ready");
       setForm(emptyProject);
       await loadProjects();
       setSelectedId(created.id);
-      setTab("field");
+      setTab("direct");
     } catch (err) {
       toast.error(err.message);
     } finally {
@@ -536,6 +608,107 @@ const PlasticProjectAdmin = () => {
     }
   };
 
+  const saveZoneInventory = async (zone, inventoryKg) => {
+    if (!zone?.id || savingZoneId) return;
+    setSavingZoneId(zone.id);
+    try {
+      await api(endpoints.plasticHoldingZone(zone.id), {
+        method: "PATCH",
+        body: { inventory_kg: Number(inventoryKg) || 0 },
+      });
+      toast.success(`${zone.name} inventory updated`);
+      if (selectedId) await loadDetail(selectedId);
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
+      setSavingZoneId(null);
+    }
+  };
+
+  const createDispatch = async (e) => {
+    e.preventDefault();
+    if (!selectedId || dispatching) return;
+    if (!dispatchForm.recycler_id) return toast.error("Pick a recycler");
+    if (!Number(dispatchForm.kg)) return toast.error("Enter kg to dispatch");
+    setDispatching(true);
+    try {
+      const created = await api(endpoints.plasticDispatches(selectedId), {
+        method: "POST",
+        body: {
+          holding_zone_id: dispatchForm.holding_zone_id || undefined,
+          recycler_id: Number(dispatchForm.recycler_id),
+          polymer_type: dispatchForm.polymer_type,
+          kg: Number(dispatchForm.kg),
+          price_kes_per_kg: dispatchForm.price_kes_per_kg || undefined,
+          pickup_day: dispatchForm.pickup_day,
+          notes: dispatchForm.notes,
+        },
+      });
+      const plat = created?.platform_share_kes;
+      const col = created?.collector_share_kes;
+      toast.success(
+        plat != null && col != null
+          ? `Offer created · CW KES ${plat} / collectors KES ${col}`
+          : "Marketplace offer created"
+      );
+      if (created?.whatsapp_url) {
+        window.open(created.whatsapp_url, "_blank", "noopener,noreferrer");
+      }
+      setDispatchForm((p) => ({ ...p, kg: "", notes: "" }));
+      await Promise.all([loadDispatches(selectedId), loadDetail(selectedId)]);
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
+      setDispatching(false);
+    }
+  };
+
+  const updateDispatchStatus = async (dispatch, statusValue) => {
+    try {
+      await api(endpoints.plasticDispatchStatus(dispatch.id), {
+        method: "POST",
+        body: { status: statusValue },
+      });
+      toast.success(`Dispatch → ${statusValue}`);
+      await Promise.all([loadDispatches(selectedId), loadDetail(selectedId)]);
+    } catch (err) {
+      toast.error(err.message);
+    }
+  };
+
+  const settleDispatch = async (dispatch, action) => {
+    try {
+      await api(endpoints.plasticDispatchSettle(dispatch.id), {
+        method: "POST",
+        body: { action },
+      });
+      toast.success(
+        action === "recycler_paid"
+          ? "Recycler payment to Climate Wavers recorded"
+          : "Collector share marked paid"
+      );
+      await loadDispatches(selectedId);
+    } catch (err) {
+      toast.error(err.message);
+    }
+  };
+
+  const toggleCollectionDay = (day) => {
+    setForm((p) => {
+      const days = new Set(p.collection_days || []);
+      if (days.has(day)) days.delete(day);
+      else days.add(day);
+      return { ...p, collection_days: COLLECTION_DAY_OPTIONS.map(([d]) => d).filter((d) => days.has(d)) };
+    });
+  };
+
+  const holdingZones = detail?.holding_zones || [];
+  const partnerRecyclers = recyclers.filter((r) => !r.is_directory);
+  const saleRecyclers = [
+    ...partnerRecyclers,
+    ...directory.filter((d) => !partnerRecyclers.some((p) => p.id === d.id)),
+  ];
+
   if (loading) {
     return <div className="p-6 text-muted">Loading Plastic Pulse…</div>;
   }
@@ -546,12 +719,16 @@ const PlasticProjectAdmin = () => {
         <div>
           <h1 className="text-2xl font-semibold text-foreground">Plastic Pulse</h1>
           <p className="text-sm text-muted mt-1 max-w-2xl">
-            Same CBO as Tree Admin. Collectors (signed-in or guest with name + phone) claim
-            hotspots with your PIN from{" "}
+            Ground ops: ~120 kg/week · 3 holding zones · Mon/Wed/Sat. Climate Wavers is the
+            marketplace: recyclers pay us, we split with collectors. Collect from{" "}
             <Link to="/app/plastic/collect" className="text-primary hover:underline">
               Collect plastic
-            </Link>{" "}
-            or the public project page — you verify here, then recyclers scan intake.
+            </Link>
+            , then settle in Direct sales.{" "}
+            <Link to="/plastic/recyclers" className="text-primary hover:underline">
+              Recycler directory
+            </Link>
+            .
           </p>
         </div>
         <PlasticOfflineSyncBanner
@@ -566,6 +743,7 @@ const PlasticProjectAdmin = () => {
       <div className="flex flex-wrap gap-2 border-b border-border pb-2">
         {[
           ["projects", "Projects"],
+          ["direct", "Direct sales"],
           ["field", "Field"],
           ["queue", "Verify queue"],
           ["intake", "Recycler intake"],
@@ -619,6 +797,16 @@ const PlasticProjectAdmin = () => {
               />
               <input
                 className="h-10 px-3 border border-border bg-background"
+                placeholder="Weekly target kg"
+                type="number"
+                min="1"
+                value={form.weekly_target_kg}
+                onChange={(e) =>
+                  setForm((p) => ({ ...p, weekly_target_kg: e.target.value }))
+                }
+              />
+              <input
+                className="h-10 px-3 border border-border bg-background"
                 placeholder="Sponsor $/kg"
                 type="number"
                 step="0.01"
@@ -628,7 +816,7 @@ const PlasticProjectAdmin = () => {
                   setForm((p) => ({ ...p, sponsor_price_usd_per_kg: e.target.value }))
                 }
               />
-              <label className="flex items-center gap-2 text-sm text-muted">
+              <label className="flex items-center gap-2 text-sm text-muted col-span-2">
                 <input
                   type="checkbox"
                   checked={form.flood_zone_flag}
@@ -638,6 +826,30 @@ const PlasticProjectAdmin = () => {
                 />
                 Drain / flood focus
               </label>
+            </div>
+            <div className="space-y-1">
+              <FieldLabel hint="Default Mon / Wed / Sat from field research.">
+                Collection days
+              </FieldLabel>
+              <div className="flex flex-wrap gap-1.5">
+                {COLLECTION_DAY_OPTIONS.map(([day, label]) => {
+                  const on = (form.collection_days || []).includes(day);
+                  return (
+                    <button
+                      key={day}
+                      type="button"
+                      onClick={() => toggleCollectionDay(day)}
+                      className={`h-8 px-2.5 text-xs border ${
+                        on
+                          ? "border-primary text-primary bg-primary/5"
+                          : "border-border text-muted"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
             <button
               type="submit"
@@ -685,6 +897,342 @@ const PlasticProjectAdmin = () => {
               ))
             )}
           </div>
+        </div>
+      ) : null}
+
+      {tab === "direct" ? (
+        <div className="space-y-6">
+          {!selectedId ? (
+            <p className="text-sm text-muted">Select or create a project first.</p>
+          ) : (
+            <>
+              <div className="border border-border p-4 space-y-2">
+                <h2 className="font-medium">Holding zones · Climate Wavers marketplace</h2>
+                <p className="text-sm text-muted">
+                  {detail?.name} · weekly target{" "}
+                  {Number(detail?.weekly_target_kg || 120)} kg · days{" "}
+                  {(detail?.collection_days || ["mon", "wed", "sat"])
+                    .join(", ")
+                    .toUpperCase()}{" "}
+                  · platform fee{" "}
+                  {Math.round(Number(detail?.marketplace_fee_rate ?? 0.2) * 100)}% to CW /
+                  {Math.round(100 - Number(detail?.marketplace_fee_rate ?? 0.2) * 100)}% to
+                  collectors
+                </p>
+                {holdingZones.length === 0 ? (
+                  <p className="text-sm text-muted">
+                    No zones yet — reopen this tab after creating the project, or call
+                    holding-zones API to seed HZ-1…3.
+                  </p>
+                ) : (
+                  <div className="grid md:grid-cols-3 gap-3">
+                    {holdingZones.map((zone) => (
+                      <div key={zone.id} className="border border-border p-3 space-y-2">
+                        <div className="font-medium text-sm">
+                          {zone.code || "HZ"} · {zone.name}
+                        </div>
+                        <label className="block text-xs text-muted">
+                          Inventory kg
+                          <input
+                            className="mt-1 w-full h-9 px-2 border border-border bg-background"
+                            type="number"
+                            step="0.01"
+                            defaultValue={Number(zone.inventory_kg || 0)}
+                            key={`${zone.id}-${zone.inventory_kg}`}
+                            onBlur={(e) => saveZoneInventory(zone, e.target.value)}
+                          />
+                        </label>
+                        <p className="text-[11px] text-muted">
+                          {(zone.materials || []).slice(0, 4).join(", ") || "plastic"}
+                          {savingZoneId === zone.id ? " · saving…" : ""}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {inventory?.ledger?.length ? (
+                  <div className="pt-2 space-y-1">
+                    <p className="text-xs text-muted">
+                      Total stock {Number(inventory.total_inventory_kg || 0)} kg · recent
+                      ledger
+                    </p>
+                    {inventory.ledger.slice(0, 6).map((row) => (
+                      <div key={row.id} className="text-xs text-muted">
+                        {row.reason}: {Number(row.delta_kg) > 0 ? "+" : ""}
+                        {row.delta_kg} kg · {row.holding_zone_name}
+                        {row.bag_id ? ` · ${row.bag_id}` : ""} → bal {row.balance_after_kg}
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="grid lg:grid-cols-2 gap-6">
+                <form
+                  onSubmit={createDispatch}
+                  className="space-y-3 border border-border p-4"
+                >
+                  <h2 className="font-medium">Offer lot (recycler pays CW)</h2>
+                  <p className="text-xs text-muted">
+                    Deducts zone inventory, quotes total to Climate Wavers, and opens
+                    WhatsApp. Default split: 20% platform / 80% collectors.
+                  </p>
+                  <select
+                    className="w-full h-10 px-3 border border-border bg-background"
+                    value={dispatchForm.holding_zone_id}
+                    onChange={(e) =>
+                      setDispatchForm((p) => ({
+                        ...p,
+                        holding_zone_id: e.target.value,
+                      }))
+                    }
+                  >
+                    <option value="">No zone (manual)</option>
+                    {holdingZones.map((z) => (
+                      <option key={z.id} value={z.id}>
+                        {z.name} ({Number(z.inventory_kg || 0)} kg)
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    className="w-full h-10 px-3 border border-border bg-background"
+                    value={dispatchForm.recycler_id}
+                    onChange={(e) =>
+                      setDispatchForm((p) => ({ ...p, recycler_id: e.target.value }))
+                    }
+                    required
+                  >
+                    <option value="">Select recycler</option>
+                    {saleRecyclers.map((r) => (
+                      <option key={r.id} value={r.id}>
+                        {r.city ? `${r.city} · ` : ""}
+                        {r.name}
+                        {r.accepts_small_lots === false ? " (large lots)" : ""}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="grid grid-cols-2 gap-2">
+                    <select
+                      className="h-10 px-3 border border-border bg-background"
+                      value={dispatchForm.polymer_type}
+                      onChange={(e) =>
+                        setDispatchForm((p) => ({
+                          ...p,
+                          polymer_type: e.target.value,
+                        }))
+                      }
+                    >
+                      {["PET", "HDPE", "PP", "LDPE", "mixed", "other"].map((p) => (
+                        <option key={p} value={p}>
+                          {p}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      className="h-10 px-3 border border-border bg-background"
+                      type="number"
+                      step="0.01"
+                      min="0.01"
+                      placeholder="kg"
+                      value={dispatchForm.kg}
+                      onChange={(e) =>
+                        setDispatchForm((p) => ({ ...p, kg: e.target.value }))
+                      }
+                      required
+                    />
+                    <input
+                      className="h-10 px-3 border border-border bg-background"
+                      type="number"
+                      step="0.01"
+                      placeholder="KES/kg"
+                      value={dispatchForm.price_kes_per_kg}
+                      onChange={(e) =>
+                        setDispatchForm((p) => ({
+                          ...p,
+                          price_kes_per_kg: e.target.value,
+                        }))
+                      }
+                    />
+                    <select
+                      className="h-10 px-3 border border-border bg-background"
+                      value={dispatchForm.pickup_day}
+                      onChange={(e) =>
+                        setDispatchForm((p) => ({
+                          ...p,
+                          pickup_day: e.target.value,
+                        }))
+                      }
+                    >
+                      {COLLECTION_DAY_OPTIONS.map(([day, label]) => (
+                        <option key={day} value={day}>
+                          Pickup {label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <textarea
+                    className="w-full min-h-16 px-3 py-2 border border-border bg-background text-sm"
+                    placeholder="Notes for recycler"
+                    value={dispatchForm.notes}
+                    onChange={(e) =>
+                      setDispatchForm((p) => ({ ...p, notes: e.target.value }))
+                    }
+                  />
+                  <button
+                    type="submit"
+                    disabled={dispatching}
+                    className="h-10 px-4 bg-primary text-white text-sm disabled:opacity-60"
+                  >
+                    {dispatching ? "Sending…" : "Create direct offer"}
+                  </button>
+                </form>
+
+                <div className="space-y-3 border border-border p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h2 className="font-medium">Directory · small lots</h2>
+                    <div className="flex flex-wrap gap-1">
+                      {DIRECTORY_CITIES.map((c) => (
+                        <button
+                          key={c}
+                          type="button"
+                          onClick={() => setDirectoryCity(c)}
+                          className={`h-8 px-2 text-xs border ${
+                            directoryCity === c
+                              ? "border-primary text-primary"
+                              : "border-border text-muted"
+                          }`}
+                        >
+                          {c}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  {directory.length === 0 ? (
+                    <p className="text-sm text-muted">
+                      Empty — run{" "}
+                      <code className="text-xs">seed_plastic_recyclers</code> on the
+                      backend.
+                    </p>
+                  ) : (
+                    directory.slice(0, 8).map((r) => (
+                      <div key={r.id} className="border border-border p-3 space-y-1">
+                        <div className="flex justify-between gap-2 text-sm">
+                          <span className="font-medium">{r.name}</span>
+                          <button
+                            type="button"
+                            className="text-primary text-xs"
+                            onClick={() =>
+                              setDispatchForm((p) => ({
+                                ...p,
+                                recycler_id: String(r.id),
+                                price_kes_per_kg:
+                                  r.buy_rates?.PET ||
+                                  r.buy_rates?.HDPE ||
+                                  p.price_kes_per_kg,
+                              }))
+                            }
+                          >
+                            Use
+                          </button>
+                        </div>
+                        <p className="text-xs text-muted line-clamp-2">
+                          {r.notes || r.address || r.city}
+                        </p>
+                        {r.contact_phone ? (
+                          <a
+                            href={`tel:${r.contact_phone}`}
+                            className="text-xs text-primary"
+                          >
+                            {r.contact_phone}
+                          </a>
+                        ) : null}
+                      </div>
+                    ))
+                  )}
+                  <Link
+                    to="/plastic/recyclers"
+                    className="text-sm text-primary hover:underline inline-block"
+                  >
+                    Full public directory →
+                  </Link>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <h2 className="font-medium">Recent dispatches</h2>
+                {dispatches.length === 0 ? (
+                  <p className="text-sm text-muted border border-border p-4">
+                    No direct offers yet.
+                  </p>
+                ) : (
+                  dispatches.map((d) => (
+                    <div
+                      key={d.id}
+                      className="border border-border p-3 flex flex-wrap gap-2 justify-between items-center"
+                    >
+                      <div className="text-sm">
+                        <div className="font-medium">
+                          {d.kg} kg {d.polymer_type} → {d.recycler_name}
+                        </div>
+                        <div className="text-xs text-muted">
+                          {d.holding_zone_name || "No zone"} · {d.status}
+                          {d.total_kes != null ? ` · recycler pays CW KES ${d.total_kes}` : ""}
+                        </div>
+                        {d.platform_share_kes != null ? (
+                          <div className="text-xs text-muted">
+                            Split: CW KES {d.platform_share_kes} · collectors KES{" "}
+                            {d.collector_share_kes} · pay {d.payment_status} · payout{" "}
+                            {d.collector_payout_status}
+                          </div>
+                        ) : null}
+                      </div>
+                      <div className="flex flex-wrap gap-1">
+                        {d.whatsapp_url ? (
+                          <a
+                            href={d.whatsapp_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="h-8 px-2 border border-border text-xs inline-flex items-center"
+                          >
+                            WhatsApp
+                          </a>
+                        ) : null}
+                        {["accepted", "in_transit", "delivered", "cancelled"].map((st) => (
+                          <button
+                            key={st}
+                            type="button"
+                            className="h-8 px-2 border border-border text-xs"
+                            onClick={() => updateDispatchStatus(d, st)}
+                          >
+                            {st}
+                          </button>
+                        ))}
+                        {d.payment_status !== "received" && d.total_kes != null ? (
+                          <button
+                            type="button"
+                            className="h-8 px-2 bg-primary text-white text-xs"
+                            onClick={() => settleDispatch(d, "recycler_paid")}
+                          >
+                            Recycler paid CW
+                          </button>
+                        ) : null}
+                        {d.payment_status === "received" &&
+                        d.collector_payout_status !== "paid" ? (
+                          <button
+                            type="button"
+                            className="h-8 px-2 bg-primary text-white text-xs"
+                            onClick={() => settleDispatch(d, "collectors_paid")}
+                          >
+                            Paid collectors
+                          </button>
+                        ) : null}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </>
+          )}
         </div>
       ) : null}
 

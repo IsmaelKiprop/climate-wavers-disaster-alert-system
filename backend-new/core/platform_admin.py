@@ -26,6 +26,7 @@ from .models import (
     Notification,
     PartnerCamera,
     PlatformAdminInvite,
+    PlasticRecyclerPartner,
     Post,
     ResponderOrganization,
     ResponderPlanPayment,
@@ -46,6 +47,7 @@ MODULES = [
     {"id": "content", "label": "Content", "path": "/app/platform-admin/content"},
     {"id": "disasters", "label": "Disasters", "path": "/app/platform-admin/disasters"},
     {"id": "trees", "label": "Trees & payments", "path": "/app/platform-admin/trees"},
+    {"id": "plastic", "label": "Plastic recyclers", "path": "/app/platform-admin/plastic"},
     {"id": "champions", "label": "Champions", "path": "/app/platform-admin/champions"},
     {"id": "responders", "label": "Responders", "path": "/app/platform-admin/responders"},
     {"id": "calendar", "label": "Calendar", "path": "/app/platform-admin/calendar"},
@@ -88,6 +90,9 @@ def _badge_counts():
         "pending_champions": CommunityChampion.objects.filter(status="pending").count(),
         "pending_tree_orgs": TreeAdminOrganization.objects.filter(
             verification_status="pending"
+        ).count(),
+        "pending_plastic_recyclers": PlasticRecyclerPartner.objects.filter(
+            onboarding_status="applied"
         ).count(),
         "pending_responder_orgs": ResponderOrganization.objects.filter(
             verification_status="pending"

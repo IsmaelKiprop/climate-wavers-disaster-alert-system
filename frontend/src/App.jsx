@@ -40,6 +40,13 @@ const PlasticRecyclerScan = lazy(() => import("./pages/PlasticRecyclerScan"));
 const PlasticRecyclerInviteAccept = lazy(
   () => import("./pages/PlasticRecyclerInviteAccept")
 );
+const PlasticRecyclerDirectory = lazy(
+  () => import("./pages/PlasticRecyclerDirectory")
+);
+const PlasticRecyclerOnboard = lazy(
+  () => import("./pages/PlasticRecyclerOnboard")
+);
+const PlasticRecyclerDesk = lazy(() => import("./pages/PlasticRecyclerDesk"));
 const PlasticPulseOnboarding = lazy(() => import("./pages/PlasticPulseOnboarding"));
 const PlasticCollectorDesk = lazy(() => import("./pages/PlasticCollectorDesk"));
 const DisasterPage = lazy(() => import("./pages/DisasterPage"));
@@ -72,6 +79,9 @@ const PlatformDisasters = lazy(() =>
 );
 const PlatformTrees = lazy(() =>
   import("./platform-admin").then((m) => ({ default: m.TreesPayments }))
+);
+const PlatformPlasticRecyclers = lazy(() =>
+  import("./platform-admin").then((m) => ({ default: m.PlasticRecyclers }))
 );
 const PlatformChampions = lazy(() =>
   import("./platform-admin").then((m) => ({ default: m.Champions }))
@@ -261,6 +271,22 @@ function App() {
               <Route path="/verify/plastic/:code" element={<VerifyPlasticCertificate />} />
               <Route path="/plastic-pulse" element={<PlasticPulseOnboarding />} />
               <Route
+                path="/plastic/recyclers"
+                element={<PlasticRecyclerDirectory />}
+              />
+              <Route
+                path="/plastic/recycler-onboard"
+                element={<PlasticRecyclerOnboard />}
+              />
+              <Route
+                path="/plastic/desk"
+                element={
+                  <ProtectedRoute>
+                    <PlasticRecyclerDesk />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
                 path="/plastic/intake"
                 element={
                   <ProtectedRoute>
@@ -293,6 +319,7 @@ function App() {
                 <Route path="content" element={<PlatformContent />} />
                 <Route path="disasters" element={<PlatformDisasters />} />
                 <Route path="trees" element={<PlatformTrees />} />
+                <Route path="plastic" element={<PlatformPlasticRecyclers />} />
                 <Route path="champions" element={<PlatformChampions />} />
                 <Route path="responders" element={<PlatformResponders />} />
                 <Route path="calendar" element={<PlatformCalendar />} />

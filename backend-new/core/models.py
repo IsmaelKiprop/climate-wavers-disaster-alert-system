@@ -3024,6 +3024,26 @@ class PlasticProject(models.Model):
     scrap_hdpe_kes_per_kg = models.DecimalField(
         max_digits=10, decimal_places=2, default=25, help_text="Indicative HDPE scrap KES/kg"
     )
+    collection_days = models.JSONField(
+        default=list,
+        blank=True,
+        help_text='Weekday codes when collectors run, e.g. ["mon","wed","sat"]',
+    )
+    weekly_target_kg = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=120,
+        help_text="Typical weekly kg across holding zones (ground ops baseline)",
+    )
+    marketplace_fee_rate = models.DecimalField(
+        max_digits=5,
+        decimal_places=4,
+        default=0.20,
+        help_text=(
+            "Climate Wavers platform share of recycler payment "
+            "(e.g. 0.20 = 20% to CW, 80% to collectors/CBO)"
+        ),
+    )
     cover_image = models.CharField(max_length=500, blank=True, default="")
     gallery = models.JSONField(default=list, blank=True)
     flood_zone_flag = models.BooleanField(
@@ -3133,14 +3153,120 @@ class PlasticHotspot(models.Model):
         return f"Hotspot {self.id} ({self.status})"
 
 
+class PlasticHoldingZone(models.Model):
+    """CBO aggregation point where collectors stage bags before direct recycler dispatch."""
+
+    project = models.ForeignKey(
+        PlasticProject, on_delete=models.CASCADE, related_name="holding_zones"
+    )
+    name = models.CharField(max_length=120)
+    code = models.CharField(
+        max_length=32,
+        blank=True,
+        default="",
+        help_text="Short zone code, e.g. HZ-1",
+    )
+    location_label = models.CharField(max_length=255, blank=True, default="")
+    latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    materials = models.JSONField(
+        default=list,
+        blank=True,
+        help_text='Accepted materials, e.g. ["plastic","paper_bags","PET","HDPE","LDPE"]',
+    )
+    inventory_kg = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    inventory_by_polymer = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Optional split, e.g. {"PET": 40, "HDPE": 30, "LDPE": 20}',
+    )
+    notes = models.TextField(blank=True, default="")
+    is_active = models.BooleanField(default=True)
+    sort_order = models.PositiveSmallIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["sort_order", "id"]
+        indexes = [
+            models.Index(fields=["project", "is_active"]),
+        ]
+
+    def __str__(self):
+        return f"{self.name} ({self.inventory_kg} kg)"
+
+
+class PlasticInventoryLedger(models.Model):
+    """Audit trail for holding-zone stock in/out."""
+
+    REASON_CHOICES = [
+        ("verify_in", "CBO verified bag → stock in"),
+        ("dispatch_out", "Marketplace dispatch → stock out"),
+        ("dispatch_cancel", "Dispatch cancelled → stock restored"),
+        ("adjust", "Manual adjustment"),
+    ]
+
+    project = models.ForeignKey(
+        PlasticProject, on_delete=models.CASCADE, related_name="inventory_ledger"
+    )
+    holding_zone = models.ForeignKey(
+        PlasticHoldingZone,
+        on_delete=models.CASCADE,
+        related_name="ledger_entries",
+    )
+    recovery = models.ForeignKey(
+        "PlasticRecovery",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="inventory_entries",
+    )
+    dispatch = models.ForeignKey(
+        "PlasticDispatch",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="inventory_entries",
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="plastic_inventory_edits",
+    )
+    delta_kg = models.DecimalField(max_digits=12, decimal_places=2)
+    balance_after_kg = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    polymer_type = models.CharField(max_length=20, blank=True, default="mixed")
+    reason = models.CharField(max_length=32, choices=REASON_CHOICES, db_index=True)
+    notes = models.CharField(max_length=255, blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["project", "created_at"]),
+            models.Index(fields=["holding_zone", "created_at"]),
+        ]
+
+    def __str__(self):
+        return f"{self.reason} {self.delta_kg} kg @ zone {self.holding_zone_id}"
+
+
 class PlasticRecyclerPartner(models.Model):
-    """Recycler yard partner. May be linked to a scan-only Climate Wavers user."""
+    """Recycler yard partner. May be linked to a Climate Wavers user after onboarding."""
 
     INVITE_STATUS = [
         ("none", "No invite"),
         ("pending", "Invite pending"),
         ("accepted", "Invite accepted"),
         ("revoked", "Invite revoked"),
+    ]
+    ONBOARDING_STATUS = [
+        ("none", "Not applied"),
+        ("applied", "Application pending"),
+        ("approved", "Approved"),
+        ("rejected", "Rejected"),
     ]
 
     name = models.CharField(max_length=200)
@@ -3153,6 +3279,8 @@ class PlasticRecyclerPartner(models.Model):
     )
     contact_email = models.EmailField(blank=True, default="")
     contact_phone = models.CharField(max_length=40, blank=True, default="")
+    website = models.URLField(blank=True, default="")
+    address = models.TextField(blank=True, default="")
     city = models.CharField(max_length=100, blank=True, default="")
     latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
@@ -3160,6 +3288,43 @@ class PlasticRecyclerPartner(models.Model):
         default=dict,
         blank=True,
         help_text='KES/kg by polymer, e.g. {"PET": 20, "HDPE": 25, "PP": 10}',
+    )
+    materials_accepted = models.JSONField(
+        default=list,
+        blank=True,
+        help_text='e.g. ["PET","HDPE","PP","LDPE"]',
+    )
+    min_buy_kg = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        help_text="Minimum lot size this yard typically buys (0 = flexible)",
+    )
+    accepts_small_lots = models.BooleanField(
+        default=True,
+        help_text="True if yard can take CBO-scale lots (~40–120 kg/week)",
+    )
+    notes = models.TextField(blank=True, default="")
+    is_directory = models.BooleanField(
+        default=False,
+        help_text="Public Kenya recycler directory entry (not org-owned partner)",
+    )
+    onboarding_status = models.CharField(
+        max_length=20,
+        choices=ONBOARDING_STATUS,
+        default="none",
+        db_index=True,
+        help_text="Self-serve recycler platform application status",
+    )
+    application_message = models.TextField(blank=True, default="")
+    applied_at = models.DateTimeField(null=True, blank=True)
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="reviewed_plastic_recyclers",
     )
     is_active = models.BooleanField(default=True)
     linked_user = models.ForeignKey(
@@ -3205,6 +3370,15 @@ class PlasticRecyclerPartner(models.Model):
             return False
         return timezone.now() >= self.invite_expires_at
 
+    @property
+    def marketplace_ready(self) -> bool:
+        return bool(
+            self.is_active
+            and self.onboarding_status == "approved"
+            and self.linked_user_id
+            and self.invite_status == "accepted"
+        )
+
 
 class PlasticRecovery(models.Model):
     STATUS_CHOICES = [
@@ -3218,6 +3392,7 @@ class PlasticRecovery(models.Model):
         ("PET", "PET"),
         ("HDPE", "HDPE"),
         ("PP", "PP"),
+        ("LDPE", "LDPE"),
         ("mixed", "Mixed"),
         ("other", "Other"),
     ]
@@ -3227,6 +3402,13 @@ class PlasticRecovery(models.Model):
     )
     hotspot = models.ForeignKey(
         PlasticHotspot,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="recoveries",
+    )
+    holding_zone = models.ForeignKey(
+        "PlasticHoldingZone",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -3316,7 +3498,146 @@ class PlasticRecovery(models.Model):
         return f"Recovery {self.bag_id} ({self.status})"
 
 
+class PlasticDispatch(models.Model):
+    """
+    Climate Wavers marketplace sale: recycler pays the platform,
+    platform splits with collectors/CBO (CW is the formal aggregator).
+    """
+
+    STATUS_CHOICES = [
+        ("draft", "Draft"),
+        ("offered", "Offered to recycler"),
+        ("accepted", "Recycler accepted"),
+        ("in_transit", "In transit"),
+        ("delivered", "Delivered"),
+        ("settled", "Settled"),
+        ("cancelled", "Cancelled"),
+    ]
+    PAYMENT_STATUSES = [
+        ("pending", "Awaiting recycler payment"),
+        ("received", "Recycler paid Climate Wavers"),
+        ("failed", "Payment failed"),
+        ("refunded", "Refunded"),
+    ]
+    COLLECTOR_PAYOUT_STATUSES = [
+        ("none", "Not started"),
+        ("pending", "Pending payout"),
+        ("paid", "Collectors paid"),
+        ("failed", "Payout failed"),
+    ]
+
+    project = models.ForeignKey(
+        PlasticProject, on_delete=models.CASCADE, related_name="dispatches"
+    )
+    holding_zone = models.ForeignKey(
+        PlasticHoldingZone,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="dispatches",
+    )
+    recycler = models.ForeignKey(
+        PlasticRecyclerPartner,
+        on_delete=models.PROTECT,
+        related_name="dispatches",
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="plastic_dispatches",
+    )
+    polymer_type = models.CharField(
+        max_length=20,
+        choices=PlasticRecovery.POLYMER_CHOICES,
+        default="mixed",
+    )
+    kg = models.DecimalField(max_digits=10, decimal_places=2)
+    price_kes_per_kg = models.DecimalField(
+        max_digits=10, decimal_places=2, null=True, blank=True
+    )
+    total_kes = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="What the recycler pays Climate Wavers for this lot",
+    )
+    fee_rate = models.DecimalField(
+        max_digits=5,
+        decimal_places=4,
+        default=0.20,
+        help_text="Platform fee rate applied at offer time",
+    )
+    platform_share_kes = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Climate Wavers cut",
+    )
+    collector_share_kes = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Share paid out to collectors / CBO",
+    )
+    payment_status = models.CharField(
+        max_length=20,
+        choices=PAYMENT_STATUSES,
+        default="pending",
+        db_index=True,
+    )
+    payment_reference = models.CharField(max_length=120, blank=True, default="")
+    payment_received_at = models.DateTimeField(null=True, blank=True)
+    collector_payout_status = models.CharField(
+        max_length=20,
+        choices=COLLECTOR_PAYOUT_STATUSES,
+        default="none",
+        db_index=True,
+    )
+    collector_payout_phone = models.CharField(
+        max_length=40,
+        blank=True,
+        default="",
+        help_text="M-Pesa / payout phone for collector or CBO share",
+    )
+    collector_payout_reference = models.CharField(max_length=120, blank=True, default="")
+    collector_paid_at = models.DateTimeField(null=True, blank=True)
+    status = models.CharField(
+        max_length=20, choices=STATUS_CHOICES, default="offered", db_index=True
+    )
+    pickup_day = models.CharField(
+        max_length=16,
+        blank=True,
+        default="",
+        help_text="Planned pickup weekday code, e.g. mon",
+    )
+    notes = models.TextField(blank=True, default="")
+    contact_phone = models.CharField(max_length=40, blank=True, default="")
+    offered_at = models.DateTimeField(null=True, blank=True)
+    accepted_at = models.DateTimeField(null=True, blank=True)
+    delivered_at = models.DateTimeField(null=True, blank=True)
+    settled_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["project", "status"]),
+            models.Index(fields=["recycler", "status"]),
+            models.Index(fields=["payment_status"]),
+        ]
+
+    def __str__(self):
+        return f"Dispatch {self.id} → {self.recycler_id} ({self.kg} kg)"
+
+
 class PlasticCertificate(models.Model):
+
     code = models.CharField(max_length=80, unique=True, db_index=True)
     project = models.ForeignKey(
         PlasticProject, on_delete=models.CASCADE, related_name="certificates"

@@ -217,6 +217,12 @@ const AppNav = ({ onNavigate, compact = false }) => {
         ...(recyclerScanOk
           ? [
               {
+                to: "/plastic/desk",
+                label: "Recycler desk",
+                Icon: IoLeafOutline,
+                ActiveIcon: IoLeafOutline,
+              },
+              {
                 to: "/plastic/intake",
                 label: "Bag scanner",
                 Icon: IoLeafOutline,
