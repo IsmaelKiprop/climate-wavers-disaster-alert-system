@@ -141,7 +141,10 @@ const PlasticCollectorPanel = ({
   const ownsHotspot = useCallback(
     (h) => {
       if (!h || h.status !== "claimed") return false;
-      if (authed && Number(h.claimed_by) === Number(user?.id)) return true;
+      const claimedById = h.claimed_by?.id ?? h.claimed_by;
+      if (authed && claimedById != null && Number(claimedById) === Number(user?.id)) {
+        return true;
+      }
       if (authed) return false;
       if (!h.is_guest_claim || !guestToken) return false;
       const session = getPlasticGuestProjectSession(projectId);
@@ -151,12 +154,25 @@ const PlasticCollectorPanel = ({
     [authed, user?.id, guestToken, guestPhone, projectId, phoneMatchesHint]
   );
 
-  const claimable = useMemo(
-    () =>
-      hotspots.filter(
-        (h) => h.status === "open" || ownsHotspot(h)
-      ),
-    [hotspots, ownsHotspot]
+  // Collectors can claim open sites, or keep working on ones they already claimed.
+  // Claimed-by-others / cleared stay visible so the list does not look empty.
+  const visibleHotspots = useMemo(() => {
+    const rank = (h) => {
+      if (h.status === "open") return 0;
+      if (ownsHotspot(h)) return 1;
+      if (h.status === "claimed") return 2;
+      return 3;
+    };
+    return [...hotspots].sort((a, b) => rank(a) - rank(b) || Number(b.id) - Number(a.id));
+  }, [hotspots, ownsHotspot]);
+
+  const openCount = useMemo(
+    () => hotspots.filter((h) => h.status === "open").length,
+    [hotspots]
+  );
+  const clearedCount = useMemo(
+    () => hotspots.filter((h) => h.status === "cleared").length,
+    [hotspots]
   );
 
   const persistGuest = useCallback(() => {
@@ -601,104 +617,130 @@ const PlasticCollectorPanel = ({
 
       {tab === "hotspots" ? (
         <div className="space-y-2">
-          {!claimable.length ? (
+          {!visibleHotspots.length ? (
             <p className="text-sm text-muted">
-              No open hotspots yet. Wait for the CBO to pin a site and share the claim PIN
-              with your team on the ground.
+              No hotspots yet. Wait for the CBO to pin a site and share the claim PIN with
+              your team on the ground.
             </p>
           ) : (
-            <ul className="space-y-2">
-              {claimable.map((h) => {
-                const mine = ownsHotspot(h);
-                return (
-                  <li
-                    key={h.id}
-                    className="border border-border bg-background p-3 space-y-3"
-                  >
-                    <div className="min-w-0">
-                      <p className="font-medium text-foreground text-sm">
-                        {h.title || h.location_label || `Hotspot #${h.id}`}
-                      </p>
-                      <p className="text-xs text-muted mt-0.5">
-                        {statusLabel(h.status)} · {statusLabel(h.severity)}
-                        {h.drain_related ? " · drain / flood" : ""}
-                        {mine
-                          ? " · claimed by you"
-                          : " · enter CBO PIN to claim"}
-                      </p>
-                    </div>
-                    {!mine ? (
-                      <div className="space-y-2">
-                        <div className="flex flex-col sm:flex-row gap-2">
-                          <input
-                            className="flex-1 h-10 px-3 border border-border bg-surface text-foreground text-sm tracking-widest font-mono"
-                            placeholder="CBO claim PIN"
-                            inputMode="numeric"
-                            autoComplete="off"
-                            maxLength={8}
-                            value={claimPins[h.id] || ""}
-                            onChange={(e) =>
-                              setClaimPins((prev) => ({
-                                ...prev,
-                                [h.id]: e.target.value.replace(/\D/g, "").slice(0, 8),
-                              }))
-                            }
-                            aria-label={`Claim PIN for hotspot ${h.id}`}
-                          />
+            <>
+              {openCount === 0 ? (
+                <p className="text-xs text-amber-800 dark:text-amber-300 border border-amber-500/30 bg-amber-500/10 px-3 py-2">
+                  {clearedCount > 0 && clearedCount === hotspots.length
+                    ? "All hotspots are cleared after intake. Ask the CBO to reopen one or pin a new site."
+                    : "No open hotspots to claim right now. Claimed sites stay listed below — ask the CBO to reopen if you need one."}
+                </p>
+              ) : null}
+              <ul className="space-y-2">
+                {visibleHotspots.map((h) => {
+                  const mine = ownsHotspot(h);
+                  const isOpen = h.status === "open";
+                  const isCleared = h.status === "cleared";
+                  const locked = h.status === "claimed" && !mine;
+                  return (
+                    <li
+                      key={h.id}
+                      className={`border border-border bg-background p-3 space-y-3 ${
+                        isCleared || locked ? "opacity-80" : ""
+                      }`}
+                    >
+                      <div className="min-w-0">
+                        <p className="font-medium text-foreground text-sm">
+                          {h.title || h.location_label || `Hotspot #${h.id}`}
+                        </p>
+                        <p className="text-xs text-muted mt-0.5">
+                          {statusLabel(h.status)} · {statusLabel(h.severity)}
+                          {h.drain_related ? " · drain / flood" : ""}
+                          {mine
+                            ? " · claimed by you"
+                            : isOpen
+                              ? " · enter CBO PIN to claim"
+                              : locked
+                                ? " · claimed by someone else"
+                                : isCleared
+                                  ? " · finished — CBO can reopen"
+                                  : ""}
+                        </p>
+                      </div>
+                      {isOpen ? (
+                        <div className="space-y-2">
+                          <div className="flex flex-col sm:flex-row gap-2">
+                            <input
+                              className="flex-1 h-10 px-3 border border-border bg-surface text-foreground text-sm tracking-widest font-mono"
+                              placeholder="CBO claim PIN"
+                              inputMode="numeric"
+                              autoComplete="off"
+                              maxLength={8}
+                              value={claimPins[h.id] || ""}
+                              onChange={(e) =>
+                                setClaimPins((prev) => ({
+                                  ...prev,
+                                  [h.id]: e.target.value.replace(/\D/g, "").slice(0, 8),
+                                }))
+                              }
+                              aria-label={`Claim PIN for hotspot ${h.id}`}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => captureGps("claim")}
+                              disabled={capturingClaimGps}
+                              className="h-10 px-3 border border-border text-sm shrink-0 disabled:opacity-60"
+                            >
+                              {capturingClaimGps
+                                ? "GPS…"
+                                : claimGps.latitude
+                                  ? "Refresh GPS"
+                                  : "Capture GPS"}
+                            </button>
+                          </div>
+                          {claimGps.latitude ? (
+                            <p className="text-[11px] text-primary">
+                              GPS ready: {claimGps.latitude}, {claimGps.longitude} — must be
+                              within ~250 m of the CBO pin
+                            </p>
+                          ) : (
+                            <p className="text-[11px] text-muted">
+                              Stand at the hotspot, capture GPS, then claim. PIN alone is not
+                              enough.
+                            </p>
+                          )}
                           <button
                             type="button"
-                            onClick={() => captureGps("claim")}
-                            disabled={capturingClaimGps}
-                            className="h-10 px-3 border border-border text-sm shrink-0 disabled:opacity-60"
+                            disabled={claimingId === h.id || !guestReady}
+                            onClick={() => claimHotspot(h)}
+                            className="h-10 w-full sm:w-auto px-4 bg-primary text-primary-foreground text-sm font-medium disabled:opacity-60"
                           >
-                            {capturingClaimGps
-                              ? "GPS…"
-                              : claimGps.latitude
-                                ? "Refresh GPS"
-                                : "Capture GPS"}
+                            {claimingId === h.id ? "Checking PIN + GPS…" : "Claim & start"}
                           </button>
                         </div>
-                        {claimGps.latitude ? (
-                          <p className="text-[11px] text-primary">
-                            GPS ready: {claimGps.latitude}, {claimGps.longitude} — must be
-                            within ~250 m of the CBO pin
-                          </p>
-                        ) : (
-                          <p className="text-[11px] text-muted">
-                            Stand at the hotspot, capture GPS, then claim. PIN alone is not
-                            enough.
-                          </p>
-                        )}
+                      ) : mine ? (
                         <button
                           type="button"
-                          disabled={claimingId === h.id || !guestReady}
-                          onClick={() => claimHotspot(h)}
-                          className="h-10 w-full sm:w-auto px-4 bg-primary text-primary-foreground text-sm font-medium disabled:opacity-60"
+                          onClick={() => {
+                            setProofForm((p) => ({
+                              ...p,
+                              hotspot_id: String(h.id),
+                              location_label:
+                                h.location_label || h.title || p.location_label,
+                            }));
+                            setTab("log");
+                          }}
+                          className="h-9 px-3 border border-border text-sm font-medium"
                         >
-                          {claimingId === h.id ? "Checking PIN + GPS…" : "Claim & start"}
+                          Log bag here
                         </button>
-                      </div>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setProofForm((p) => ({
-                            ...p,
-                            hotspot_id: String(h.id),
-                            location_label:
-                              h.location_label || h.title || p.location_label,
-                          }));
-                          setTab("log");
-                        }}
-                        className="h-9 px-3 border border-border text-sm font-medium"
-                      >
-                        Log bag here
-                      </button>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
+                      ) : (
+                        <p className="text-[11px] text-muted">
+                          {isCleared
+                            ? "Cleared after recycler intake. CBO can reopen this pin from Plastic Pulse → Field."
+                            : "Another collector already claimed this site."}
+                        </p>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            </>
           )}
         </div>
       ) : null}

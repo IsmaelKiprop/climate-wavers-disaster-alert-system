@@ -1303,6 +1303,49 @@ class PlasticHotspotCreateView(APIView):
         )
 
 
+class PlasticHotspotReopenView(APIView):
+    """
+    CBO reopens a claimed/cleared hotspot so collectors can claim it again.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, hotspot_id):
+        try:
+            hotspot = PlasticHotspot.objects.select_related("project").get(pk=hotspot_id)
+        except PlasticHotspot.DoesNotExist:
+            return Response({"detail": "Hotspot not found."}, status=404)
+        if not _can_manage_project(request.user, hotspot.project):
+            return Response(
+                {"detail": "Only the project CBO can reopen hotspots."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        hotspot.status = "open"
+        hotspot.claimed_by = None
+        hotspot.claimed_guest_name = ""
+        hotspot.claimed_guest_phone = ""
+        hotspot.guest_claim_token = ""
+        hotspot.claimed_at = None
+        hotspot.cleared_at = None
+        hotspot.save(
+            update_fields=[
+                "status",
+                "claimed_by",
+                "claimed_guest_name",
+                "claimed_guest_phone",
+                "guest_claim_token",
+                "claimed_at",
+                "cleared_at",
+                "updated_at",
+            ]
+        )
+        return Response(
+            PlasticHotspotSerializer(
+                hotspot, context={"include_claim_pin": True}
+            ).data
+        )
+
+
 class PlasticHotspotClaimView(APIView):
     """
     Claim a hotspot after CBO claim PIN match.

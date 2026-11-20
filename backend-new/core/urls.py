@@ -48,6 +48,7 @@ from .plastic import (
     PlasticProjectListCreateView,
     PlasticProjectDetailView,
     PlasticHotspotCreateView,
+    PlasticHotspotReopenView,
     PlasticHotspotClaimView,
     PlasticRecoveryCreateView,
     PlasticRecoveryVerifyView,
@@ -263,6 +264,11 @@ urlpatterns = [
         "plastic/hotspots/<int:hotspot_id>/claim/",
         PlasticHotspotClaimView.as_view(),
         name="plastic-hotspot-claim",
+    ),
+    path(
+        "plastic/hotspots/<int:hotspot_id>/reopen/",
+        PlasticHotspotReopenView.as_view(),
+        name="plastic-hotspot-reopen",
     ),
     path("plastic/recoveries/", PlasticRecoveryCreateView.as_view(), name="plastic-recoveries"),
     path(

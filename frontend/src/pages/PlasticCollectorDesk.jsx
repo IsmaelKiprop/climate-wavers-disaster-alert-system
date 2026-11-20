@@ -79,12 +79,21 @@ const PlasticCollectorDesk = () => {
   }, [loadProjects, loadMyBags]);
 
   useEffect(() => {
-    if (selectedId) {
-      loadDetail(selectedId).catch(() => setDetail(null));
+    if (!selectedId) {
+      setDetail(null);
+      return;
     }
+    // Drop stale detail immediately so Collect does not show another project's hotspots.
+    setDetail((prev) =>
+      prev && Number(prev.id) === Number(selectedId) ? prev : null
+    );
+    loadDetail(selectedId).catch(() => setDetail(null));
   }, [selectedId, loadDetail]);
 
-  const selected = detail || projects.find((p) => p.id === selectedId);
+  const selected =
+    detail && Number(detail.id) === Number(selectedId)
+      ? detail
+      : projects.find((p) => p.id === selectedId);
 
   return (
     <div className="max-w-5xl mx-auto p-4 sm:p-6 space-y-6">

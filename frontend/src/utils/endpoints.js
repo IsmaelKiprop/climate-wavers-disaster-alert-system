@@ -61,6 +61,7 @@ export const endpoints = {
     "plasticHotspots": (id) => `/api/v1/plastic/projects/${id}/hotspots/`,
     "plasticSponsor": (id) => `/api/v1/plastic/projects/${id}/sponsor/`,
     "plasticHotspotClaim": (id) => `/api/v1/plastic/hotspots/${id}/claim/`,
+    "plasticHotspotReopen": (id) => `/api/v1/plastic/hotspots/${id}/reopen/`,
     "plasticRecoveries": "/api/v1/plastic/recoveries/",
     "plasticMyRecoveries": "/api/v1/plastic/recoveries/mine/",
     "plasticGuestRecoveries": "/api/v1/plastic/recoveries/guest/",

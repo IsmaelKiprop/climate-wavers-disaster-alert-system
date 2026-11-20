@@ -92,6 +92,7 @@ const PlasticProjectAdmin = () => {
   const [qrBagId, setQrBagId] = useState(null);
   const [invitingId, setInvitingId] = useState(null);
   const [lastInvite, setLastInvite] = useState(null);
+  const [reopeningId, setReopeningId] = useState(null);
 
   const [hotspotForm, setHotspotForm] = useState({
     title: "",
@@ -260,6 +261,22 @@ const PlasticProjectAdmin = () => {
       toast.error(err.message);
     } finally {
       setPinning(false);
+    }
+  };
+
+  const reopenHotspot = async (hotspot) => {
+    if (!hotspot?.id || reopeningId) return;
+    setReopeningId(hotspot.id);
+    try {
+      await api(endpoints.plasticHotspotReopen(hotspot.id), { method: "POST", body: {} });
+      toast.success(
+        `Hotspot reopened${hotspot.claim_pin ? ` · share PIN ${hotspot.claim_pin}` : ""}`
+      );
+      if (selectedId) await loadDetail(selectedId);
+    } catch (err) {
+      toast.error(err.message || "Could not reopen hotspot");
+    } finally {
+      setReopeningId(null);
     }
   };
 
@@ -972,9 +989,14 @@ const PlasticProjectAdmin = () => {
 
               <div className="border border-border p-4">
                 <h3 className="font-medium mb-2">Hotspots</h3>
+                <p className="text-xs text-muted mb-2">
+                  Collect plastic only lists <span className="text-foreground">open</span> sites
+                  for new claims. After a bag is claimed or intake clears a site, reopen it here
+                  so collectors can see and claim it again.
+                </p>
                 <div className="space-y-2">
                   {(detail?.hotspots || []).map((h) => (
-                    <div key={h.id} className="text-sm flex flex-wrap justify-between gap-2 border-b border-border/60 py-2">
+                    <div key={h.id} className="text-sm flex flex-wrap items-center justify-between gap-2 border-b border-border/60 py-2">
                       <span>
                         #{h.id} {h.title || "Hotspot"} · {h.status}
                         {h.drain_related ? " · drain" : ""}
@@ -988,8 +1010,20 @@ const PlasticProjectAdmin = () => {
                           <span className="ml-2 text-amber-600">no PIN</span>
                         )}
                       </span>
-                      <span className="text-muted">
-                        {h.latitude}, {h.longitude}
+                      <span className="flex items-center gap-2 text-muted">
+                        <span>
+                          {h.latitude}, {h.longitude}
+                        </span>
+                        {h.status !== "open" ? (
+                          <button
+                            type="button"
+                            disabled={reopeningId === h.id}
+                            onClick={() => reopenHotspot(h)}
+                            className="h-8 px-2 border border-border text-xs text-foreground hover:border-primary disabled:opacity-60"
+                          >
+                            {reopeningId === h.id ? "Reopening…" : "Reopen for collectors"}
+                          </button>
+                        ) : null}
                       </span>
                     </div>
                   ))}
