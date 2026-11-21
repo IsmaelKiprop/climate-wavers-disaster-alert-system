@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "react-toastify";
 import { endpoints } from "../utils/endpoints";
@@ -9,6 +9,7 @@ import PlantingProofMediaCarousel, {
   proofMediaFromArrays,
 } from "./PlantingProofMediaCarousel";
 import PlasticBagQrCard from "./PlasticBagQrCard";
+import PlasticRecyclerNearbyMap from "./PlasticRecyclerNearbyMap";
 import {
   enqueuePlasticOfflineProof,
   isPlasticNetworkError,
@@ -95,6 +96,8 @@ const PlasticProjectAdmin = () => {
   const [recyclers, setRecyclers] = useState([]);
   const [directory, setDirectory] = useState([]);
   const [directoryCity, setDirectoryCity] = useState("Eldoret");
+  const [mapRecyclers, setMapRecyclers] = useState([]);
+  const [selectedMapRecyclerId, setSelectedMapRecyclerId] = useState("");
   const [dispatches, setDispatches] = useState([]);
   const [inventory, setInventory] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -184,7 +187,8 @@ const PlasticProjectAdmin = () => {
   }, []);
 
   const loadRecyclers = useCallback(async () => {
-    const data = await api(`${endpoints.plasticRecyclers}?approved=1`);
+    // Org partners (invite/scan) — not limited to marketplace-approved.
+    const data = await api(endpoints.plasticRecyclers);
     setRecyclers(Array.isArray(data) ? data : []);
   }, []);
 
@@ -192,6 +196,33 @@ const PlasticProjectAdmin = () => {
     const q = new URLSearchParams({ city, small_lots: "1", approved: "1" });
     const data = await api(`${endpoints.plasticRecyclers}?${q}`);
     setDirectory(Array.isArray(data) ? data : []);
+  }, []);
+
+  const loadMapRecyclers = useCallback(async (city) => {
+    const q = new URLSearchParams();
+    if (city) q.set("city", city);
+    try {
+      const [dir, approved] = await Promise.all([
+        api(`${endpoints.plasticRecyclerDirectory}?${q}`),
+        api(`${endpoints.plasticRecyclers}?approved=1&${q}`),
+      ]);
+      const merged = new Map();
+      for (const r of [
+        ...(Array.isArray(dir?.recyclers) ? dir.recyclers : []),
+        ...(Array.isArray(approved) ? approved : []),
+      ]) {
+        if (
+          r?.id != null &&
+          Number.isFinite(Number(r.latitude)) &&
+          Number.isFinite(Number(r.longitude))
+        ) {
+          merged.set(r.id, r);
+        }
+      }
+      setMapRecyclers(Array.from(merged.values()));
+    } catch {
+      setMapRecyclers([]);
+    }
   }, []);
 
   const loadDispatches = useCallback(async (projectId) => {
@@ -212,6 +243,7 @@ const PlasticProjectAdmin = () => {
           loadQueue(),
           loadRecyclers(),
           loadDirectory(directoryCity),
+          loadMapRecyclers(directoryCity),
         ]);
       } catch (err) {
         toast.error(err.message || "Failed to load Plastic Pulse");
@@ -219,7 +251,14 @@ const PlasticProjectAdmin = () => {
         setLoading(false);
       }
     })();
-  }, [loadProjects, loadQueue, loadRecyclers, loadDirectory, directoryCity]);
+  }, [
+    loadProjects,
+    loadQueue,
+    loadRecyclers,
+    loadDirectory,
+    loadMapRecyclers,
+    directoryCity,
+  ]);
 
   useEffect(() => {
     if (selectedId) {
@@ -549,14 +588,42 @@ const PlasticProjectAdmin = () => {
     }
   };
 
+  const selectNearbyRecycler = (r) => {
+    if (!r) return;
+    setSelectedMapRecyclerId(String(r.id));
+    const existing = recyclers.find((p) => p.id === r.id);
+    if (existing) {
+      toast.info(`${r.name} is already a partner — use Invite below`);
+      return;
+    }
+    setRecyclerForm((p) => ({
+      ...p,
+      name: r.name || p.name,
+      city: r.city || p.city,
+      contact_phone: r.contact_phone || p.contact_phone,
+    }));
+    toast.success(`Selected ${r.name} — save to add as partner, then Invite`);
+  };
+
   const createRecycler = async (e) => {
     e.preventDefault();
     if (savingRecycler) return;
     setSavingRecycler(true);
     try {
+      const selected = mapRecyclers.find(
+        (r) => String(r.id) === String(selectedMapRecyclerId)
+      );
       await api(endpoints.plasticRecyclers, {
         method: "POST",
-        body: recyclerForm,
+        body: {
+          ...recyclerForm,
+          ...(selected?.latitude != null
+            ? {
+                latitude: selected.latitude,
+                longitude: selected.longitude,
+              }
+            : {}),
+        },
       });
       toast.success("Recycler partner added");
       setRecyclerForm({
@@ -565,7 +632,8 @@ const PlasticProjectAdmin = () => {
         contact_phone: "",
         buy_rates: { PET: 20, HDPE: 25, PP: 10 },
       });
-      await loadRecyclers();
+      setSelectedMapRecyclerId("");
+      await Promise.all([loadRecyclers(), loadMapRecyclers(directoryCity)]);
     } catch (err) {
       toast.error(err.message);
     } finally {
@@ -676,13 +744,26 @@ const PlasticProjectAdmin = () => {
   };
 
   const holdingZones = detail?.holding_zones || [];
-  const saleRecyclers = (() => {
+  const saleRecyclers = useMemo(() => {
     const byId = new Map();
-    for (const r of [...recyclers, ...directory]) {
+    for (const r of [...directory, ...recyclers.filter((x) => x.onboarding_status === "approved")]) {
       if (r?.id != null && !byId.has(r.id)) byId.set(r.id, r);
     }
     return Array.from(byId.values());
-  })();
+  }, [directory, recyclers]);
+  const partnerMapPoints = useMemo(() => {
+    const byId = new Map();
+    for (const r of [...mapRecyclers, ...recyclers]) {
+      if (
+        r?.id != null &&
+        Number.isFinite(Number(r.latitude)) &&
+        Number.isFinite(Number(r.longitude))
+      ) {
+        byId.set(r.id, r);
+      }
+    }
+    return Array.from(byId.values());
+  }, [mapRecyclers, recyclers]);
 
   if (loading) {
     return <div className="p-6 text-muted">Loading Plastic Pulse…</div>;
@@ -1779,9 +1860,36 @@ const PlasticProjectAdmin = () => {
           <form onSubmit={createRecycler} className="space-y-3 border border-border p-4">
             <h2 className="font-medium">Add recycler partner</h2>
             <p className="text-xs text-muted">
-              After saving, tap <span className="text-foreground">Invite to scan</span> and
-              share WhatsApp — they get scan-only access.
+              See onboarded yards on the map, tap to select, then save and{" "}
+              <span className="text-foreground">Invite to scan</span> via WhatsApp.
             </p>
+            <div className="flex flex-wrap gap-1">
+              {["Eldoret", "Nairobi", "Mombasa", "Kisumu"].map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => {
+                    setDirectoryCity(c);
+                    loadMapRecyclers(c);
+                  }}
+                  className={`h-8 px-2 text-xs border ${
+                    directoryCity === c
+                      ? "border-primary text-primary"
+                      : "border-border text-muted"
+                  }`}
+                >
+                  {c}
+                </button>
+              ))}
+            </div>
+            <PlasticRecyclerNearbyMap
+              recyclers={partnerMapPoints}
+              selectedId={selectedMapRecyclerId}
+              onSelect={selectNearbyRecycler}
+              city={directoryCity || recyclerForm.city || "Eldoret"}
+              heightClass="h-56 sm:h-72"
+              emptyHint="No nearby yards with GPS yet. Add one below, or wait for recyclers to onboard with location."
+            />
             <input
               className="w-full h-10 px-3 border border-border bg-background"
               placeholder="Name"

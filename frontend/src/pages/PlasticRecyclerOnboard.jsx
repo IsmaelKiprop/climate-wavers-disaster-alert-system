@@ -1,11 +1,25 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
+import PlasticRecyclerNearbyMap from "../components/PlasticRecyclerNearbyMap";
 import { endpoints } from "../utils/endpoints";
 import { getAuthToken } from "../utils/factory";
 import { apiUrl } from "../config/env";
 
 const CITIES = ["Eldoret", "Nairobi", "Mombasa", "Kisumu"];
+
+function haversineKm(aLat, aLng, bLat, bLng) {
+  const toRad = (d) => (Number(d) * Math.PI) / 180;
+  const R = 6371;
+  const dLat = toRad(bLat - aLat);
+  const dLng = toRad(bLng - aLng);
+  const lat1 = toRad(aLat);
+  const lat2 = toRad(bLat);
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
 
 async function api(path, { method = "GET", body } = {}) {
   const token = getAuthToken();
@@ -64,6 +78,21 @@ const PlasticRecyclerOnboard = () => {
   useEffect(() => {
     load().catch(() => {});
   }, [load]);
+
+  const mapRecyclers = useMemo(() => {
+    const withGps = directory.filter(
+      (r) =>
+        Number.isFinite(Number(r.latitude)) && Number.isFinite(Number(r.longitude))
+    );
+    const myLat = Number(form.latitude);
+    const myLng = Number(form.longitude);
+    if (!Number.isFinite(myLat) || !Number.isFinite(myLng)) return withGps;
+    return [...withGps].sort(
+      (a, b) =>
+        haversineKm(myLat, myLng, a.latitude, a.longitude) -
+        haversineKm(myLat, myLng, b.latitude, b.longitude)
+    );
+  }, [directory, form.latitude, form.longitude]);
 
   const claim = (r) => {
     setForm((p) => ({
@@ -185,13 +214,23 @@ const PlasticRecyclerOnboard = () => {
           </p>
         ) : null}
 
-        <div className="space-y-2">
+        <div className="space-y-3 border border-border p-4">
+          <div className="space-y-1">
+            <h2 className="font-medium">Yards near you</h2>
+            <p className="text-xs text-muted">
+              See recyclers already listed around you on the map. Tap a pin (or row) to
+              claim that yard, then capture GPS at the site to confirm you are there.
+            </p>
+          </div>
           <div className="flex flex-wrap gap-2">
             {CITIES.map((c) => (
               <button
                 key={c}
                 type="button"
-                onClick={() => setCity(c)}
+                onClick={() => {
+                  setCity(c);
+                  setForm((p) => ({ ...p, city: c }));
+                }}
                 className={`h-8 px-3 text-xs border ${
                   city === c
                     ? "border-primary text-primary"
@@ -202,27 +241,47 @@ const PlasticRecyclerOnboard = () => {
               </button>
             ))}
           </div>
-          <p className="text-xs text-muted">
-            Optional: claim an existing directory yard, or fill a new application below.
-          </p>
-          <div className="space-y-2 max-h-56 overflow-auto">
-            {directory.map((r) => (
-              <button
-                key={r.id}
-                type="button"
-                onClick={() => claim(r)}
-                className={`w-full text-left border p-3 text-sm ${
-                  String(form.directory_recycler_id) === String(r.id)
-                    ? "border-primary"
-                    : "border-border"
-                }`}
-              >
-                <div className="font-medium">{r.name}</div>
-                <div className="text-xs text-muted">
-                  {r.contact_phone || "No phone"} · {r.contact_email || "No email"}
-                </div>
-              </button>
-            ))}
+          <PlasticRecyclerNearbyMap
+            recyclers={mapRecyclers}
+            selectedId={form.directory_recycler_id}
+            onSelect={claim}
+            myLat={form.latitude || null}
+            myLng={form.longitude || null}
+            city={city}
+            emptyHint={`No ${city} yards with GPS yet — fill a new application below, or capture GPS so your pin appears for the next applicant.`}
+          />
+          <div className="space-y-2 max-h-48 overflow-auto">
+            {mapRecyclers.map((r) => {
+              const myLat = Number(form.latitude);
+              const myLng = Number(form.longitude);
+              const km =
+                Number.isFinite(myLat) && Number.isFinite(myLng)
+                  ? haversineKm(myLat, myLng, r.latitude, r.longitude)
+                  : null;
+              return (
+                <button
+                  key={r.id}
+                  type="button"
+                  onClick={() => claim(r)}
+                  className={`w-full text-left border p-3 text-sm ${
+                    String(form.directory_recycler_id) === String(r.id)
+                      ? "border-primary"
+                      : "border-border"
+                  }`}
+                >
+                  <div className="font-medium">{r.name}</div>
+                  <div className="text-xs text-muted">
+                    {r.contact_phone || "No phone"}
+                    {km != null ? ` · ${km < 1 ? `${Math.round(km * 1000)} m` : `${km.toFixed(1)} km`} away` : ""}
+                  </div>
+                </button>
+              );
+            })}
+            {!mapRecyclers.length && directory.length ? (
+              <p className="text-xs text-muted">
+                {directory.length} listed without GPS — they cannot appear on the map yet.
+              </p>
+            ) : null}
           </div>
         </div>
 
