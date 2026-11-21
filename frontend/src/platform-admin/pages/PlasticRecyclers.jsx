@@ -74,6 +74,18 @@ const PlasticRecyclers = () => {
             {r.city}
             {r.address ? ` · ${r.address}` : ""}
           </p>
+          {r.latitude != null && r.longitude != null ? (
+            <a
+              href={`https://www.google.com/maps?q=${r.latitude},${r.longitude}`}
+              target="_blank"
+              rel="noreferrer"
+              className="text-xs text-primary hover:underline"
+            >
+              Map pin {Number(r.latitude).toFixed(4)}, {Number(r.longitude).toFixed(4)}
+            </a>
+          ) : (
+            <p className="text-xs text-muted">No GPS captured</p>
+          )}
         </div>
       ),
     },
@@ -136,7 +148,7 @@ const PlasticRecyclers = () => {
     <div className="space-y-4">
       <PageHeader
         title="Plastic recyclers"
-        subtitle="Superadmin approval for yards joining the Climate Wavers marketplace. CBOs cannot approve."
+        subtitle="Superadmin approval for yards joining the Climate Wavers marketplace. Check the map pin (captured at the yard) before approving."
       />
       <AdminFilters
         onSubmit={(e) => {

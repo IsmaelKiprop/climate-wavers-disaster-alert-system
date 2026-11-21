@@ -11,7 +11,7 @@ import re
 import secrets
 import uuid
 from datetime import timedelta
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Optional
 from urllib.parse import quote
 
@@ -2795,6 +2795,27 @@ class PlasticRecyclerApplyView(APIView):
         if not phone and not email:
             return Response({"detail": "Phone or email required."}, status=400)
 
+        # Yard GPS required for validation (same idea as collector proof GPS).
+        try:
+            lat = data.get("latitude")
+            lng = data.get("longitude")
+            if lat in (None, "") or lng in (None, ""):
+                raise ValueError("missing")
+            lat_dec = Decimal(str(lat))
+            lng_dec = Decimal(str(lng))
+            if not (-90 <= lat_dec <= 90 and -180 <= lng_dec <= 180):
+                raise ValueError("range")
+        except (InvalidOperation, ValueError, TypeError):
+            return Response(
+                {
+                    "detail": (
+                        "Yard GPS required — capture location at the recycling "
+                        "site so Climate Wavers can validate the application."
+                    )
+                },
+                status=400,
+            )
+
         now = timezone.now()
         if partner is None:
             partner = PlasticRecyclerPartner(created_by=request.user)
@@ -2805,6 +2826,8 @@ class PlasticRecyclerApplyView(APIView):
         partner.contact_email = email or partner.contact_email
         partner.address = address or partner.address
         partner.website = website or partner.website
+        partner.latitude = lat_dec
+        partner.longitude = lng_dec
         if materials:
             partner.materials_accepted = materials
         if buy_rates:

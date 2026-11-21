@@ -29,6 +29,7 @@ const PlasticRecyclerOnboard = () => {
   const [city, setCity] = useState("Eldoret");
   const [me, setMe] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [capturingGps, setCapturingGps] = useState(false);
   const [form, setForm] = useState({
     name: "",
     city: "Eldoret",
@@ -40,6 +41,8 @@ const PlasticRecyclerOnboard = () => {
     accepts_small_lots: true,
     directory_recycler_id: "",
     materials_accepted: ["PET", "HDPE", "PP", "LDPE"],
+    latitude: "",
+    longitude: "",
   });
 
   const load = useCallback(async () => {
@@ -76,8 +79,35 @@ const PlasticRecyclerOnboard = () => {
         ? r.materials_accepted
         : p.materials_accepted,
       accepts_small_lots: r.accepts_small_lots !== false,
+      // Always force a fresh device capture at the yard — do not trust listed coords.
+      latitude: "",
+      longitude: "",
     }));
-    toast.info(`Claiming ${r.name}`);
+    toast.info(`Claiming ${r.name} — capture GPS at the yard to continue`);
+  };
+
+  const captureGps = () => {
+    if (!navigator.geolocation) {
+      toast.error("Geolocation not available on this device");
+      return;
+    }
+    setCapturingGps(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setForm((p) => ({
+          ...p,
+          latitude: pos.coords.latitude.toFixed(6),
+          longitude: pos.coords.longitude.toFixed(6),
+        }));
+        toast.success("Yard GPS captured");
+        setCapturingGps(false);
+      },
+      () => {
+        toast.error("Could not get GPS — allow location and try again at the yard");
+        setCapturingGps(false);
+      },
+      { enableHighAccuracy: true, timeout: 15000 }
+    );
   };
 
   const submit = async (e) => {
@@ -87,6 +117,10 @@ const PlasticRecyclerOnboard = () => {
       navigate("/login");
       return;
     }
+    if (!form.latitude || !form.longitude) {
+      toast.error("Capture yard GPS before submitting");
+      return;
+    }
     setSaving(true);
     try {
       const result = await api(endpoints.plasticRecyclerApply, {
@@ -94,6 +128,8 @@ const PlasticRecyclerOnboard = () => {
         body: {
           ...form,
           directory_recycler_id: form.directory_recycler_id || undefined,
+          latitude: Number(form.latitude),
+          longitude: Number(form.longitude),
         },
       });
       toast.success(result.next || "Application submitted");
@@ -229,6 +265,50 @@ const PlasticRecyclerOnboard = () => {
             value={form.address}
             onChange={(e) => setForm((p) => ({ ...p, address: e.target.value }))}
           />
+          <div className="space-y-2 border border-border p-3">
+            <p className="text-sm font-medium">Yard location (required)</p>
+            <p className="text-xs text-muted">
+              You must capture GPS on this device while at the recycling yard. Manual
+              coordinates are not allowed. Climate Wavers reviews this pin before approval.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={captureGps}
+                disabled={capturingGps}
+                className={`h-10 px-3 text-sm disabled:opacity-60 ${
+                  form.latitude && form.longitude
+                    ? "border border-border"
+                    : "bg-primary text-white"
+                }`}
+              >
+                {capturingGps
+                  ? "Capturing…"
+                  : form.latitude && form.longitude
+                    ? "Recapture GPS"
+                    : "Capture GPS to continue"}
+              </button>
+              {form.latitude && form.longitude ? (
+                <a
+                  href={`https://www.google.com/maps?q=${form.latitude},${form.longitude}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="h-10 px-3 border border-border text-sm inline-flex items-center text-primary"
+                >
+                  Preview on map
+                </a>
+              ) : null}
+            </div>
+            {form.latitude && form.longitude ? (
+              <p className="text-xs text-muted">
+                GPS captured: {form.latitude}, {form.longitude}
+              </p>
+            ) : (
+              <p className="text-xs text-red-500">
+                Capture GPS at the yard — submit stays locked until then.
+              </p>
+            )}
+          </div>
           <textarea
             className="w-full min-h-20 px-3 py-2 border border-border bg-background text-sm"
             placeholder="Tell us polymers you buy and typical lot size"
@@ -249,10 +329,14 @@ const PlasticRecyclerOnboard = () => {
           </label>
           <button
             type="submit"
-            disabled={saving || !token}
+            disabled={saving || !token || !form.latitude || !form.longitude}
             className="h-10 px-4 bg-primary text-white text-sm disabled:opacity-60"
           >
-            {saving ? "Submitting…" : "Submit application"}
+            {saving
+              ? "Submitting…"
+              : !form.latitude || !form.longitude
+                ? "Capture GPS first"
+                : "Submit application"}
           </button>
         </form>
       </div>
