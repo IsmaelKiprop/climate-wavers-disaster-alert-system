@@ -3292,7 +3292,7 @@ class PlasticRecyclerPartner(models.Model):
     materials_accepted = models.JSONField(
         default=list,
         blank=True,
-        help_text='e.g. ["PET","HDPE","PP","LDPE"]',
+        help_text='e.g. ["PET","HDPE","PVC","LDPE","PP","PS","PC"]',
     )
     min_buy_kg = models.DecimalField(
         max_digits=10,
@@ -3391,8 +3391,11 @@ class PlasticRecovery(models.Model):
     POLYMER_CHOICES = [
         ("PET", "PET"),
         ("HDPE", "HDPE"),
-        ("PP", "PP"),
+        ("PVC", "PVC"),
         ("LDPE", "LDPE"),
+        ("PP", "PP"),
+        ("PS", "PS"),
+        ("PC", "PC"),
         ("mixed", "Mixed"),
         ("other", "Other"),
     ]

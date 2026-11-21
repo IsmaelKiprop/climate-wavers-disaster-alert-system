@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
-"""Build FlowOps Africa / Climate Wavers YECO pitch deck PDF."""
+"""Build FlowOps Africa / Climate Wavers pitch deck PDFs.
 
+Default: YECO 2026/27 deck.
+Pass --alx for the ALX Ventures Pitch Fest / One Community Festival deck.
+"""
+
+import sys
 from pathlib import Path
 
 from reportlab.lib.colors import HexColor, white, black
@@ -11,7 +16,12 @@ from reportlab.pdfgen import canvas
 
 ROOT = Path(__file__).resolve().parent
 ASSETS = ROOT / "assets"
-OUT = ROOT / "FlowOps_Africa_Climate_Wavers_YECO_Pitch_Deck.pdf"
+ALX = "--alx" in sys.argv
+OUT = ROOT / (
+    "FlowOps_Africa_Climate_Wavers_ALX_Pitch_Fest.pdf"
+    if ALX
+    else "FlowOps_Africa_Climate_Wavers_YECO_Pitch_Deck.pdf"
+)
 
 # Brand
 TEAL = HexColor("#067d83")
@@ -174,9 +184,14 @@ def slide_cover(c, page, total):
     c.setFont("Helvetica", 13)
     c.drawString(0.7 * inch, H - 3.7 * inch, "A product of FlowOps Africa  ·  Nairobi, Kenya")
     c.setFont("Helvetica", 11)
-    c.drawString(0.7 * inch, H - 4.1 * inch, "Youth Ecopreneur Programme (YECO) 2026/27  ·  Pitch Deck")
-    c.setFont("Helvetica", 10)
-    c.drawString(0.7 * inch, H - 4.45 * inch, "Sector: Climate Technology & Environmental Monitoring")
+    if ALX:
+        c.drawString(0.7 * inch, H - 4.1 * inch, "ALX Ventures Pitch Fest  ·  One Community Festival")
+        c.setFont("Helvetica", 10)
+        c.drawString(0.7 * inch, H - 4.45 * inch, "Sector: CleanTech  ·  Climate technology & environmental monitoring")
+    else:
+        c.drawString(0.7 * inch, H - 4.1 * inch, "Youth Ecopreneur Programme (YECO) 2026/27  ·  Pitch Deck")
+        c.setFont("Helvetica", 10)
+        c.drawString(0.7 * inch, H - 4.45 * inch, "Sector: Climate Technology & Environmental Monitoring")
 
     # Product visual (OG brand image)
     og = logo_path("og-image.jpg")
@@ -360,10 +375,25 @@ def slide_traction(c, page, total):
         "Product live with multi-source hazard feeds (USGS / NASA) and verification workflows",
         "RapidBrief responder onboarding + Community Champion pathway built",
         "Tree / restoration partner pipeline integrated into the platform",
-        "Submitted to MoveNow Social Innovation Challenge — Climate Wavers: Building Climate-Resilient Communities",
-        "Next: formal county/NGO pilots and paid RapidBrief conversions",
+        (
+            "Live restoration listing: OKOA Youth Self Help Group, mangroves in Kwale"
+            if ALX
+            else "Submitted to MoveNow Social Innovation Challenge — Climate Wavers: Building Climate-Resilient Communities"
+        ),
+        (
+            "Plastic Pulse: verified plastic recovery for organisations already on Tree Admin"
+            if ALX
+            else "Next: formal county/NGO pilots and paid RapidBrief conversions"
+        ),
+        (
+            "Next: county and NGO RapidBrief pilots, then paid desk conversions"
+            if ALX
+            else ""
+        ),
     ]
     for t in items:
+        if not t:
+            continue
         y = bullet(c, 0.7 * inch, y, t)
     draw_footer(c, page, total)
 
@@ -490,7 +520,7 @@ def slide_growth(c, page, total):
         [
             "B2NGO / B2G subscriptions",
             "Multilingual alerts",
-            "YECO mentorship → model fit",
+            "Mentorship into model fit" if ALX else "YECO mentorship → model fit",
             "Investor readiness",
         ],
     )
@@ -513,22 +543,36 @@ def slide_growth(c, page, total):
 
 def slide_ask(c, page, total):
     draw_bg(c)
-    title_block(c, "The Ask", "YECO 2026/27 — accelerate a youth-led climate enterprise")
-    c.setFillColor(TEAL)
-    c.roundRect(0.7 * inch, 3.6 * inch, 5.5 * inch, 1.8 * inch, 10, fill=1, stroke=0)
-    c.setFillColor(white)
-    c.setFont("Helvetica", 12)
-    c.drawString(1.0 * inch, 5.0 * inch, "Investment ask")
-    c.setFont("Helvetica-Bold", 36)
-    c.drawString(1.0 * inch, 4.2 * inch, "$50,000")
-    c.setFont("Helvetica", 11)
-    c.drawString(1.0 * inch, 3.85 * inch, "Equity-free preferred · 12-month scale")
+    if ALX:
+        title_block(c, "The Ask", "Pitch Fest place, judge feedback, and a micro grant for Kenya depth")
+        c.setFillColor(TEAL)
+        c.roundRect(0.7 * inch, 3.35 * inch, 5.5 * inch, 2.05 * inch, 10, fill=1, stroke=0)
+        c.setFillColor(white)
+        c.setFont("Helvetica", 12)
+        c.drawString(1.0 * inch, 4.95 * inch, "What we are here for")
+        c.setFont("Helvetica-Bold", 22)
+        c.drawString(1.0 * inch, 4.45 * inch, "A place to pitch")
+        c.setFont("Helvetica-Bold", 16)
+        c.drawString(1.0 * inch, 4.05 * inch, "Judge feedback")
+        c.setFont("Helvetica", 12)
+        c.drawString(1.0 * inch, 3.6 * inch, "Micro grant  ·  last-mile pilots in Kenya")
+    else:
+        title_block(c, "The Ask", "YECO 2026/27 — accelerate a youth-led climate enterprise")
+        c.setFillColor(TEAL)
+        c.roundRect(0.7 * inch, 3.6 * inch, 5.5 * inch, 1.8 * inch, 10, fill=1, stroke=0)
+        c.setFillColor(white)
+        c.setFont("Helvetica", 12)
+        c.drawString(1.0 * inch, 5.0 * inch, "Investment ask")
+        c.setFont("Helvetica-Bold", 36)
+        c.drawString(1.0 * inch, 4.2 * inch, "$50,000")
+        c.setFont("Helvetica", 11)
+        c.drawString(1.0 * inch, 3.85 * inch, "Equity-free preferred · 12-month scale")
 
     c.setFillColor(TEAL_SOFT)
     c.roundRect(6.5 * inch, 1.2 * inch, 5.9 * inch, 4.2 * inch, 10, fill=1, stroke=0)
     c.setFillColor(TEAL)
     c.setFont("Helvetica-Bold", 13)
-    c.drawString(6.85 * inch, 5.0 * inch, "Use of funds")
+    c.drawString(6.85 * inch, 5.0 * inch, "Where a micro grant goes" if ALX else "Use of funds")
     c.setFillColor(INK)
     c.setFont("Helvetica", 11)
     uses = [
@@ -548,7 +592,10 @@ def slide_ask(c, page, total):
 
     c.setFillColor(MUTED)
     c.setFont("Helvetica", 10)
-    c.drawString(0.7 * inch, 1.5 * inch, "Also seeking: YECO mentorship, networks, legal/IP readiness, and Awards visibility.")
+    if ALX:
+        c.drawString(0.7 * inch, 1.5 * inch, "Founder: Ismael Kiprop  ·  hello@flowops.africa  ·  alerts.flowops.africa")
+    else:
+        c.drawString(0.7 * inch, 1.5 * inch, "Also seeking: YECO mentorship, networks, legal/IP readiness, and Awards visibility.")
     draw_footer(c, page, total)
 
 
@@ -572,7 +619,8 @@ def slide_close(c, page, total):
     c.drawString(0.7 * inch, 1.5 * inch, "www.flowops.africa  ·  alerts.flowops.africa")
     c.drawString(0.7 * inch, 1.2 * inch, "linkedin.com/company/climate-wavers-by-flowops-africa")
     c.setFont("Helvetica", 9)
-    c.drawString(0.7 * inch, 0.5 * inch, f"YECO 2026/27 Pitch Deck  ·  {page}/{total}")
+    close_label = "ALX Ventures Pitch Fest" if ALX else "YECO 2026/27 Pitch Deck"
+    c.drawString(0.7 * inch, 0.5 * inch, f"{close_label}  ·  {page}/{total}")
 
 
 def main():

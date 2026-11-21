@@ -44,7 +44,17 @@ from .models import (
 )
 
 DEFAULT_COLLECTION_DAYS = ["mon", "wed", "sat"]
-DEFAULT_HOLDING_ZONE_MATERIALS = ["plastic", "paper_bags", "PET", "HDPE", "LDPE", "PP"]
+DEFAULT_HOLDING_ZONE_MATERIALS = [
+    "plastic",
+    "paper_bags",
+    "PET",
+    "HDPE",
+    "PVC",
+    "LDPE",
+    "PP",
+    "PS",
+    "PC",
+]
 DEFAULT_MARKETPLACE_FEE_RATE = Decimal("0.20")
 
 

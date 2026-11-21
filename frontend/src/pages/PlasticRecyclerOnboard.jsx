@@ -5,6 +5,7 @@ import PlasticRecyclerNearbyMap from "../components/PlasticRecyclerNearbyMap";
 import { endpoints } from "../utils/endpoints";
 import { getAuthToken } from "../utils/factory";
 import { apiUrl } from "../config/env";
+import { RECYCLER_MATERIALS } from "../utils/plasticPolymers";
 
 const CITIES = ["Eldoret", "Nairobi", "Mombasa", "Kisumu"];
 
@@ -54,7 +55,7 @@ const PlasticRecyclerOnboard = () => {
     application_message: "",
     accepts_small_lots: true,
     directory_recycler_id: "",
-    materials_accepted: ["PET", "HDPE", "PP", "LDPE"],
+    materials_accepted: [...RECYCLER_MATERIALS],
     latitude: "",
     longitude: "",
   });
@@ -368,9 +369,45 @@ const PlasticRecyclerOnboard = () => {
               </p>
             )}
           </div>
+          <div className="space-y-2 border border-border p-3">
+            <p className="text-sm font-medium">Polymers you buy</p>
+            <p className="text-xs text-muted">
+              Select resin types your yard accepts (SPI codes 1–7).
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {RECYCLER_MATERIALS.map((m) => {
+                const checked = form.materials_accepted.includes(m);
+                return (
+                  <label
+                    key={m}
+                    className={`inline-flex items-center gap-1.5 h-9 px-2.5 border text-sm cursor-pointer ${
+                      checked
+                        ? "border-primary text-primary"
+                        : "border-border text-muted"
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      className="sr-only"
+                      checked={checked}
+                      onChange={() =>
+                        setForm((p) => ({
+                          ...p,
+                          materials_accepted: checked
+                            ? p.materials_accepted.filter((x) => x !== m)
+                            : [...p.materials_accepted, m],
+                        }))
+                      }
+                    />
+                    {m}
+                  </label>
+                );
+              })}
+            </div>
+          </div>
           <textarea
             className="w-full min-h-20 px-3 py-2 border border-border bg-background text-sm"
-            placeholder="Tell us polymers you buy and typical lot size"
+            placeholder="Typical lot size, pricing notes, anything else"
             value={form.application_message}
             onChange={(e) =>
               setForm((p) => ({ ...p, application_message: e.target.value }))

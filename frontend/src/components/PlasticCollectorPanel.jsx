@@ -25,6 +25,7 @@ import PlasticBagQrCard from "./PlasticBagQrCard";
 import PlantingProofMediaCarousel, {
   proofMediaFromArrays,
 } from "./PlantingProofMediaCarousel";
+import { PLASTIC_POLYMERS } from "../utils/plasticPolymers";
 
 async function api(path, { method = "GET", body } = {}) {
   const token = getAuthToken();
@@ -797,7 +798,7 @@ const PlasticCollectorPanel = ({
                   setProofForm((p) => ({ ...p, polymer_type: e.target.value }))
                 }
               >
-                {["PET", "HDPE", "PP", "mixed", "other"].map((p) => (
+                {PLASTIC_POLYMERS.map((p) => (
                   <option key={p} value={p}>
                     {p}
                   </option>

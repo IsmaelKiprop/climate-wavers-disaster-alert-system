@@ -15,6 +15,7 @@ import {
   isPlasticNetworkError,
 } from "../utils/plasticOfflineQueue";
 import PlasticOfflineSyncBanner from "./PlasticOfflineSyncBanner";
+import { PLASTIC_POLYMERS } from "../utils/plasticPolymers";
 
 async function api(path, { method = "GET", body } = {}) {
   const token = getAuthToken();
@@ -1072,7 +1073,7 @@ const PlasticProjectAdmin = () => {
                         }))
                       }
                     >
-                      {["PET", "HDPE", "PP", "LDPE", "mixed", "other"].map((p) => (
+                      {PLASTIC_POLYMERS.map((p) => (
                         <option key={p} value={p}>
                           {p}
                         </option>
@@ -1484,7 +1485,7 @@ const PlasticProjectAdmin = () => {
                           setProofForm((p) => ({ ...p, polymer_type: e.target.value }))
                         }
                       >
-                        {["mixed", "PET", "HDPE", "PP", "other"].map((t) => (
+                        {PLASTIC_POLYMERS.map((t) => (
                           <option key={t} value={t}>
                             {t}
                           </option>

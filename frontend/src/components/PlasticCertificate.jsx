@@ -3,24 +3,14 @@ import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import { toast } from "react-toastify";
 import { SITE } from "../config/site";
+import { polymerResinCode } from "../utils/plasticPolymers";
+
+export { polymerResinCode };
 
 const qrImageUrl = (text, size = 160) =>
   `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&margin=6&ecc=M&data=${encodeURIComponent(
     text
   )}`;
-
-/** SPI resin ID codes for the recycling triangle. */
-export function polymerResinCode(polymer) {
-  const key = String(polymer || "").toUpperCase();
-  if (key.includes("PET")) return { code: "1", label: "PET" };
-  if (key.includes("HDPE")) return { code: "2", label: "HDPE" };
-  if (key.includes("PVC")) return { code: "3", label: "PVC" };
-  if (key.includes("LDPE")) return { code: "4", label: "LDPE" };
-  if (key === "PP" || key.includes("PP")) return { code: "5", label: "PP" };
-  if (key.includes("PS")) return { code: "6", label: "PS" };
-  if (key.includes("MIX")) return { code: "7", label: "OTHER" };
-  return { code: "7", label: key || "OTHER" };
-}
 
 function PlasticResinMark({ polymer, className = "h-14 w-14" }) {
   const { code, label } = polymerResinCode(polymer);
