@@ -503,9 +503,9 @@ def _send_plastic_certificate_email(
         f"Powered by FlowOps Africa · Climate Wavers"
     )
     try:
-        from api.tasks import _send_resend
+        from api.tasks import _deliver_mail
 
-        _send_resend(
+        _deliver_mail(
             "custom_mail",
             {
                 "email": email,

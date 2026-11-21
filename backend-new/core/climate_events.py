@@ -172,7 +172,7 @@ def _send_climate_event_mail(
     event: ClimateEvent,
     kind: str = "invite",
 ):
-    """Deliver climate-event mail via Resend (SMTP is blocked on Render)."""
+    """Deliver climate-event mail via SMTP, falling back to Resend."""
     email = str(to_email or "").strip()
     if not email or "@" not in email or email.endswith("@example.com"):
         return False
@@ -201,19 +201,20 @@ def _send_climate_event_mail(
         },
     }
     try:
-        from api.tasks import _send_resend
+        from api.tasks import _deliver_mail
 
-        _send_resend("custom_mail", payload)
+        via = _deliver_mail("custom_mail", payload)
         logger.info(
-            "Climate %s email sent via Resend to %s event=%s",
+            "Climate %s email sent via %s to %s event=%s",
             kind,
+            via,
             email,
             event.id,
         )
         return True
     except Exception as exc:
         logger.warning(
-            "Climate %s Resend failed to %s event=%s: %s",
+            "Climate %s SMTP/Resend failed to %s event=%s: %s",
             kind,
             email,
             event.id,
@@ -248,7 +249,7 @@ def send_climate_invite_email(
     *,
     role: str = "attendee",
 ):
-    """Send invite via Resend (SMTP is blocked on Render)."""
+    """Send invite via SMTP, falling back to Resend when SMTP is unavailable."""
     email = str(to_email or "").strip()
     if not email or "@" not in email or email.endswith("@example.com"):
         return False

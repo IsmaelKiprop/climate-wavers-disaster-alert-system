@@ -264,19 +264,45 @@ def _send_resend(queue_name, payload):
     raise last_error or RuntimeError("Resend send failed")
 
 
+def _smtp_configured():
+    return bool(settings.EMAIL_HOST_USER and settings.EMAIL_HOST_PASSWORD)
+
+
 def _send_smtp(queue_name, payload):
     if os.environ.get("RENDER"):
         raise RuntimeError("SMTP is blocked on Render")
-    if not settings.EMAIL_HOST_USER or not settings.EMAIL_HOST_PASSWORD:
+    if not _smtp_configured():
         raise RuntimeError("SMTP is not configured")
     email = payload.get("email")
     subject, body, html = _mail_copy(queue_name, payload)
     last_error = None
-    attempts = [
-        {"port": 465, "use_ssl": True, "use_tls": False},
-        {"port": 587, "use_ssl": False, "use_tls": True},
-    ]
+    configured_port = int(getattr(settings, "EMAIL_PORT", 0) or 0)
+    attempts = []
+    if configured_port in (465, 587):
+        attempts.append(
+            {
+                "port": configured_port,
+                "use_ssl": configured_port == 465
+                or bool(getattr(settings, "EMAIL_USE_SSL", False)),
+                "use_tls": configured_port != 465
+                and bool(getattr(settings, "EMAIL_USE_TLS", True)),
+            }
+        )
+    attempts.extend(
+        [
+            {"port": 465, "use_ssl": True, "use_tls": False},
+            {"port": 587, "use_ssl": False, "use_tls": True},
+        ]
+    )
+    seen_ports = set()
+    unique_attempts = []
     for attempt in attempts:
+        if attempt["port"] in seen_ports:
+            continue
+        seen_ports.add(attempt["port"])
+        unique_attempts.append(attempt)
+
+    for attempt in unique_attempts:
         try:
             with _force_ipv4():
                 connection = get_connection(
@@ -310,23 +336,52 @@ def _send_smtp(queue_name, payload):
     raise last_error or RuntimeError("SMTP send failed")
 
 
+def _deliver_mail(queue_name, payload):
+    """
+    Prefer SMTP when configured; fall back to Resend if SMTP is missing or fails.
+    """
+    errors = []
+
+    try:
+        _send_smtp(queue_name, payload)
+        logger.info("Mail %s delivered via SMTP to %s", queue_name, payload.get("email"))
+        return "smtp"
+    except Exception as exc:
+        errors.append(f"smtp: {exc}")
+        if "not configured" in str(exc) or "blocked on Render" in str(exc):
+            logger.info("SMTP skipped for %s: %s", queue_name, exc)
+        else:
+            logger.warning("SMTP failed for %s, trying Resend: %s", queue_name, exc)
+
+    try:
+        _send_resend(queue_name, payload)
+        logger.info("Mail %s delivered via Resend to %s", queue_name, payload.get("email"))
+        return "resend"
+    except Exception as exc:
+        errors.append(f"resend: {exc}")
+        if "RESEND_API_KEY is not set" in str(exc):
+            logger.info("Resend skipped for %s: %s", queue_name, exc)
+        else:
+            logger.warning("Resend failed for %s: %s", queue_name, exc)
+
+    raise RuntimeError("Email delivery failed: " + "; ".join(errors))
+
+
 def send_message(queue_name, message):
     """
-    On Render, send over HTTPS (Resend). Gmail SMTP ports are blocked.
+    Deliver mail: SMTP first when available, then Resend, then notification/AMQP.
+    On Render, SMTP is blocked so delivery falls through to Resend/HTTPS.
     """
     payload = json.loads(message) if isinstance(message, str) else message
     errors = []
 
     try:
-        _send_resend(queue_name, payload)
-        print(f" [x] Sent {queue_name} via Resend")
+        via = _deliver_mail(queue_name, payload)
+        print(f" [x] Sent {queue_name} via {via}")
         return
     except Exception as exc:
-        errors.append(f"resend: {exc}")
-        if "RESEND_API_KEY is not set" in str(exc):
-            logger.info("Resend skipped: %s", exc)
-        else:
-            logger.warning("Resend HTTP failed: %s", exc)
+        errors.append(str(exc))
+        logger.warning("Direct SMTP/Resend delivery failed: %s", exc)
 
     try:
         _post_notification({"type": queue_name, **payload})
@@ -336,22 +391,12 @@ def send_message(queue_name, message):
         errors.append(f"http: {exc}")
         logger.warning("Notification send failed: %s", exc)
 
-    try:
-        _send_smtp(queue_name, payload)
-        print(f" [x] Sent {queue_name} via SMTP")
-        return
-    except Exception as exc:
-        errors.append(f"smtp: {exc}")
-        if "not configured" in str(exc) or "blocked on Render" in str(exc):
-            logger.info("Direct SMTP skipped: %s", exc)
-        else:
-            logger.exception("SMTP send failed")
-
     if settings.AMQP_URL:
         try:
             body = message if isinstance(message, str) else json.dumps(payload)
             _publish_amqp(queue_name, body)
             print(f" [x] Queued {queue_name} on AMQP after direct send failed")
+            return
         except Exception as exc:
             errors.append(f"amqp: {exc}")
             logger.exception("AMQP publish failed")

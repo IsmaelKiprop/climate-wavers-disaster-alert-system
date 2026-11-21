@@ -170,26 +170,10 @@ class Mailer{
 
     async sendMail(email, html, subject="Climate Wavers"){
         const failures = []
-        if (process.env.RESEND_API_KEY) {
-            for (const from of fromAddresses()) {
-                const started = Date.now()
-                try {
-                    await this._sendResend(email, html, subject, from)
-                    console.log(`mail resend sent ${JSON.stringify({ from, ms: Date.now() - started })}`)
-                    return
-                } catch (error) {
-                    const failure = {
-                        via: "resend",
-                        from,
-                        ms: Date.now() - started,
-                        error: describeError(error),
-                    }
-                    failures.push(failure)
-                    console.log(`mail resend failed ${JSON.stringify(failure)}`)
-                }
-            }
-        }
-        if (!ON_RENDER) {
+        const smtpReady = Boolean(process.env.MAIL_USER && process.env.MAIL_PASS)
+
+        // Prefer SMTP when configured; fall back to Resend if missing or failing.
+        if (smtpReady && !ON_RENDER) {
             const attempts = [
                 { port: 465, secure: true },
                 { port: Number(process.env.MAIL_PORT) || 587, secure: false, requireTLS: true },
@@ -220,6 +204,30 @@ class Mailer{
                     }
                     failures.push(failure)
                     console.log(`mail smtp failed ${JSON.stringify({ ...mailMeta(), ...failure })}`)
+                }
+            }
+        } else if (!smtpReady) {
+            console.log(`mail smtp skipped ${JSON.stringify({ ...mailMeta(), reason: "not configured" })}`)
+        } else {
+            console.log(`mail smtp skipped ${JSON.stringify({ ...mailMeta(), reason: "blocked on Render" })}`)
+        }
+
+        if (process.env.RESEND_API_KEY) {
+            for (const from of fromAddresses()) {
+                const started = Date.now()
+                try {
+                    await this._sendResend(email, html, subject, from)
+                    console.log(`mail resend sent ${JSON.stringify({ from, ms: Date.now() - started })}`)
+                    return
+                } catch (error) {
+                    const failure = {
+                        via: "resend",
+                        from,
+                        ms: Date.now() - started,
+                        error: describeError(error),
+                    }
+                    failures.push(failure)
+                    console.log(`mail resend failed ${JSON.stringify(failure)}`)
                 }
             }
         }

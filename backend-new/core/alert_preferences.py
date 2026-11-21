@@ -9,7 +9,7 @@ from rest_framework import permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from api.tasks import _post_notification, _send_resend
+from api.tasks import _deliver_mail, _post_notification
 
 from . import meta_whatsapp
 from .models import UserAlertPreference
@@ -129,9 +129,9 @@ class AlertPhoneVerifyRequestView(APIView):
                 channel_errors["whatsapp_notification"] = str(nested)
                 logger.warning("Notification-service WhatsApp OTP failed: %s", nested)
 
-        # Email OTP via Resend first (same Cloudflare issue on notification HTTP).
+        # Email OTP via SMTP first, then Resend (notification HTTP is last resort).
         try:
-            _send_resend(
+            _deliver_mail(
                 "custom_mail",
                 {
                     "email": request.user.email,
@@ -151,8 +151,8 @@ class AlertPhoneVerifyRequestView(APIView):
             )
             sent_via.append("email")
         except Exception as exc:
-            channel_errors["email_resend"] = str(exc)
-            logger.warning("Resend OTP email failed: %s", exc)
+            channel_errors["email_smtp_resend"] = str(exc)
+            logger.warning("SMTP/Resend OTP email failed: %s", exc)
             try:
                 _post_notification(
                     {

@@ -152,9 +152,9 @@ def _send_admin_invite_email(*, to_email: str, invite_url: str, invited_by_name:
         f"This link expires in 7 days."
     )
     try:
-        from api.tasks import _send_resend
+        from api.tasks import _deliver_mail
 
-        _send_resend(
+        _deliver_mail(
             "custom_mail",
             {
                 "email": email,

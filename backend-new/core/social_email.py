@@ -1,6 +1,6 @@
 """
 Email for social activity (follow, like, repost, comment, new post).
-Uses Resend first; falls back to notification service HTTP.
+Uses SMTP first, then Resend; falls back to notification service HTTP.
 Renders as branded community card HTML (Tree-Nation-style layout).
 """
 import logging
@@ -482,12 +482,12 @@ def send_social_email(
         },
     }
     try:
-        from api.tasks import _send_resend
+        from api.tasks import _deliver_mail
 
-        _send_resend("custom_mail", payload)
+        _deliver_mail("custom_mail", payload)
         return True
     except Exception as exc:
-        logger.warning("Social email via Resend failed for %s: %s", email, exc)
+        logger.warning("Social email via SMTP/Resend failed for %s: %s", email, exc)
     try:
         from api.tasks import _post_notification
 

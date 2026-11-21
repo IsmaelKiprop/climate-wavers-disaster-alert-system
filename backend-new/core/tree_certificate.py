@@ -803,7 +803,69 @@ def render_certificate_png(donation) -> bytes:
     return buf.getvalue()
 
 
-def _send_certificate_email(
+def _send_certificate_email_smtp(
+    *,
+    to_email: str,
+    subject: str,
+    text: str,
+    html: str,
+    png_bytes: bytes,
+    filename: str,
+) -> bool:
+    if os.environ.get("RENDER"):
+        raise RuntimeError("SMTP is blocked on Render")
+    if not settings.EMAIL_HOST_USER or not settings.EMAIL_HOST_PASSWORD:
+        raise RuntimeError("SMTP is not configured")
+
+    from django.core.mail import EmailMessage, get_connection
+
+    from api.tasks import _force_ipv4
+
+    attempts = [
+        {"port": 465, "use_ssl": True, "use_tls": False},
+        {
+            "port": int(getattr(settings, "EMAIL_PORT", 587) or 587),
+            "use_ssl": False,
+            "use_tls": True,
+        },
+    ]
+    last_error = None
+    for attempt in attempts:
+        try:
+            with _force_ipv4():
+                connection = get_connection(
+                    host=settings.EMAIL_HOST or "smtp.gmail.com",
+                    port=attempt["port"],
+                    username=settings.EMAIL_HOST_USER,
+                    password=settings.EMAIL_HOST_PASSWORD,
+                    use_tls=attempt["use_tls"],
+                    use_ssl=attempt["use_ssl"],
+                    timeout=20,
+                )
+                msg = EmailMessage(
+                    subject=subject,
+                    body=html or text,
+                    from_email=settings.DEFAULT_FROM_EMAIL or settings.EMAIL_HOST_USER,
+                    to=[to_email],
+                    connection=connection,
+                )
+                if html:
+                    msg.content_subtype = "html"
+                msg.attach(filename, png_bytes, "image/png")
+                msg.send(fail_silently=False)
+            logger.info(
+                "Certificate email via SMTP ok to=%s port=%s",
+                to_email,
+                attempt["port"],
+            )
+            return True
+        except Exception as exc:
+            last_error = exc
+            logger.warning("Certificate SMTP %s failed: %s", attempt["port"], exc)
+    raise last_error or RuntimeError("SMTP certificate send failed")
+
+
+def _send_certificate_email_resend(
     *,
     to_email: str,
     subject: str,
@@ -813,10 +875,8 @@ def _send_certificate_email(
     filename: str,
 ) -> bool:
     key = getattr(settings, "RESEND_API_KEY", "") or os.environ.get("RESEND_API_KEY", "")
-    if not key or not to_email or "@" not in to_email:
-        return False
-    if to_email.endswith("@example.com"):
-        return False
+    if not key:
+        raise RuntimeError("RESEND_API_KEY is not set")
 
     from api.tasks import _resend_from_addresses, _ssl_context
 
@@ -847,15 +907,60 @@ def _send_certificate_email(
         )
         try:
             with urllib.request.urlopen(req, timeout=25, context=_ssl_context()) as resp:
-                logger.info("Certificate email ok to=%s status=%s", to_email, resp.status)
+                logger.info(
+                    "Certificate email via Resend ok to=%s status=%s",
+                    to_email,
+                    resp.status,
+                )
                 return True
         except Exception as exc:
             last_error = exc
             logger.warning("Certificate email failed from %s: %s", from_email, exc)
             continue
-    if last_error:
-        logger.warning("Certificate email ultimately failed: %s", last_error)
-    return False
+    raise last_error or RuntimeError("Resend certificate send failed")
+
+
+def _send_certificate_email(
+    *,
+    to_email: str,
+    subject: str,
+    text: str,
+    html: str,
+    png_bytes: bytes,
+    filename: str,
+) -> bool:
+    if not to_email or "@" not in to_email:
+        return False
+    if to_email.endswith("@example.com"):
+        return False
+
+    try:
+        return _send_certificate_email_smtp(
+            to_email=to_email,
+            subject=subject,
+            text=text,
+            html=html,
+            png_bytes=png_bytes,
+            filename=filename,
+        )
+    except Exception as exc:
+        if "not configured" in str(exc) or "blocked on Render" in str(exc):
+            logger.info("Certificate SMTP skipped: %s", exc)
+        else:
+            logger.warning("Certificate SMTP failed, trying Resend: %s", exc)
+
+    try:
+        return _send_certificate_email_resend(
+            to_email=to_email,
+            subject=subject,
+            text=text,
+            html=html,
+            png_bytes=png_bytes,
+            filename=filename,
+        )
+    except Exception as exc:
+        logger.warning("Certificate email ultimately failed: %s", exc)
+        return False
 
 
 def _email_html(ctx: Dict[str, Any]) -> str:
@@ -1004,7 +1109,7 @@ def _notify_tree_admin(donation, ctx: Dict[str, Any]) -> None:
     email = (getattr(org, "contact_email", None) or "").strip() if org else ""
     if not email or "@" not in email:
         return
-    from api.tasks import _send_resend
+    from api.tasks import _deliver_mail
 
     payload = {
         "email": email,
@@ -1023,7 +1128,7 @@ def _notify_tree_admin(donation, ctx: Dict[str, Any]) -> None:
             "preheader": "A supporter just funded trees on your project.",
         },
     }
-    _send_resend("custom_mail", payload)
+    _deliver_mail("custom_mail", payload)
 
 
 def maybe_issue_certificate(donation) -> None:
