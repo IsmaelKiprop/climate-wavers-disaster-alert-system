@@ -13,7 +13,8 @@ const OfflineBanner = () => {
         <div className="px-3 sm:px-5 py-2 text-xs sm:text-sm flex flex-wrap items-center gap-x-3 gap-y-1">
           <span className="font-semibold text-warning">You're offline</span>
           <span className="text-muted">
-            Cached alerts stay available. Reports queue and send when data returns.
+            Browse your cached feed. Text posts, likes, and field reports wait here and
+            send when you're back online.
           </span>
           {queueCount > 0 ? (
             <span className="font-medium">{queueCount} waiting to sync</span>
@@ -46,7 +47,7 @@ const OfflineBanner = () => {
           ) : null}
           {queueCount > 0 ? (
             <span className="text-muted">
-              {queueCount} queued report{queueCount === 1 ? "" : "s"} will sync automatically.
+              {queueCount} queued item{queueCount === 1 ? "" : "s"} will sync automatically.
             </span>
           ) : null}
           {canInstall ? (

@@ -19,6 +19,8 @@ const Postcomponent = ({ type, postId, comment, itemsPerPage = 10 }) => {
   const posts = data?.results || [];
   const totalItems = data?.count || 0;
   const totalPages = Math.max(1, Math.ceil(totalItems / itemsPerPage));
+  const fromCache = Boolean(data?._fromCache);
+  const cacheAge = data?._cacheAge;
 
   const {
     likeMutation,
@@ -30,11 +32,11 @@ const Postcomponent = ({ type, postId, comment, itemsPerPage = 10 }) => {
   } = usePostMutations();
 
   useEffect(() => {
-    if (error) {
+    if (error && !fromCache && posts.length === 0) {
       toast.dismiss();
       toast.error("We could not load posts. Please try again.");
     }
-  }, [error]);
+  }, [error, fromCache, posts.length]);
 
   useEffect(() => {
     if (currentPage > totalPages) {
@@ -46,6 +48,15 @@ const Postcomponent = ({ type, postId, comment, itemsPerPage = 10 }) => {
 
   return (
     <div className={isComments ? "space-y-3" : "space-y-6"}>
+      {fromCache && posts.length > 0 ? (
+        <p className="text-xs text-muted px-1">
+          Showing cached posts
+          {cacheAge ? ` from ${cacheAge}` : ""}.{" "}
+          {typeof navigator !== "undefined" && !navigator.onLine
+            ? "You're offline — new posts will appear when you're back online."
+            : "Refreshing when a connection is available."}
+        </p>
+      ) : null}
       <Posts
         posts={posts}
         type={type}
@@ -57,7 +68,7 @@ const Postcomponent = ({ type, postId, comment, itemsPerPage = 10 }) => {
         save={saveMutation}
         unsave={unsaveMutation}
         isLoading={isLoading || (isFetching && posts.length === 0)}
-        isError={Boolean(error)}
+        isError={Boolean(error) && posts.length === 0 && !fromCache}
         onRetry={() => refetch()}
       />
 

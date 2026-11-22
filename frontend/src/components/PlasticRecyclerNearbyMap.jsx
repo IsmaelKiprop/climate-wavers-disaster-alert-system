@@ -160,8 +160,15 @@ export default function PlasticRecyclerNearbyMap({
       bounds.push([pt.lat, pt.lng]);
     }
 
-    const myLatN = Number(myLat);
-    const myLngN = Number(myLng);
+    // Number(null) === 0 — treat missing GPS as absent, not Null Island (ocean).
+    const myLatN =
+      myLat === null || myLat === undefined || myLat === ""
+        ? NaN
+        : Number(myLat);
+    const myLngN =
+      myLng === null || myLng === undefined || myLng === ""
+        ? NaN
+        : Number(myLng);
     if (Number.isFinite(myLatN) && Number.isFinite(myLngN)) {
       L.marker([myLatN, myLngN], { icon: youIcon() })
         .bindPopup("You (captured GPS)")
@@ -192,7 +199,12 @@ export default function PlasticRecyclerNearbyMap({
         <p className="text-xs text-muted">
           {points.length} yard{points.length === 1 ? "" : "s"} with GPS · tap a pin to
           select
-          {Number.isFinite(Number(myLat)) ? " · amber = you" : ""}
+          {myLat !== null &&
+          myLat !== undefined &&
+          myLat !== "" &&
+          Number.isFinite(Number(myLat))
+            ? " · amber = you"
+            : ""}
         </p>
       )}
     </div>

@@ -1,24 +1,22 @@
 import { createContext, useContext, useEffect, useState } from "react";
-import { flushOfflineQueue, offlineQueueCount } from "../utils/offlineQueue";
-import { chatbotApiUrl } from "../config/env";
-import axios from "axios";
-import { prependCachedDisaster } from "../utils/apiData";
+import { offlineQueueCount } from "../utils/offlineQueue";
+import {
+  flushAllOfflineQueues,
+  pendingOfflineCount,
+} from "../utils/flushAllOfflineQueues";
 
 const LOW_DATA_KEY = "cw_low_data_mode";
 const ConnectivityContext = createContext(null);
 
-async function syncDisasterReport(payload) {
-  const apiUrl = chatbotApiUrl("/api/v1/disasters");
-  const { data } = await axios.post(apiUrl, payload);
-  if (data?.disaster) prependCachedDisaster(data.disaster);
-  return data;
+function totalQueued() {
+  return offlineQueueCount() + pendingOfflineCount();
 }
 
 export function ConnectivityProvider({ children }) {
   const [online, setOnline] = useState(
     typeof navigator === "undefined" ? true : navigator.onLine
   );
-  const [queueCount, setQueueCount] = useState(() => offlineQueueCount());
+  const [queueCount, setQueueCount] = useState(() => totalQueued());
   const [lowData, setLowDataState] = useState(() => {
     try {
       return localStorage.getItem(LOW_DATA_KEY) === "1";
@@ -45,9 +43,13 @@ export function ConnectivityProvider({ children }) {
   }, [lowData]);
 
   useEffect(() => {
-    const onOnline = () => setOnline(true);
+    const refreshCount = () => setQueueCount(totalQueued());
+    const onOnline = () => {
+      setOnline(true);
+      refreshCount();
+    };
     const onOffline = () => setOnline(false);
-    const onQueue = (event) => setQueueCount(event.detail?.count ?? offlineQueueCount());
+    const onQueue = () => refreshCount();
     const onInstall = (event) => {
       event.preventDefault();
       setInstallPrompt(event);
@@ -55,11 +57,17 @@ export function ConnectivityProvider({ children }) {
     window.addEventListener("online", onOnline);
     window.addEventListener("offline", onOffline);
     window.addEventListener("cw-offline-queue", onQueue);
+    window.addEventListener("cw-plastic-offline-queue", onQueue);
+    window.addEventListener("cw-tree-survival-offline-queue", onQueue);
+    window.addEventListener("cw-hazard-corroboration-offline-queue", onQueue);
     window.addEventListener("beforeinstallprompt", onInstall);
     return () => {
       window.removeEventListener("online", onOnline);
       window.removeEventListener("offline", onOffline);
       window.removeEventListener("cw-offline-queue", onQueue);
+      window.removeEventListener("cw-plastic-offline-queue", onQueue);
+      window.removeEventListener("cw-tree-survival-offline-queue", onQueue);
+      window.removeEventListener("cw-hazard-corroboration-offline-queue", onQueue);
       window.removeEventListener("beforeinstallprompt", onInstall);
     };
   }, []);
@@ -70,11 +78,12 @@ export function ConnectivityProvider({ children }) {
     (async () => {
       setSyncing(true);
       try {
-        await flushOfflineQueue({ disaster_report: syncDisasterReport });
+        // Disaster reports + plastic bags + tree survival + hazard corroborations
+        await flushAllOfflineQueues();
       } finally {
         if (!cancelled) {
           setSyncing(false);
-          setQueueCount(offlineQueueCount());
+          setQueueCount(totalQueued());
         }
       }
     })();

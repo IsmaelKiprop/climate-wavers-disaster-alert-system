@@ -1,6 +1,7 @@
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { client } from "../api";
 import { endpoints } from "../utils/endpoints";
+import { loadFeedCache, saveFeedCache, feedCacheAgeLabel } from "../utils/feedCache";
 
 const emptyPage = { results: [], count: 0, next: null, previous: null };
 
@@ -36,21 +37,55 @@ export const useFetchPosts = ({ type, postId, comment, page = 1, pageSize = 10 }
     url = `${endpoints.post}?page=${page}&page_size=${pageSize}`;
   }
 
+  const cacheKey = ["post", type, postId, comment, page, pageSize];
+
   const fetchPosts = async () => {
-    const res = await client.run("get", url, null, true);
-    return normalizePostsResponse(res);
+    try {
+      const res = await client.run("get", url, null, true);
+      const pageData = normalizePostsResponse(res);
+      saveFeedCache(cacheKey, pageData);
+      return { ...pageData, _fromCache: false, _cacheAge: null };
+    } catch (err) {
+      const cached = loadFeedCache(cacheKey);
+      if (cached?.page) {
+        return {
+          ...normalizePostsResponse(cached.page),
+          _fromCache: true,
+          _cacheAge: feedCacheAgeLabel(cached.savedAt),
+          _offline: typeof navigator !== "undefined" && navigator.onLine === false,
+        };
+      }
+      throw err;
+    }
   };
 
+  const cached = loadFeedCache(cacheKey);
+  const placeholder = cached?.page
+    ? {
+        ...normalizePostsResponse(cached.page),
+        _fromCache: true,
+        _cacheAge: feedCacheAgeLabel(cached.savedAt),
+      }
+    : keepPreviousData;
+
   return useQuery({
-    queryKey: ["post", type, postId, comment, page, pageSize],
+    queryKey: cacheKey,
     queryFn: fetchPosts,
     enabled: Boolean(url),
-    placeholderData: keepPreviousData,
+    placeholderData: placeholder === keepPreviousData ? keepPreviousData : () => placeholder,
+    initialData: cached?.page
+      ? {
+          ...normalizePostsResponse(cached.page),
+          _fromCache: true,
+          _cacheAge: feedCacheAgeLabel(cached.savedAt),
+        }
+      : undefined,
     refetchInterval: 300000,
     refetchIntervalInBackground: false,
     staleTime: 60000,
     gcTime: 600000,
     retry: 1,
     retryDelay: 1500,
+    networkMode: "offlineFirst",
   });
 };

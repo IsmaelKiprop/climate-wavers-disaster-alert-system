@@ -37,6 +37,8 @@ import {
   encodePostImages,
   revokeMediaItems,
 } from "../utils/postMedia";
+import { enqueueCreatePost } from "../utils/socialOffline";
+import { useConnectivity } from "../context/ConnectivityContext";
 import UserAvatar from "./UserAvatar";
 
 function displayPersonName(person) {
@@ -57,6 +59,7 @@ const MAX_MEDIA = 10;
 
 const ModernPostCreator = ({ type = "post", postId, parentId, closeModal }) => {
   const queryClient = useQueryClient();
+  const { online } = useConnectivity();
   const { register, handleSubmit, reset, watch, setValue, formState: { errors } } = useForm({
     defaultValues: { visibility: "Everyone", location: "" },
   });
@@ -583,7 +586,42 @@ const ModernPostCreator = ({ type = "post", postId, parentId, closeModal }) => {
     }
 
     setIsDisabled(true);
-    
+    const endpoint = endpoints[type];
+    const hasMedia =
+      mediaItems.length > 0 ||
+      (data.audio && data.audio.length > 0 && data.audio[0] instanceof File);
+
+    if (!online) {
+      if (hasMedia) {
+        toast.error(
+          "Photos and videos need a connection. Remove media to post text offline, or wait for signal."
+        );
+        setIsDisabled(false);
+        return;
+      }
+      enqueueCreatePost(
+        {
+          content: data.content,
+          visibility: data.visibility || "Everyone",
+          font_family: fontFamily || DEFAULT_POST_FONT,
+          location: data.location || "",
+          post_id: postId || null,
+          parent_comment: parentId || null,
+          endpoint,
+        },
+        { isComment: type === "comments" || Boolean(postId) }
+      );
+      toast.info("Waiting to post — will share when you're back online");
+      reset({ visibility: "Everyone", location: "", content: "" });
+      clearMedia();
+      removeAudio?.();
+      setSelectedLocation(null);
+      setComposerOpen(false);
+      setIsDisabled(false);
+      closeModal?.();
+      return;
+    }
+
     try {
       const formData = new FormData();
 
@@ -642,7 +680,6 @@ const ModernPostCreator = ({ type = "post", postId, parentId, closeModal }) => {
         }
       }
       
-      const endpoint = endpoints[type];
       const token = getAuthToken();
       const response = await fetch(`${env.backendUrl}${endpoint}`, {
         method: 'POST',
@@ -656,7 +693,7 @@ const ModernPostCreator = ({ type = "post", postId, parentId, closeModal }) => {
         throw new Error(`HTTP ${response.status}`);
       }
       
-      toast.success("Post created successfully! 🌱");
+      toast.success("Post created successfully!");
       
       reset({ visibility: "Everyone", location: "", content: "" });
       clearMedia();
@@ -681,6 +718,32 @@ const ModernPostCreator = ({ type = "post", postId, parentId, closeModal }) => {
     } catch (error) {
       setIsDisabled(false);
       console.error("Post creation error:", error);
+      if (
+        !hasMedia &&
+        String(data.content || "").trim().length >= 5 &&
+        (error?.message?.includes("Failed to fetch") ||
+          error?.message?.includes("Network") ||
+          error?.message?.includes("HTTP 5"))
+      ) {
+        enqueueCreatePost(
+          {
+            content: data.content,
+            visibility: data.visibility || "Everyone",
+            font_family: fontFamily || DEFAULT_POST_FONT,
+            location: data.location || "",
+            post_id: postId || null,
+            parent_comment: parentId || null,
+            endpoint,
+          },
+          { isComment: type === "comments" || Boolean(postId) }
+        );
+        toast.info("Saved offline — will post when connection returns");
+        reset({ visibility: "Everyone", location: "", content: "" });
+        clearMedia();
+        setComposerOpen(false);
+        closeModal?.();
+        return;
+      }
       toast.error("Failed to create post. Please try again.");
     }
   };

@@ -4,6 +4,7 @@ import { getAuthToken, setUser, getUser } from "../utils/factory";
 import ModernPostCreator from "./ModernPostCreator";
 import DisasterForecastPanel from "./DisasterForecastPanel";
 import WeatherForecastPanel from "./WeatherForecastPanel";
+import PendingOfflinePosts from "./PendingOfflinePosts";
 import { getLocation } from "../utils/location";
 import { useEffect } from "react";
 import { Link } from "react-router-dom";
@@ -55,6 +56,7 @@ const Mainfeed = () => {
       <div className="border border-border bg-surface p-3 sm:p-4">
         <ModernPostCreator type={"post"} />
       </div>
+      <PendingOfflinePosts />
       <Postcomponent type={"post"} />
     </div>
   );

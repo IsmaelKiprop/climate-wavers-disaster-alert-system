@@ -24,6 +24,8 @@ import {
   encodePostImages,
   revokeMediaItems,
 } from "../utils/postMedia";
+import { enqueueCreatePost } from "../utils/socialOffline";
+import { useConnectivity } from "../context/ConnectivityContext";
 
 const MAX_MEDIA = 10;
 
@@ -45,6 +47,7 @@ export default function Createpost({ type, postId, parentId, closeModal }) {
   const mediaInputRef = useRef(null);
   const aiPromptRef = useRef(null);
   const [user, setUserState] = useState(() => getUser() || null);
+  const { online } = useConnectivity();
 
   useEffect(() => {
     const sync = () => setUserState(getUser() || null);
@@ -402,23 +405,59 @@ export default function Createpost({ type, postId, parentId, closeModal }) {
 
   const onSubmit = async (data) => {
     setIsDisabled(true);
-    
+    const endpoint = endpoints[type];
+    const content = data.content || "";
+    const location = locationFieldValue(selectedLocation, data.location || "");
+    const hasMedia =
+      mediaItems.length > 0 ||
+      (data.audio && data.audio.length > 0 && data.audio[0] instanceof File);
+
+    // Facebook-style: text posts queue offline; media needs a connection to upload.
+    if (!online) {
+      if (hasMedia) {
+        toast.error(
+          "Photos and videos need a connection. Remove media to post text offline, or wait for signal."
+        );
+        setIsDisabled(false);
+        return;
+      }
+      if (!String(content).trim()) {
+        toast.error("Write something to post offline.");
+        setIsDisabled(false);
+        return;
+      }
+      enqueueCreatePost(
+        {
+          content,
+          visibility: data.visibility || "Everyone",
+          font_family: fontFamily || DEFAULT_POST_FONT,
+          location,
+          post_id: postId || null,
+          parent_comment: parentId || null,
+          endpoint,
+        },
+        { isComment: type === "comments" || Boolean(postId) }
+      );
+      toast.info("Waiting to post — will share when you're back online");
+      reset();
+      clearMedia();
+      setSelectedLocation(null);
+      setFontFamily(DEFAULT_POST_FONT);
+      setIsDisabled(false);
+      closeModal?.();
+      return;
+    }
+
     try {
       const formData = new FormData();
-      
-      // Add text content
-      formData.append('content', data.content || '');
-      formData.append('visibility', data.visibility || 'Everyone');
-      formData.append('font_family', fontFamily || DEFAULT_POST_FONT);
-      formData.append(
-        "location",
-        locationFieldValue(selectedLocation, data.location || "")
-      );
-      
-      // Add post/comment relationships
-      if (postId) formData.append('post_id', postId);
-      if (parentId) formData.append('parent_comment', parentId);
-      
+      formData.append("content", content);
+      formData.append("visibility", data.visibility || "Everyone");
+      formData.append("font_family", fontFamily || DEFAULT_POST_FONT);
+      formData.append("location", location);
+
+      if (postId) formData.append("post_id", postId);
+      if (parentId) formData.append("parent_comment", parentId);
+
       const imageFiles = mediaItems
         .filter((item) => item.kind === "image")
         .map((item) => item.file);
@@ -436,48 +475,60 @@ export default function Createpost({ type, postId, parentId, closeModal }) {
         const videoUrls = await uploadFiles(videoFiles);
         if (videoUrls?.[0]) formData.append("video", videoUrls[0]);
       }
-      
-      // Handle audio files - send as File object
+
       if (data.audio && data.audio.length > 0 && data.audio[0] instanceof File) {
-        console.log("Adding audio file:", data.audio[0].name, data.audio[0].type, data.audio[0].size);
-        formData.append('audio', data.audio[0]);
+        formData.append("audio", data.audio[0]);
       }
-      
-    const endpoint = endpoints[type];
-      console.log("Using endpoint:", endpoint);
-      
-      // Debug: Log FormData contents
-      console.log("FormData contents:");
-      for (let [key, value] of formData.entries()) {
-        console.log(`${key}:`, value);
-      }
-      
+
       const token = getAuthToken();
       const response = await fetch(`${env.backendUrl}${endpoint}`, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Authorization': `Bearer ${token}`,
-          // Don't set Content-Type, let browser set it with boundary for FormData
+          Authorization: `Bearer ${token}`,
         },
-        body: formData
+        body: formData,
       });
-      
+
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
-      
-      toast.success("Post created successfully! 🌱");
-      
+
+      toast.success("Post created successfully!");
       reset();
       clearMedia();
       setSelectedLocation(null);
       setFontFamily(DEFAULT_POST_FONT);
       setIsDisabled(false);
-      closeModal();
-      
+      closeModal?.();
     } catch (error) {
       setIsDisabled(false);
       console.error("Post creation error:", error);
+      // Network failure while "online" — queue text-only like Facebook
+      if (
+        !hasMedia &&
+        String(content).trim() &&
+        (error?.message?.includes("Failed to fetch") ||
+          error?.message?.includes("Network") ||
+          error?.message?.includes("HTTP 5"))
+      ) {
+        enqueueCreatePost(
+          {
+            content,
+            visibility: data.visibility || "Everyone",
+            font_family: fontFamily || DEFAULT_POST_FONT,
+            location,
+            post_id: postId || null,
+            parent_comment: parentId || null,
+            endpoint,
+          },
+          { isComment: type === "comments" || Boolean(postId) }
+        );
+        toast.info("Saved offline — will post when connection returns");
+        reset();
+        clearMedia();
+        closeModal?.();
+        return;
+      }
       toast.error("Failed to create post. Please try again.");
     }
   };
