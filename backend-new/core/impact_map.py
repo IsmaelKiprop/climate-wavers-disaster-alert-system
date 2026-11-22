@@ -42,6 +42,31 @@ def _recovery_kg(recovery) -> float:
     return float(getattr(recovery, "kg_claimed", None) or 0)
 
 
+def _in_east_africa(lat, lng) -> bool:
+    try:
+        return -5.5 <= float(lat) <= 5.5 and 29.0 <= float(lng) <= 42.5
+    except (TypeError, ValueError):
+        return False
+
+
+def _plastic_display_coords(lat, lng, *, hotspot=None, project=None):
+    """
+    Prefer submitted GPS when it is in-region; otherwise snap to hotspot/project
+    so IP blunders (India pins on Eldoret bags) do not dominate the public map.
+    """
+    if lat is not None and lng is not None and _in_east_africa(lat, lng):
+        return lat, lng
+    for obj in (hotspot, project):
+        if obj is None:
+            continue
+        plat, plng = _f(getattr(obj, "latitude", None)), _f(
+            getattr(obj, "longitude", None)
+        )
+        if plat is not None and plng is not None and _in_east_africa(plat, plng):
+            return plat, plng
+    return None, None
+
+
 class CommunityImpactMapView(APIView):
     permission_classes = [AllowAny]
 
@@ -279,7 +304,11 @@ class CommunityImpactMapView(APIView):
             hotspot_qs = hotspot_qs.filter(county_q)
         for h in hotspot_qs.order_by("-created_at")[:400]:
             try:
-                lat, lng = _f(h.latitude), _f(h.longitude)
+                lat, lng = _plastic_display_coords(
+                    _f(h.latitude),
+                    _f(h.longitude),
+                    project=getattr(h, "project", None),
+                )
                 if lat is None or lng is None:
                     continue
                 out.append(
@@ -307,17 +336,19 @@ class CommunityImpactMapView(APIView):
             except Exception as exc:
                 logger.debug("skip plastic hotspot %s: %s", h.id, exc)
 
-        recovery_qs = (
-            PlasticRecovery.objects.select_related("project")
-            .exclude(latitude__isnull=True)
-            .exclude(longitude__isnull=True)
-            .exclude(status="rejected")
-        )
+        recovery_qs = PlasticRecovery.objects.select_related(
+            "project", "hotspot"
+        ).exclude(status="rejected")
         if county:
             recovery_qs = recovery_qs.filter(county_q)
         for r in recovery_qs.order_by("-created_at")[:300]:
             try:
-                lat, lng = _f(r.latitude), _f(r.longitude)
+                lat, lng = _plastic_display_coords(
+                    _f(r.latitude),
+                    _f(r.longitude),
+                    hotspot=getattr(r, "hotspot", None),
+                    project=getattr(r, "project", None),
+                )
                 if lat is None or lng is None:
                     continue
                 kg = _recovery_kg(r)

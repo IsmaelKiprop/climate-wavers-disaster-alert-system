@@ -253,22 +253,21 @@ const PlasticCollectorPanel = ({
     toast.success("Certificate ready — WhatsApp opened, tap Send to share");
   }, [myBags, authed, guestPhone, guestName, project?.name]);
 
-  const readDeviceGps = () =>
-    new Promise((resolve, reject) => {
-      if (!navigator.geolocation) {
-        reject(new Error("GPS not available on this device"));
-        return;
-      }
-      navigator.geolocation.getCurrentPosition(
-        (pos) =>
-          resolve({
-            latitude: String(pos.coords.latitude.toFixed(6)),
-            longitude: String(pos.coords.longitude.toFixed(6)),
-          }),
-        () => reject(new Error("Could not get GPS — enable location and try again")),
-        { enableHighAccuracy: true, timeout: 20000 }
+  const readDeviceGps = async () => {
+    const { readPreciseDevicePosition } = await import("../utils/location");
+    try {
+      const pos = await readPreciseDevicePosition({ timeoutMs: 28000 });
+      return {
+        latitude: String(Number(pos.latitude).toFixed(6)),
+        longitude: String(Number(pos.longitude).toFixed(6)),
+        accuracy: pos.accuracy,
+      };
+    } catch {
+      throw new Error(
+        "Could not get precise GPS — use a phone at the site (desktop IP cities like India are blocked)"
       );
-    });
+    }
+  };
 
   const captureGps = async (target = "proof") => {
     try {

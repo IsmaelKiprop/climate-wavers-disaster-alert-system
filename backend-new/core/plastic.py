@@ -266,6 +266,55 @@ def _gps_near_hotspot(hotspot: PlasticHotspot, lat, lng, *, radius_m: float | No
     return True, round(distance), round(radius), ""
 
 
+# Desktop Chrome IP geolocation often drops African users in India (~5,000+ km away).
+PROJECT_REGION_MAX_M = 250_000  # 250 km from project HQ / hotspot
+
+
+def _in_east_africa(lat, lng) -> bool:
+    try:
+        return -5.5 <= float(lat) <= 5.5 and 29.0 <= float(lng) <= 42.5
+    except (TypeError, ValueError):
+        return False
+
+
+def _gps_in_project_region(project, lat, lng):
+    """
+    Reject browser IP blunders (e.g. Eldoret project + Mumbai pin).
+    Returns (ok, detail).
+    """
+    if lat in (None, "") or lng in (None, ""):
+        return False, "Capture GPS on site before continuing."
+    try:
+        flat, flng = float(lat), float(lng)
+    except (TypeError, ValueError):
+        return False, "Invalid GPS coordinates."
+
+    country = str(getattr(project, "country", "") or "").strip().lower()
+    # Kenya / East Africa projects: require regional bounds when no HQ pin.
+    if country in ("kenya", "ke", "uganda", "ug", "tanzania", "tz", ""):
+        proj_lat = getattr(project, "latitude", None)
+        proj_lng = getattr(project, "longitude", None)
+        if proj_lat is not None and proj_lng is not None:
+            dist = _haversine_m(proj_lat, proj_lng, flat, flng)
+            if dist != float("inf") and dist > PROJECT_REGION_MAX_M:
+                return (
+                    False,
+                    (
+                        "GPS is far from this project (desktop IP location is often wrong). "
+                        "Capture precise GPS on a phone at the site in Kenya."
+                    ),
+                )
+        elif not _in_east_africa(flat, flng):
+            return (
+                False,
+                (
+                    "GPS is outside East Africa. Enable precise location on a phone "
+                    "at the cleanup site — browser IP cities (e.g. India) are rejected."
+                ),
+            )
+    return True, ""
+
+
 def _normalize_phone(value) -> str:
     """Normalize Kenyan / regional phones to digits (prefer 254…)."""
     digits = re.sub(r"\D", "", str(value or "").strip())
@@ -1606,6 +1655,9 @@ class PlasticHotspotCreateView(APIView):
             return Response(
                 {"detail": "latitude and longitude are required."}, status=400
             )
+        region_ok, region_detail = _gps_in_project_region(project, lat, lng)
+        if not region_ok:
+            return Response({"detail": region_detail}, status=400)
         pin = _normalize_claim_pin(ser.validated_data.get("claim_pin"))
         if not pin:
             return Response(
@@ -1877,6 +1929,9 @@ class PlasticRecoveryCreateView(APIView):
             return Response(
                 {"detail": "GPS latitude and longitude are required."}, status=400
             )
+        region_ok, region_detail = _gps_in_project_region(project, lat, lng)
+        if not region_ok:
+            return Response({"detail": region_detail}, status=400)
         if not images and not videos:
             return Response(
                 {"detail": "At least one photo or video is required."}, status=400
@@ -1968,10 +2023,25 @@ class PlasticRecoveryCreateView(APIView):
             elif already_mine and not user and hotspot.guest_claim_token:
                 guest_token = guest_token or hotspot.guest_claim_token
 
-            # Bag GPS must be near the CBO pin (managers may log from desk).
-            if not is_manager:
-                ok, distance_m, radius_m, detail = _gps_near_hotspot(hotspot, lat, lng)
-                if not ok:
+            # Bag GPS must be near the CBO pin. Managers still cannot use
+            # offshore IP geolocation (e.g. India) — use site GPS or hotspot pin.
+            ok, distance_m, radius_m, detail = _gps_near_hotspot(hotspot, lat, lng)
+            if not ok:
+                if is_manager:
+                    # Allow desk logging only by adopting the hotspot pin itself.
+                    try:
+                        lat = float(hotspot.latitude)
+                        lng = float(hotspot.longitude)
+                    except (TypeError, ValueError):
+                        return Response(
+                            {
+                                "detail": detail,
+                                "distance_m": distance_m,
+                                "allowed_radius_m": radius_m,
+                            },
+                            status=status.HTTP_403_FORBIDDEN,
+                        )
+                else:
                     return Response(
                         {
                             "detail": detail,

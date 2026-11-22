@@ -322,25 +322,28 @@ const PlasticProjectAdmin = () => {
     }
   };
 
-  const captureGps = (target) => {
-    if (!navigator.geolocation) {
-      toast.error("Geolocation not available");
-      return;
+  const captureGps = async (target) => {
+    try {
+      const { readPreciseDevicePosition } = await import("../utils/location");
+      toast.info("Waiting for precise GPS…");
+      const pos = await readPreciseDevicePosition({ timeoutMs: 28000 });
+      const latitude = Number(pos.latitude).toFixed(6);
+      const longitude = Number(pos.longitude).toFixed(6);
+      if (target === "hotspot") {
+        setHotspotForm((p) => ({ ...p, latitude, longitude }));
+      } else {
+        setProofForm((p) => ({ ...p, latitude, longitude }));
+      }
+      toast.success(
+        Number.isFinite(pos.accuracy)
+          ? `GPS captured (±${Math.round(pos.accuracy)} m)`
+          : "GPS captured"
+      );
+    } catch {
+      toast.error(
+        "Precise GPS failed — use a phone on site. Desktop IP location (e.g. India) is rejected."
+      );
     }
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const latitude = pos.coords.latitude.toFixed(6);
-        const longitude = pos.coords.longitude.toFixed(6);
-        if (target === "hotspot") {
-          setHotspotForm((p) => ({ ...p, latitude, longitude }));
-        } else {
-          setProofForm((p) => ({ ...p, latitude, longitude }));
-        }
-        toast.success("GPS captured");
-      },
-      () => toast.error("Could not get GPS"),
-      { enableHighAccuracy: true, timeout: 15000 }
-    );
   };
 
   const pinHotspot = async (e) => {
