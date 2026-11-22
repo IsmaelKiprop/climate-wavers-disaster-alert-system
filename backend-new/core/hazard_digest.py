@@ -6,7 +6,6 @@ import logging
 from datetime import timedelta
 
 from django.conf import settings
-from django.db.models import Q
 from django.utils import timezone
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -34,8 +33,13 @@ def _nearby_disasters(pref: UserAlertPreference, since, until):
         created_at__gte=since,
         created_at__lte=until,
     ).exclude(status="resolved")
-    if pref.min_magnitude is not None:
-        qs = qs.filter(Q(magnitude__isnull=True) | Q(magnitude__gte=pref.min_magnitude))
+
+    # Magnitude lives on OfficialAlertEvent / payload, not Disaster — filter by severity instead.
+    min_mag = float(pref.min_magnitude or 0)
+    if min_mag >= 5.5:
+        qs = qs.filter(severity__in=["high", "severe", "extreme", "catastrophic"])
+    elif min_mag >= 4.5:
+        qs = qs.exclude(severity="low")
 
     rows = []
     for d in qs.order_by("-created_at")[:80]:
@@ -83,9 +87,9 @@ def _digest_text(pref, rows) -> str:
             filter(None, [getattr(d, "city", None), getattr(d, "country", None)])
         ) or "unspecified"
         dtype = getattr(d, "disaster_type", None) or getattr(d, "type", None) or "hazard"
-        mag = f" M{d.magnitude}" if getattr(d, "magnitude", None) else ""
+        sev = f" ({d.severity})" if getattr(d, "severity", None) else ""
         near = f" · {dist:.0f}km" if dist is not None else ""
-        lines.append(f"• {dtype}{mag} near {place}{near}")
+        lines.append(f"• {dtype}{sev} near {place}{near}")
     lines.append(f"Open map: {FRONTEND}/impact-map")
     return "\n".join(lines)[:900]
 

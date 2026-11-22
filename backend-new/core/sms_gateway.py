@@ -4,7 +4,12 @@ SMS delivery via Africa's Talking (preferred) or Twilio.
 Env:
   SMS_PROVIDER=africastalking|twilio|log
   AT_USERNAME / AT_API_KEY / AT_SENDER_ID
+  AT_SANDBOX=true  (or AT_USERNAME=sandbox) → uses sandbox API host
   TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN / TWILIO_FROM_NUMBER
+
+Sandbox note (Africa's Talking):
+  Default Sender ID is test-only in Kenya and currently Airtel-only.
+  Production / Safaricom needs a dedicated Sender ID on a Team app.
 """
 
 from __future__ import annotations
@@ -64,25 +69,39 @@ def send_sms(phone: str, message: str) -> Dict[str, Any]:
         return {"ok": False, "provider": mode, "detail": str(exc)[:300]}
 
 
+def _africastalking_base_url(username: str) -> str:
+    sandbox_flag = (os.getenv("AT_SANDBOX") or "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+    if sandbox_flag or username.lower() == "sandbox":
+        return "https://api.sandbox.africastalking.com/version1/messaging"
+    return "https://api.africastalking.com/version1/messaging"
+
+
 def _send_africastalking(to: str, body: str) -> Dict[str, Any]:
     username = (os.getenv("AT_USERNAME") or "").strip()
     api_key = (os.getenv("AT_API_KEY") or "").strip()
-    sender = (os.getenv("AT_SENDER_ID") or "ClimateW").strip()
+    # Sandbox often works with AFRICASTKNG / default; leave blank to omit "from"
+    sender = (os.getenv("AT_SENDER_ID") or "").strip()
     if not username or not api_key:
         raise RuntimeError("AT_USERNAME / AT_API_KEY not configured")
 
     # Africa's Talking expects 2547… without +
     msisdn = to.lstrip("+")
-    data = urllib.parse.urlencode(
-        {
-            "username": username,
-            "to": msisdn,
-            "message": body,
-            "from": sender,
-        }
-    ).encode("utf-8")
+    form = {
+        "username": username,
+        "to": msisdn,
+        "message": body,
+    }
+    if sender:
+        form["from"] = sender
+    data = urllib.parse.urlencode(form).encode("utf-8")
+    url = _africastalking_base_url(username)
     req = urllib.request.Request(
-        "https://api.africastalking.com/version1/messaging",
+        url,
         data=data,
         headers={
             "ApiKey": api_key,
@@ -91,10 +110,20 @@ def _send_africastalking(to: str, body: str) -> Dict[str, Any]:
         },
         method="POST",
     )
-    with urllib.request.urlopen(req, timeout=25) as resp:
-        raw = resp.read().decode("utf-8") or "{}"
-    payload = json.loads(raw)
-    return {"ok": True, "provider": "africastalking", "to": to, "response": payload}
+    try:
+        with urllib.request.urlopen(req, timeout=25) as resp:
+            raw = resp.read().decode("utf-8") or "{}"
+    except urllib.error.HTTPError as exc:
+        raw = exc.read().decode("utf-8", errors="replace") if exc.fp else str(exc)
+        raise RuntimeError(raw[:400]) from exc
+    payload = json.loads(raw) if raw.strip().startswith("{") else {"raw": raw}
+    return {
+        "ok": True,
+        "provider": "africastalking",
+        "sandbox": "sandbox" in url,
+        "to": to,
+        "response": payload,
+    }
 
 
 def _send_twilio(to: str, body: str) -> Dict[str, Any]:
