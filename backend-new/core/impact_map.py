@@ -10,7 +10,14 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import Disaster, PlasticHotspot, PlasticRecovery, TreeProjectDonation
+from .models import (
+    Disaster,
+    PlasticHotspot,
+    PlasticRecovery,
+    TreeProject,
+    TreeProjectDonation,
+    TreeProjectUpdate,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +29,13 @@ def _f(val):
         return float(val)
     except (TypeError, ValueError):
         return None
+
+
+def _recovery_kg(recovery) -> float:
+    verified = getattr(recovery, "kg_verified", None)
+    if verified is not None:
+        return float(verified or 0)
+    return float(getattr(recovery, "kg_claimed", None) or 0)
 
 
 class CommunityImpactMapView(APIView):
@@ -82,7 +96,75 @@ class CommunityImpactMapView(APIView):
         return Response(payload)
 
     def _tree_features(self, county: str):
+        """
+        Prefer geotagged planting proofs / survival pins on funded gifts.
+        Fall back to project grove coordinates when a planted gift has no pin yet.
+        """
         out = []
+        seen_donations = set()
+        seen_coords = set()
+
+        proof_qs = (
+            TreeProjectUpdate.objects.select_related("project", "donation", "donation__project")
+            .filter(update_type="planting_proof")
+            .exclude(latitude__isnull=True)
+            .exclude(longitude__isnull=True)
+        )
+        if county:
+            proof_qs = proof_qs.filter(
+                Q(project__region__icontains=county)
+                | Q(project__city__icontains=county)
+                | Q(donation__project__region__icontains=county)
+                | Q(donation__project__city__icontains=county)
+            )
+        for proof in proof_qs.order_by("-created_at")[:500]:
+            lat, lng = _f(proof.latitude), _f(proof.longitude)
+            if lat is None or lng is None:
+                continue
+            donation = proof.donation
+            if donation is not None:
+                if (donation.payment_status or "") != "completed":
+                    continue
+                if donation.id in seen_donations:
+                    continue
+                seen_donations.add(donation.id)
+                trees = donation.trees_purchased or 1
+                status = donation.planting_status or "planted"
+                donation_id = donation.id
+                project = donation.project or proof.project
+            else:
+                trees = proof.trees_planted_this_update or 1
+                status = "planted"
+                donation_id = None
+                project = proof.project
+            coord_key = (round(lat, 5), round(lng, 5), donation_id or f"proof-{proof.id}")
+            if coord_key in seen_coords:
+                continue
+            seen_coords.add(coord_key)
+            out.append(
+                {
+                    "layer": "trees",
+                    "id": f"tree-proof-{proof.id}",
+                    "title": (project.name if project else None) or proof.title or "Tree gift",
+                    "subtitle": f"{trees} tree(s) · {status}",
+                    "county": (
+                        (project.region or project.city or "") if project else ""
+                    ),
+                    "ward": proof.location_label
+                    or getattr(donation, "survival_location_label", "")
+                    or "",
+                    "latitude": lat,
+                    "longitude": lng,
+                    "meta": {
+                        "trees": trees,
+                        "status": status,
+                        "donation_id": donation_id,
+                        "project_id": getattr(project, "id", None),
+                        "proof_id": proof.id,
+                    },
+                }
+            )
+
         tree_qs = TreeProjectDonation.objects.select_related("project").filter(
             payment_status="completed",
             planting_status__in=[
@@ -98,6 +180,8 @@ class CommunityImpactMapView(APIView):
                 | Q(project__city__icontains=county)
             )
         for d in tree_qs.order_by("-planted_at")[:500]:
+            if d.id in seen_donations:
+                continue
             try:
                 lat = _f(getattr(d, "survival_lat", None))
                 lng = _f(getattr(d, "survival_lng", None))
@@ -115,6 +199,7 @@ class CommunityImpactMapView(APIView):
                         lat, lng = _f(proj.latitude), _f(proj.longitude)
                 if lat is None or lng is None:
                     continue
+                seen_donations.add(d.id)
                 proj = d.project
                 out.append(
                     {
@@ -136,6 +221,44 @@ class CommunityImpactMapView(APIView):
                 )
             except Exception as exc:
                 logger.debug("skip tree donation %s: %s", d.id, exc)
+
+        # Grove sites with coordinates (visible even before every gift has its own pin).
+        project_qs = (
+            TreeProject.objects.exclude(latitude__isnull=True)
+            .exclude(longitude__isnull=True)
+            .filter(Q(trees_planted__gt=0) | Q(status="active"))
+        )
+        if county:
+            project_qs = project_qs.filter(
+                Q(region__icontains=county) | Q(city__icontains=county)
+            )
+        for proj in project_qs.order_by("-updated_at")[:200]:
+            lat, lng = _f(proj.latitude), _f(proj.longitude)
+            if lat is None or lng is None:
+                continue
+            coord_key = (round(lat, 5), round(lng, 5), f"project-{proj.id}")
+            if coord_key in seen_coords:
+                continue
+            seen_coords.add(coord_key)
+            trees = int(proj.trees_planted or 0)
+            out.append(
+                {
+                    "layer": "trees",
+                    "id": f"tree-project-{proj.id}",
+                    "title": proj.name or f"Grove #{proj.id}",
+                    "subtitle": f"{trees} tree(s) planted · project site",
+                    "county": proj.region or proj.city or "",
+                    "ward": proj.city or "",
+                    "latitude": lat,
+                    "longitude": lng,
+                    "meta": {
+                        "trees": trees or 1,
+                        "status": "project_site",
+                        "project_id": proj.id,
+                    },
+                }
+            )
+
         return out
 
     def _plastic_features(self, county: str):
@@ -147,30 +270,33 @@ class CommunityImpactMapView(APIView):
                 | Q(project__city__icontains=county)
             )
         for h in hotspot_qs.order_by("-created_at")[:400]:
-            lat, lng = _f(h.latitude), _f(h.longitude)
-            if lat is None or lng is None:
-                continue
-            out.append(
-                {
-                    "layer": "plastic",
-                    "id": f"plastic-hotspot-{h.id}",
-                    "title": h.title
-                    or getattr(h.project, "name", None)
-                    or "Cleanup hotspot",
-                    "subtitle": f"Status: {h.status}",
-                    "county": getattr(h.project, "region", "")
-                    or getattr(h.project, "city", "")
-                    or "",
-                    "ward": h.location_label or "",
-                    "latitude": lat,
-                    "longitude": lng,
-                    "meta": {
-                        "status": h.status,
-                        "project_id": h.project_id,
-                        "hotspot_id": h.id,
-                    },
-                }
-            )
+            try:
+                lat, lng = _f(h.latitude), _f(h.longitude)
+                if lat is None or lng is None:
+                    continue
+                out.append(
+                    {
+                        "layer": "plastic",
+                        "id": f"plastic-hotspot-{h.id}",
+                        "title": h.title
+                        or getattr(h.project, "name", None)
+                        or "Cleanup hotspot",
+                        "subtitle": f"Status: {h.status}",
+                        "county": getattr(h.project, "region", "")
+                        or getattr(h.project, "city", "")
+                        or "",
+                        "ward": h.location_label or "",
+                        "latitude": lat,
+                        "longitude": lng,
+                        "meta": {
+                            "status": h.status,
+                            "project_id": h.project_id,
+                            "hotspot_id": h.id,
+                        },
+                    }
+                )
+            except Exception as exc:
+                logger.debug("skip plastic hotspot %s: %s", h.id, exc)
 
         recovery_qs = (
             PlasticRecovery.objects.select_related("project")
@@ -178,28 +304,32 @@ class CommunityImpactMapView(APIView):
             .exclude(longitude__isnull=True)
         )
         for r in recovery_qs.order_by("-created_at")[:300]:
-            lat, lng = _f(r.latitude), _f(r.longitude)
-            if lat is None or lng is None:
-                continue
-            out.append(
-                {
-                    "layer": "plastic",
-                    "id": f"plastic-bag-{r.id}",
-                    "title": f"{r.kg or 0} kg recovered",
-                    "subtitle": getattr(r, "polymer_type", "") or "plastic",
-                    "county": getattr(getattr(r, "project", None), "region", "")
-                    or getattr(getattr(r, "project", None), "city", "")
-                    or "",
-                    "ward": "",
-                    "latitude": lat,
-                    "longitude": lng,
-                    "meta": {
-                        "kg": float(r.kg or 0),
-                        "status": r.status,
-                        "recovery_id": r.id,
-                    },
-                }
-            )
+            try:
+                lat, lng = _f(r.latitude), _f(r.longitude)
+                if lat is None or lng is None:
+                    continue
+                kg = _recovery_kg(r)
+                out.append(
+                    {
+                        "layer": "plastic",
+                        "id": f"plastic-bag-{r.id}",
+                        "title": f"{kg} kg recovered",
+                        "subtitle": getattr(r, "polymer_type", "") or "plastic",
+                        "county": getattr(getattr(r, "project", None), "region", "")
+                        or getattr(getattr(r, "project", None), "city", "")
+                        or "",
+                        "ward": getattr(r, "location_label", "") or "",
+                        "latitude": lat,
+                        "longitude": lng,
+                        "meta": {
+                            "kg": kg,
+                            "status": r.status,
+                            "recovery_id": r.id,
+                        },
+                    }
+                )
+            except Exception as exc:
+                logger.debug("skip plastic recovery %s: %s", r.id, exc)
         return out
 
     def _hazard_features(self, county: str):

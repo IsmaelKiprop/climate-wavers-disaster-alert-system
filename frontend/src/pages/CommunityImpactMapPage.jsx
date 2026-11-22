@@ -56,7 +56,12 @@ function layerIcon(layer) {
 const CommunityImpactMapPage = () => {
   const [layer, setLayer] = useState("all");
   const [county, setCounty] = useState("");
-  const [data, setData] = useState({ features: [], counties: [], count: 0 });
+  const [data, setData] = useState({
+    features: [],
+    counties: [],
+    count: 0,
+    errors: [],
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const mapRef = useRef(null);
@@ -81,10 +86,11 @@ const CommunityImpactMapPage = () => {
         features: Array.isArray(json.features) ? json.features : [],
         counties: Array.isArray(json.counties) ? json.counties : [],
         count: Number(json.count || 0),
+        errors: Array.isArray(json.errors) ? json.errors : [],
       });
     } catch (err) {
       setError(err?.message || "Could not load impact map");
-      setData({ features: [], counties: [], count: 0 });
+      setData({ features: [], counties: [], count: 0, errors: [] });
     } finally {
       setLoading(false);
     }
@@ -250,6 +256,17 @@ const CommunityImpactMapPage = () => {
               : `${data.count || points.length} point${
                   (data.count || points.length) === 1 ? "" : "s"
                 }`}
+          {!loading && !error && !(data.count || points.length) ? (
+            <span className="block mt-1 text-xs">
+              Tree pins appear after a planting proof with GPS. Plastic pins appear from
+              hotspot/bag GPS. Hazards need an active report with coordinates.
+            </span>
+          ) : null}
+          {!loading && data.errors?.length ? (
+            <span className="block mt-1 text-xs text-amber-700">
+              Some layers failed to load. Refresh or try again shortly.
+            </span>
+          ) : null}
         </p>
         <ul className="flex flex-wrap gap-3 text-[11px] text-muted">
           <li className="inline-flex items-center gap-1.5">

@@ -802,6 +802,16 @@ class TreeAdminDonationProofView(APIView):
             lng_val = float(lng) if lng not in (None, "") else None
         except (TypeError, ValueError):
             return Response({"detail": "Invalid latitude/longitude"}, status=400)
+        # GPS pin required so the gift appears on the public community impact map.
+        if lat_val is None or lng_val is None:
+            return Response(
+                {
+                    "detail": "Capture planting GPS (Use my GPS) so the tree pin shows on the impact map."
+                },
+                status=400,
+            )
+        if not (-90 <= lat_val <= 90 and -180 <= lng_val <= 180):
+            return Response({"detail": "Latitude/longitude out of range"}, status=400)
 
         donor_name = ""
         try:
@@ -836,21 +846,18 @@ class TreeAdminDonationProofView(APIView):
             )
             donation.planting_status = "planted"
             donation.planted_at = timezone.now()
-            if lat_val is not None and lng_val is not None:
-                donation.survival_lat = lat_val
-                donation.survival_lng = lng_val
-                donation.survival_location_label = location_label
-                donation.save(
-                    update_fields=[
-                        "planting_status",
-                        "planted_at",
-                        "survival_lat",
-                        "survival_lng",
-                        "survival_location_label",
-                    ]
-                )
-            else:
-                donation.save(update_fields=["planting_status", "planted_at"])
+            donation.survival_lat = lat_val
+            donation.survival_lng = lng_val
+            donation.survival_location_label = location_label
+            donation.save(
+                update_fields=[
+                    "planting_status",
+                    "planted_at",
+                    "survival_lat",
+                    "survival_lng",
+                    "survival_location_label",
+                ]
+            )
             try:
                 from .tree_survival import schedule_survival_checkins
 

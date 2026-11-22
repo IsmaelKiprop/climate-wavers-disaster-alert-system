@@ -8,9 +8,19 @@ function normalizeType(event) {
 }
 
 function normalizeSeverity(event) {
-  const raw = String(event?.severity || "").toUpperCase();
-  if (["CRITICAL", "HIGH", "MODERATE", "LOW"].includes(raw)) return raw;
-  return "UNKNOWN";
+  const raw = String(event?.severity || "").toUpperCase().trim();
+  // Align with mapDisaster / live feeds (MEDIUM), plus backend variants.
+  const map = {
+    CRITICAL: "CRITICAL",
+    CATASTROPHIC: "CRITICAL",
+    EXTREME: "CRITICAL",
+    HIGH: "HIGH",
+    SEVERE: "HIGH",
+    MEDIUM: "MEDIUM",
+    MODERATE: "MEDIUM",
+    LOW: "LOW",
+  };
+  return map[raw] || "UNKNOWN";
 }
 
 function eventTime(event) {
@@ -136,7 +146,7 @@ export function buildCommunityAnalytics(events = [], hashtags = []) {
   ).length;
   const climateShare = list.length ? Math.round((climateCount / list.length) * 100) : 0;
   const highPlus = list.filter((e) =>
-    ["HIGH", "CRITICAL"].includes(String(e?.severity || "").toUpperCase())
+    ["HIGH", "CRITICAL"].includes(normalizeSeverity(e))
   ).length;
 
   const summary = {

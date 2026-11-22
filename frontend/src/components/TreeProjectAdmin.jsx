@@ -587,6 +587,10 @@ const TreeProjectAdmin = () => {
       toast.error('Add at least one photo or video');
       return;
     }
+    if (proofLat === '' || proofLng === '') {
+      toast.error('Capture planting GPS (Use my GPS) so the tree shows on the impact map');
+      return;
+    }
     setProofSaving(true);
     try {
       const token = getAuthToken() || localStorage.getItem('token');
@@ -1473,9 +1477,13 @@ Thank you for your understanding! 🌱
                     >
                       {proofLocating ? 'Getting GPS…' : 'Use my GPS'}
                     </button>
-                    {(proofLat || proofLng) && (
+                    {(proofLat || proofLng) ? (
                       <p className="text-xs text-muted self-center font-mono">
                         {proofLat}, {proofLng}
+                      </p>
+                    ) : (
+                      <p className="text-xs text-amber-700 self-center">
+                        Required — pins the tree on the community impact map
                       </p>
                     )}
                   </div>

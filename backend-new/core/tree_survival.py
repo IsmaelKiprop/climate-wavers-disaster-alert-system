@@ -332,54 +332,27 @@ class TreeSurvivalPublicMapView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request):
-        qs = (
-            TreeProjectDonation.objects.select_related("project")
-            .filter(payment_status="completed", planting_status__in=[
-                "planted",
-                "surviving_30",
-                "surviving_90",
-                "surviving_180",
-            ])
-            .exclude(survival_lat__isnull=True, planted_at__isnull=True)
-        )
+        from .impact_map import CommunityImpactMapView
+
         county = (request.query_params.get("county") or "").strip()
-        if county:
-            from django.db.models import Q
-
-            qs = qs.filter(
-                Q(project__region__icontains=county)
-                | Q(project__city__icontains=county)
-            )
-
-        features = []
-        for d in qs.order_by("-planted_at")[:800]:
-            lat = d.survival_lat
-            lng = d.survival_lng
-            if lat is None or lng is None:
-                # fall back to latest planting proof coords
-                proof = (
-                    d.planting_updates.filter(update_type="planting_proof")
-                    .exclude(latitude__isnull=True)
-                    .order_by("-created_at")
-                    .first()
-                )
-                if not proof:
-                    continue
-                lat, lng = proof.latitude, proof.longitude
-            features.append(
+        features = CommunityImpactMapView()._tree_features(county)
+        results = []
+        for f in features:
+            meta = f.get("meta") or {}
+            results.append(
                 {
                     "type": "tree_gift",
-                    "donation_id": d.id,
-                    "project_id": d.project_id,
-                    "project_name": d.project.name,
-                    "county": d.project.region or d.project.city or "",
-                    "country": d.project.country or "",
-                    "trees": d.trees_purchased,
-                    "status": d.planting_status,
-                    "planted_at": d.planted_at.isoformat() if d.planted_at else None,
-                    "latitude": float(lat),
-                    "longitude": float(lng),
-                    "location_label": d.survival_location_label or "",
+                    "donation_id": meta.get("donation_id"),
+                    "project_id": meta.get("project_id"),
+                    "project_name": f.get("title") or "",
+                    "county": f.get("county") or "",
+                    "country": "",
+                    "trees": meta.get("trees") or 1,
+                    "status": meta.get("status") or "",
+                    "planted_at": None,
+                    "latitude": f.get("latitude"),
+                    "longitude": f.get("longitude"),
+                    "location_label": f.get("ward") or "",
                 }
             )
-        return Response({"results": features, "count": len(features)})
+        return Response({"results": results, "count": len(results)})
