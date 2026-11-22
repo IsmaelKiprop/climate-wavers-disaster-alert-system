@@ -20,6 +20,13 @@ const VerifyMail = lazy(() => import("./pages/Auth/VerifyMail"));
 const VerifyResetRequest = lazy(() => import("./pages/Auth/VerifyResetRequest"));
 const AboutPage = lazy(() => import("./pages/AboutPage"));
 const ImpactPage = lazy(() => import("./pages/ImpactPage"));
+const CommunityImpactMapPage = lazy(() => import("./pages/CommunityImpactMapPage"));
+const LeaderboardsPage = lazy(() => import("./pages/LeaderboardsPage"));
+const GroupImpactProfile = lazy(() => import("./pages/GroupImpactProfile"));
+const VerifyChallengeCertificate = lazy(
+  () => import("./pages/VerifyChallengeCertificate")
+);
+const CorroboratePage = lazy(() => import("./pages/CorroboratePage"));
 const PrivacyPolicy = lazy(() => import("./pages/PrivacyPolicy"));
 const TermsOfService = lazy(() => import("./pages/TermsOfService"));
 const FAQ = lazy(() => import("./pages/FAQ"));
@@ -244,6 +251,9 @@ function App() {
               <Route path="/landing" element={<LandingPage />} />
               <Route path="/about" element={<AboutPage />} />
               <Route path="/impact" element={<ImpactPage />} />
+              <Route path="/impact-map" element={<CommunityImpactMapPage />} />
+              <Route path="/leaderboards" element={<LeaderboardsPage />} />
+              <Route path="/groups/:id" element={<GroupImpactProfile />} />
               <Route path="/privacy-policy" element={<PrivacyPolicy />} />
               <Route path="/terms-of-service" element={<TermsOfService />} />
               <Route path="/faq" element={<FAQ />} />
@@ -269,6 +279,11 @@ function App() {
               <Route path="/verify/tree/:code" element={<VerifyTreeCertificate />} />
               <Route path="/verify/plastic" element={<VerifyPlasticCertificate />} />
               <Route path="/verify/plastic/:code" element={<VerifyPlasticCertificate />} />
+              <Route path="/verify/challenge" element={<VerifyChallengeCertificate />} />
+              <Route
+                path="/verify/challenge/:code"
+                element={<VerifyChallengeCertificate />}
+              />
               <Route path="/plastic-pulse" element={<PlasticPulseOnboarding />} />
               <Route
                 path="/plastic/recyclers"
@@ -339,6 +354,9 @@ function App() {
                 <Route path="/app/community" element={<AuthCommunity />} />
                 <Route path="/app/network" element={<AuthNetwork />} />
                 <Route path="/app/groups" element={<AuthGroups />} />
+                <Route path="/app/groups/:id" element={<GroupImpactProfile />} />
+                <Route path="/app/leaderboards" element={<LeaderboardsPage />} />
+                <Route path="/app/corroborate" element={<CorroboratePage />} />
                 <Route path="/app/chat" element={<AuthChat />} />
                 <Route path="/app/calendar" element={<AuthCalendar />} />
                 <Route path="/app/calendar/events/:eventId" element={<AuthCalendar />} />

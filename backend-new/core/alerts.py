@@ -64,6 +64,7 @@ class _PrefProxy:
         self.user = user
         self.email_alerts = True
         self.whatsapp_alerts = False
+        self.sms_alerts = False
         self.radius_km = DEFAULT_RADIUS_KM
         self.min_magnitude = 4.5
         self.latitude = None
@@ -92,7 +93,11 @@ def _match_users(lat, lng, city, country, magnitude=None):
 
     matched = []
     for pref in prefs:
-        if not pref.email_alerts and not pref.whatsapp_alerts:
+        if not (
+            pref.email_alerts
+            or pref.whatsapp_alerts
+            or getattr(pref, "sms_alerts", False)
+        ):
             continue
 
         radius = float(pref.radius_km or DEFAULT_RADIUS_KM)
@@ -199,6 +204,7 @@ def dispatch_disaster_alert(payload):
 
     email_recipients = []
     whatsapp_recipients = []
+    sms_recipients = []
     for pref in prefs[:300]:
         if pref.email_alerts and pref.user.email:
             email_recipients.append(pref.user.email.lower())
@@ -214,6 +220,8 @@ def dispatch_disaster_alert(payload):
                     "name": pref.user.get_full_name or pref.user.username,
                 }
             )
+        if getattr(pref, "sms_alerts", False) and (pref.phone or pref.user.phone):
+            sms_recipients.append(pref.phone or pref.user.phone)
 
     # Newsletter only when at least one nearby/matched user was found (avoid global spam)
     if prefs:
@@ -268,6 +276,24 @@ def dispatch_disaster_alert(payload):
             wa_sent = len(whatsapp_recipients)
         except Exception as exc:
             logger.exception("Disaster alert WhatsApp fanout failed: %s", exc)
+
+    sms_sent = 0
+    if sms_recipients:
+        try:
+            from .sms_gateway import send_sms
+
+            sms_body = f"{message} Details: {deep_link}"[:640]
+            seen = set()
+            for phone in sms_recipients:
+                key = str(phone).strip()
+                if not key or key in seen:
+                    continue
+                seen.add(key)
+                out = send_sms(key, sms_body)
+                if out.get("ok"):
+                    sms_sent += 1
+        except Exception as exc:
+            logger.exception("Disaster alert SMS fanout failed: %s", exc)
 
     agency_emails = [a["email"] for a in agencies if a.get("email")]
     agency_wa = [
@@ -337,6 +363,7 @@ def dispatch_disaster_alert(payload):
         "notifications": created,
         "emails": mailed,
         "whatsapp": wa_sent,
+        "sms": sms_sent,
         "agency_emails": agency_mailed,
         "agency_whatsapp": agency_wa_sent,
         "agencies": agencies,

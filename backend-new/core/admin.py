@@ -60,6 +60,13 @@ from .models import (
     PlasticSponsorship,
     PlasticRecyclerPartner,
     PlasticDispatch,
+    TreeSurvivalCheckIn,
+    CommunityHazardCorroboration,
+    SeasonalChallenge,
+    ChallengeParticipation,
+    GroupImpactBadge,
+    HazardDigestLog,
+    SocialGroup,
 )
 from .pricing import verification_priority
 from unfold.admin import ModelAdmin
@@ -826,4 +833,74 @@ class PlasticDispatchAdmin(ModelAdmin):
     list_filter = ("status", "payment_status", "polymer_type")
     search_fields = ("notes", "contact_phone", "payment_reference")
 
+
+@admin.register(TreeSurvivalCheckIn)
+class TreeSurvivalCheckInAdmin(ModelAdmin):
+    list_display = (
+        "id",
+        "donation",
+        "milestone_days",
+        "status",
+        "due_at",
+        "submitted_at",
+    )
+    list_filter = ("status", "milestone_days")
+    search_fields = ("donation__payment_reference", "location_label", "note")
+
+
+@admin.register(CommunityHazardCorroboration)
+class CommunityHazardCorroborationAdmin(ModelAdmin):
+    list_display = ("id", "disaster", "user", "decision", "distance_km", "created_at")
+    list_filter = ("decision", "source_channel")
+    search_fields = ("note", "user__username", "disaster__title")
+
+
+@admin.register(SeasonalChallenge)
+class SeasonalChallengeAdmin(ModelAdmin):
+    list_display = ("title", "county", "metric", "status", "starts_at", "ends_at")
+    list_filter = ("status", "metric", "county")
+    search_fields = ("title", "slug", "description")
+    prepopulated_fields = {"slug": ("title",)}
+
+
+@admin.register(ChallengeParticipation)
+class ChallengeParticipationAdmin(ModelAdmin):
+    list_display = (
+        "id",
+        "challenge",
+        "group",
+        "score",
+        "rank",
+        "certificate_id",
+        "joined_at",
+    )
+    list_filter = ("challenge",)
+    search_fields = ("group__name", "certificate_id")
+
+
+@admin.register(GroupImpactBadge)
+class GroupImpactBadgeAdmin(ModelAdmin):
+    list_display = ("id", "group", "badge_type", "label", "awarded_at")
+    list_filter = ("badge_type",)
+
+
+@admin.register(HazardDigestLog)
+class HazardDigestLogAdmin(ModelAdmin):
+    list_display = ("id", "user", "channel", "cadence", "alert_count", "success", "sent_at")
+    list_filter = ("channel", "success", "cadence")
+
+
+@admin.register(SocialGroup)
+class SocialGroupAdmin(ModelAdmin):
+    list_display = (
+        "name",
+        "group_type",
+        "county",
+        "is_verified",
+        "trees_planted_total",
+        "plastic_kg_total",
+        "alerts_verified_total",
+    )
+    list_filter = ("group_type", "is_verified", "county")
+    search_fields = ("name", "slug", "description")
 

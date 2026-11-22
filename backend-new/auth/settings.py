@@ -375,6 +375,14 @@ try:
             "task": "core.tasks.waverx_tweet_recent_alerts",
             "schedule": crontab(minute="*/45"),
         },
+        "tree-survival-reminders": {
+            "task": "core.tasks.tree_survival_reminders",
+            "schedule": crontab(hour=7, minute=0),
+        },
+        "hazard-digests-morning": {
+            "task": "core.tasks.send_hazard_digests",
+            "schedule": crontab(hour=6, minute=30),
+        },
     }
 except Exception:
     CELERY_BEAT_SCHEDULE = {}

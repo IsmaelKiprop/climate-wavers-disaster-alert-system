@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import PropTypes from "prop-types";
 import { useQueryClient } from "@tanstack/react-query";
 import { getLocation } from "../utils/factory";
@@ -281,6 +282,13 @@ const CreateReport = ({ onSubmitted }) => {
       >
         {busy ? "Submitting report..." : online ? "Submit report" : "Save offline report"}
       </button>
+
+      <p className="text-xs text-muted text-center">
+        Already see a nearby report?{" "}
+        <Link to="/app/corroborate" className="text-primary">
+          Corroborate with a geotagged photo
+        </Link>
+      </p>
     </form>
   );
 };

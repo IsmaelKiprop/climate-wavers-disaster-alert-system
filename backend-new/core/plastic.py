@@ -3162,12 +3162,42 @@ class PlasticDispatchSettleView(APIView):
             dispatch.save()
             return Response(PlasticDispatchSerializer(dispatch).data)
 
+        if action in {"auto_payout", "mpesa_payout", "pay_collectors"}:
+            if not is_staff:
+                return Response(
+                    {"detail": "Only Climate Wavers staff can trigger M-Pesa payouts."},
+                    status=403,
+                )
+            if dispatch.payment_status != "received":
+                return Response(
+                    {"detail": "Record recycler payment to Climate Wavers first."},
+                    status=400,
+                )
+            phone = str(request.data.get("collector_payout_phone") or "").strip()
+            if phone:
+                dispatch.collector_payout_phone = phone[:40]
+                dispatch.save(update_fields=["collector_payout_phone", "updated_at"])
+            from .paystack_transfers import maybe_payout_plastic_collectors
+
+            payout = maybe_payout_plastic_collectors(
+                dispatch, force=bool(request.data.get("force"))
+            )
+            dispatch.refresh_from_db()
+            return Response(
+                {
+                    "dispatch": PlasticDispatchSerializer(dispatch).data,
+                    "payout": payout,
+                }
+            )
+
         return Response(
             {
-                "detail": "action must be recycler_paid or collectors_paid.",
+                "detail": (
+                    "action must be recycler_paid, collectors_paid, or auto_payout."
+                ),
                 "model": (
                     "Recycler pays Climate Wavers → CW keeps platform share → "
-                    "CW pays collectors."
+                    "CW pays collectors via M-Pesa."
                 ),
             },
             status=400,

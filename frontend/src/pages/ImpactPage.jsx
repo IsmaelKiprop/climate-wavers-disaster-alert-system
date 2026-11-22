@@ -45,6 +45,15 @@ const ImpactPage = () => {
         {SITE.name}.
       </p>
 
+      <div className="mt-6">
+        <Link
+          to="/impact-map"
+          className="inline-flex min-h-10 items-center px-4 bg-primary text-primary-foreground text-sm font-medium"
+        >
+          Open community impact map
+        </Link>
+      </div>
+
       <div className="mt-8 grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="border border-border bg-surface p-4">
           <p className="text-sm text-muted">Active events</p>

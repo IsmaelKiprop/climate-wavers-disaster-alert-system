@@ -30,6 +30,15 @@ class SocialGroupSerializer(serializers.ModelSerializer):
             "slug",
             "description",
             "cover_image",
+            "group_type",
+            "county",
+            "ward",
+            "country",
+            "is_verified",
+            "verified_badge",
+            "trees_planted_total",
+            "plastic_kg_total",
+            "alerts_verified_total",
             "member_count",
             "is_member",
             "my_role",
@@ -122,12 +131,19 @@ class SocialGroupListCreateView(APIView):
         cover = str(cover).strip() or None
         if cover and len(cover) > 500:
             return Response({"detail": "Logo URL is too long"}, status=400)
+        group_type = (request.data.get("group_type") or "chapter").strip()
+        if group_type not in dict(SocialGroup.GROUP_TYPES):
+            group_type = "chapter"
         with transaction.atomic():
             group = SocialGroup.objects.create(
                 name=name[:120],
                 slug=_unique_slug(name),
                 description=description[:512],
                 cover_image=cover,
+                group_type=group_type,
+                county=(request.data.get("county") or "").strip()[:100],
+                ward=(request.data.get("ward") or "").strip()[:100],
+                country=(request.data.get("country") or "Kenya").strip()[:100] or "Kenya",
                 created_by=request.user,
             )
             SocialGroupMembership.objects.create(

@@ -43,6 +43,27 @@ from .tree_admin import (
     TreeAdminDonationsView,
     TreeAdminDonationProofView,
 )
+from .tree_survival import (
+    TreeSurvivalDueListView,
+    TreeSurvivalSubmitView,
+    TreeSurvivalPublicMapView,
+)
+from .impact_map import CommunityImpactMapView
+from .crowd_corroboration import (
+    HazardCorroborationCreateView,
+    HazardCorroborationStatsView,
+    HazardCorroborationQueueView,
+)
+from .leaderboards import (
+    GroupLeaderboardView,
+    GroupProfileView,
+    SeasonalChallengeListCreateView,
+    ChallengeJoinView,
+    ChallengeLeaderboardView,
+    ChallengeCertificateView,
+    GroupStatsSyncView,
+)
+from .hazard_digest import HazardDigestRunView
 from .tree_certificate import TreeCertificateVerifyView
 from .plastic import (
     PlasticProjectListCreateView,
@@ -431,6 +452,96 @@ urlpatterns = [
         "tree-admin/donations/<int:donation_id>/proof/",
         TreeAdminDonationProofView.as_view(),
         name="tree-admin-donation-proof",
+    ),
+    path(
+        "trees/survival/due/",
+        TreeSurvivalDueListView.as_view(),
+        name="tree-survival-due",
+    ),
+    path(
+        "trees/survival/<int:checkin_id>/submit/",
+        TreeSurvivalSubmitView.as_view(),
+        name="tree-survival-submit",
+    ),
+    path(
+        "trees/survival/map/",
+        TreeSurvivalPublicMapView.as_view(),
+        name="tree-survival-map",
+    ),
+    path(
+        "impact-map/",
+        CommunityImpactMapView.as_view(),
+        name="community-impact-map",
+    ),
+    path(
+        "hazards/<int:disaster_id>/corroborate/",
+        HazardCorroborationCreateView.as_view(),
+        name="hazard-corroborate",
+    ),
+    path(
+        "hazards/corroborate/",
+        HazardCorroborationCreateView.as_view(),
+        name="hazard-corroborate-body",
+    ),
+    path(
+        "hazards/<int:disaster_id>/corroborations/",
+        HazardCorroborationStatsView.as_view(),
+        name="hazard-corroboration-stats",
+    ),
+    path(
+        "hazards/corroboration-queue/",
+        HazardCorroborationQueueView.as_view(),
+        name="hazard-corroboration-queue",
+    ),
+    path(
+        "leaderboards/groups/",
+        GroupLeaderboardView.as_view(),
+        name="group-leaderboard",
+    ),
+    path(
+        "leaderboards/groups/<int:group_id>/",
+        GroupProfileView.as_view(),
+        name="group-profile",
+    ),
+    path(
+        "leaderboards/groups/by-slug/<slug:slug>/",
+        GroupProfileView.as_view(),
+        name="group-profile-slug",
+    ),
+    path(
+        "leaderboards/groups/<int:group_id>/stats/",
+        GroupStatsSyncView.as_view(),
+        name="group-stats-sync",
+    ),
+    path(
+        "challenges/",
+        SeasonalChallengeListCreateView.as_view(),
+        name="seasonal-challenges",
+    ),
+    path(
+        "challenges/<int:challenge_id>/join/",
+        ChallengeJoinView.as_view(),
+        name="challenge-join",
+    ),
+    path(
+        "challenges/<int:challenge_id>/leaderboard/",
+        ChallengeLeaderboardView.as_view(),
+        name="challenge-leaderboard",
+    ),
+    path(
+        "challenges/<int:challenge_id>/certificate/",
+        ChallengeCertificateView.as_view(),
+        name="challenge-certificate-issue",
+    ),
+    path(
+        "challenges/certificates/<str:code>/",
+        ChallengeCertificateView.as_view(),
+        name="challenge-certificate-verify",
+    ),
+    path(
+        "alerts/digests/run/",
+        HazardDigestRunView.as_view(),
+        name="hazard-digests-run",
     ),
     path("groups/", SocialGroupListCreateView.as_view(), name="social-groups"),
     path(

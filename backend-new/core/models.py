@@ -153,10 +153,32 @@ class Post(models.Model):
 class SocialGroup(models.Model):
     """Community interest group for Climate Wavers members."""
 
+    GROUP_TYPES = [
+        ("chapter", "Chapter"),
+        ("school", "School"),
+        ("cbo", "CBO"),
+        ("youth", "Youth group"),
+        ("other", "Other"),
+    ]
+
     name = models.CharField(max_length=120)
     slug = models.SlugField(max_length=140, unique=True)
     description = models.TextField(blank=True, default="")
     cover_image = models.URLField(max_length=500, blank=True, null=True)
+    group_type = models.CharField(
+        max_length=20, choices=GROUP_TYPES, default="chapter", db_index=True
+    )
+    county = models.CharField(max_length=100, blank=True, default="", db_index=True)
+    ward = models.CharField(max_length=100, blank=True, default="")
+    country = models.CharField(max_length=100, blank=True, default="Kenya")
+    is_verified = models.BooleanField(default=False, db_index=True)
+    verified_badge = models.CharField(max_length=40, blank=True, default="")
+    verified_at = models.DateTimeField(null=True, blank=True)
+    trees_planted_total = models.PositiveIntegerField(default=0)
+    plastic_kg_total = models.DecimalField(
+        max_digits=12, decimal_places=2, default=0
+    )
+    alerts_verified_total = models.PositiveIntegerField(default=0)
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -608,6 +630,7 @@ class TreeProjectUpdate(models.Model):
     UPDATE_TYPES = [
         ("progress", "Progress update"),
         ("planting_proof", "Planting proof"),
+        ("survival_checkin", "Survival check-in"),
     ]
     project = models.ForeignKey(
         TreeProject, 
@@ -734,11 +757,22 @@ class TreeProjectDonation(models.Model):
         choices=[
             ("funded", "Funded — awaiting planting"),
             ("planted", "Planted — proof shared"),
+            ("surviving_30", "Survived 30 days"),
+            ("surviving_90", "Survived 90 days"),
+            ("surviving_180", "Survived 180 days"),
+            ("failed", "Did not survive"),
         ],
         default="funded",
         db_index=True,
     )
     planted_at = models.DateTimeField(null=True, blank=True)
+    survival_lat = models.DecimalField(
+        max_digits=9, decimal_places=6, null=True, blank=True
+    )
+    survival_lng = models.DecimalField(
+        max_digits=9, decimal_places=6, null=True, blank=True
+    )
+    survival_location_label = models.CharField(max_length=255, blank=True, default="")
     PAYOUT_STATUSES = [
         ("none", "Not started"),
         ("skipped", "Skipped"),
@@ -1479,6 +1513,16 @@ class NewsletterSubscriber(models.Model):
 
 
 class UserAlertPreference(models.Model):
+    DIGEST_CHANNELS = [
+        ("whatsapp", "WhatsApp"),
+        ("sms", "SMS"),
+        ("both", "WhatsApp + SMS"),
+    ]
+    DIGEST_CADENCES = [
+        ("daily", "Daily digest"),
+        ("weekly", "Weekly digest"),
+    ]
+
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
@@ -1486,6 +1530,15 @@ class UserAlertPreference(models.Model):
     )
     email_alerts = models.BooleanField(default=True)
     whatsapp_alerts = models.BooleanField(default=False)
+    sms_alerts = models.BooleanField(default=False)
+    digest_enabled = models.BooleanField(default=False)
+    digest_channel = models.CharField(
+        max_length=20, choices=DIGEST_CHANNELS, default="whatsapp"
+    )
+    digest_cadence = models.CharField(
+        max_length=20, choices=DIGEST_CADENCES, default="daily"
+    )
+    last_digest_at = models.DateTimeField(null=True, blank=True)
     radius_km = models.PositiveIntegerField(default=100)
     min_magnitude = models.DecimalField(
         max_digits=3, decimal_places=1, default=4.5
@@ -3608,6 +3661,10 @@ class PlasticDispatch(models.Model):
         help_text="M-Pesa / payout phone for collector or CBO share",
     )
     collector_payout_reference = models.CharField(max_length=120, blank=True, default="")
+    collector_payout_transfer_code = models.CharField(
+        max_length=80, blank=True, default=""
+    )
+    collector_payout_error = models.CharField(max_length=500, blank=True, default="")
     collector_paid_at = models.DateTimeField(null=True, blank=True)
     status = models.CharField(
         max_length=20, choices=STATUS_CHOICES, default="offered", db_index=True
@@ -3739,3 +3796,261 @@ class PlasticSponsorship(models.Model):
 
     def __str__(self):
         return f"Sponsor {self.kg_sponsored}kg on {self.project_id} ({self.payment_status})"
+
+
+class TreeSurvivalCheckIn(models.Model):
+    """30 / 90 / 180-day geotagged survival follow-ups for planted tree gifts."""
+
+    MILESTONE_CHOICES = [
+        (30, "30-day"),
+        (90, "90-day"),
+        (180, "180-day"),
+    ]
+    STATUS_CHOICES = [
+        ("scheduled", "Scheduled"),
+        ("due", "Due"),
+        ("submitted", "Submitted"),
+        ("verified", "Verified alive"),
+        ("failed", "Did not survive"),
+        ("missed", "Missed window"),
+    ]
+
+    donation = models.ForeignKey(
+        TreeProjectDonation,
+        on_delete=models.CASCADE,
+        related_name="survival_checkins",
+    )
+    milestone_days = models.PositiveSmallIntegerField(choices=MILESTONE_CHOICES)
+    due_at = models.DateTimeField(db_index=True)
+    window_ends_at = models.DateTimeField(null=True, blank=True)
+    status = models.CharField(
+        max_length=20, choices=STATUS_CHOICES, default="scheduled", db_index=True
+    )
+    reminder_sent_at = models.DateTimeField(null=True, blank=True)
+    submitted_at = models.DateTimeField(null=True, blank=True)
+    verified_at = models.DateTimeField(null=True, blank=True)
+    submitted_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="tree_survival_submissions",
+    )
+    images = models.JSONField(default=list, blank=True)
+    videos = models.JSONField(default=list, blank=True)
+    latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    location_label = models.CharField(max_length=255, blank=True, default="")
+    note = models.TextField(blank=True, default="")
+    points_awarded = models.PositiveIntegerField(default=0)
+    client_uuid = models.UUIDField(null=True, blank=True, db_index=True)
+    offline_queued_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["due_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["donation", "milestone_days"],
+                name="uniq_donation_survival_milestone",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["status", "due_at"]),
+        ]
+
+    def __str__(self):
+        return f"{self.milestone_days}d check-in for donation {self.donation_id}"
+
+
+class CommunityHazardCorroboration(models.Model):
+    """Nearby member ground-truth confirm/deny before a ward-level alert."""
+
+    DECISION_CHOICES = [
+        ("confirm", "Confirm"),
+        ("deny", "Deny"),
+    ]
+    SOURCE_CHOICES = [
+        ("app", "App"),
+        ("sms", "SMS"),
+        ("offline_sync", "Offline sync"),
+    ]
+
+    disaster = models.ForeignKey(
+        Disaster, on_delete=models.CASCADE, related_name="crowd_corroborations"
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="hazard_corroborations",
+    )
+    decision = models.CharField(max_length=20, choices=DECISION_CHOICES)
+    note = models.TextField(blank=True, default="")
+    evidence = models.JSONField(default=list, blank=True)
+    latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    accuracy_m = models.FloatField(null=True, blank=True)
+    distance_km = models.FloatField(null=True, blank=True)
+    source_channel = models.CharField(
+        max_length=20, choices=SOURCE_CHOICES, default="app"
+    )
+    client_uuid = models.UUIDField(null=True, blank=True, db_index=True)
+    queued_offline_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["disaster", "user"],
+                name="uniq_crowd_corroboration_user_disaster",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["disaster", "decision"]),
+            models.Index(fields=["created_at"]),
+        ]
+
+    def __str__(self):
+        return f"{self.decision} by {self.user_id} on disaster {self.disaster_id}"
+
+
+class SeasonalChallenge(models.Model):
+    """County / chapter seasonal contests for schools, CBOs, and youth groups."""
+
+    METRIC_CHOICES = [
+        ("trees", "Trees planted"),
+        ("plastic_kg", "Plastic recovered (kg)"),
+        ("alerts", "Verified hazard alerts"),
+        ("combined", "Combined impact score"),
+    ]
+    STATUS_CHOICES = [
+        ("draft", "Draft"),
+        ("active", "Active"),
+        ("ended", "Ended"),
+    ]
+
+    title = models.CharField(max_length=200)
+    slug = models.SlugField(max_length=220, unique=True)
+    description = models.TextField(blank=True, default="")
+    county = models.CharField(max_length=100, blank=True, default="", db_index=True)
+    country = models.CharField(max_length=100, default="Kenya")
+    metric = models.CharField(max_length=20, choices=METRIC_CHOICES, default="combined")
+    status = models.CharField(
+        max_length=20, choices=STATUS_CHOICES, default="draft", db_index=True
+    )
+    starts_at = models.DateTimeField()
+    ends_at = models.DateTimeField()
+    cover_image = models.URLField(max_length=500, blank=True, null=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_seasonal_challenges",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-starts_at"]
+
+    def __str__(self):
+        return self.title
+
+
+class ChallengeParticipation(models.Model):
+    challenge = models.ForeignKey(
+        SeasonalChallenge, on_delete=models.CASCADE, related_name="participations"
+    )
+    group = models.ForeignKey(
+        SocialGroup, on_delete=models.CASCADE, related_name="challenge_participations"
+    )
+    trees_count = models.PositiveIntegerField(default=0)
+    plastic_kg = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    alerts_count = models.PositiveIntegerField(default=0)
+    score = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    rank = models.PositiveIntegerField(null=True, blank=True)
+    certificate_id = models.CharField(max_length=80, blank=True, default="", db_index=True)
+    certificate_issued_at = models.DateTimeField(null=True, blank=True)
+    joined_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["challenge", "group"],
+                name="uniq_challenge_group_participation",
+            )
+        ]
+        ordering = ["-score", "joined_at"]
+
+    def __str__(self):
+        return f"{self.group_id} in {self.challenge_id}"
+
+
+class GroupImpactBadge(models.Model):
+    BADGE_CHOICES = [
+        ("verified_chapter", "Verified chapter"),
+        ("school_champion", "School champion"),
+        ("cbo_partner", "CBO partner"),
+        ("plastic_pulse", "Plastic Pulse leader"),
+        ("tree_guardian", "Tree guardian"),
+        ("hazard_sentinel", "Hazard sentinel"),
+        ("season_winner", "Seasonal challenge winner"),
+    ]
+
+    group = models.ForeignKey(
+        SocialGroup, on_delete=models.CASCADE, related_name="impact_badges"
+    )
+    badge_type = models.CharField(max_length=40, choices=BADGE_CHOICES)
+    label = models.CharField(max_length=120, blank=True, default="")
+    challenge = models.ForeignKey(
+        SeasonalChallenge,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="badges_awarded",
+    )
+    awarded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="awarded_group_badges",
+    )
+    awarded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [models.Index(fields=["group", "badge_type"])]
+        ordering = ["-awarded_at"]
+
+    def __str__(self):
+        return f"{self.badge_type} → group {self.group_id}"
+
+
+class HazardDigestLog(models.Model):
+    """Audit trail for SMS / WhatsApp digest sends."""
+
+    CHANNEL_CHOICES = [
+        ("sms", "SMS"),
+        ("whatsapp", "WhatsApp"),
+        ("email", "Email"),
+    ]
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="hazard_digests",
+    )
+    channel = models.CharField(max_length=20, choices=CHANNEL_CHOICES)
+    cadence = models.CharField(max_length=20, blank=True, default="daily")
+    alert_count = models.PositiveIntegerField(default=0)
+    payload_preview = models.CharField(max_length=500, blank=True, default="")
+    success = models.BooleanField(default=True)
+    error = models.CharField(max_length=500, blank=True, default="")
+    sent_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-sent_at"]
+        indexes = [models.Index(fields=["user", "sent_at"])]

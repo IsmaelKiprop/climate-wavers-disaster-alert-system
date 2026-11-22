@@ -21,6 +21,10 @@ const AlertSettings = () => {
   const [form, setForm] = useState({
     email_alerts: true,
     whatsapp_alerts: false,
+    sms_alerts: false,
+    digest_enabled: false,
+    digest_channel: "whatsapp",
+    digest_cadence: "daily",
     radius_km: 100,
     min_magnitude: 4.5,
     latitude: "",
@@ -42,6 +46,10 @@ const AlertSettings = () => {
           setForm({
             email_alerts: Boolean(data.email_alerts),
             whatsapp_alerts: Boolean(data.whatsapp_alerts),
+            sms_alerts: Boolean(data.sms_alerts),
+            digest_enabled: Boolean(data.digest_enabled),
+            digest_channel: data.digest_channel || "whatsapp",
+            digest_cadence: data.digest_cadence || "daily",
             radius_km: data.radius_km || 100,
             min_magnitude: data.min_magnitude || 4.5,
             latitude: data.latitude ?? "",
@@ -160,6 +168,10 @@ const AlertSettings = () => {
       const payload = {
         email_alerts: form.email_alerts,
         whatsapp_alerts: form.whatsapp_alerts,
+        sms_alerts: form.sms_alerts,
+        digest_enabled: form.digest_enabled,
+        digest_channel: form.digest_channel || "whatsapp",
+        digest_cadence: form.digest_cadence || "daily",
         radius_km: Number(form.radius_km) || 100,
         min_magnitude: Number(form.min_magnitude) || 4.5,
         phone: form.phone,
@@ -365,6 +377,76 @@ const AlertSettings = () => {
             </span>
           </span>
         </label>
+
+        <label className="flex items-start gap-3 text-sm">
+          <input
+            type="checkbox"
+            checked={form.sms_alerts}
+            onChange={(e) => update("sms_alerts", e.target.checked)}
+            className="mt-1"
+          />
+          <span>
+            <span className="font-medium text-foreground">SMS alerts</span>
+            <span className="block text-muted">
+              Short text alerts to your verified phone when hazards enter your radius.
+            </span>
+          </span>
+        </label>
+
+        <div className="border border-border bg-surface p-4 space-y-3">
+          <div>
+            <p className="text-sm font-medium text-foreground">Hazard digest</p>
+            <p className="mt-1 text-sm text-muted">
+              Periodic summary of nearby USGS, NASA, and community hazards instead of
+              only one-off alerts.
+            </p>
+          </div>
+          <label className="flex items-start gap-3 text-sm">
+            <input
+              type="checkbox"
+              checked={form.digest_enabled}
+              onChange={(e) => update("digest_enabled", e.target.checked)}
+              className="mt-1"
+            />
+            <span>
+              <span className="font-medium text-foreground">Enable digest</span>
+              <span className="block text-muted">
+                Send a daily or weekly roundup on the channel you choose.
+              </span>
+            </span>
+          </label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <label className="text-sm space-y-1">
+              <span className="text-xs uppercase tracking-wide text-muted">
+                Digest channel
+              </span>
+              <select
+                value={form.digest_channel}
+                onChange={(e) => update("digest_channel", e.target.value)}
+                disabled={!form.digest_enabled}
+                className="w-full h-10 px-3 border border-border bg-background disabled:opacity-50"
+              >
+                <option value="whatsapp">WhatsApp</option>
+                <option value="sms">SMS</option>
+                <option value="both">Both</option>
+              </select>
+            </label>
+            <label className="text-sm space-y-1">
+              <span className="text-xs uppercase tracking-wide text-muted">
+                Cadence
+              </span>
+              <select
+                value={form.digest_cadence}
+                onChange={(e) => update("digest_cadence", e.target.value)}
+                disabled={!form.digest_enabled}
+                className="w-full h-10 px-3 border border-border bg-background disabled:opacity-50"
+              >
+                <option value="daily">Daily</option>
+                <option value="weekly">Weekly</option>
+              </select>
+            </label>
+          </div>
+        </div>
 
         <div className="border border-border bg-surface p-4 space-y-3">
           <div>

@@ -316,3 +316,205 @@ def payout_on_commit(donation_id: int) -> None:
             logger.exception("payout_on_commit failed id=%s: %s", donation_id, exc)
 
     transaction.on_commit(_run)
+
+
+def ensure_mpesa_recipient(phone: str, name: str = "Plastic collector") -> str:
+    """Create a one-off Paystack mobile_money recipient for a collector phone."""
+    account_number = normalize_ke_phone(phone)
+    if not re.fullmatch(r"0[17]\d{8}", account_number):
+        raise RuntimeError("M-Pesa number must be a valid Kenyan mobile (07… or 01…)")
+    data = _paystack_request(
+        "POST",
+        "/transferrecipient",
+        {
+            "type": "mobile_money",
+            "name": (name or "Plastic collector")[:100],
+            "account_number": account_number,
+            "bank_code": "MPESA",
+            "currency": "KES",
+        },
+    )
+    code = (data.get("recipient_code") or "").strip()
+    if not code:
+        raise RuntimeError("Paystack did not return a recipient_code")
+    return code
+
+
+def maybe_payout_plastic_collectors(dispatch, *, force: bool = False) -> Dict[str, Any]:
+    """
+    Transfer collector_share_kes to collector_payout_phone via Paystack M-Pesa.
+    Idempotent; safe to call after recycler payment is received.
+    """
+    result: Dict[str, Any] = {"ok": False, "status": "none"}
+    try:
+        if not dispatch:
+            result["detail"] = "No dispatch"
+            return result
+        if (getattr(dispatch, "payment_status", "") or "") != "received":
+            result["status"] = "skipped"
+            result["detail"] = "Recycler payment not received yet"
+            return result
+
+        current = (getattr(dispatch, "collector_payout_status", "") or "none").strip()
+        if current == "paid" and not force:
+            result["ok"] = True
+            result["status"] = "paid"
+            result["detail"] = "Already paid"
+            return result
+
+        if not transfers_enabled() and not force:
+            dispatch.collector_payout_status = "pending"
+            dispatch.collector_payout_error = "PAYSTACK_TRANSFER_ENABLED is off"
+            dispatch.save(
+                update_fields=["collector_payout_status", "collector_payout_error", "updated_at"]
+            )
+            result["status"] = "skipped"
+            result["detail"] = "Transfers disabled"
+            return result
+
+        phone = (getattr(dispatch, "collector_payout_phone", "") or "").strip()
+        if not phone:
+            # Prefer project / org contact phone
+            project = getattr(dispatch, "project", None)
+            phone = (
+                (getattr(project, "contact_phone", None) or "")
+                or (
+                    getattr(getattr(project, "tree_admin_org", None), "contact_phone", None)
+                    or ""
+                )
+            ).strip()
+            if phone:
+                dispatch.collector_payout_phone = phone[:40]
+
+        if not phone:
+            dispatch.collector_payout_status = "failed"
+            dispatch.collector_payout_error = "No collector M-Pesa phone on dispatch"
+            dispatch.save(
+                update_fields=[
+                    "collector_payout_status",
+                    "collector_payout_phone",
+                    "collector_payout_error",
+                    "updated_at",
+                ]
+            )
+            result["status"] = "failed"
+            result["detail"] = "Missing phone"
+            return result
+
+        share = Decimal(str(getattr(dispatch, "collector_share_kes", 0) or 0)).quantize(
+            Decimal("0.01")
+        )
+        if share <= 0:
+            dispatch.collector_payout_status = "paid"
+            dispatch.collector_payout_error = "Zero collector share"
+            dispatch.collector_paid_at = timezone.now()
+            dispatch.status = "settled"
+            dispatch.settled_at = timezone.now()
+            dispatch.save()
+            result["ok"] = True
+            result["status"] = "paid"
+            result["detail"] = "Zero share marked settled"
+            return result
+
+        amount_cents = int((share * 100).quantize(Decimal("1")))
+        if amount_cents < 100:
+            dispatch.collector_payout_status = "failed"
+            dispatch.collector_payout_error = "Amount below Paystack transfer minimum"
+            dispatch.save(
+                update_fields=["collector_payout_status", "collector_payout_error", "updated_at"]
+            )
+            result["status"] = "failed"
+            result["detail"] = "Below minimum"
+            return result
+
+        reference = f"plasticpay_{dispatch.payment_reference or dispatch.id}"[:100]
+        if force and current == "paid":
+            reference = f"{reference}_{int(timezone.now().timestamp())}"[:100]
+
+        dispatch.collector_payout_status = "pending"
+        dispatch.collector_payout_reference = reference
+        dispatch.collector_payout_error = ""
+        dispatch.save(
+            update_fields=[
+                "collector_payout_status",
+                "collector_payout_phone",
+                "collector_payout_reference",
+                "collector_payout_error",
+                "updated_at",
+            ]
+        )
+
+        recipient = ensure_mpesa_recipient(
+            phone, name=getattr(getattr(dispatch, "project", None), "name", "Collector")
+        )
+        reason = f"Plastic Pulse collectors · dispatch {dispatch.id}"[:80]
+        data = _paystack_request(
+            "POST",
+            "/transfer",
+            {
+                "source": "balance",
+                "amount": amount_cents,
+                "currency": "KES",
+                "recipient": recipient,
+                "reason": reason,
+                "reference": reference,
+            },
+        )
+        transfer_code = str(
+            data.get("transfer_code") or data.get("code") or data.get("id") or ""
+        )[:80]
+        status = (data.get("status") or "success").lower()
+        ok = status in {"success", "pending", "otp", "received"}
+        dispatch.collector_payout_transfer_code = transfer_code
+        if ok:
+            dispatch.collector_payout_status = "paid"
+            dispatch.collector_paid_at = timezone.now()
+            dispatch.status = "settled"
+            dispatch.settled_at = timezone.now()
+            dispatch.collector_payout_error = ""
+        else:
+            dispatch.collector_payout_status = "failed"
+            dispatch.collector_payout_error = f"Transfer status: {status}"
+        dispatch.save()
+        result["ok"] = ok
+        result["status"] = "paid" if ok else "failed"
+        result["transfer_code"] = transfer_code
+        result["amount_kes"] = float(share)
+        return result
+    except Exception as exc:
+        logger.exception(
+            "Plastic collector payout failed dispatch=%s: %s",
+            getattr(dispatch, "id", None),
+            exc,
+        )
+        try:
+            dispatch.collector_payout_status = "failed"
+            dispatch.collector_payout_error = str(exc)[:500]
+            dispatch.save(
+                update_fields=["collector_payout_status", "collector_payout_error", "updated_at"]
+            )
+        except Exception:
+            pass
+        result["status"] = "failed"
+        result["detail"] = str(exc)[:300]
+        return result
+
+
+def plastic_collector_payout_on_commit(dispatch_id: int) -> None:
+    def _run():
+        try:
+            from .models import PlasticDispatch
+
+            d = (
+                PlasticDispatch.objects.select_related("project", "project__tree_admin_org")
+                .filter(pk=dispatch_id)
+                .first()
+            )
+            if d:
+                maybe_payout_plastic_collectors(d)
+        except Exception as exc:
+            logger.exception(
+                "plastic_collector_payout_on_commit failed id=%s: %s", dispatch_id, exc
+            )
+
+    transaction.on_commit(_run)

@@ -29,6 +29,15 @@ def _serialize(pref):
     return {
         "email_alerts": pref.email_alerts,
         "whatsapp_alerts": pref.whatsapp_alerts,
+        "sms_alerts": getattr(pref, "sms_alerts", False),
+        "digest_enabled": getattr(pref, "digest_enabled", False),
+        "digest_channel": getattr(pref, "digest_channel", "whatsapp") or "whatsapp",
+        "digest_cadence": getattr(pref, "digest_cadence", "daily") or "daily",
+        "last_digest_at": (
+            pref.last_digest_at.isoformat()
+            if getattr(pref, "last_digest_at", None)
+            else None
+        ),
         "radius_km": pref.radius_km,
         "min_magnitude": float(pref.min_magnitude) if pref.min_magnitude is not None else 4.5,
         "latitude": float(pref.latitude) if pref.latitude is not None else None,
@@ -51,6 +60,18 @@ class AlertPreferenceView(APIView):
             pref.email_alerts = bool(data.get("email_alerts"))
         if "whatsapp_alerts" in data:
             pref.whatsapp_alerts = bool(data.get("whatsapp_alerts"))
+        if "sms_alerts" in data:
+            pref.sms_alerts = bool(data.get("sms_alerts"))
+        if "digest_enabled" in data:
+            pref.digest_enabled = bool(data.get("digest_enabled"))
+        if "digest_channel" in data:
+            channel = str(data.get("digest_channel") or "whatsapp").strip().lower()
+            if channel in {"whatsapp", "sms", "both"}:
+                pref.digest_channel = channel
+        if "digest_cadence" in data:
+            cadence = str(data.get("digest_cadence") or "daily").strip().lower()
+            if cadence in {"daily", "weekly"}:
+                pref.digest_cadence = cadence
         if "radius_km" in data:
             try:
                 pref.radius_km = max(10, min(500, int(data.get("radius_km"))))

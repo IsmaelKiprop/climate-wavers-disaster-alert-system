@@ -7,6 +7,7 @@ import DashboardSidebar from "../components/DashboardSidebar";
 import Menu from "../components/Menu";
 import Footer from "../components/FooterBar";
 import ScheduleClimateEventModal from "../components/ScheduleClimateEventModal";
+import HazardCorroborationPanel from "../components/HazardCorroborationPanel";
 import {
   disasterTypeFallback,
   fetchDisaster,
@@ -178,6 +179,17 @@ const DisasterPage = () => {
           {!signedIn ? (
             <p className="mt-6 text-sm text-muted">
               <Link to="/login" className="text-primary">Sign in</Link> to open the full alerts list and community tools.
+            </p>
+          ) : null}
+          {signedIn && Number.isFinite(Number(disaster?.id)) ? (
+            <div className="mt-8">
+              <HazardCorroborationPanel disasterId={disaster.id} />
+            </div>
+          ) : signedIn ? (
+            <p className="mt-6 text-sm text-muted">
+              <Link to="/app/corroborate" className="text-primary">
+                Corroborate nearby community reports
+              </Link>
             </p>
           ) : null}
         </>

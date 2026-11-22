@@ -24,6 +24,9 @@ import {
   IoCalendar,
   IoFlagOutline,
   IoFlag,
+  IoTrophyOutline,
+  IoMapOutline,
+  IoCheckmarkDoneOutline,
 } from "react-icons/io5";
 import { MdOutlineCampaign, MdCampaign } from "react-icons/md";
 import { RiAlarmWarningLine, RiAlarmWarningFill } from "react-icons/ri";
@@ -157,6 +160,24 @@ const AppNav = ({ onNavigate, compact = false }) => {
         { to: "/app/network", label: "Network", Icon: IoPeopleOutline, ActiveIcon: IoPeople },
         { to: "/app/groups", label: "Groups", Icon: IoPeopleCircleOutline, ActiveIcon: IoPeopleCircle },
         { to: "/app/community", label: "Community", Icon: RiAlarmWarningLine, ActiveIcon: RiAlarmWarningFill },
+        {
+          to: "/app/leaderboards",
+          label: "Leaderboards",
+          Icon: IoTrophyOutline,
+          ActiveIcon: IoTrophyOutline,
+        },
+        {
+          to: "/impact-map",
+          label: "Impact map",
+          Icon: IoMapOutline,
+          ActiveIcon: IoMapOutline,
+        },
+        {
+          to: "/app/corroborate",
+          label: "Corroborate",
+          Icon: IoCheckmarkDoneOutline,
+          ActiveIcon: IoCheckmarkDoneOutline,
+        },
         {
           to: "/app/chat",
           label: "Chats",

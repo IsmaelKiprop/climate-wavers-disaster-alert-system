@@ -15,6 +15,8 @@ const loaders = {
   "/app/community": () => import("../pages/AuthenticatedPages/Community"),
   "/app/network": () => import("../pages/AuthenticatedPages/Network"),
   "/app/groups": () => import("../pages/AuthenticatedPages/Groups"),
+  "/app/leaderboards": () => import("../pages/LeaderboardsPage"),
+  "/app/corroborate": () => import("../pages/CorroboratePage"),
   "/app/chat": () => import("../pages/AuthenticatedPages/Chat"),
   "/app/notifications": () => import("../pages/AuthenticatedPages/Notification"),
   "/app/waverx": () => import("../pages/AuthenticatedPages/WaverX"),
@@ -28,6 +30,8 @@ const loaders = {
   "/campaigns": () => import("../pages/AuthenticatedPages/Campaigns"),
   "/about": () => import("../pages/AboutPage"),
   "/impact": () => import("../pages/ImpactPage"),
+  "/impact-map": () => import("../pages/CommunityImpactMapPage"),
+  "/leaderboards": () => import("../pages/LeaderboardsPage"),
   "/pricing": () => import("../pages/PricingPage"),
 };
 

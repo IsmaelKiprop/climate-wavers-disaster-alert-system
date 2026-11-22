@@ -903,9 +903,16 @@ def record_plastic_dispatch_payment(reference, request_user=None, client_data=No
         dispatch.accepted_at = dispatch.accepted_at or now
     dispatch.save()
 
+    try:
+        from .paystack_transfers import plastic_collector_payout_on_commit
+
+        plastic_collector_payout_on_commit(dispatch.id)
+    except Exception:
+        pass
+
     return {
         "success": True,
-        "message": "Recycler payment recorded. Climate Wavers will pay collectors.",
+        "message": "Recycler payment recorded. Climate Wavers will pay collectors via M-Pesa.",
         "payment_reference": reference,
         "dispatch_id": dispatch.id,
         "total_kes": float(dispatch.total_kes or 0),

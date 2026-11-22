@@ -7,6 +7,7 @@ import { getAuthToken } from '../utils/factory';
 import { apiUrl, mediaUrl } from '../config/env';
 import { uploadFiles } from '../services/upload.service';
 import TreeAnalyticsPanel from './TreeAnalyticsPanel';
+import TreeSurvivalPanel from './TreeSurvivalPanel';
 import ScheduleClimateEventModal from './ScheduleClimateEventModal';
 import PlantingProofMediaCarousel, {
   proofMediaFromArrays,
@@ -1310,6 +1311,8 @@ Thank you for your understanding! 🌱
           variant="admin"
           projects={Array.isArray(projects) ? projects : []}
         />
+
+        <TreeSurvivalPanel />
 
         {/* Payments & certificates */}
         <div className="border border-border bg-surface">

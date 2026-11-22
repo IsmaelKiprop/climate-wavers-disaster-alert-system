@@ -234,3 +234,30 @@ def waverx_tweet_recent_alerts():
     except Exception as e:
         logger.error("WaverX alert tweet backfill error: %s", e)
         return f"Error: {str(e)}"
+
+
+@shared_task
+def tree_survival_reminders():
+    """Mark due/missed survival check-ins and send planter reminders."""
+    try:
+        from .tree_survival import mark_missed_checkins, send_due_reminders
+
+        missed = mark_missed_checkins()
+        sent = send_due_reminders()
+        return f"survival reminders sent={sent} missed={missed}"
+    except Exception as e:
+        logger.error("Tree survival reminders error: %s", e)
+        return f"Error: {str(e)}"
+
+
+@shared_task
+def send_hazard_digests():
+    """Fan out daily/weekly SMS + WhatsApp hazard digests."""
+    try:
+        from .hazard_digest import run_hazard_digests
+
+        result = run_hazard_digests()
+        return f"hazard digests {result}"
+    except Exception as e:
+        logger.error("Hazard digest error: %s", e)
+        return f"Error: {str(e)}"

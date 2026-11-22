@@ -836,7 +836,27 @@ class TreeAdminDonationProofView(APIView):
             )
             donation.planting_status = "planted"
             donation.planted_at = timezone.now()
-            donation.save(update_fields=["planting_status", "planted_at"])
+            if lat_val is not None and lng_val is not None:
+                donation.survival_lat = lat_val
+                donation.survival_lng = lng_val
+                donation.survival_location_label = location_label
+                donation.save(
+                    update_fields=[
+                        "planting_status",
+                        "planted_at",
+                        "survival_lat",
+                        "survival_lng",
+                        "survival_location_label",
+                    ]
+                )
+            else:
+                donation.save(update_fields=["planting_status", "planted_at"])
+            try:
+                from .tree_survival import schedule_survival_checkins
+
+                schedule_survival_checkins(donation)
+            except Exception:
+                pass
 
         try:
             _notify_planting_proof(donation, proof)
