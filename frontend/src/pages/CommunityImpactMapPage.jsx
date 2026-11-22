@@ -258,8 +258,8 @@ const CommunityImpactMapPage = () => {
                 }`}
           {!loading && !error && !(data.count || points.length) ? (
             <span className="block mt-1 text-xs">
-              Tree pins appear after a planting proof with GPS. Plastic pins appear from
-              hotspot/bag GPS. Hazards need an active report with coordinates.
+              Pins appear after GPS is captured: tree planting proof, plastic hotspot/bag
+              proof, or an active hazard report.
             </span>
           ) : null}
           {!loading && data.errors?.length ? (

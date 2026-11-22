@@ -115,9 +115,15 @@ const WeatherForecastPanel = ({ compact = false, className = "" }) => {
           forceRefresh
             ? null
             : coords.label || (coords.source === "default" ? DEFAULT_LOCATION.label : null),
-        refreshPlaceLabel: forceRefresh,
+        // Refresh and My location both re-geocode so a stale "India" cookie cannot stick.
+        refreshPlaceLabel: forceRefresh || !coords.label || coords.gpsFailed,
       });
       setForecast(report);
+      if (forceRefresh && coords.gpsFailed) {
+        setError(
+          "Could not get GPS — showing last saved place. Allow location access and try My location again."
+        );
+      }
     } catch (err) {
       console.error(err);
       setError(err?.message || "Could not load weather forecast.");
@@ -128,7 +134,8 @@ const WeatherForecastPanel = ({ compact = false, className = "" }) => {
   }, []);
 
   useEffect(() => {
-    load();
+    // First paint: prefer a fresh device fix so a stale cookie (e.g. wrong country) does not stick.
+    load({ forceRefresh: true });
   }, [load]);
 
   const useMyLocation = async () => {
@@ -286,7 +293,10 @@ const WeatherForecastPanel = ({ compact = false, className = "" }) => {
           </button>
           <button
             type="button"
-            onClick={() => load()}
+            onClick={() => {
+              setLocating(true);
+              load({ forceRefresh: true });
+            }}
             disabled={loading}
             className="h-10 px-3 bg-primary text-primary-foreground text-sm inline-flex items-center gap-1.5 disabled:opacity-60"
             style={{ borderRadius: 5 }}
@@ -360,10 +370,16 @@ const WeatherForecastPanel = ({ compact = false, className = "" }) => {
                 </p>
               </div>
             ))}
-          </div>
         </div>
+      </div>
 
-        {/* Daily fields from Open-Meteo (high/low/rain) were underused before */}
+      {error ? (
+        <p className="px-4 py-2 text-xs text-amber-700 border-b border-border bg-amber-500/5">
+          {error}
+        </p>
+      ) : null}
+
+      {/* Daily fields from Open-Meteo (high/low/rain) were underused before */}
         {today ? (
           <div
             className={`border p-3 sm:p-4 ${toneClasses(today.tone)}`}

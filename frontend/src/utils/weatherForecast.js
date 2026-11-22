@@ -103,6 +103,35 @@ function formatClock(date, timeZone) {
 }
 
 async function reverseGeocodeLabel(latitude, longitude) {
+  // BigDataCloud first — CORS-friendly in browsers (Nominatim often blocks anonymous clients).
+  try {
+    const bdc = new URL(
+      "https://api.bigdatacloud.net/data/reverse-geocode-client"
+    );
+    bdc.searchParams.set("latitude", String(latitude));
+    bdc.searchParams.set("longitude", String(longitude));
+    bdc.searchParams.set("localityLanguage", "en");
+    const res = await fetch(bdc.toString());
+    if (res.ok) {
+      const data = await res.json();
+      const city =
+        data?.city ||
+        data?.locality ||
+        data?.principalSubdivision ||
+        null;
+      const region = data?.principalSubdivision || null;
+      const country = data?.countryName || null;
+      const parts = [];
+      if (city) parts.push(city);
+      if (region && region !== city) parts.push(region);
+      else if (country && country !== city) parts.push(country);
+      if (parts.length) return parts.slice(0, 2).join(", ");
+      if (country) return country;
+    }
+  } catch {
+    /* try Nominatim next */
+  }
+
   try {
     const url =
       `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}` +
@@ -214,7 +243,14 @@ export async function fetchWeatherForecast({
   const utcOffsetSeconds = Number(data.utc_offset_seconds || 0);
   const timeZone = data.timezone || undefined;
 
-  let placeLabel = refreshPlaceLabel ? null : label;
+  // Always re-resolve place name when asked, or when the stored label looks like a bare country
+  // (stale cookies often kept "India" while coords had already moved).
+  const bareCountry =
+    typeof label === "string" &&
+    /^[A-Za-z\s]+$/.test(label.trim()) &&
+    !label.includes(",") &&
+    label.trim().length <= 24;
+  let placeLabel = refreshPlaceLabel || bareCountry ? null : label;
   if (!placeLabel) {
     placeLabel = await reverseGeocodeLabel(lat, lon);
   }

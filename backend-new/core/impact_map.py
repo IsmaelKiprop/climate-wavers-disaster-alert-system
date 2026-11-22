@@ -11,8 +11,12 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .models import (
+    CommunityHazardCorroboration,
     Disaster,
+    OfficialAlertEvent,
+    PlasticHoldingZone,
     PlasticHotspot,
+    PlasticProject,
     PlasticRecovery,
     TreeProject,
     TreeProjectDonation,
@@ -262,13 +266,17 @@ class CommunityImpactMapView(APIView):
         return out
 
     def _plastic_features(self, county: str):
+        """Hotspots, bag proofs, holding zones, and project sites with GPS."""
         out = []
+        county_q = Q()
+        if county:
+            county_q = Q(project__region__icontains=county) | Q(
+                project__city__icontains=county
+            )
+
         hotspot_qs = PlasticHotspot.objects.select_related("project").all()
         if county:
-            hotspot_qs = hotspot_qs.filter(
-                Q(project__region__icontains=county)
-                | Q(project__city__icontains=county)
-            )
+            hotspot_qs = hotspot_qs.filter(county_q)
         for h in hotspot_qs.order_by("-created_at")[:400]:
             try:
                 lat, lng = _f(h.latitude), _f(h.longitude)
@@ -281,7 +289,7 @@ class CommunityImpactMapView(APIView):
                         "title": h.title
                         or getattr(h.project, "name", None)
                         or "Cleanup hotspot",
-                        "subtitle": f"Status: {h.status}",
+                        "subtitle": f"Hotspot · {h.status}",
                         "county": getattr(h.project, "region", "")
                         or getattr(h.project, "city", "")
                         or "",
@@ -292,6 +300,7 @@ class CommunityImpactMapView(APIView):
                             "status": h.status,
                             "project_id": h.project_id,
                             "hotspot_id": h.id,
+                            "kind": "hotspot",
                         },
                     }
                 )
@@ -302,7 +311,10 @@ class CommunityImpactMapView(APIView):
             PlasticRecovery.objects.select_related("project")
             .exclude(latitude__isnull=True)
             .exclude(longitude__isnull=True)
+            .exclude(status="rejected")
         )
+        if county:
+            recovery_qs = recovery_qs.filter(county_q)
         for r in recovery_qs.order_by("-created_at")[:300]:
             try:
                 lat, lng = _f(r.latitude), _f(r.longitude)
@@ -314,7 +326,7 @@ class CommunityImpactMapView(APIView):
                         "layer": "plastic",
                         "id": f"plastic-bag-{r.id}",
                         "title": f"{kg} kg recovered",
-                        "subtitle": getattr(r, "polymer_type", "") or "plastic",
+                        "subtitle": f"{getattr(r, 'polymer_type', '') or 'plastic'} · {r.status}",
                         "county": getattr(getattr(r, "project", None), "region", "")
                         or getattr(getattr(r, "project", None), "city", "")
                         or "",
@@ -325,42 +337,199 @@ class CommunityImpactMapView(APIView):
                             "kg": kg,
                             "status": r.status,
                             "recovery_id": r.id,
+                            "kind": "bag_proof",
                         },
                     }
                 )
             except Exception as exc:
                 logger.debug("skip plastic recovery %s: %s", r.id, exc)
+
+        zone_qs = (
+            PlasticHoldingZone.objects.select_related("project")
+            .exclude(latitude__isnull=True)
+            .exclude(longitude__isnull=True)
+        )
+        if county:
+            zone_qs = zone_qs.filter(county_q)
+        for z in zone_qs.order_by("-updated_at")[:200]:
+            try:
+                lat, lng = _f(z.latitude), _f(z.longitude)
+                if lat is None or lng is None:
+                    continue
+                out.append(
+                    {
+                        "layer": "plastic",
+                        "id": f"plastic-zone-{z.id}",
+                        "title": z.name or "Holding zone",
+                        "subtitle": "Holding zone",
+                        "county": getattr(z.project, "region", "")
+                        or getattr(z.project, "city", "")
+                        or "",
+                        "ward": getattr(z, "location_label", "") or "",
+                        "latitude": lat,
+                        "longitude": lng,
+                        "meta": {
+                            "status": "holding_zone",
+                            "project_id": z.project_id,
+                            "zone_id": z.id,
+                            "kind": "holding_zone",
+                        },
+                    }
+                )
+            except Exception as exc:
+                logger.debug("skip plastic holding zone %s: %s", z.id, exc)
+
+        project_qs = (
+            PlasticProject.objects.exclude(latitude__isnull=True)
+            .exclude(longitude__isnull=True)
+            .filter(status__in=["active", "completed"])
+        )
+        if county:
+            project_qs = project_qs.filter(
+                Q(region__icontains=county) | Q(city__icontains=county)
+            )
+        for p in project_qs.order_by("-updated_at")[:200]:
+            try:
+                lat, lng = _f(p.latitude), _f(p.longitude)
+                if lat is None or lng is None:
+                    continue
+                out.append(
+                    {
+                        "layer": "plastic",
+                        "id": f"plastic-project-{p.id}",
+                        "title": p.name or f"Plastic project #{p.id}",
+                        "subtitle": f"{float(p.recovered_kg or 0):.0f} kg recovered · project site",
+                        "county": p.region or p.city or "",
+                        "ward": p.city or "",
+                        "latitude": lat,
+                        "longitude": lng,
+                        "meta": {
+                            "status": p.status,
+                            "project_id": p.id,
+                            "kind": "project_site",
+                        },
+                    }
+                )
+            except Exception as exc:
+                logger.debug("skip plastic project %s: %s", p.id, exc)
+
         return out
 
     def _hazard_features(self, county: str):
+        """
+        Active disasters (incl. default monitoring), official USGS/NASA pins,
+        and recent crowd corroboration GPS when present.
+        """
         out = []
-        disaster_qs = Disaster.objects.filter(
-            status__in=["alert", "warning", "ongoing", "investigating"]
-        ).exclude(latitude__isnull=True)
+        # Default Disaster.status is "monitoring" — include it or the layer stays empty.
+        disaster_qs = (
+            Disaster.objects.exclude(status="resolved")
+            .exclude(latitude__isnull=True)
+            .exclude(longitude__isnull=True)
+        )
         if county:
             disaster_qs = disaster_qs.filter(
-                Q(region__icontains=county) | Q(city__icontains=county)
+                Q(region__icontains=county)
+                | Q(city__icontains=county)
+                | Q(country__icontains=county)
             )
         for d in disaster_qs.order_by("-created_at")[:400]:
-            lat, lng = _f(d.latitude), _f(d.longitude)
-            if lat is None or lng is None:
-                continue
-            out.append(
-                {
-                    "layer": "hazards",
-                    "id": f"hazard-{d.id}",
-                    "title": d.title,
-                    "subtitle": f"{d.disaster_type} · {d.status}",
-                    "county": d.region or "",
-                    "ward": d.city or "",
-                    "latitude": lat,
-                    "longitude": lng,
-                    "meta": {
-                        "status": d.status,
-                        "disaster_type": d.disaster_type,
-                        "severity": d.severity,
-                        "disaster_id": d.id,
-                    },
-                }
+            try:
+                lat, lng = _f(d.latitude), _f(d.longitude)
+                if lat is None or lng is None:
+                    continue
+                out.append(
+                    {
+                        "layer": "hazards",
+                        "id": f"hazard-{d.id}",
+                        "title": d.title,
+                        "subtitle": f"{d.disaster_type} · {d.status}",
+                        "county": d.region or d.country or "",
+                        "ward": d.city or "",
+                        "latitude": lat,
+                        "longitude": lng,
+                        "meta": {
+                            "status": d.status,
+                            "disaster_type": d.disaster_type,
+                            "severity": d.severity,
+                            "disaster_id": d.id,
+                            "kind": "disaster",
+                        },
+                    }
+                )
+            except Exception as exc:
+                logger.debug("skip disaster %s: %s", d.id, exc)
+
+        alert_qs = OfficialAlertEvent.objects.exclude(latitude__isnull=True).exclude(
+            longitude__isnull=True
+        )
+        for ev in alert_qs.order_by("-created_at")[:300]:
+            try:
+                lat, lng = _f(ev.latitude), _f(ev.longitude)
+                if lat is None or lng is None:
+                    continue
+                hay = f"{ev.title or ''} {ev.disaster_type or ''}".lower()
+                if county and county.lower() not in hay:
+                    # Official feeds rarely store county — skip when a county filter is active.
+                    continue
+                out.append(
+                    {
+                        "layer": "hazards",
+                        "id": f"official-{ev.id}",
+                        "title": ev.title or f"{ev.source} alert",
+                        "subtitle": f"{ev.source} · {ev.disaster_type or 'hazard'}",
+                        "county": "",
+                        "ward": "",
+                        "latitude": lat,
+                        "longitude": lng,
+                        "meta": {
+                            "status": "official",
+                            "disaster_type": ev.disaster_type,
+                            "severity": "",
+                            "event_id": ev.event_id,
+                            "kind": "official_alert",
+                            "source": ev.source,
+                        },
+                    }
+                )
+            except Exception as exc:
+                logger.debug("skip official alert %s: %s", ev.id, exc)
+
+        crowd_qs = (
+            CommunityHazardCorroboration.objects.select_related("disaster")
+            .filter(decision="confirm")
+            .exclude(latitude__isnull=True)
+            .exclude(longitude__isnull=True)
+        )
+        if county:
+            crowd_qs = crowd_qs.filter(
+                Q(disaster__region__icontains=county)
+                | Q(disaster__city__icontains=county)
             )
+        for c in crowd_qs.order_by("-created_at")[:200]:
+            try:
+                lat, lng = _f(c.latitude), _f(c.longitude)
+                if lat is None or lng is None:
+                    continue
+                d = c.disaster
+                out.append(
+                    {
+                        "layer": "hazards",
+                        "id": f"crowd-{c.id}",
+                        "title": (d.title if d else None) or "Crowd-confirmed hazard",
+                        "subtitle": "Community corroboration",
+                        "county": (d.region if d else "") or "",
+                        "ward": (d.city if d else "") or "",
+                        "latitude": lat,
+                        "longitude": lng,
+                        "meta": {
+                            "status": "corroborated",
+                            "disaster_id": c.disaster_id,
+                            "kind": "corroboration",
+                        },
+                    }
+                )
+            except Exception as exc:
+                logger.debug("skip corroboration %s: %s", c.id, exc)
+
         return out
