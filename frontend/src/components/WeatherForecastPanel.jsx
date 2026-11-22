@@ -115,29 +115,26 @@ const WeatherForecastPanel = ({ compact = false, className = "" }) => {
       const coords =
         preset ||
         (await resolveUserLocation({ forceRefresh }));
+      const fromDevice = coords.source === "device";
+      const trustedSource = ["manual", "default", "profile", "geocode"].includes(
+        coords.source
+      );
       const report = await fetchWeatherForecast({
         latitude: coords.latitude,
         longitude: coords.longitude,
         label:
-          forceRefresh && coords.source === "device"
-            ? null
-            : coords.label ||
-              (coords.source === "default" ? DEFAULT_LOCATION.label : null),
-        refreshPlaceLabel:
-          forceRefresh ||
-          !coords.label ||
-          coords.gpsFailed ||
-          coords.lowAccuracy ||
-          coords.source === "device",
+          coords.label ||
+          (coords.source === "default" ? DEFAULT_LOCATION.label : null),
+        // Always reverse-geocode a fresh GPS fix so the label matches exact coords.
+        refreshPlaceLabel: fromDevice || (!coords.label && !trustedSource),
       });
       setForecast(report);
-      if (coords.lowAccuracy) {
+      if (fromDevice && Number.isFinite(Number(coords.accuracy))) {
+        // Precise GPS succeeded — keep UI clean.
+        setError("");
+      } else if (forceRefresh && (coords.gpsFailed || coords.needPrecise || coords.lowAccuracy)) {
         setError(
-          "Browser location was too imprecise (often wrong IP city). Pick your city below, or enable precise location."
-        );
-      } else if (forceRefresh && coords.gpsFailed) {
-        setError(
-          "Could not get GPS — showing a nearby fallback. Allow location, or pick your city below."
+          "Could not get a precise GPS fix yet. On phone: allow Location. On Windows: Settings → Privacy → Location → on, then press My location again. Or pick your city below."
         );
       }
     } catch (err) {
@@ -150,16 +147,20 @@ const WeatherForecastPanel = ({ compact = false, className = "" }) => {
   }, []);
 
   useEffect(() => {
+    // Capture GPS on first open (waits for a precise fix, not an IP city).
+    setLocating(true);
     load({ forceRefresh: true });
   }, [load]);
 
   const useMyLocation = async () => {
     setLocating(true);
+    setError("Waiting for precise GPS… keep this tab open for a few seconds.");
     await load({ forceRefresh: true });
   };
 
   const pickCity = async (city) => {
     setLocating(true);
+    setError("");
     const coords = setManualWeatherLocation(city);
     await load({ forceRefresh: false, coords });
   };
@@ -310,7 +311,7 @@ const WeatherForecastPanel = ({ compact = false, className = "" }) => {
             aria-label="Use my location"
           >
             <IoLocateOutline size={16} />
-            {locating ? "Locating…" : "My location"}
+            {locating ? "Getting GPS…" : "My location"}
           </button>
           <button
             type="button"

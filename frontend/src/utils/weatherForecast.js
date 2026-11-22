@@ -102,6 +102,30 @@ function formatClock(date, timeZone) {
   }
 }
 
+function normalizePlacePart(value) {
+  return String(value || "")
+    .replace(/\b(city|county|county council|municipality)\b/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function joinPlaceParts(...parts) {
+  const out = [];
+  for (const raw of parts) {
+    const part = normalizePlacePart(raw);
+    if (!part) continue;
+    const lower = part.toLowerCase();
+    if (out.some((existing) => {
+      const e = existing.toLowerCase();
+      return e === lower || e.includes(lower) || lower.includes(e);
+    })) {
+      continue;
+    }
+    out.push(part);
+  }
+  return out.slice(0, 2).join(", ") || null;
+}
+
 async function reverseGeocodeLabel(latitude, longitude) {
   // BigDataCloud first — CORS-friendly in browsers (Nominatim often blocks anonymous clients).
   try {
@@ -114,18 +138,11 @@ async function reverseGeocodeLabel(latitude, longitude) {
     const res = await fetch(bdc.toString());
     if (res.ok) {
       const data = await res.json();
-      const city =
-        data?.city ||
-        data?.locality ||
-        data?.principalSubdivision ||
-        null;
+      const city = data?.city || data?.locality || null;
       const region = data?.principalSubdivision || null;
       const country = data?.countryName || null;
-      const parts = [];
-      if (city) parts.push(city);
-      if (region && region !== city) parts.push(region);
-      else if (country && country !== city) parts.push(country);
-      if (parts.length) return parts.slice(0, 2).join(", ");
+      const label = joinPlaceParts(city, region, country);
+      if (label) return label;
       if (country) return country;
     }
   } catch {
@@ -146,15 +163,11 @@ async function reverseGeocodeLabel(latitude, longitude) {
       a.city || a.town || a.village || a.municipality || a.suburb || null;
     const region = a.state || a.county || a.region || null;
     const country = a.country || null;
-    const parts = [];
-    if (city) parts.push(city);
-    if (region && region !== city && !String(region).includes(String(city || ""))) {
-      parts.push(region);
-    } else if (country && country !== city) {
-      parts.push(country);
-    }
-    if (parts.length) return parts.slice(0, 2).join(", ");
-    return data?.display_name?.split(",").slice(0, 2).join(",").trim() || null;
+    return (
+      joinPlaceParts(city, region, country) ||
+      data?.display_name?.split(",").slice(0, 2).join(",").trim() ||
+      null
+    );
   } catch {
     return null;
   }
