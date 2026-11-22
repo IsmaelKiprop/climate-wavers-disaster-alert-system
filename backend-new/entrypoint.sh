@@ -14,6 +14,8 @@ if [ "${CREATE_ADMINS_ON_BOOT:-0}" = "1" ]; then
 fi
 python manage.py seed_tree_projects || echo "seed_tree_projects skipped"
 python manage.py sync_calendar_observances || echo "sync_calendar_observances skipped"
+# Strip desktop IP / offshore GPS blunders (e.g. India pins on Eldoret bags).
+python manage.py clear_inaccurate_gps || echo "clear_inaccurate_gps skipped"
 
 PORT="${PORT:-8000}"
 exec daphne -b 0.0.0.0 -p "$PORT" auth.asgi:application
