@@ -47,8 +47,21 @@ function browserTimeZone() {
   }
 }
 
+export function inEastAfricaBounds(lat, lng) {
+  const latitude = Number(lat);
+  const longitude = Number(lng);
+  return (
+    Number.isFinite(latitude) &&
+    Number.isFinite(longitude) &&
+    latitude >= -5.5 &&
+    latitude <= 5.5 &&
+    longitude >= 29 &&
+    longitude <= 42.5
+  );
+}
+
 function inEastAfrica(lat, lng) {
-  return lat >= -5.5 && lat <= 5.5 && lng >= 29 && lng <= 42.5;
+  return inEastAfricaBounds(lat, lng);
 }
 
 /**

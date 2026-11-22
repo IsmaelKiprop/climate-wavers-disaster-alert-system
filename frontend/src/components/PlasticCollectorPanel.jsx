@@ -254,9 +254,18 @@ const PlasticCollectorPanel = ({
   }, [myBags, authed, guestPhone, guestName, project?.name]);
 
   const readDeviceGps = async () => {
-    const { readPreciseDevicePosition } = await import("../utils/location");
+    const { readPreciseDevicePosition, inEastAfricaBounds } = await import(
+      "../utils/location"
+    );
     try {
-      const pos = await readPreciseDevicePosition({ timeoutMs: 28000 });
+      // Field proofs need true on-site GPS (±100 m), not desktop IP cities.
+      const pos = await readPreciseDevicePosition({
+        timeoutMs: 30000,
+        goodAccuracyMeters: 100,
+      });
+      if (!inEastAfricaBounds(pos.latitude, pos.longitude)) {
+        throw new Error("GPS is outside East Africa");
+      }
       return {
         latitude: String(Number(pos.latitude).toFixed(6)),
         longitude: String(Number(pos.longitude).toFixed(6)),
@@ -264,7 +273,7 @@ const PlasticCollectorPanel = ({
       };
     } catch {
       throw new Error(
-        "Could not get precise GPS — use a phone at the site (desktop IP cities like India are blocked)"
+        "Need precise GPS on a phone at the site (±100 m). Desktop IP location is not accurate enough."
       );
     }
   };

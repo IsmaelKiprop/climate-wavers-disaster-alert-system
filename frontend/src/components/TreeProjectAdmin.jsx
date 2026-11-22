@@ -511,29 +511,37 @@ const TreeProjectAdmin = () => {
     );
   };
 
-  const captureProofLocation = () => {
-    if (!navigator.geolocation) {
-      toast.error('Location is not available on this device');
-      return;
-    }
+  const captureProofLocation = async () => {
     setProofLocating(true);
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setProofLat(pos.coords.latitude.toFixed(6));
-        setProofLng(pos.coords.longitude.toFixed(6));
-        if (!proofLocationLabel.trim()) {
-          setProofLocationLabel('Captured at planting site');
-        }
-        setProofLocating(false);
-        toast.success('Planting location captured');
-      },
-      (err) => {
-        console.error(err);
-        setProofLocating(false);
-        toast.error('Could not get GPS. Enter a place name instead.');
-      },
-      { enableHighAccuracy: true, timeout: 15000 }
-    );
+    try {
+      const { readPreciseDevicePosition, inEastAfricaBounds } = await import(
+        '../utils/location'
+      );
+      const pos = await readPreciseDevicePosition({
+        timeoutMs: 30000,
+        goodAccuracyMeters: 100,
+      });
+      if (!inEastAfricaBounds(pos.latitude, pos.longitude)) {
+        throw new Error('outside region');
+      }
+      setProofLat(Number(pos.latitude).toFixed(6));
+      setProofLng(Number(pos.longitude).toFixed(6));
+      if (!proofLocationLabel.trim()) {
+        setProofLocationLabel('Captured at planting site');
+      }
+      toast.success(
+        Number.isFinite(pos.accuracy)
+          ? `Accurate planting GPS (±${Math.round(pos.accuracy)} m)`
+          : 'Accurate planting GPS captured'
+      );
+    } catch (err) {
+      console.error(err);
+      toast.error(
+        'Need precise GPS on a phone at the planting site (±100 m). Desktop IP location is not accurate enough.'
+      );
+    } finally {
+      setProofLocating(false);
+    }
   };
 
   const handleProofMediaUpload = async (files) => {

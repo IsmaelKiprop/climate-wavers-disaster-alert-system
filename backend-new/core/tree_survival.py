@@ -335,7 +335,7 @@ class TreeSurvivalPublicMapView(APIView):
         from .impact_map import CommunityImpactMapView
 
         county = (request.query_params.get("county") or "").strip()
-        features = CommunityImpactMapView()._tree_features(county)
+        features, _skipped = CommunityImpactMapView()._tree_features(county)
         results = []
         for f in features:
             meta = f.get("meta") or {}

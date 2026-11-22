@@ -324,9 +324,17 @@ const PlasticProjectAdmin = () => {
 
   const captureGps = async (target) => {
     try {
-      const { readPreciseDevicePosition } = await import("../utils/location");
-      toast.info("Waiting for precise GPS…");
-      const pos = await readPreciseDevicePosition({ timeoutMs: 28000 });
+      const { readPreciseDevicePosition, inEastAfricaBounds } = await import(
+        "../utils/location"
+      );
+      toast.info("Waiting for precise on-site GPS…");
+      const pos = await readPreciseDevicePosition({
+        timeoutMs: 30000,
+        goodAccuracyMeters: 100,
+      });
+      if (!inEastAfricaBounds(pos.latitude, pos.longitude)) {
+        throw new Error("outside region");
+      }
       const latitude = Number(pos.latitude).toFixed(6);
       const longitude = Number(pos.longitude).toFixed(6);
       if (target === "hotspot") {
@@ -336,12 +344,12 @@ const PlasticProjectAdmin = () => {
       }
       toast.success(
         Number.isFinite(pos.accuracy)
-          ? `GPS captured (±${Math.round(pos.accuracy)} m)`
-          : "GPS captured"
+          ? `Accurate GPS captured (±${Math.round(pos.accuracy)} m)`
+          : "Accurate GPS captured"
       );
     } catch {
       toast.error(
-        "Precise GPS failed — use a phone on site. Desktop IP location (e.g. India) is rejected."
+        "Need precise GPS on a phone at the site (±100 m). Desktop IP cities are rejected."
       );
     }
   };

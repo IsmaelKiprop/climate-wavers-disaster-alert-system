@@ -61,6 +61,7 @@ const CommunityImpactMapPage = () => {
     counties: [],
     count: 0,
     errors: [],
+    skippedInaccurate: 0,
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -87,10 +88,17 @@ const CommunityImpactMapPage = () => {
         counties: Array.isArray(json.counties) ? json.counties : [],
         count: Number(json.count || 0),
         errors: Array.isArray(json.errors) ? json.errors : [],
+        skippedInaccurate: Number(json.skipped_inaccurate_gps || 0),
       });
     } catch (err) {
       setError(err?.message || "Could not load impact map");
-      setData({ features: [], counties: [], count: 0, errors: [] });
+      setData({
+        features: [],
+        counties: [],
+        count: 0,
+        errors: [],
+        skippedInaccurate: 0,
+      });
     } finally {
       setLoading(false);
     }
@@ -258,8 +266,16 @@ const CommunityImpactMapPage = () => {
                 }`}
           {!loading && !error && !(data.count || points.length) ? (
             <span className="block mt-1 text-xs">
-              Pins appear after GPS is captured: tree planting proof, plastic hotspot/bag
-              proof, or an active hazard report.
+              Only accurate on-site GPS pins are shown. Capture planting proof, plastic
+              hotspot/bag proof, or a hazard report on a phone at the real location (±100
+              m) — desktop IP cities are rejected.
+            </span>
+          ) : null}
+          {!loading && data.skippedInaccurate > 0 ? (
+            <span className="block mt-1 text-xs text-amber-700">
+              {data.skippedInaccurate} record
+              {data.skippedInaccurate === 1 ? "" : "s"} hidden because GPS was inaccurate
+              (e.g. offshore IP location). Re-capture precise GPS on site to show them.
             </span>
           ) : null}
           {!loading && data.errors?.length ? (

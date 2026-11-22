@@ -49,20 +49,32 @@ def _in_east_africa(lat, lng) -> bool:
         return False
 
 
+def _accurate_coords(lat, lng):
+    """Only real in-region coordinates — never invent city-center guesses."""
+    if lat is None or lng is None:
+        return None, None
+    if not _in_east_africa(lat, lng):
+        return None, None
+    return lat, lng
+
+
 def _plastic_display_coords(lat, lng, *, hotspot=None, project=None):
     """
-    Prefer submitted GPS when it is in-region; otherwise snap to hotspot/project
-    so IP blunders (India pins on Eldoret bags) do not dominate the public map.
+    Map pins must be accurate GPS.
+    Use bag coords if valid; else a real hotspot/project pin that is itself in-region.
+    Do not fabricate Eldoret/Nairobi city centers from text labels.
     """
-    if lat is not None and lng is not None and _in_east_africa(lat, lng):
-        return lat, lng
+    good = _accurate_coords(lat, lng)
+    if good[0] is not None:
+        return good
     for obj in (hotspot, project):
         if obj is None:
             continue
-        plat, plng = _f(getattr(obj, "latitude", None)), _f(
-            getattr(obj, "longitude", None)
+        plat, plng = _accurate_coords(
+            _f(getattr(obj, "latitude", None)),
+            _f(getattr(obj, "longitude", None)),
         )
-        if plat is not None and plng is not None and _in_east_africa(plat, plng):
+        if plat is not None:
             return plat, plng
     return None, None
 
@@ -76,17 +88,22 @@ class CommunityImpactMapView(APIView):
 
         features = []
         errors = []
+        skipped_inaccurate = 0
 
         if layer in ("all", "trees"):
             try:
-                features.extend(self._tree_features(county))
+                tree_feats, tree_skip = self._tree_features(county)
+                features.extend(tree_feats)
+                skipped_inaccurate += tree_skip
             except Exception as exc:
                 logger.exception("impact-map trees layer failed: %s", exc)
                 errors.append({"layer": "trees", "detail": str(exc)[:200]})
 
         if layer in ("all", "plastic"):
             try:
-                features.extend(self._plastic_features(county))
+                plastic_feats, plastic_skip = self._plastic_features(county)
+                features.extend(plastic_feats)
+                skipped_inaccurate += plastic_skip
             except Exception as exc:
                 logger.exception("impact-map plastic layer failed: %s", exc)
                 errors.append({"layer": "plastic", "detail": str(exc)[:200]})
@@ -114,6 +131,7 @@ class CommunityImpactMapView(APIView):
         payload = {
             "features": features,
             "count": len(features),
+            "skipped_inaccurate_gps": skipped_inaccurate,
             "counties": sorted(
                 counties.values(),
                 key=lambda c: c["trees"] + c["plastic_points"] + c["hazards"],
@@ -127,9 +145,10 @@ class CommunityImpactMapView(APIView):
     def _tree_features(self, county: str):
         """
         Prefer geotagged planting proofs / survival pins on funded gifts.
-        Fall back to project grove coordinates when a planted gift has no pin yet.
+        Only accurate in-region GPS is mapped — never invent city centers.
         """
         out = []
+        skipped = 0
         seen_donations = set()
         seen_coords = set()
 
@@ -147,8 +166,9 @@ class CommunityImpactMapView(APIView):
                 | Q(donation__project__city__icontains=county)
             )
         for proof in proof_qs.order_by("-created_at")[:500]:
-            lat, lng = _f(proof.latitude), _f(proof.longitude)
+            lat, lng = _accurate_coords(_f(proof.latitude), _f(proof.longitude))
             if lat is None or lng is None:
+                skipped += 1
                 continue
             donation = proof.donation
             if donation is not None:
@@ -226,7 +246,9 @@ class CommunityImpactMapView(APIView):
                     else:
                         proj = d.project
                         lat, lng = _f(proj.latitude), _f(proj.longitude)
+                lat, lng = _accurate_coords(lat, lng)
                 if lat is None or lng is None:
+                    skipped += 1
                     continue
                 seen_donations.add(d.id)
                 proj = d.project
@@ -251,7 +273,7 @@ class CommunityImpactMapView(APIView):
             except Exception as exc:
                 logger.debug("skip tree donation %s: %s", d.id, exc)
 
-        # Grove sites with coordinates (visible even before every gift has its own pin).
+        # Grove sites with accurate coordinates only.
         project_qs = (
             TreeProject.objects.exclude(latitude__isnull=True)
             .exclude(longitude__isnull=True)
@@ -262,8 +284,9 @@ class CommunityImpactMapView(APIView):
                 Q(region__icontains=county) | Q(city__icontains=county)
             )
         for proj in project_qs.order_by("-updated_at")[:200]:
-            lat, lng = _f(proj.latitude), _f(proj.longitude)
+            lat, lng = _accurate_coords(_f(proj.latitude), _f(proj.longitude))
             if lat is None or lng is None:
+                skipped += 1
                 continue
             coord_key = (round(lat, 5), round(lng, 5), f"project-{proj.id}")
             if coord_key in seen_coords:
@@ -288,11 +311,12 @@ class CommunityImpactMapView(APIView):
                 }
             )
 
-        return out
+        return out, skipped
 
     def _plastic_features(self, county: str):
-        """Hotspots, bag proofs, holding zones, and project sites with GPS."""
+        """Hotspots, bag proofs, holding zones, and project sites — accurate GPS only."""
         out = []
+        skipped = 0
         county_q = Q()
         if county:
             county_q = Q(project__region__icontains=county) | Q(
@@ -307,9 +331,11 @@ class CommunityImpactMapView(APIView):
                 lat, lng = _plastic_display_coords(
                     _f(h.latitude),
                     _f(h.longitude),
+                    hotspot=h,
                     project=getattr(h, "project", None),
                 )
                 if lat is None or lng is None:
+                    skipped += 1
                     continue
                 out.append(
                     {
@@ -350,6 +376,7 @@ class CommunityImpactMapView(APIView):
                     project=getattr(r, "project", None),
                 )
                 if lat is None or lng is None:
+                    skipped += 1
                     continue
                 kg = _recovery_kg(r)
                 out.append(
@@ -375,17 +402,19 @@ class CommunityImpactMapView(APIView):
             except Exception as exc:
                 logger.debug("skip plastic recovery %s: %s", r.id, exc)
 
-        zone_qs = (
-            PlasticHoldingZone.objects.select_related("project")
-            .exclude(latitude__isnull=True)
-            .exclude(longitude__isnull=True)
-        )
+        zone_qs = PlasticHoldingZone.objects.select_related("project").all()
         if county:
             zone_qs = zone_qs.filter(county_q)
         for z in zone_qs.order_by("-updated_at")[:200]:
             try:
-                lat, lng = _f(z.latitude), _f(z.longitude)
+                lat, lng = _plastic_display_coords(
+                    _f(z.latitude),
+                    _f(z.longitude),
+                    project=getattr(z, "project", None),
+                )
                 if lat is None or lng is None:
+                    if z.latitude is not None or z.longitude is not None:
+                        skipped += 1
                     continue
                 out.append(
                     {
@@ -410,10 +439,8 @@ class CommunityImpactMapView(APIView):
             except Exception as exc:
                 logger.debug("skip plastic holding zone %s: %s", z.id, exc)
 
-        project_qs = (
-            PlasticProject.objects.exclude(latitude__isnull=True)
-            .exclude(longitude__isnull=True)
-            .filter(status__in=["active", "completed"])
+        project_qs = PlasticProject.objects.filter(
+            status__in=["active", "completed"]
         )
         if county:
             project_qs = project_qs.filter(
@@ -421,8 +448,14 @@ class CommunityImpactMapView(APIView):
             )
         for p in project_qs.order_by("-updated_at")[:200]:
             try:
-                lat, lng = _f(p.latitude), _f(p.longitude)
+                lat, lng = _plastic_display_coords(
+                    _f(p.latitude),
+                    _f(p.longitude),
+                    project=p,
+                )
                 if lat is None or lng is None:
+                    if p.latitude is not None or p.longitude is not None:
+                        skipped += 1
                     continue
                 out.append(
                     {
@@ -444,7 +477,7 @@ class CommunityImpactMapView(APIView):
             except Exception as exc:
                 logger.debug("skip plastic project %s: %s", p.id, exc)
 
-        return out
+        return out, skipped
 
     def _hazard_features(self, county: str):
         """
