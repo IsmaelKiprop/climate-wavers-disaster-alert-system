@@ -9,6 +9,7 @@ import {
   IoChatbubbles,
 } from "react-icons/io5";
 import { RiAlarmWarningLine, RiAlarmWarningFill } from "react-icons/ri";
+import { useChatSocket } from "../context/ChatContext";
 import { prefetchHandlers } from "../utils/routePrefetch";
 import WaverXIcon from "./WaverXIcon";
 
@@ -17,6 +18,7 @@ const itemClass =
 
 const Footer = () => {
   const onboarding = useLocation().pathname.startsWith("/onboarding");
+  const { unreadTotal = 0 } = useChatSocket() || {};
   const items = onboarding
     ? [
         { to: "/onboarding/home", label: "Home", Icon: IoHomeOutline, ActiveIcon: IoHome, end: true },
@@ -48,13 +50,33 @@ const Footer = () => {
           to={to}
           end={Boolean(end)}
           className={itemClass}
+          aria-label={
+            label === "Chats" && Number(unreadTotal) > 0
+              ? `Chats, ${unreadTotal > 99 ? "99+" : unreadTotal} unread`
+              : label
+          }
           {...prefetchHandlers(to)}
         >
           {({ isActive }) => {
             const Glyph = isActive ? ActiveIcon : Icon;
+            const chatUnread =
+              label === "Chats" && Number(unreadTotal) > 0
+                ? Number(unreadTotal)
+                : 0;
             return (
               <>
-                <Glyph size={20} className={isActive ? "text-primary" : "text-foreground/70"} aria-hidden="true" />
+                <span className="relative inline-flex">
+                  <Glyph
+                    size={20}
+                    className={isActive ? "text-primary" : "text-foreground/70"}
+                    aria-hidden="true"
+                  />
+                  {chatUnread > 0 ? (
+                    <span className="absolute -top-1.5 -right-2.5 min-w-[1.05rem] h-[1.05rem] px-1 rounded-full bg-destructive text-destructive-foreground text-[9px] font-bold leading-none flex items-center justify-center">
+                      {chatUnread > 99 ? "99+" : chatUnread}
+                    </span>
+                  ) : null}
+                </span>
                 <span className={`truncate max-w-full ${isActive ? "text-primary" : "text-foreground/70"}`}>
                   {label}
                 </span>

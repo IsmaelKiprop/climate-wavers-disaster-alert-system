@@ -40,6 +40,7 @@ import Modal from "../Modal";
 import Createpost from "../Createpost";
 import Report from "../Report";
 import { useNotifications } from "../../context/NotificationContext";
+import { useChatSocket } from "../../context/ChatContext";
 import { client } from "../../api";
 import { endpoints } from "../../utils/endpoints";
 import WaverXIcon from "../WaverXIcon";
@@ -49,6 +50,7 @@ const AppNav = ({ onNavigate, compact = false }) => {
   const onboarding = location.pathname.startsWith("/onboarding");
   const isCompact = compact;
   const { hasNewNotification } = useNotifications() || {};
+  const { unreadTotal = 0 } = useChatSocket() || {};
   const [user, setUser] = useState(getUser());
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isReportOpen, setIsReportOpen] = useState(false);
@@ -262,7 +264,11 @@ const AppNav = ({ onNavigate, compact = false }) => {
             to={to}
             end={Boolean(end)}
             title={label}
-            aria-label={label}
+            aria-label={
+              label === "Chats" && Number(unreadTotal) > 0
+                ? `Chats, ${unreadTotal > 99 ? "99+" : unreadTotal} unread`
+                : label
+            }
             onClick={close}
             {...prefetchHandlers(to)}
             className={({ isActive }) =>
@@ -278,6 +284,11 @@ const AppNav = ({ onNavigate, compact = false }) => {
             {({ isActive }) => {
               const Glyph = isActive ? ActiveIcon : Icon;
               const showDot = label === "Notifications" && hasNewNotification;
+              const chatUnread =
+                label === "Chats" && Number(unreadTotal) > 0
+                  ? Number(unreadTotal)
+                  : 0;
+              const unreadLabel = chatUnread > 99 ? "99+" : String(chatUnread);
               return (
                 <>
                   <span className="relative inline-flex">
@@ -285,8 +296,27 @@ const AppNav = ({ onNavigate, compact = false }) => {
                     {showDot ? (
                       <span className="absolute -top-0.5 -right-0.5 h-2 w-2 bg-destructive" />
                     ) : null}
+                    {isCompact && chatUnread > 0 ? (
+                      <span className="absolute -top-1.5 -right-2 min-w-[1.1rem] h-[1.1rem] px-1 rounded-full bg-destructive text-destructive-foreground text-[9px] font-bold leading-none flex items-center justify-center">
+                        {unreadLabel}
+                      </span>
+                    ) : null}
                   </span>
-                  {isCompact ? <span className="sr-only">{label}</span> : <span>{label}</span>}
+                  {isCompact ? (
+                    <span className="sr-only">
+                      {label}
+                      {chatUnread > 0 ? `, ${unreadLabel} unread` : ""}
+                    </span>
+                  ) : (
+                    <span className="flex items-center justify-between gap-2 min-w-0 flex-1">
+                      <span className="truncate">{label}</span>
+                      {chatUnread > 0 ? (
+                        <span className="shrink-0 min-w-5 h-5 px-1.5 rounded-full bg-destructive text-destructive-foreground text-[10px] font-semibold flex items-center justify-center">
+                          {unreadLabel}
+                        </span>
+                      ) : null}
+                    </span>
+                  )}
                 </>
               );
             }}

@@ -7,22 +7,31 @@ import {
   useRef,
   useState,
 } from "react";
-import { getAuthToken, getUser, isGuestPublicPath } from "../utils/factory";
+import { client } from "../api";
 import { chatSocketUrl } from "../config/env";
+import { endpoints } from "../utils/endpoints";
+import { getAuthToken, getUser, isGuestPublicPath } from "../utils/factory";
 
 const ChatContext = createContext(null);
 
 export const useChatSocket = () => useContext(ChatContext);
 
+const sumUnread = (byConv) =>
+  Object.values(byConv).reduce((sum, n) => sum + (Number(n) || 0), 0);
+
 export const ChatProvider = ({ children }) => {
   const [connected, setConnected] = useState(false);
   const [onlineIds, setOnlineIds] = useState(() => new Set());
   const [lastSeenMap, setLastSeenMap] = useState({});
+  const [unreadTotal, setUnreadTotal] = useState(0);
   const socketRef = useRef(null);
   const reconnectRef = useRef(null);
   const heartbeatRef = useRef(null);
   const listenersRef = useRef(new Set());
   const joinedRef = useRef(new Set());
+  const unreadByConvRef = useRef({});
+  const activeConversationRef = useRef(null);
+  const meIdRef = useRef(null);
 
   const emitLocal = useCallback((event, payload) => {
     listenersRef.current.forEach((fn) => {
@@ -97,6 +106,56 @@ export const ChatProvider = ({ children }) => {
     [send]
   );
 
+  const setUnreadCounts = useCallback((conversations) => {
+    const next = {};
+    (conversations || []).forEach((c) => {
+      const id = Number(c?.id);
+      const n = Number(c?.unread_count || 0);
+      if (id && n > 0) next[id] = n;
+    });
+    unreadByConvRef.current = next;
+    setUnreadTotal(sumUnread(next));
+  }, []);
+
+  const clearConversationUnread = useCallback((conversationId) => {
+    const id = Number(conversationId);
+    if (!id || !unreadByConvRef.current[id]) return;
+    const next = { ...unreadByConvRef.current };
+    delete next[id];
+    unreadByConvRef.current = next;
+    setUnreadTotal(sumUnread(next));
+  }, []);
+
+  const setActiveConversation = useCallback((conversationId) => {
+    activeConversationRef.current = conversationId
+      ? Number(conversationId)
+      : null;
+    if (conversationId) clearConversationUnread(conversationId);
+  }, [clearConversationUnread]);
+
+  const refreshUnread = useCallback(async () => {
+    if (!getAuthToken() || isGuestPublicPath()) {
+      unreadByConvRef.current = {};
+      setUnreadTotal(0);
+      return;
+    }
+    try {
+      const res = await client.run(
+        "get",
+        endpoints.chatConversations,
+        {},
+        true,
+        false,
+        false,
+        false
+      );
+      const list = res?.conversations || [];
+      setUnreadCounts(list);
+    } catch {
+      // Keep last known counts when offline
+    }
+  }, [setUnreadCounts]);
+
   const reactToMessage = useCallback(
     (conversationId, messageId, emoji) =>
       send("react_message", {
@@ -169,6 +228,33 @@ export const ChatProvider = ({ children }) => {
       if (event === "presence") {
         applyPresence(payload);
       }
+      if (event === "message" && payload) {
+        const mine =
+          payload.is_mine ||
+          Number(payload.sender?.id) === Number(meIdRef.current);
+        const convId = Number(payload.conversation_id);
+        if (
+          !mine &&
+          convId &&
+          Number(activeConversationRef.current) !== convId
+        ) {
+          const next = { ...unreadByConvRef.current };
+          next[convId] = (Number(next[convId]) || 0) + 1;
+          unreadByConvRef.current = next;
+          setUnreadTotal(sumUnread(next));
+        }
+      }
+      if (event === "read" && payload) {
+        if (Number(payload.user_id) === Number(meIdRef.current)) {
+          const id = Number(payload.conversation_id);
+          if (id && unreadByConvRef.current[id]) {
+            const next = { ...unreadByConvRef.current };
+            delete next[id];
+            unreadByConvRef.current = next;
+            setUnreadTotal(sumUnread(next));
+          }
+        }
+      }
       emitLocal(event, payload);
     };
 
@@ -196,6 +282,7 @@ export const ChatProvider = ({ children }) => {
 
   useEffect(() => {
     const user = getUser();
+    meIdRef.current = user?.id || null;
     if (isGuestPublicPath()) return undefined;
     if (!user?.id && !getAuthToken()) return undefined;
 
@@ -225,11 +312,51 @@ export const ChatProvider = ({ children }) => {
     };
   }, [connect]);
 
+  useEffect(() => {
+    const user = getUser();
+    meIdRef.current = user?.id || null;
+    if (isGuestPublicPath()) return undefined;
+    if (!user?.id && !getAuthToken()) {
+      unreadByConvRef.current = {};
+      setUnreadTotal(0);
+      return undefined;
+    }
+
+    let idleId;
+    let timeoutId;
+    let pollId;
+    const start = () => {
+      refreshUnread();
+      pollId = window.setInterval(refreshUnread, 60000);
+    };
+    if (typeof window !== "undefined" && window.requestIdleCallback) {
+      idleId = window.requestIdleCallback(start, { timeout: 3000 });
+    } else {
+      timeoutId = window.setTimeout(start, 1500);
+    }
+
+    const onUserUpdated = () => {
+      meIdRef.current = getUser()?.id || null;
+      refreshUnread();
+    };
+    window.addEventListener("userUpdated", onUserUpdated);
+    window.addEventListener("storage", onUserUpdated);
+
+    return () => {
+      if (idleId && window.cancelIdleCallback) window.cancelIdleCallback(idleId);
+      if (timeoutId) window.clearTimeout(timeoutId);
+      if (pollId) window.clearInterval(pollId);
+      window.removeEventListener("userUpdated", onUserUpdated);
+      window.removeEventListener("storage", onUserUpdated);
+    };
+  }, [refreshUnread]);
+
   const value = useMemo(
     () => ({
       connected,
       onlineIds,
       lastSeenMap,
+      unreadTotal,
       subscribe,
       joinConversation,
       leaveConversation,
@@ -238,12 +365,17 @@ export const ChatProvider = ({ children }) => {
       markRead,
       reactToMessage,
       seedOnline,
+      setUnreadCounts,
+      clearConversationUnread,
+      setActiveConversation,
+      refreshUnread,
       isOnline: (userId) => onlineIds.has(Number(userId)),
     }),
     [
       connected,
       onlineIds,
       lastSeenMap,
+      unreadTotal,
       subscribe,
       joinConversation,
       leaveConversation,
@@ -252,6 +384,10 @@ export const ChatProvider = ({ children }) => {
       markRead,
       reactToMessage,
       seedOnline,
+      setUnreadCounts,
+      clearConversationUnread,
+      setActiveConversation,
+      refreshUnread,
     ]
   );
 

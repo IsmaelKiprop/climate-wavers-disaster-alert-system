@@ -296,6 +296,9 @@ const CommunityChat = () => {
     seedOnline,
     isOnline,
     lastSeenMap,
+    setUnreadCounts,
+    clearConversationUnread,
+    setActiveConversation,
   } = chat;
 
   const [conversations, setConversations] = useState([]);
@@ -351,7 +354,11 @@ const CommunityChat = () => {
 
   useEffect(() => {
     activeIdRef.current = activeId;
-  }, [activeId]);
+    if (setActiveConversation) setActiveConversation(activeId);
+    return () => {
+      if (setActiveConversation) setActiveConversation(null);
+    };
+  }, [activeId, setActiveConversation]);
 
   useEffect(() => {
     messagesRef.current = messages;
@@ -373,6 +380,7 @@ const CommunityChat = () => {
       const res = await client.run("get", endpoints.chatConversations, {}, true);
       const list = res?.conversations || unwrapList(res) || [];
       setConversations(list);
+      if (setUnreadCounts) setUnreadCounts(list);
       if (Array.isArray(res?.online_user_ids) && seedOnline) {
         seedOnline(res.online_user_ids);
       }
@@ -383,7 +391,7 @@ const CommunityChat = () => {
     } finally {
       setLoadingList(false);
     }
-  }, [seedOnline]);
+  }, [seedOnline, setUnreadCounts]);
 
   const loadMessages = useCallback(async (conversationId) => {
     if (!conversationId) return;
@@ -415,12 +423,13 @@ const CommunityChat = () => {
           Number(c.id) === Number(conversationId) ? { ...c, unread_count: 0 } : c
         )
       );
+      if (clearConversationUnread) clearConversationUnread(conversationId);
     } catch {
       setMessages([]);
     } finally {
       setLoadingMessages(false);
     }
-  }, [markRead]);
+  }, [markRead, clearConversationUnread]);
 
   const joinClimateCall = useCallback(
     async (eventId, { ring = false } = {}) => {
