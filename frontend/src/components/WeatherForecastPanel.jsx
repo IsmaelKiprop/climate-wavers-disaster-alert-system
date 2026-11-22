@@ -22,7 +22,12 @@ import {
 } from "react-icons/io5";
 import { WiFog, WiDayCloudy } from "react-icons/wi";
 import { useTheme } from "../context/ThemeContext";
-import { DEFAULT_LOCATION, resolveUserLocation } from "../utils/location";
+import {
+  DEFAULT_LOCATION,
+  QUICK_WEATHER_CITIES,
+  resolveUserLocation,
+  setManualWeatherLocation,
+} from "../utils/location";
 import { fetchWeatherForecast } from "../utils/weatherForecast";
 
 ChartJS.register(
@@ -103,25 +108,36 @@ const WeatherForecastPanel = ({ compact = false, className = "" }) => {
   const [error, setError] = useState("");
   const [locating, setLocating] = useState(false);
 
-  const load = useCallback(async ({ forceRefresh = false } = {}) => {
+  const load = useCallback(async ({ forceRefresh = false, coords: preset } = {}) => {
     setLoading(true);
     setError("");
     try {
-      const coords = await resolveUserLocation({ forceRefresh });
+      const coords =
+        preset ||
+        (await resolveUserLocation({ forceRefresh }));
       const report = await fetchWeatherForecast({
         latitude: coords.latitude,
         longitude: coords.longitude,
         label:
-          forceRefresh
+          forceRefresh && coords.source === "device"
             ? null
-            : coords.label || (coords.source === "default" ? DEFAULT_LOCATION.label : null),
-        // Refresh and My location both re-geocode so a stale "India" cookie cannot stick.
-        refreshPlaceLabel: forceRefresh || !coords.label || coords.gpsFailed,
+            : coords.label ||
+              (coords.source === "default" ? DEFAULT_LOCATION.label : null),
+        refreshPlaceLabel:
+          forceRefresh ||
+          !coords.label ||
+          coords.gpsFailed ||
+          coords.lowAccuracy ||
+          coords.source === "device",
       });
       setForecast(report);
-      if (forceRefresh && coords.gpsFailed) {
+      if (coords.lowAccuracy) {
         setError(
-          "Could not get GPS — showing last saved place. Allow location access and try My location again."
+          "Browser location was too imprecise (often wrong IP city). Pick your city below, or enable precise location."
+        );
+      } else if (forceRefresh && coords.gpsFailed) {
+        setError(
+          "Could not get GPS — showing a nearby fallback. Allow location, or pick your city below."
         );
       }
     } catch (err) {
@@ -134,13 +150,18 @@ const WeatherForecastPanel = ({ compact = false, className = "" }) => {
   }, []);
 
   useEffect(() => {
-    // First paint: prefer a fresh device fix so a stale cookie (e.g. wrong country) does not stick.
     load({ forceRefresh: true });
   }, [load]);
 
   const useMyLocation = async () => {
     setLocating(true);
     await load({ forceRefresh: true });
+  };
+
+  const pickCity = async (city) => {
+    setLocating(true);
+    const coords = setManualWeatherLocation(city);
+    await load({ forceRefresh: false, coords });
   };
 
   const chartOptions = useMemo(() => {
@@ -307,7 +328,35 @@ const WeatherForecastPanel = ({ compact = false, className = "" }) => {
         </div>
       </div>
 
-      {error ? <p className="px-4 pt-3 text-sm text-destructive">{error}</p> : null}
+      {error ? (
+        <p className="px-4 pt-3 text-sm text-amber-700 dark:text-amber-400">{error}</p>
+      ) : null}
+
+      <div className="px-4 pt-3 flex flex-wrap gap-2">
+        {QUICK_WEATHER_CITIES.map((city) => {
+          const active =
+            forecast?.location?.label &&
+            String(forecast.location.label)
+              .toLowerCase()
+              .includes(city.label.split(",")[0].toLowerCase());
+          return (
+            <button
+              key={city.label}
+              type="button"
+              onClick={() => pickCity(city)}
+              disabled={loading || locating}
+              className={`h-8 px-2.5 text-xs border disabled:opacity-60 ${
+                active
+                  ? "border-primary text-primary bg-primary/10"
+                  : "border-border text-muted hover:border-primary hover:text-foreground"
+              }`}
+              style={{ borderRadius: 5 }}
+            >
+              {city.label.split(",")[0]}
+            </button>
+          );
+        })}
+      </div>
 
       <div className="p-4 space-y-5">
         {/* Now strip: one composition, not a card stack */}
