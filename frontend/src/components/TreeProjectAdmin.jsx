@@ -595,8 +595,14 @@ const TreeProjectAdmin = () => {
       toast.error('Add at least one photo or video');
       return;
     }
-    if (proofLat === '' || proofLng === '') {
-      toast.error('Capture planting GPS (Use my GPS) so the tree shows on the impact map');
+    const latitude = Number(proofLat);
+    const longitude = Number(proofLng);
+    if (proofLat === '' || proofLng === '' || !Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+      toast.error('Enter latitude and longitude, or capture them with Use my GPS');
+      return;
+    }
+    if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+      toast.error('Latitude must be between -90 and 90; longitude between -180 and 180');
       return;
     }
     setProofSaving(true);
@@ -1485,15 +1491,41 @@ Thank you for your understanding! 🌱
                     >
                       {proofLocating ? 'Getting GPS…' : 'Use my GPS'}
                     </button>
-                    {(proofLat || proofLng) ? (
-                      <p className="text-xs text-muted self-center font-mono">
-                        {proofLat}, {proofLng}
-                      </p>
-                    ) : (
-                      <p className="text-xs text-amber-700 self-center">
-                        Required — pins the tree on the community impact map
-                      </p>
-                    )}
+                    <p className="text-xs text-muted self-center">
+                      Or enter the planting site coordinates manually (decimal degrees).
+                    </p>
+                  </div>
+                  <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <label className="text-sm">
+                      <span className="block mb-1">Latitude</span>
+                      <input
+                        type="number"
+                        inputMode="decimal"
+                        step="any"
+                        min="-90"
+                        max="90"
+                        value={proofLat}
+                        onChange={(e) => setProofLat(e.target.value)}
+                        placeholder="e.g. -4.0435"
+                        className={fieldClass}
+                      />
+                      <span className="text-xs text-muted">-90 to 90</span>
+                    </label>
+                    <label className="text-sm">
+                      <span className="block mb-1">Longitude</span>
+                      <input
+                        type="number"
+                        inputMode="decimal"
+                        step="any"
+                        min="-180"
+                        max="180"
+                        value={proofLng}
+                        onChange={(e) => setProofLng(e.target.value)}
+                        placeholder="e.g. 39.6682"
+                        className={fieldClass}
+                      />
+                      <span className="text-xs text-muted">-180 to 180</span>
+                    </label>
                   </div>
                 </div>
 
