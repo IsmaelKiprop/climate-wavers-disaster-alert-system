@@ -182,8 +182,15 @@ const Posts = ({
     }
   };
 
-  const shareUrl = (post) => `${window.location.origin}/app/post/${post.id}`;
-  const shareText = (post) => String(post?.content || "").trim().slice(0, 500);
+  const shareUrl = (post) => `${window.location.origin}/share/post/${post.id}`;
+  const shareText = (post) =>
+    String(post?.content || "")
+      .replace(/\uFFFD/g, "")
+      .replace(/[\p{Extended_Pictographic}\uFE0F\u200D]/gu, "")
+      .replace(/[\u{1F1E6}-\u{1F1FF}]/gu, "")
+      .replace(/\s{2,}/g, " ")
+      .trim()
+      .slice(0, 500);
   const openShareTarget = (target, post) => {
     const url = shareUrl(post);
     const text = shareText(post);

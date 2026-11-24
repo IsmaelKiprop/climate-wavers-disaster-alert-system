@@ -45,6 +45,14 @@
   ],
   "rewrites": [
     {
+      "source": "/share/post/:id",
+      "destination": "/api/share-post?id=:id"
+    },
+    {
+      "source": "/share/post/:id/",
+      "destination": "/api/share-post?id=:id"
+    },
+    {
       "source": "/share/profile/:id",
       "destination": "/api/share-profile?id=:id"
     },
@@ -245,6 +253,17 @@
         }
       ],
       "destination": "/api/share-page?path=/champions"
+    },
+    {
+      "source": "/app/post/:id",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": "(?i).*(whatsapp|facebookexternalhit|facebot|twitterbot|linkedinbot|slackbot|discordbot|telegrambot|embedly|pinterest|quora link preview|googlebot|bingbot|applebot|yandexbot|duckduckbot|bot|crawler|spider).*"
+        }
+      ],
+      "destination": "/api/share-post?id=:id"
     },
     {
       "source": "/app",
