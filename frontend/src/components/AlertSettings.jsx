@@ -452,8 +452,7 @@ const AlertSettings = () => {
           <div>
             <p className="text-sm font-medium text-foreground">Nearby Champion sirens</p>
             <p className="mt-1 text-sm text-muted">
-              Opt in so Community Champions can send a geofenced phone siren when you are
-              near a verified hazard. Uses recent device location — not SMS-first.
+              Opt in to receive a real-time in-app alert when a Community Champion warns people near a verified hazard. Your location must be recent; Climate Wavers must be open to receive the live siren. This does not send SMS.
             </p>
           </div>
           <p className="text-xs text-muted">

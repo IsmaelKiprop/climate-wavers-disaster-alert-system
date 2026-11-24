@@ -25,7 +25,6 @@ from .champion_curriculum import (
 
 from .models import (
     CameraAccessLog,
-    CameraClip,
     ChampionCheckIn,
     ChampionEnrollment,
     ChampionRating,
@@ -220,8 +219,14 @@ def serialize_champion(champ: CommunityChampion, *, public=False) -> dict:
         "user_id": champ.user_id,
     }
     if not public:
+        latest_check_in = champ.check_ins.order_by("-created_at").only(
+            "accuracy_m", "created_at"
+        ).first()
         data.update(
             {
+                "last_check_in_accuracy_m": latest_check_in.accuracy_m
+                if latest_check_in
+                else None,
                 "phone": champ.phone,
                 "relay_nodes": champ.relay_nodes or [],
                 "user_id": champ.user_id,
@@ -642,12 +647,18 @@ class ChampionVerifyQueueView(APIView):
         disasters = Disaster.objects.exclude(
             status__in=("resolved", "contained")
         ).order_by("-start_date")[:200]
+        live_rooms = {}
+        for verification in ChampionVerification.objects.filter(
+            disaster_id__in=[d.id for d in disasters], jitsi_room__gt=""
+        ).order_by("-created_at").only("disaster_id", "jitsi_room"):
+            live_rooms.setdefault(verification.disaster_id, verification.jitsi_room)
         already = set(
             ChampionVerification.objects.filter(champion=champ).values_list(
                 "disaster_id", flat=True
             )
         )
         results = []
+        warn_targets = []
         nearby_incidents = []
         for d in disasters:
             if d.latitude is None or d.longitude is None:
@@ -668,28 +679,38 @@ class ChampionVerifyQueueView(APIView):
             if duplicate:
                 continue
             nearby_incidents.append(d)
+            hazard_item = {
+                "id": d.id,
+                "title": d.title,
+                "disaster_type": d.disaster_type,
+                "severity": d.severity,
+                "status": d.status,
+                "city": d.city,
+                "region": d.region,
+                "country": d.country,
+                "latitude": float(d.latitude),
+                "longitude": float(d.longitude),
+                "cover_image": d.cover_image,
+                "distance_km": round(dist, 2),
+                "affected_area_radius": float(d.affected_area_radius or 0),
+                "live_cam_room": live_rooms.get(d.id, ""),
+                "description": (d.description or "")[:280],
+                "start_date": d.start_date.isoformat() if d.start_date else None,
+                "already_verified": d.id in already,
+            }
+            warn_targets.append(hazard_item)
             if d.id in already:
                 continue
-            results.append(
-                {
-                    "id": d.id,
-                    "title": d.title,
-                    "disaster_type": d.disaster_type,
-                    "severity": d.severity,
-                    "status": d.status,
-                    "city": d.city,
-                    "region": d.region,
-                    "country": d.country,
-                    "latitude": float(d.latitude),
-                    "longitude": float(d.longitude),
-                    "cover_image": d.cover_image,
-                    "distance_km": round(dist, 2),
-                    "description": (d.description or "")[:280],
-                    "start_date": d.start_date.isoformat() if d.start_date else None,
-                }
-            )
+            results.append(hazard_item)
         results.sort(key=lambda x: x["distance_km"])
-        return Response({"results": results[:50], "radius_km": radius})
+        warn_targets.sort(key=lambda x: x["distance_km"])
+        return Response(
+            {
+                "results": results[:50],
+                "warn_targets": warn_targets[:50],
+                "radius_km": radius,
+            }
+        )
 
 
 class ChampionVerificationCreateView(APIView):
@@ -1229,7 +1250,10 @@ class PartnerCameraNearbyView(APIView):
                         "stream_type": cam.stream_type,
                         "status": cam.status,
                         "distance_km": round(dist, 2),
-                        "has_stream": bool(cam.stream_url),
+                        "has_stream": bool(cam.stream_url)
+                        and cam.stream_type in ("hls", "mjpeg"),
+                        "stream_type": cam.stream_type,
+                        "needs_proxy": cam.stream_type == "rtsp" and bool(cam.stream_url),
                         "preview_url": cam.stream_url if cam.stream_type in ("hls", "mjpeg") else "",
                     }
                 )
@@ -1242,16 +1266,20 @@ class PartnerCameraNearbyView(APIView):
             "no",
         )
         public_count = 0
+        public_lookup_error = False
         if include_public:
             try:
                 from .public_cctv import fetch_public_webcams
 
                 radius_m = int(request.query_params.get("public_radius_m") or 15000)
-                public_cams = fetch_public_webcams(lat, lng, radius_m=radius_m)
+                public_cams = fetch_public_webcams(
+                    lat, lng, radius_m=radius_m, raise_on_error=True
+                )
                 public_count = len(public_cams)
                 # Prefer partner cams first, then public
                 results.extend(public_cams)
             except Exception as exc:
+                public_lookup_error = True
                 logger.warning("Public CCTV lookup failed: %s", exc)
 
         results.sort(
@@ -1267,6 +1295,7 @@ class PartnerCameraNearbyView(APIView):
                 "partner_count": partner_count,
                 "public_count": public_count,
                 "public_fallback": partner_count == 0 and public_count > 0,
+                "public_lookup_error": public_lookup_error,
             }
         )
 
@@ -1437,52 +1466,9 @@ class PartnerCameraRecordMomentView(APIView):
         cam = PartnerCamera.objects.filter(id=camera_id, status="active").first()
         if not cam:
             return Response({"detail": "Camera not found"}, status=404)
-        duration = min(int(data.get("duration_s") or 60), 180)
-        disaster = None
-        verification = None
-        if data.get("disaster_id"):
-            disaster = Disaster.objects.filter(id=data.get("disaster_id")).first()
-        if data.get("verification_id"):
-            verification = ChampionVerification.objects.filter(
-                id=data.get("verification_id")
-            ).first()
-        clip = CameraClip.objects.create(
-            camera=cam,
-            disaster=disaster,
-            verification=verification,
-            started_at=timezone.now(),
-            duration_s=duration,
-            storage_url="",
-            sync_status="recording",
-            source="snapshot" if data.get("snapshot") else "live_record",
-        )
-        CameraAccessLog.objects.create(
-            camera=cam, user=request.user, action="record"
-        )
-        clip.sync_status = "synced"
-        clip.storage_url = f"/media/camera-clips/{clip.id}.placeholder"
-        clip.save(update_fields=["sync_status", "storage_url"])
-        if verification:
-            evidence = list(verification.evidence or [])
-            evidence.append(
-                {
-                    "kind": "cctv_snapshot" if clip.source == "snapshot" else "cctv_clip",
-                    "camera_id": cam.id,
-                    "url": clip.storage_url,
-                    "clip_id": clip.id,
-                }
-            )
-            verification.evidence = evidence
-            verification.save(update_fields=["evidence", "updated_at"])
         return Response(
-            {
-                "clip_id": clip.id,
-                "public": False,
-                "sync_status": clip.sync_status,
-                "storage_url": clip.storage_url,
-                "duration_s": clip.duration_s,
-            },
-            status=201,
+            {"detail": "Partner camera recording storage is not configured. Open the live feed to view it."},
+            status=501,
         )
 
 

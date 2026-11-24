@@ -8,6 +8,7 @@ import { apiUrl, chatbotApiUrl, env } from "../config/env";
 import { unwrapList } from "../utils/apiData";
 import { avatarInitial, getUser, secureMediaUrl } from "../utils/factory";
 import ChampionCertificate from "./ChampionCertificate";
+import JitsiMeetEmbed from "./JitsiMeetEmbed";
 
 const TABS = ["Verify", "Warn", "Network", "Training", "Cameras", "Impact"];
 
@@ -16,6 +17,7 @@ const ChampionDesk = () => {
   const [me, setMe] = useState(null);
   const [impact, setImpact] = useState(null);
   const [queue, setQueue] = useState([]);
+  const [warnTargets, setWarnTargets] = useState([]);
   const [selected, setSelected] = useState(null);
   const [enrollments, setEnrollments] = useState([]);
   const [training, setTraining] = useState([]);
@@ -33,11 +35,17 @@ const ChampionDesk = () => {
   const [certData, setCertData] = useState(null);
   const [cameras, setCameras] = useState([]);
   const [cameraMeta, setCameraMeta] = useState({ partner_count: 0, public_count: 0, public_fallback: false });
+  const [cameraLoading, setCameraLoading] = useState(false);
+  const [cameraLookupError, setCameraLookupError] = useState(false);
+  const [liveCamRoom, setLiveCamRoom] = useState("");
+  const [liveCamHost, setLiveCamHost] = useState(false);
+  const [cameraEvidence, setCameraEvidence] = useState([]);
   const [templates, setTemplates] = useState([]);
   const [warnRadius, setWarnRadius] = useState(1000);
   const [warnPreview, setWarnPreview] = useState(null);
   const [warnTemplate, setWarnTemplate] = useState("");
   const [warnNote, setWarnNote] = useState("");
+  const [warnResult, setWarnResult] = useState(null);
   const [enrollForm, setEnrollForm] = useState({
     name: "",
     email: "",
@@ -121,8 +129,10 @@ const ChampionDesk = () => {
       }
       const data = await client.run("get", endpoints.championsVerifyQueue, {}, true);
       setQueue(data?.results || []);
+      setWarnTargets(data?.warn_targets || data?.results || []);
     } catch (err) {
       setQueue([]);
+      setWarnTargets([]);
       if (err?.response?.data?.detail) {
         /* pending champions see empty */
       }
@@ -169,7 +179,7 @@ const ChampionDesk = () => {
       if (tab === "Training") loadTraining();
       return;
     }
-    if (tab === "Verify") loadQueue();
+    if (tab === "Verify" || tab === "Warn") loadQueue();
     if (tab === "Network") loadEnrollments();
     if (tab === "Training") loadTraining();
   }, [tab, me, loadQueue, loadEnrollments, loadTraining]);
@@ -223,6 +233,30 @@ const ChampionDesk = () => {
       );
     });
 
+  const distanceKm = (lat1, lng1, lat2, lng2) => {
+    const toRad = (value) => (value * Math.PI) / 180;
+    const dLat = toRad(lat2 - lat1);
+    const dLng = toRad(lng2 - lng1);
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+    return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  };
+
+  const closeLiveCam = useCallback(() => {
+    setLiveCamRoom("");
+    setLiveCamHost(false);
+  }, []);
+
+  useEffect(() => {
+    setCameraEvidence([]);
+    setCameras([]);
+    setCameraLookupError(false);
+    setCameraMeta({ partner_count: 0, public_count: 0, public_fallback: false });
+    setLiveCamRoom("");
+    setLiveCamHost(false);
+    setWarnPreview(null);
+    setWarnResult(null);
+  }, [selected?.id]);
+
   const submitDecision = async (decision) => {
     if (!selected) return;
     setBusy(true);
@@ -242,6 +276,35 @@ const ChampionDesk = () => {
           return;
         }
       }
+      if (decision !== "escalate") {
+        const maxKm = Number(me?.radius_km || 5) + Number(selected.affected_area_radius || 2);
+        const freshDistance = coords.latitude != null
+          ? distanceKm(coords.latitude, coords.longitude, Number(selected.latitude), Number(selected.longitude))
+          : Infinity;
+        if (freshDistance > maxKm || Number(coords.accuracy_m) > 5000) {
+          const checkedAt = me?.last_check_in_at ? new Date(me.last_check_in_at).getTime() : 0;
+          const checkInAge = Date.now() - checkedAt;
+          const checkInDistance = me?.latitude != null && me?.longitude != null
+            ? distanceKm(Number(me.latitude), Number(me.longitude), Number(selected.latitude), Number(selected.longitude))
+            : Infinity;
+          const usableCheckIn = checkInAge >= 0 && checkInAge <= 60 * 60 * 1000
+            && Number(me?.last_check_in_accuracy_m) <= 2000
+            && checkInDistance <= maxKm;
+          if (usableCheckIn && window.confirm(
+            `Your current browser GPS is ${freshDistance.toFixed(1)} km from this hazard${Number.isFinite(Number(coords.accuracy_m)) ? ` (accuracy ${Math.round(coords.accuracy_m)} m)` : ""}. Use your recent on-site check-in (${checkInDistance.toFixed(1)} km away, ${Math.max(0, Math.round(checkInAge / 60000))} min ago) instead?`
+          )) {
+            coords = {
+              latitude: Number(me.latitude),
+              longitude: Number(me.longitude),
+              accuracy_m: Number(me.last_check_in_accuracy_m),
+            };
+          } else {
+            toast.error("Browser GPS does not place you near this hazard. Check in again on site, then retry.");
+            setBusy(false);
+            return;
+          }
+        }
+      }
       const data = await client.run(
         "post",
         endpoints.championsVerifications,
@@ -253,7 +316,11 @@ const ChampionDesk = () => {
           field_signals: {
             still_active: true,
           },
-          evidence: [],
+          evidence: [
+            ...cameraEvidence,
+            ...(liveCamRoom ? [{ kind: "live_cam", jitsi_room: liveCamRoom }] : []),
+          ],
+          jitsi_room: liveCamRoom,
           ...coords,
         },
         true
@@ -271,10 +338,18 @@ const ChampionDesk = () => {
   };
 
   const startLiveCam = async () => {
+    if (!selected) {
+      toast.error("Select a hazard first");
+      return;
+    }
     setBusy(true);
     try {
       const data = await client.run("post", endpoints.championsLiveCam, {}, true);
-      toast.success(`Ground-truth room: ${data?.roomName || data?.jitsi_room}`);
+      const room = data?.roomName || data?.jitsi_room;
+      if (!room) throw new Error("No live camera room was returned");
+      setLiveCamRoom(room);
+      setLiveCamHost(true);
+      toast.info("Join the room and enable your camera to share a live view. Your browser may ask for camera access.");
     } catch (err) {
       toast.error(err?.response?.data?.detail || "Could not start live cam");
     } finally {
@@ -284,6 +359,8 @@ const ChampionDesk = () => {
 
   const loadCameras = async () => {
     if (!selected?.id && !me) return;
+    setCameraLoading(true);
+    setCameraLookupError(false);
     try {
       const q = selected?.id
         ? `?disaster_id=${selected.id}&include_public=1`
@@ -299,13 +376,19 @@ const ChampionDesk = () => {
         partner_count: data?.partner_count || 0,
         public_count: data?.public_count || 0,
         public_fallback: Boolean(data?.public_fallback),
+        public_lookup_error: Boolean(data?.public_lookup_error),
       });
+      if (!(data?.results || []).length) toast.info("No nearby cameras found for this hazard.");
       if ((data?.partner_count || 0) === 0 && (data?.public_count || 0) > 0) {
         toast.info("No partner CCTV — showing public nearby webcams");
       }
     } catch {
       setCameras([]);
       setCameraMeta({ partner_count: 0, public_count: 0, public_fallback: false });
+      setCameraLookupError(true);
+      toast.error("Could not look up nearby cameras. Check your connection and try again.");
+    } finally {
+      setCameraLoading(false);
     }
   };
 
@@ -338,7 +421,7 @@ const ChampionDesk = () => {
   const recordCam = async (cameraId, isPublic = false) => {
     setBusy(true);
     try {
-      await client.run(
+      const result = await client.run(
         "post",
         endpoints.championsCameraRecord(cameraId),
         {
@@ -350,11 +433,12 @@ const ChampionDesk = () => {
         },
         true
       );
-      toast.success(
-        isPublic
-          ? "Public webcam snapshot captured for evidence"
-          : "Moment recorded — syncing"
-      );
+      if (isPublic && result?.evidence) {
+        setCameraEvidence((items) => [...items, result.evidence]);
+        toast.success("Public camera reference and fingerprint added to this verification");
+      } else if (isPublic) {
+        toast.success("Public camera snapshot captured");
+      }
     } catch (err) {
       toast.error(err?.response?.data?.detail || "Record failed");
     } finally {
@@ -384,23 +468,6 @@ const ChampionDesk = () => {
     if (!selected) return;
     setBusy(true);
     try {
-      // Share our location ping so we participate in network
-      try {
-        const c = await getGps();
-        await client.run(
-          "post",
-          endpoints.championsLocationPing,
-          {
-            latitude: c.latitude,
-            longitude: c.longitude,
-            accuracy_m: c.accuracy,
-            proximity_alerts_opt_in: true,
-          },
-          true
-        );
-      } catch {
-        /* optional */
-      }
       const data = await client.run(
         "post",
         endpoints.championsWarn,
@@ -414,9 +481,12 @@ const ChampionDesk = () => {
         },
         true
       );
-      toast.success(
-        `Warned nearby — ${data?.delivered_count ?? 0} phones (of ${data?.targeted_count ?? 0})`
-      );
+      setWarnResult(data);
+      if (Number(data?.targeted_count || 0) === 0) {
+        toast.info("Warning was created, but no opted-in users with a recent location matched this radius.");
+      } else {
+        toast.success(`Nearby warning sent to ${data?.delivered_count || 0} opted-in users (${data?.targeted_count} matched).`);
+      }
       loadMe();
     } catch (err) {
       toast.error(err?.response?.data?.detail || "Warn failed");
@@ -762,6 +832,13 @@ const ChampionDesk = () => {
                     <h2 className="text-lg font-semibold text-foreground">{selected.title}</h2>
                     <p className="text-sm text-muted mt-1">{selected.description}</p>
                   </div>
+                  {selected.live_cam_room ? (
+                    <button
+                      type="button"
+                      onClick={() => { setLiveCamHost(false); setLiveCamRoom(selected.live_cam_room); }}
+                      className="h-10 px-3 border border-primary text-primary text-sm"
+                    >Join community live camera</button>
+                  ) : null}
                   <label className="block text-xs text-muted">
                     Feed comparison
                     <select
@@ -826,6 +903,15 @@ const ChampionDesk = () => {
                       Nearby CCTV
                     </button>
                   </div>
+                  {cameraEvidence.length ? (
+                    <p className="text-xs text-primary">{cameraEvidence.length} public camera reference{cameraEvidence.length === 1 ? "" : "s"} will be attached to your verification.</p>
+                  ) : null}
+                  {liveCamRoom ? (
+                    <p className="text-xs text-primary">Live camera room is open. Join it to enable your phone camera, then submit the verification to attach the room.</p>
+                  ) : null}
+                  {cameraLoading ? <p className="text-sm text-muted">Searching nearby partner cameras and public webcam listings…</p> : null}
+                  {cameraLookupError ? <p className="text-sm text-muted">Camera lookup failed. Retry when your connection is available.</p> : null}
+                  {!cameraLoading && !cameraLookupError && !cameras.length ? <p className="text-sm text-muted">{cameraMeta.public_lookup_error ? "No partner cameras were found, and the public webcam lookup is temporarily unavailable." : "No cameras found near this hazard. Try Phone live cam or register an opted-in partner camera."}</p> : null}
                   {cameras.length ? (
                     <div className="space-y-2">
                       <p className="text-xs uppercase tracking-wide text-muted">
@@ -853,7 +939,7 @@ const ChampionDesk = () => {
                               </span>
                             )}
                             {!cam.has_stream ? (
-                              <span className="ml-2 text-[10px] text-muted">no open URL</span>
+                              <span className="ml-2 text-[10px] text-muted">{cam.needs_proxy ? "RTSP playback proxy required" : "no playable open URL"}</span>
                             ) : null}
                           </span>
                           <div className="flex gap-1">
@@ -865,14 +951,14 @@ const ChampionDesk = () => {
                             >
                               View
                             </button>
-                            <button
-                              type="button"
-                              disabled={!cam.has_stream || busy}
-                              onClick={() => recordCam(cam.id, Boolean(cam.public))}
-                              className="h-8 px-2 border border-border text-xs disabled:opacity-40"
-                            >
-                              {cam.public ? "Capture" : "Record moment"}
-                            </button>
+                            {cam.public ? (
+                              <button
+                                type="button"
+                                disabled={!cam.has_stream || busy}
+                                onClick={() => recordCam(cam.id, true)}
+                                className="h-8 px-2 border border-border text-xs disabled:opacity-40"
+                              >Capture reference</button>
+                            ) : null}
                           </div>
                         </div>
                       ))}
@@ -887,35 +973,40 @@ const ChampionDesk = () => {
         {tab === "Warn" && active ? (
           <div className="max-w-xl space-y-4 border border-border p-4">
             <p className="text-sm text-muted">
-              Geofenced phone siren for people who opted in under Alert settings and were
-              recently near the hazard. Not SMS-first.
+              Sends a real-time in-app alert to people who opted into Nearby Champion Sirens
+              and shared their location within the last 90 minutes.
             </p>
             {!selected ? (
               <p className="text-sm text-foreground">
-                Open Verify, select a hazard, then return here — or pick from the queue:
+                Select an active hazard below. Confirmed hazards stay available here for warnings.
               </p>
             ) : (
               <p className="text-sm font-medium">{selected.title}</p>
             )}
+            {warnTargets.length ? (
             <div className="flex flex-wrap gap-2">
-              {queue.slice(0, 5).map((item) => (
+              {warnTargets.slice(0, 10).map((item) => (
                 <button
                   key={item.id}
                   type="button"
-                  onClick={() => setSelected(item)}
-                  className="h-8 px-2 border border-border text-xs"
+                  onClick={() => { setSelected(item); setWarnPreview(null); setWarnResult(null); }}
+                  className={`h-8 px-2 border text-xs ${selected?.id === item.id ? "border-primary text-primary" : "border-border"}`}
                 >
-                  {item.title.slice(0, 28)}
+                  {item.title.slice(0, 28)} · {item.status}
                 </button>
               ))}
             </div>
+            ) : <p className="text-sm text-muted">No active hazards are currently in your territory. Refresh your GPS check-in or wait for a nearby report.</p>}
             <label className="block text-xs text-muted">
               Radius (m)
               <input
                 type="number"
+                min={200}
+                max={me?.tier === "trusted" ? 5000 : me?.tier === "active" ? 3000 : 1000}
+                step={100}
                 className="mt-1 w-full h-10 border border-border px-2"
                 value={warnRadius}
-                onChange={(e) => setWarnRadius(Number(e.target.value) || 1000)}
+                onChange={(e) => { setWarnRadius(Number(e.target.value) || 1000); setWarnPreview(null); setWarnResult(null); }}
               />
             </label>
             <label className="block text-xs text-muted">
@@ -944,6 +1035,7 @@ const ChampionDesk = () => {
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"
+                disabled={!selected || busy}
                 onClick={previewWarn}
                 className="h-10 px-3 border border-border text-sm"
               >
@@ -960,7 +1052,15 @@ const ChampionDesk = () => {
             </div>
             {warnPreview ? (
               <p className="text-sm text-muted">
-                ~{warnPreview.count} phones in {warnPreview.radius_m} m
+                About {warnPreview.count} opted-in users with a recent location within {warnPreview.radius_m} m
+              </p>
+            ) : null}
+            {warnPreview && warnPreview.count === 0 ? (
+              <p className="text-xs text-muted">Recipients must enable Nearby Champion Sirens and share a recent location in Alert Settings.</p>
+            ) : null}
+            {warnResult ? (
+              <p className="text-sm text-foreground" role="status">
+                Warning saved: {warnResult.delivered_count} in-app alerts sent to {warnResult.targeted_count} matched users within {warnResult.radius_m} m.
               </p>
             ) : null}
           </div>
@@ -1320,6 +1420,16 @@ const ChampionDesk = () => {
           </div>
         ) : null}
       </div>
+      {liveCamRoom ? (
+        <JitsiMeetEmbed
+          roomName={liveCamRoom}
+          displayName={me?.display_name || "Community Champion"}
+          subject={`Live hazard view · ${selected?.title || "Disaster response"}`}
+          onClose={closeLiveCam}
+          startWithVideoMuted={!liveCamHost}
+          startWithAudioMuted={true}
+        />
+      ) : null}
     </div>
   );
 };

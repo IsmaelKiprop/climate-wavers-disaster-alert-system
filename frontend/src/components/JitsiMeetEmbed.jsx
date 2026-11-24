@@ -34,6 +34,8 @@ const JitsiMeetEmbed = ({
   subject = "Climate Wavers",
   domain,
   onClose,
+  startWithVideoMuted = true,
+  startWithAudioMuted = false,
 }) => {
   const containerRef = useRef(null);
   const apiRef = useRef(null);
@@ -67,8 +69,8 @@ const JitsiMeetEmbed = ({
             // Skip lobby so both people land in the same room immediately.
             prejoinConfig: { enabled: false },
             prejoinPageEnabled: false,
-            startWithAudioMuted: false,
-            startWithVideoMuted: true,
+            startWithAudioMuted,
+            startWithVideoMuted,
             disableDeepLinking: true,
             disableInviteFunctions: true,
             enableClosePage: false,
@@ -149,7 +151,7 @@ const JitsiMeetEmbed = ({
       }
       apiRef.current = null;
     };
-  }, [roomName, displayName, subject, host, onClose]);
+  }, [roomName, displayName, subject, host, onClose, startWithVideoMuted, startWithAudioMuted]);
 
   if (typeof document === "undefined") return null;
 

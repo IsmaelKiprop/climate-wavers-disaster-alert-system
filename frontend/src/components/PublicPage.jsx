@@ -17,6 +17,7 @@ export default function PublicPage({
   type = "website",
   canonical,
   path,
+  embedded = false,
 }) {
   const location = useLocation();
   const signedIn = Boolean(getAuthToken());
@@ -37,8 +38,8 @@ export default function PublicPage({
         image={image}
         type={type}
       />
-      <main className="min-h-[100dvh] bg-background text-foreground flex flex-col overflow-x-hidden">
-        <header className="bg-surface border-b border-border">
+      <main className={embedded ? "w-full min-w-0 bg-background text-foreground" : "min-h-[100dvh] bg-background text-foreground flex flex-col overflow-x-hidden"}>
+        {!embedded ? <header className="bg-surface border-b border-border">
           <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between gap-3">
             <Link to={homeTo} className="flex items-center min-w-0 gap-3">
               <BrandLogo imgClassName="h-8 w-auto" />
@@ -51,11 +52,11 @@ export default function PublicPage({
               {homeLabel}
             </Link>
           </div>
-        </header>
-        <div className={`flex-1 w-full mx-auto px-4 sm:px-6 py-10 ${wide ? "max-w-6xl" : "max-w-3xl"}`}>
+        </header> : null}
+        <div className={embedded ? "w-full" : `flex-1 w-full mx-auto px-4 sm:px-6 py-10 ${wide ? "max-w-6xl" : "max-w-3xl"}`}>
           {children}
         </div>
-        <SiteFooter showNewsletter={false} />
+        {!embedded ? <SiteFooter showNewsletter={false} /> : null}
       </main>
     </>
   );

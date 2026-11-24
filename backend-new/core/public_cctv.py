@@ -81,6 +81,7 @@ def fetch_public_webcams(
     *,
     radius_m: int = DEFAULT_RADIUS_M,
     timeout: float = 12.0,
+    raise_on_error: bool = False,
 ) -> list[dict[str, Any]]:
     radius_m = max(500, min(int(radius_m or DEFAULT_RADIUS_M), 50000))
     query = f"""
@@ -113,6 +114,8 @@ def fetch_public_webcams(
             continue
     if payload is None:
         logger.warning("Public CCTV Overpass failed: %s", last_err)
+        if raise_on_error:
+            raise requests.RequestException(last_err or "Public webcam lookup failed")
         return []
 
     results = []

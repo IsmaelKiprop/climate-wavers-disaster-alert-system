@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import PublicPage from "../components/PublicPage";
 import { client } from "../api";
@@ -14,6 +14,8 @@ const CATEGORIES = [["solar", "Solar kits / lighting"], ["cookstove", "Clean coo
 const money = (n) => `KES ${Number(n || 0).toLocaleString()}`;
 
 export function EcoPulse() {
+  const location = useLocation();
+  const embedded = location.pathname.startsWith("/app/");
   const [params] = useSearchParams();
   const [products, setProducts] = useState([]);
   const [county, setCounty] = useState("");
@@ -98,7 +100,7 @@ export function EcoPulse() {
     }
   };
 
-  return <PublicPage title="Eco Pulse" description="Verified local resilience products for your ward." wide>
+  return <PublicPage title="Eco Pulse" description="Verified local resilience products for your ward." wide embedded={embedded}>
     <div className="mx-auto max-w-6xl px-4 py-8">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div><p className="text-sm font-semibold uppercase tracking-widest text-primary">Climate Wavers marketplace</p>
@@ -140,18 +142,20 @@ export function EcoPulseApply() {
 }
 
 export function EcoPulseDesk() {
+  const location = useLocation();
+  const embedded = location.pathname.startsWith("/app/");
   const [desk,setDesk]=useState(null); const [busy,setBusy]=useState(false);
   const load=useCallback(()=>client.run("get",endpoints.ecoDesk,null,true).then(setDesk).catch(()=>setDesk(null)),[]);
   useEffect(()=>{load();},[load]);
   const add=async(e)=>{e.preventDefault();const form=e.currentTarget;const f=new FormData(form);const data=Object.fromEntries(f.entries());data.price_kes=Number(data.price_kes);data.warranty_days=Number(data.warranty_days);data.install_included=f.get("install_included")==="on";data.coverage_wards=data.coverage_wards.split(",").map(x=>x.trim()).filter(Boolean);setBusy(true);try{await client.run("post",endpoints.ecoDesk,data,true);form.reset();load();toast.success("Listing saved.");}catch(err){toast.error(err?.response?.data?.detail||"Could not save listing.");}finally{setBusy(false);}};
   const savePayout=async(e)=>{e.preventDefault();const data=Object.fromEntries(new FormData(e.currentTarget));try{await client.run("patch",endpoints.ecoDesk,data,true);toast.success("Payout details saved. Climate Wavers must enable payouts before transfers start.");load();}catch(err){toast.error(err?.response?.data?.detail||"Could not save payout details.");}};
   const advance=async(orderId,state)=>{try{await client.run("patch",endpoints.ecoOrders,{order_id:orderId,status:state},true);load();}catch(err){toast.error(err?.response?.data?.detail||"Could not update order.");}};
-  if(!desk)return <PublicPage title="Eco Pulse vendor desk" description="Manage Eco Pulse listings and orders." wide><div className="mx-auto my-10 max-w-2xl rounded-xl border border-border p-6"><p>Vendor desk access requires an approved application.</p><Link className="mt-3 inline-block text-primary underline" to="/eco-pulse/apply">Apply to become a vendor</Link></div></PublicPage>;
-  return <PublicPage title="Eco Pulse vendor desk" description="Manage Eco Pulse listings and orders." wide><main className="mx-auto max-w-5xl space-y-6 p-5"><h1 className="text-3xl font-bold">{desk.vendor.name} · Vendor desk</h1><p>Verification: {desk.vendor.verification_status} · Platform fee: {(Number(desk.vendor.platform_fee_rate)*100).toFixed(0)}%</p>
+  if(!desk)return <PublicPage title="Eco Pulse vendor desk" description="Manage Eco Pulse listings and orders." wide embedded={embedded}><div className="mx-auto my-10 max-w-2xl rounded-xl border border-border p-6"><p>Vendor desk access requires an approved application.</p><Link className="mt-3 inline-block text-primary underline" to="/eco-pulse/apply">Apply to become a vendor</Link></div></PublicPage>;
+  return <PublicPage title="Eco Pulse vendor desk" description="Manage Eco Pulse listings and orders." wide embedded={embedded}><div className="mx-auto max-w-5xl space-y-6 p-5"><h1 className="text-3xl font-bold">{desk.vendor.name} · Vendor desk</h1><p>Verification: {desk.vendor.verification_status} · Platform fee: {(Number(desk.vendor.platform_fee_rate)*100).toFixed(0)}%</p>
     {desk.vendor.verification_status==="approved"&&<form onSubmit={add} className="grid gap-3 rounded-xl border border-border p-4 sm:grid-cols-2"><h2 className="text-xl font-semibold sm:col-span-2">Add a listing</h2><input name="title" placeholder="Product title" required className="h-11 rounded border bg-background px-3"/><input name="price_kes" type="number" min="1" placeholder="Price (KES)" required className="h-11 rounded border bg-background px-3"/><select name="category" className="h-11 rounded border bg-background px-3">{CATEGORIES.map(([v,l])=><option key={v} value={v}>{l}</option>)}</select><select name="outcome_tag" className="h-11 rounded border bg-background px-3">{OUTCOMES.map(([v,l])=><option key={v} value={v}>{l}</option>)}</select><input name="warranty_days" type="number" min="0" placeholder="Warranty days" className="h-11 rounded border bg-background px-3"/><input name="coverage_wards" placeholder="Coverage wards / counties" className="h-11 rounded border bg-background px-3"/><input name="photos" placeholder="Photo URL (optional)" className="h-11 rounded border bg-background px-3"/><label className="flex items-center gap-2"><input type="checkbox" name="install_included"/>Installation included</label><button disabled={busy} className="min-h-11 bg-primary text-primary-foreground">{busy?"Saving…":"Save listing"}</button></form>}
     <form onSubmit={savePayout} className="grid gap-3 rounded-xl border border-border p-4 sm:grid-cols-2"><h2 className="text-xl font-semibold sm:col-span-2">M-Pesa payout details</h2><input name="payout_channel" type="hidden" value="mobile_money"/><input name="payout_account_name" defaultValue={desk.vendor.payout_account_name} placeholder="Account name" className="h-11 rounded border bg-background px-3"/><input name="payout_account_number" defaultValue={desk.vendor.payout_account_number} placeholder="M-Pesa number (07… or 01…)" className="h-11 rounded border bg-background px-3"/><button className="min-h-11 bg-primary text-primary-foreground">Save payout details</button><p className="text-xs text-muted">Payouts {desk.vendor.payouts_enabled?"enabled":"awaiting platform setup"}; current sales split: 15% platform fee by default.</p></form>
     <section><h2 className="mb-3 text-xl font-semibold">Orders and quote requests</h2>{desk.orders.length?desk.orders.map(o=><div key={o.id} className="mb-2 flex flex-wrap items-center justify-between gap-3 rounded border border-border p-3"><span>{o.product__title} · {o.buyer_county} · Qty {o.quantity} · {money(o.amount_kes)} · {o.status}{o.status==="lead"&&o.buyer__email?` · Contact ${o.buyer__email}`:""}</span>{o.status==="paid"&&<button onClick={()=>advance(o.id,"install_scheduled")} className="rounded border border-border px-3 py-2">Schedule installation</button>}{o.status==="install_scheduled"&&<button onClick={()=>advance(o.id,"installed")} className="rounded border border-border px-3 py-2">Mark installed</button>}</div>):<p className="text-muted">No orders yet.</p>}</section>
-  </main></PublicPage>;
+  </div></PublicPage>;
 }
 
 export function EcoPulseAdmin() {
