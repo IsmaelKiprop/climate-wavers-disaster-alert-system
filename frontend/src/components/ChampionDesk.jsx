@@ -998,7 +998,7 @@ const ChampionDesk = () => {
                   onClick={() => { setSelected(item); setWarnPreview(null); setWarnResult(null); }}
                   className={`h-8 px-2 border text-xs ${selected?.id === item.id ? "border-primary text-primary" : "border-border"}`}
                 >
-                  {item.title.slice(0, 28)} · {item.status}
+                  {item.title.slice(0, 28)} · {item.display_status || item.status}
                 </button>
               ))}
             </div>

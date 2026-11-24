@@ -672,8 +672,8 @@ class ChampionVerifyQueueView(APIView):
                 if (
                     prior.disaster_type == d.disaster_type
                     and (prior.country or "").strip().casefold() == (d.country or "").strip().casefold()
-                    and abs((prior.start_date - d.start_date).total_seconds()) <= 30 * 60
-                    and haversine_km(prior.latitude, prior.longitude, d.latitude, d.longitude) <= 1
+                    and abs((prior.start_date - d.start_date).total_seconds()) <= 24 * 60 * 60
+                    and haversine_km(prior.latitude, prior.longitude, d.latitude, d.longitude) <= 10
                 ):
                     duplicate = True
                     break
@@ -686,6 +686,8 @@ class ChampionVerifyQueueView(APIView):
                 "disaster_type": d.disaster_type,
                 "severity": d.severity,
                 "status": d.status,
+                "is_verified": bool(d.is_verified),
+                "display_status": "confirmed" if d.is_verified else d.status,
                 "city": d.city,
                 "region": d.region,
                 "country": d.country,
@@ -1664,6 +1666,7 @@ class WarnNearbyCreateView(APIView):
         recent = ProximityBlast.objects.filter(
             champion=champ,
             created_at__gte=timezone.now() - timedelta(minutes=10),
+            targeted_count__gt=0,
         )
         if disaster:
             recent = recent.filter(disaster=disaster)
