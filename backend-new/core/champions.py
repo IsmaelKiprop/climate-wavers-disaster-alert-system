@@ -820,10 +820,10 @@ class ChampionVerificationCreateView(APIView):
                 champion__tier="trusted",
             ).exists()
             if confirms >= 2 or trusted or score >= 70:
-                if disaster.status in ("monitoring", "investigating"):
+                if disaster.status in ("unconfirmed", "monitoring", "investigating"):
                     disaster.status = "alert"
                     disaster.save(update_fields=["status", "updated_at"])
-            elif disaster.status == "monitoring":
+            elif disaster.status in ("unconfirmed", "monitoring"):
                 disaster.status = "investigating"
                 disaster.save(update_fields=["status", "updated_at"])
         elif decision == "deny":

@@ -67,6 +67,7 @@ def maybe_escalate_disaster(disaster: Disaster) -> str:
         champ_confirms = 0
     total_confirms = stats["confirms"] + champ_confirms
     if total_confirms >= CONFIRM_THRESHOLD and disaster.status in (
+        "unconfirmed",
         "monitoring",
         "investigating",
         "reported",

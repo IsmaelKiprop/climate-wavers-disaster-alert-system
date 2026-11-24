@@ -203,8 +203,6 @@ class CommunityImpactMapView(APIView):
                 continue
             donation = proof.donation
             if donation is not None:
-                if (donation.payment_status or "") != "completed":
-                    continue
                 if donation.id in seen_donations:
                     continue
                 seen_donations.add(donation.id)
@@ -533,18 +531,23 @@ class CommunityImpactMapView(APIView):
                 lat, lng = _f(d.latitude), _f(d.longitude)
                 if lat is None or lng is None:
                     continue
+                # Verification is tracked separately from the operational status.
+                # A report can remain `unconfirmed` after an admin confirms it.
+                status_label = "confirmed" if d.is_verified else d.status
                 out.append(
                     {
                         "layer": "hazards",
                         "id": f"hazard-{d.id}",
                         "title": d.title,
-                        "subtitle": f"{d.disaster_type} · {d.status}",
+                        "subtitle": f"{d.disaster_type} · {status_label}",
                         "county": d.region or d.country or "",
                         "ward": d.city or "",
                         "latitude": lat,
                         "longitude": lng,
                         "meta": {
                             "status": d.status,
+                            "is_verified": bool(d.is_verified),
+                            "verification_source": d.verification_source or "",
                             "disaster_type": d.disaster_type,
                             "severity": d.severity,
                             "disaster_id": d.id,
