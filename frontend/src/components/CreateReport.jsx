@@ -261,7 +261,6 @@ const CreateReport = ({ onSubmitted }) => {
           id="report-photo"
           type="file"
           accept="image/*"
-          capture="environment"
           onChange={onFile}
           className="block w-full text-sm"
         />

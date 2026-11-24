@@ -55,9 +55,9 @@ export const uploadFiles = async (fileList) => {
         
         console.log(`Uploading ${file.type} file (${file.size} bytes) to: ${endpoint}`);
 
-        return axios.post(endpoint, formData, {
-            headers: { "Content-Type": "multipart/form-data" },
-        });
+        // Let the browser set Content-Type and its multipart boundary. This is
+        // especially important for mobile browsers and WebViews.
+        return axios.post(endpoint, formData);
     });
 
     try {

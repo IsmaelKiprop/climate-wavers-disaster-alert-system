@@ -80,7 +80,10 @@ class Validator{
             severity: Joi.number(),
             images: Joi.array().default([]),
             details: Joi.string().required(),
-            status: Joi.string().default("REPORTED")
+            status: Joi.string().default("REPORTED"),
+            // Community reports include their origin so synced/offline reports
+            // can be distinguished from reports submitted directly.
+            source: Joi.string().allow("")
         }).validate(obj)
     }
 }
