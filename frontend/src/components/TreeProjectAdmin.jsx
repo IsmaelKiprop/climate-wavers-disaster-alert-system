@@ -636,6 +636,11 @@ const TreeProjectAdmin = () => {
         setDonations((prev) =>
           prev.map((d) => (d.id === data.donation.id ? data.donation : d))
         );
+        window.dispatchEvent(
+          new CustomEvent('treeProjectUpdated', {
+            detail: { projectId: data.donation.project_id },
+          })
+        );
       } else {
         fetchDonations();
       }

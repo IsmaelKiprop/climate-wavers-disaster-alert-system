@@ -5,8 +5,15 @@ import { endpoints } from '../utils/endpoints';
 import SocialShare from './SocialShare';
 import ProjectSEO from './ProjectSEO';
 import { apiUrl } from '../config/env';
+import PlantingProofMediaCarousel, { proofMediaFromArrays } from './PlantingProofMediaCarousel';
 // Global cache to prevent multiple API calls across the entire app
 const globalProjectCache = new Map();
+if (typeof window !== 'undefined') {
+  window.addEventListener('treeProjectUpdated', (event) => {
+    const updatedProjectId = event?.detail?.projectId;
+    if (updatedProjectId != null) globalProjectCache.delete(String(updatedProjectId));
+  });
+}
 
 const PublicProjectView = () => {
   const { projectId: pathProjectId } = useParams();
@@ -261,6 +268,48 @@ const PublicProjectView = () => {
                     </div>
                   </div>
                 )}
+
+                {Array.isArray(project.updates) && project.updates.some((update) => update.update_type === 'planting_proof') ? (
+                  <section className="mb-8" aria-labelledby="planting-proof-heading">
+                    <div className="mb-4">
+                      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-green-700">On the ground</p>
+                      <h3 id="planting-proof-heading" className="mt-1 text-xl font-semibold text-gray-900">Planting proof</h3>
+                      <p className="mt-1 text-sm text-gray-600">Photos, videos, and site locations shared by the project team.</p>
+                    </div>
+                    <div className="space-y-4">
+                      {project.updates
+                        .filter((update) => update.update_type === 'planting_proof')
+                        .map((update) => (
+                          <article key={update.id} className="overflow-hidden border border-gray-200 bg-white">
+                            <div className="flex flex-wrap items-start justify-between gap-2 p-4">
+                              <div>
+                                <h4 className="font-semibold text-gray-900">{update.title || 'Trees planted'}</h4>
+                                <p className="mt-1 text-xs text-gray-500">
+                                  {update.created_at ? new Date(update.created_at).toLocaleDateString() : 'Planting update'}
+                                  {update.location_label ? ` · ${update.location_label}` : ''}
+                                </p>
+                              </div>
+                              {update.latitude != null && update.longitude != null ? (
+                                <a
+                                  href={`https://www.google.com/maps?q=${update.latitude},${update.longitude}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-sm font-medium text-green-700 hover:underline"
+                                >
+                                  View planting site
+                                </a>
+                              ) : null}
+                            </div>
+                            {update.content ? <p className="px-4 pb-4 text-sm leading-6 text-gray-700">{update.content}</p> : null}
+                            <PlantingProofMediaCarousel
+                              items={proofMediaFromArrays(update.images, update.videos)}
+                              className="border-x-0 border-b-0"
+                            />
+                          </article>
+                        ))}
+                    </div>
+                  </section>
+                ) : null}
 
                 {/* Organization Info */}
                 <div className="mb-8">
