@@ -929,6 +929,8 @@ def record_paystack_charge(reference, request_user=None, client_data=None):
     """
     client_data = client_data or {}
     product = str(client_data.get("product") or "").strip().lower()
+    if product in {"eco_pulse", "eco_order"}:
+        return record_eco_order(reference, request_user, client_data)
     if product in {"rapidbrief", "responder_plan", "rapidbrief_plan"}:
         return record_rapidbrief_payment(reference, request_user, client_data)
     if product in {"plastic_dispatch", "plastic_lot", "marketplace_plastic"}:
@@ -946,6 +948,8 @@ def record_paystack_charge(reference, request_user=None, client_data=None):
             "rapidbrief_plan",
         }:
             return record_rapidbrief_payment(reference, request_user, client_data)
+        if ptype in {"eco_pulse", "eco_order"}:
+            return record_eco_order(reference, request_user, client_data)
         if ptype in {"plastic_dispatch", "plastic_lot", "marketplace_plastic"}:
             return record_plastic_dispatch_payment(reference, request_user, client_data)
         if ptype in {"plastic", "plastic_pulse", "sponsor_plastic"}:
@@ -955,3 +959,56 @@ def record_paystack_charge(reference, request_user=None, client_data=None):
         pass
 
     return record_tree_payment(reference, request_user, client_data)
+
+
+def record_eco_order(reference, request_user=None, client_data=None):
+    """Verify and record an Eco Pulse Paystack order idempotently."""
+    from .models import EcoOrder
+
+    reference = str(reference or "").strip()
+    payment = _verify_with_paystack(reference)
+    metadata = payment.get("metadata") or {}
+    order_id = _metadata_value(metadata, "eco_order_id") or (client_data or {}).get("eco_order_id")
+    if not order_id:
+        raise PaymentRecordError("Missing Eco Pulse order reference.")
+    try:
+        order = EcoOrder.objects.select_related("product", "vendor").get(pk=int(order_id))
+    except (EcoOrder.DoesNotExist, TypeError, ValueError):
+        raise PaymentRecordError("Eco Pulse order not found.")
+    if order.payment_reference and order.payment_reference != reference:
+        raise PaymentRecordError("Payment reference does not match this order.")
+    expected = int(order.amount_kes) * 100
+    if int(payment.get("amount") or 0) != expected:
+        raise PaymentRecordError("Payment amount does not match this order.")
+    if order.status not in {"paid", "install_scheduled", "installed", "checked_in"}:
+        from django.db import transaction
+        with transaction.atomic():
+            locked = EcoOrder.objects.select_for_update().select_related("challenge", "chapter").get(pk=order.pk)
+            if locked.status not in {"paid", "install_scheduled", "installed", "checked_in"}:
+                locked.status = "paid"
+                locked.payment_reference = reference
+                locked.save(update_fields=["status", "payment_reference"])
+                if locked.challenge_id and locked.chapter_id:
+                    from .models import ChallengeParticipation
+                    from .leaderboards import compute_score, refresh_challenge_ranks
+                    participation, _ = ChallengeParticipation.objects.get_or_create(
+                        challenge=locked.challenge, group=locked.chapter
+                    )
+                    participation.eco_kits += locked.quantity
+                    participation.score = compute_score(
+                        locked.challenge.metric, participation.trees_count,
+                        participation.plastic_kg, participation.alerts_count,
+                        participation.eco_kits,
+                    )
+                    participation.save(update_fields=["eco_kits", "score", "updated_at"])
+                    refresh_challenge_ranks(locked.challenge)
+            order = locked
+    try:
+        from .eco_pulse_payout import payout_eco_vendor_order
+
+        payout_eco_vendor_order(order)
+    except Exception:
+        logger.exception("Eco Pulse vendor payout failed for order %s", order.id)
+    return {"success": True, "product": "eco_pulse", "order_id": order.id,
+            "status": order.status, "amount_kes": order.amount_kes,
+            "platform_fee_kes": order.platform_fee_kes, "vendor_share_kes": order.vendor_share_kes}

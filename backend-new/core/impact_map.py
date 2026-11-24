@@ -12,6 +12,7 @@ from rest_framework.views import APIView
 
 from .models import (
     CommunityHazardCorroboration,
+    EcoInstallCheckIn,
     Disaster,
     OfficialAlertEvent,
     PlasticHoldingZone,
@@ -115,8 +116,36 @@ class CommunityImpactMapView(APIView):
                 logger.exception("impact-map hazards layer failed: %s", exc)
                 errors.append({"layer": "hazards", "detail": str(exc)[:200]})
 
+        if layer in ("all", "eco"):
+            try:
+                eco_qs = EcoInstallCheckIn.objects.select_related("order", "order__product").filter(
+                    order__status="checked_in"
+                )
+                if county:
+                    eco_qs = eco_qs.filter(Q(order__buyer_county__icontains=county) | Q(order__buyer_ward__icontains=county))
+                seen_eco_orders = set()
+                for checkin in eco_qs.order_by("-created_at")[:1000]:
+                    if checkin.order_id in seen_eco_orders:
+                        continue
+                    seen_eco_orders.add(checkin.order_id)
+                    if not checkin.working:
+                        continue
+                    lat, lng = _accurate_coords(_f(checkin.latitude), _f(checkin.longitude))
+                    if lat is None or lng is None:
+                        skipped_inaccurate += 1
+                        continue
+                    order = checkin.order
+                    features.append({"layer":"eco", "id":f"eco-{checkin.id}",
+                        "title":order.product.title, "subtitle":f"Installed kit · working at day {checkin.day_mark}",
+                        "county":order.buyer_county, "ward":order.buyer_ward,
+                        "latitude":lat,"longitude":lng,
+                        "meta":{"order_id":order.id,"product_id":order.product_id,"day_mark":checkin.day_mark}})
+            except Exception as exc:
+                logger.exception("impact-map Eco Pulse layer failed: %s", exc)
+                errors.append({"layer":"eco", "detail":str(exc)[:200]})
+
         counties = defaultdict(
-            lambda: {"trees": 0, "plastic_points": 0, "hazards": 0, "county": ""}
+            lambda: {"trees": 0, "plastic_points": 0, "hazards": 0, "eco_kits": 0, "county": ""}
         )
         for f in features:
             key = (f.get("county") or "Unknown").strip() or "Unknown"
@@ -127,6 +156,8 @@ class CommunityImpactMapView(APIView):
                 counties[key]["plastic_points"] += 1
             elif f["layer"] == "hazards":
                 counties[key]["hazards"] += 1
+            elif f["layer"] == "eco":
+                counties[key]["eco_kits"] += 1
 
         payload = {
             "features": features,
@@ -134,7 +165,7 @@ class CommunityImpactMapView(APIView):
             "skipped_inaccurate_gps": skipped_inaccurate,
             "counties": sorted(
                 counties.values(),
-                key=lambda c: c["trees"] + c["plastic_points"] + c["hazards"],
+                key=lambda c: c["trees"] + c["plastic_points"] + c["hazards"] + c["eco_kits"],
                 reverse=True,
             )[:40],
         }

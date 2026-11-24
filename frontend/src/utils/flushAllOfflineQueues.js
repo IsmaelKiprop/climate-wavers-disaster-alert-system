@@ -2,7 +2,7 @@
  * Flush every Climate Wavers offline field queue when connectivity returns.
  * Safe to call repeatedly; individual flushes keep permanent failures out of the queue.
  */
-import { apiUrl } from "../config/env";
+import { apiUrl, env } from "../config/env";
 import { endpoints } from "./endpoints";
 import { getAuthToken } from "./factory";
 import { flushOfflineQueue } from "./offlineQueue";
@@ -15,7 +15,6 @@ import {
   flushHazardCorroborationOffline,
   listHazardCorroborationOffline,
 } from "./hazardOfflineQueue";
-import { chatbotApiUrl, env } from "../config/env";
 import axios from "axios";
 import { prependCachedDisaster } from "./apiData";
 
@@ -90,7 +89,14 @@ async function syncPostReaction(payload) {
 }
 
 async function syncDisasterReport(payload) {
-  const { data } = await axios.post(chatbotApiUrl("/api/v1/disasters"), payload);
+  const source = { ...payload };
+  if (!source.clientReportId && !source.client_report_id) {
+    const raw = JSON.stringify(source);
+    let hash = 2166136261;
+    for (let i = 0; i < raw.length; i += 1) hash = Math.imul(hash ^ raw.charCodeAt(i), 16777619);
+    source.clientReportId = `offline_${(hash >>> 0).toString(36)}`;
+  }
+  const { data } = await axios.post(apiUrl("/api/v1/community-reports/"), source);
   if (data?.disaster) prependCachedDisaster(data.disaster);
   return data;
 }

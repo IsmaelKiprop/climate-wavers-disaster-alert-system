@@ -49,6 +49,10 @@ from .tree_survival import (
     TreeSurvivalPublicMapView,
 )
 from .impact_map import CommunityImpactMapView
+from .community_reports import CommunityDisasterReportView
+from .eco_pulse import (EcoCatalogView, EcoApplyView, EcoVendorDeskView, EcoOrderView,
+                        EcoCheckoutView, EcoEndorsementView, EcoCheckInView, EcoAdminView,
+                        EcoMyOrdersView, EcoChallengeOptionsView)
 from .crowd_corroboration import (
     HazardCorroborationCreateView,
     HazardCorroborationStatsView,
@@ -219,6 +223,7 @@ urlpatterns = [
     # Include all the router URLs
     path('', include(router.urls)),
     path("status/", status_view, name='status'),
+    path("community-reports/", CommunityDisasterReportView.as_view(), name="community-disaster-reports"),
     path("newsletter/", NewsletterSubscribeView.as_view(), name="newsletter-subscribe"),
     path("alerts/fanout/", fanout_disaster_alert, name="disaster-alert-fanout"),
     path("alerts/preferences/", AlertPreferenceView.as_view(), name="alert-preferences"),
@@ -443,6 +448,17 @@ urlpatterns = [
         name="tree-admin-ensure",
     ),
     path("tree-admin/me/", TreeAdminMeView.as_view(), name="tree-admin-me"),
+    path("eco-pulse/products/", EcoCatalogView.as_view(), name="eco-pulse-products"),
+    path("eco-pulse/apply/", EcoApplyView.as_view(), name="eco-pulse-apply"),
+    path("eco-pulse/desk/", EcoVendorDeskView.as_view(), name="eco-pulse-desk"),
+    path("eco-pulse/orders/", EcoOrderView.as_view(), name="eco-pulse-orders"),
+    path("eco-pulse/my-orders/", EcoMyOrdersView.as_view(), name="eco-pulse-my-orders"),
+    path("eco-pulse/challenges/", EcoChallengeOptionsView.as_view(), name="eco-pulse-challenges"),
+    path("eco-pulse/checkout/", EcoCheckoutView.as_view(), name="eco-pulse-checkout"),
+    path("eco-pulse/vendors/<int:vendor_id>/endorse/", EcoEndorsementView.as_view(), name="eco-pulse-endorse"),
+    path("eco-pulse/orders/<int:order_id>/check-in/", EcoCheckInView.as_view(), name="eco-pulse-check-in"),
+    path("platform-admin/eco-pulse/", EcoAdminView.as_view(), name="platform-admin-eco-pulse"),
+    path("platform-admin/eco-pulse/vendors/<int:vendor_id>/moderate/", EcoAdminView.as_view(), name="platform-admin-eco-pulse-moderate"),
     path(
         "tree-admin/donations/",
         TreeAdminDonationsView.as_view(),

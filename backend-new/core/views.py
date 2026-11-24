@@ -1992,6 +1992,10 @@ def paystack_webhook(request):
             from .paystack_payment import record_plastic_sponsorship
 
             record_plastic_sponsorship(reference, client_data={"product": "plastic"})
+        elif product in {"eco_pulse", "eco_order"}:
+            from .paystack_payment import record_eco_order
+
+            record_eco_order(reference, client_data={"product": "eco_pulse", "eco_order_id": (data.get("metadata") or {}).get("eco_order_id")})
         else:
             record_tree_payment(reference)
     except PaymentRecordError as exc:

@@ -87,6 +87,7 @@ def serialize_participation(p: ChallengeParticipation) -> dict:
         "trees_count": p.trees_count,
         "plastic_kg": float(p.plastic_kg or 0),
         "alerts_count": p.alerts_count,
+        "eco_kits": p.eco_kits,
         "score": float(p.score or 0),
         "rank": p.rank,
         "certificate_id": p.certificate_id or "",
@@ -97,17 +98,20 @@ def serialize_participation(p: ChallengeParticipation) -> dict:
     }
 
 
-def compute_score(metric: str, trees: int, plastic_kg, alerts: int) -> Decimal:
+def compute_score(metric: str, trees: int, plastic_kg, alerts: int, eco_kits: int = 0) -> Decimal:
     t = Decimal(trees or 0)
     p = Decimal(str(plastic_kg or 0))
     a = Decimal(alerts or 0)
+    e = Decimal(eco_kits or 0)
     if metric == "trees":
         return t
     if metric == "plastic_kg":
         return p
     if metric == "alerts":
         return a
-    return t + (p * Decimal("2")) + (a * Decimal("5"))
+    if metric == "eco_kits":
+        return e
+    return t + (p * Decimal("2")) + (a * Decimal("5")) + e
 
 
 def refresh_challenge_ranks(challenge: SeasonalChallenge) -> None:
@@ -308,6 +312,7 @@ class ChallengeJoinView(APIView):
                     group.trees_planted_total,
                     group.plastic_kg_total,
                     group.alerts_verified_total,
+                    0,
                 ),
             },
         )
@@ -320,6 +325,7 @@ class ChallengeJoinView(APIView):
                 p.trees_count,
                 p.plastic_kg,
                 p.alerts_count,
+                p.eco_kits,
             )
             p.save()
         refresh_challenge_ranks(challenge)
@@ -448,7 +454,7 @@ class GroupStatsSyncView(APIView):
             p.plastic_kg = g.plastic_kg_total or 0
             p.alerts_count = int(g.alerts_verified_total or 0)
             p.score = compute_score(
-                p.challenge.metric, p.trees_count, p.plastic_kg, p.alerts_count
+                p.challenge.metric, p.trees_count, p.plastic_kg, p.alerts_count, p.eco_kits
             )
             p.save()
             refresh_challenge_ranks(p.challenge)

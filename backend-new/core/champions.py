@@ -648,13 +648,27 @@ class ChampionVerifyQueueView(APIView):
             )
         )
         results = []
+        nearby_incidents = []
         for d in disasters:
-            if d.id in already:
-                continue
             if d.latitude is None or d.longitude is None:
                 continue
             dist = haversine_km(lat, lng, d.latitude, d.longitude)
             if dist > radius + float(d.affected_area_radius or 0):
+                continue
+            duplicate = False
+            for prior in nearby_incidents:
+                if (
+                    prior.disaster_type == d.disaster_type
+                    and (prior.country or "").strip().casefold() == (d.country or "").strip().casefold()
+                    and abs((prior.start_date - d.start_date).total_seconds()) <= 30 * 60
+                    and haversine_km(prior.latitude, prior.longitude, d.latitude, d.longitude) <= 1
+                ):
+                    duplicate = True
+                    break
+            if duplicate:
+                continue
+            nearby_incidents.append(d)
+            if d.id in already:
                 continue
             results.append(
                 {

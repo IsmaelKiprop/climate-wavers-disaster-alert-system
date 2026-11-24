@@ -38,6 +38,10 @@ const Consulting = lazy(() => import("./pages/Consulting"));
 const PricingPage = lazy(() => import("./pages/PricingPage"));
 const PublicResponderApply = lazy(() => import("./pages/PublicResponderApply"));
 const PublicTreeAdminApply = lazy(() => import("./pages/PublicTreeAdminApply"));
+const EcoPulse = lazy(() => import("./pages/EcoPulse").then((m) => ({ default: m.EcoPulse })));
+const EcoPulseApply = lazy(() => import("./pages/EcoPulse").then((m) => ({ default: m.EcoPulseApply })));
+const EcoPulseDesk = lazy(() => import("./pages/EcoPulse").then((m) => ({ default: m.EcoPulseDesk })));
+const EcoPulseAdmin = lazy(() => import("./pages/EcoPulse").then((m) => ({ default: m.EcoPulseAdmin })));
 const PublicChampionApply = lazy(() => import("./pages/PublicChampionApply"));
 const ChampionDirectoryPage = lazy(() => import("./pages/ChampionDirectoryPage"));
 const VerifyChampionCertificate = lazy(() => import("./pages/VerifyChampionCertificate"));
@@ -265,6 +269,9 @@ function App() {
               <Route path="/pricing" element={<PricingPage />} />
               <Route path="/responders/apply" element={<PublicResponderApply />} />
               <Route path="/tree-admins/apply" element={<PublicTreeAdminApply />} />
+              <Route path="/eco-pulse" element={<EcoPulse />} />
+              <Route path="/eco-pulse/apply" element={<EcoPulseApply />} />
+              <Route path="/eco-pulse/desk" element={<ProtectedRoute><EcoPulseDesk /></ProtectedRoute>} />
               <Route path="/champions/apply" element={<PublicChampionApply />} />
               <Route path="/champions" element={<ChampionDirectoryPage />} />
               <Route
@@ -335,6 +342,7 @@ function App() {
                 <Route path="disasters" element={<PlatformDisasters />} />
                 <Route path="trees" element={<PlatformTrees />} />
                 <Route path="plastic" element={<PlatformPlasticRecyclers />} />
+                <Route path="eco-pulse" element={<EcoPulseAdmin />} />
                 <Route path="champions" element={<PlatformChampions />} />
                 <Route path="responders" element={<PlatformResponders />} />
                 <Route path="calendar" element={<PlatformCalendar />} />
@@ -383,6 +391,8 @@ function App() {
                 />
                 <Route path="/app/admin/tree-projects" element={<TreeProjectAdmin />} />
                 <Route path="/app/admin/plastic" element={<PlasticProjectAdmin />} />
+                <Route path="/app/eco-pulse" element={<EcoPulse />} />
+                <Route path="/app/eco-pulse/desk" element={<ProtectedRoute><EcoPulseDesk /></ProtectedRoute>} />
                 <Route
                   path="/app/plastic/collect"
                   element={

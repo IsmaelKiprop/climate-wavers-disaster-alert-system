@@ -5,6 +5,13 @@ const aiService = require("../services/ai.service");
 const { recognizeDisasterImage } = require("../helpers/recognize_image");
 const { triggerDisasterAlert } = require("../helpers/trigger_alert");
 
+const reportTime = (value) => {
+  const numeric = Number(value);
+  if (Number.isFinite(numeric) && numeric > 0) return numeric;
+  const parsed = Date.parse(value || "");
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
 exports.createDisaster = catchAsyncErrors(async (req, res) => {
   const validateResponse = validator.validateCreateDisasterPayload(req.body);
   if (validateResponse.error)
@@ -70,8 +77,8 @@ exports.createDisaster = catchAsyncErrors(async (req, res) => {
 
 exports.getDisasters = catchAsyncErrors(async (req, res) => {
   const { startDate, endDate, type, status } = req.query;
-  const page = req.query.page || 1;
-  const pageSize = req.query.pageSize || 15;
+  const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
+  const pageSize = Math.min(500, Math.max(1, Number.parseInt(req.query.pageSize, 10) || 15));
   let disasters;
   if (startDate) {
     disasters = await disasterService.getByDate(startDate);
@@ -88,6 +95,7 @@ exports.getDisasters = catchAsyncErrors(async (req, res) => {
   }
   if (!disasters) {
     disasters = await disasterService.getDisasters();
+    disasters.sort((a, b) => reportTime(b.startDate) - reportTime(a.startDate));
   }
   const data = {
     total: disasters.length,

@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
+import axios from "axios";
 import { Link } from "react-router-dom";
 import { toast } from "react-toastify";
 import { client } from "../api";
 import { endpoints } from "../utils/endpoints";
+import { apiUrl, chatbotApiUrl, env } from "../config/env";
+import { unwrapList } from "../utils/apiData";
 import { avatarInitial, getUser, secureMediaUrl } from "../utils/factory";
 import ChampionCertificate from "./ChampionCertificate";
 
@@ -67,6 +70,55 @@ const ChampionDesk = () => {
 
   const loadQueue = useCallback(async () => {
     try {
+      // Older mobile app builds saved community reports to Firebase. Mirror only
+      // recent reports inside this Champion's GPS radius into the shared Disaster
+      // table so the existing verification flow can handle them normally.
+      if (me?.latitude != null && me?.longitude != null && env.chatbotUrl) {
+        try {
+          const legacy = await axios.get(chatbotApiUrl("/api/v1/disasters?page=1&pageSize=500"), { timeout: 8000 });
+          const origin = { lat: Number(me.latitude), lng: Number(me.longitude) };
+          const toRad = (value) => (value * Math.PI) / 180;
+          const distanceKm = (lat, lng) => {
+            const dLat = toRad(lat - origin.lat);
+            const dLng = toRad(lng - origin.lng);
+            const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(origin.lat)) * Math.cos(toRad(lat)) * Math.sin(dLng / 2) ** 2;
+            return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+          };
+          const recentCutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+          const nearby = unwrapList(legacy.data).filter((report) => {
+            const status = String(report.status || "").toLowerCase();
+            const source = String(report.source || "").toLowerCase();
+            const when = Number(report.startDate) || new Date(report.startDate || report.created_at || 0).getTime();
+            const lat = Number(report.latitude ?? report.lat ?? report.coordinate?.lat);
+            const lng = Number(report.longitude ?? report.lng ?? report.coordinate?.lng);
+            if (!(status === "unconfirmed" || source === "app" || source === "offline_sync")) return false;
+            if (!report.id || !Number.isFinite(lat) || !Number.isFinite(lng) || when < recentCutoff) return false;
+            return distanceKm(lat, lng) <= Number(me.radius_km || 5) + Number(report.affected_area_radius || 0);
+          });
+          for (const report of nearby) {
+            const images = Array.isArray(report.images) ? report.images : (report.images ? [report.images] : []);
+            try {
+              await axios.post(apiUrl("/api/v1/community-reports/"), {
+                clientReportId: `legacy_${String(report.id).slice(0, 73)}`,
+                syncOnly: true,
+                disasterType: report.disasterType || report.disaster_type || report.type || "other",
+                title: report.title || report.disasterType || report.disaster_type || "Community hazard",
+                country: report.country || "",
+                region: report.region || report.city || "",
+                details: report.details || report.description || "Community-reported hazard",
+                magnitude: report.magnitude,
+                latitude: report.latitude ?? report.lat ?? report.coordinate?.lat,
+                longitude: report.longitude ?? report.lng ?? report.coordinate?.lng,
+                images,
+              }, { timeout: 8000 });
+            } catch {
+              // One older malformed report should not block other nearby imports.
+            }
+          }
+        } catch {
+          // Keep the normal Champion queue usable while the legacy report store is unavailable.
+        }
+      }
       const data = await client.run("get", endpoints.championsVerifyQueue, {}, true);
       setQueue(data?.results || []);
     } catch (err) {
@@ -75,7 +127,7 @@ const ChampionDesk = () => {
         /* pending champions see empty */
       }
     }
-  }, []);
+  }, [me]);
 
   const loadEnrollments = useCallback(async () => {
     try {

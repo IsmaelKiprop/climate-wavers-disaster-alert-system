@@ -1309,6 +1309,7 @@ class Disaster(models.Model):
     
     # International Classification
     disaster_id = models.CharField(max_length=50, unique=True, blank=True, null=True, help_text="International disaster ID")
+    client_report_id = models.CharField(max_length=80, unique=True, blank=True, null=True, help_text="Client idempotency key for community reports")
     emdat_id = models.CharField(max_length=50, blank=True, null=True, help_text="EM-DAT disaster ID")
     
     class Meta:
@@ -2096,6 +2097,94 @@ class TreeAdminMembership(models.Model):
 
     def __str__(self):
         return f"{self.user_id} @ tree-admin {self.org_id} ({self.role})"
+
+
+class EcoVendor(models.Model):
+    """Verified local climate resilience vendor."""
+    ORG_TYPES = TreeAdminOrganization.ORG_TYPES
+    VERIFICATION_STATUSES = TreeAdminOrganization.VERIFICATION_STATUSES
+    name = models.CharField(max_length=200)
+    org_type = models.CharField(max_length=20, choices=ORG_TYPES, default="cbo")
+    country = models.CharField(max_length=100, default="Kenya")
+    county = models.CharField(max_length=100)
+    city = models.CharField(max_length=100, blank=True, default="")
+    coverage_wards = models.JSONField(default=list, blank=True)
+    contact_email = models.EmailField(blank=True, default="")
+    contact_phone = models.CharField(max_length=40, blank=True, default="")
+    verification_status = models.CharField(max_length=20, choices=VERIFICATION_STATUSES, default="pending")
+    platform_fee_rate = models.DecimalField(max_digits=5, decimal_places=4, default=0.15)
+    payouts_enabled = models.BooleanField(default=False)
+    payout_channel = models.CharField(max_length=20, default="mobile_money", blank=True)
+    payout_account_name = models.CharField(max_length=200, blank=True, default="")
+    payout_account_number = models.CharField(max_length=64, blank=True, default="")
+    payout_bank_code = models.CharField(max_length=32, blank=True, default="MPESA")
+    paystack_recipient_code = models.CharField(max_length=80, blank=True, default="")
+    owner = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name="eco_vendors")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["name"]
+
+
+class EcoProduct(models.Model):
+    CATEGORIES = [("solar", "Solar kits / lighting"), ("cookstove", "Clean cookstoves"), ("water", "Water"), ("waste", "Waste")]
+    OUTCOMES = [("outage_resilience", "Outage resilience"), ("trees_charcoal", "Trees and charcoal"), ("drought_resilience", "Drought resilience"), ("plastic_recovery", "Plastic recovery")]
+    vendor = models.ForeignKey(EcoVendor, on_delete=models.CASCADE, related_name="products")
+    title = models.CharField(max_length=200)
+    description = models.TextField(blank=True, default="")
+    category = models.CharField(max_length=20, choices=CATEGORIES)
+    outcome_tag = models.CharField(max_length=32, choices=OUTCOMES)
+    price_kes = models.PositiveIntegerField()
+    install_included = models.BooleanField(default=False)
+    warranty_days = models.PositiveIntegerField(default=0)
+    coverage_wards = models.JSONField(default=list, blank=True)
+    photos = models.JSONField(default=list, blank=True)
+    is_published = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+class EcoOrder(models.Model):
+    STATUSES = [(s, s.replace("_", " ").title()) for s in ("lead", "pending", "paid", "install_scheduled", "installed", "checked_in", "cancelled")]
+    buyer = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name="eco_orders")
+    product = models.ForeignKey(EcoProduct, on_delete=models.PROTECT, related_name="orders")
+    vendor = models.ForeignKey(EcoVendor, on_delete=models.PROTECT, related_name="orders")
+    quantity = models.PositiveIntegerField(default=1)
+    buyer_county = models.CharField(max_length=100, blank=True, default="")
+    buyer_ward = models.CharField(max_length=100, blank=True, default="")
+    amount_kes = models.PositiveIntegerField()
+    platform_fee_kes = models.PositiveIntegerField(default=0)
+    vendor_share_kes = models.PositiveIntegerField(default=0)
+    payment_reference = models.CharField(max_length=120, blank=True, null=True, default=None, unique=True)
+    status = models.CharField(max_length=24, choices=STATUSES, default="pending")
+    installed_at = models.DateTimeField(null=True, blank=True)
+    payout_status = models.CharField(max_length=20, default="none")
+    payout_error = models.TextField(blank=True, default="")
+    payout_reference = models.CharField(max_length=120, blank=True, null=True, default=None, unique=True)
+    chapter = models.ForeignKey("SocialGroup", on_delete=models.SET_NULL, null=True, blank=True, related_name="eco_orders")
+    challenge = models.ForeignKey("SeasonalChallenge", on_delete=models.SET_NULL, null=True, blank=True, related_name="eco_orders")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+class EcoVendorEndorsement(models.Model):
+    vendor = models.ForeignKey(EcoVendor, on_delete=models.CASCADE, related_name="endorsements")
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="eco_vendor_endorsements")
+    note = models.CharField(max_length=500, blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["vendor", "user"], name="unique_eco_vendor_endorsement")]
+
+
+class EcoInstallCheckIn(models.Model):
+    order = models.ForeignKey(EcoOrder, on_delete=models.CASCADE, related_name="checkins")
+    day_mark = models.PositiveSmallIntegerField(choices=[(30, "30 days"), (90, "90 days")])
+    working = models.BooleanField()
+    note = models.CharField(max_length=500, blank=True, default="")
+    latitude = models.FloatField(null=True, blank=True)
+    longitude = models.FloatField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["order", "day_mark"], name="unique_eco_order_checkin_day")]
 
 
 
@@ -3921,6 +4010,7 @@ class SeasonalChallenge(models.Model):
     METRIC_CHOICES = [
         ("trees", "Trees planted"),
         ("plastic_kg", "Plastic recovered (kg)"),
+        ("eco_kits", "Resilience kits installed"),
         ("alerts", "Verified hazard alerts"),
         ("combined", "Combined impact score"),
     ]
@@ -3969,6 +4059,7 @@ class ChallengeParticipation(models.Model):
     trees_count = models.PositiveIntegerField(default=0)
     plastic_kg = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     alerts_count = models.PositiveIntegerField(default=0)
+    eco_kits = models.PositiveIntegerField(default=0)
     score = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     rank = models.PositiveIntegerField(null=True, blank=True)
     certificate_id = models.CharField(max_length=80, blank=True, default="", db_index=True)

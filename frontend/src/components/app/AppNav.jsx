@@ -198,6 +198,7 @@ const AppNav = ({ onNavigate, compact = false }) => {
         },
         { to: "/app/waverx", label: "WaverX", Icon: WaverXIcon, ActiveIcon: WaverXIcon },
         { to: "/app/plant-tree", label: "Plant Trees", Icon: IoLeafOutline, ActiveIcon: IoLeafOutline },
+        { to: "/app/eco-pulse", label: "Eco Pulse", Icon: IoLeafOutline, ActiveIcon: IoLeafOutline },
         {
           to: "/app/plastic/collect",
           label: "Collect plastic",

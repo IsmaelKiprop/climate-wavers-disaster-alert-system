@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import PropTypes from "prop-types";
 import { useQueryClient } from "@tanstack/react-query";
@@ -9,9 +9,10 @@ import { recognizeReportImage } from "../utils/vision";
 import { enqueueOfflineAction } from "../utils/offlineQueue";
 import { useConnectivity } from "../context/ConnectivityContext";
 import axios from "axios";
-import { chatbotApiUrl } from "../config/env";
+import { apiUrl } from "../config/env";
 
-const apiUrl = chatbotApiUrl("/api/v1/disasters");
+const reportApiUrl = apiUrl("/api/v1/community-reports/");
+const newReportId = () => globalThis.crypto?.randomUUID?.() || `report_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 
 const TYPES = ["Floods", "Earthquake", "Wildfire", "Storm", "Drought", "Landslide", "Other"];
 
@@ -42,6 +43,7 @@ const CreateReport = ({ onSubmitted }) => {
   const [visionStatus, setVisionStatus] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const reportId = useRef(newReportId());
 
   useEffect(() => {
     let cancelled = false;
@@ -111,6 +113,7 @@ const CreateReport = ({ onSubmitted }) => {
   };
 
   const buildPayload = (images = []) => ({
+    clientReportId: reportId.current,
     region,
     country,
     disasterType,
@@ -157,7 +160,7 @@ const CreateReport = ({ onSubmitted }) => {
       }
 
       const images = file ? await uploadFiles([file]) : [];
-      const { data } = await axios.post(apiUrl, buildPayload(images));
+      const { data } = await axios.post(reportApiUrl, buildPayload(images));
       if (data?.disaster) {
         prependCachedDisaster(data.disaster);
         queryClient.invalidateQueries({ queryKey: ["liveDisasters"] });
@@ -166,6 +169,7 @@ const CreateReport = ({ onSubmitted }) => {
         ...data,
         vision: data.vision || vision,
       });
+      reportId.current = newReportId();
     } catch (err) {
       console.error(err);
       // Network blip — queue instead of failing hard.

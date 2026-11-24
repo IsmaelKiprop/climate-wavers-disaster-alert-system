@@ -429,11 +429,38 @@ async function fetchCommunityReports() {
 
 function mergeDisasters(...lists) {
   const byId = new Map();
+  const merged = [];
   lists.flat().forEach((item) => {
     if (!item?.id || byId.has(String(item.id))) return;
+    const type = String(item.disasterType || item.disaster_type || item.type || "").toLowerCase().replace(/s$/, "");
+    const country = String(item.country || "").trim().toLowerCase();
+    const region = String(item.region || item.city || "").trim().toLowerCase();
+    const detail = String(item.details || item.description || "").trim().toLowerCase().replace(/\s+/g, " ");
+    const timestamp = new Date(item.startDate || item.start_date || item.created_at || 0).getTime();
+    const lat = Number(item.latitude ?? item.coordinates?.lat);
+    const lng = Number(item.longitude ?? item.coordinates?.lng);
+    const duplicate = merged.some((prior) => {
+      const priorType = String(prior.disasterType || prior.disaster_type || prior.type || "").toLowerCase().replace(/s$/, "");
+      if (priorType !== type || String(prior.country || "").trim().toLowerCase() !== country) return false;
+      const priorTime = new Date(prior.startDate || prior.start_date || prior.created_at || 0).getTime();
+      if (!Number.isFinite(timestamp) || !Number.isFinite(priorTime) || Math.abs(timestamp - priorTime) > 30 * 60 * 1000) return false;
+      const priorLat = Number(prior.latitude ?? prior.coordinates?.lat);
+      const priorLng = Number(prior.longitude ?? prior.coordinates?.lng);
+      if (Number.isFinite(lat) && Number.isFinite(lng) && Number.isFinite(priorLat) && Number.isFinite(priorLng)) {
+        const toRad = (degrees) => (degrees * Math.PI) / 180;
+        const dLat = toRad(priorLat - lat);
+        const dLng = toRad(priorLng - lng);
+        const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat)) * Math.cos(toRad(priorLat)) * Math.sin(dLng / 2) ** 2;
+        return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)) <= 5;
+      }
+      const priorRegion = String(prior.region || prior.city || "").trim().toLowerCase();
+      const priorDetail = String(prior.details || prior.description || "").trim().toLowerCase().replace(/\s+/g, " ");
+      return Boolean(region && region === priorRegion && detail && detail === priorDetail);
+    });
     byId.set(String(item.id), item);
+    if (!duplicate) merged.push(item);
   });
-  return [...byId.values()];
+  return merged;
 }
 
 export async function fetchDisasters() {

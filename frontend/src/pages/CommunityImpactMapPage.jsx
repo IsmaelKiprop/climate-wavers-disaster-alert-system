@@ -21,12 +21,14 @@ const LAYERS = [
   { id: "trees", label: "Trees" },
   { id: "plastic", label: "Plastic" },
   { id: "hazards", label: "Hazards" },
+  { id: "eco", label: "Eco Pulse" },
 ];
 
 const LAYER_COLORS = {
   trees: "#0d9488",
   plastic: "#0369a1",
   hazards: "#b45309",
+  eco: "#7c3aed",
 };
 
 function escapeHtml(value) {
@@ -247,7 +249,7 @@ const CommunityImpactMapPage = () => {
               >
                 {name}
                 <span className="ml-1.5 text-[10px] opacity-80">
-                  T{c.trees || 0} · P{c.plastic_points || 0} · H{c.hazards || 0}
+                  T{c.trees || 0} · P{c.plastic_points || 0} · H{c.hazards || 0} · E{c.eco_kits || 0}
                 </span>
               </button>
             );
