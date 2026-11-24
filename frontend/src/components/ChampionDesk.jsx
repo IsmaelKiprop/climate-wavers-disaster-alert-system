@@ -482,10 +482,16 @@ const ChampionDesk = () => {
         true
       );
       setWarnResult(data);
+      const channels = data?.channels || {};
       if (Number(data?.targeted_count || 0) === 0) {
         toast.info("Warning was created, but no opted-in users with a recent location matched this radius.");
       } else {
-        toast.success(`Nearby warning sent to ${data?.delivered_count || 0} opted-in users (${data?.targeted_count} matched).`);
+        const summary = `In-app ${channels.in_app?.sent ?? data?.delivered_count ?? 0}; push ${channels.push?.sent ?? 0}/${channels.push?.registered_devices ?? 0}; SMS ${channels.sms?.sent ?? 0}/${channels.sms?.eligible_users ?? 0}.`;
+        if (!channels.push?.configured || !channels.sms?.configured) {
+          toast.info(`Warning sent. ${summary} Configure missing server credentials for all channels.`);
+        } else {
+          toast.success(`Nearby warning sent to ${data?.targeted_count} users. ${summary}`);
+        }
       }
       loadMe();
     } catch (err) {
@@ -1060,7 +1066,7 @@ const ChampionDesk = () => {
             ) : null}
             {warnResult ? (
               <p className="text-sm text-foreground" role="status">
-                Warning saved: {warnResult.delivered_count} in-app alerts sent to {warnResult.targeted_count} matched users within {warnResult.radius_m} m.
+                Warning saved for {warnResult.targeted_count} matched users within {warnResult.radius_m} m. In-app: {warnResult.channels?.in_app?.sent ?? warnResult.delivered_count}. Background push: {warnResult.channels?.push?.sent ?? 0}/{warnResult.channels?.push?.registered_devices ?? 0} devices{warnResult.channels?.push?.configured ? "" : " (server not configured)"}. SMS: {warnResult.channels?.sms?.sent ?? 0}/{warnResult.channels?.sms?.eligible_users ?? 0} opted-in verified numbers{warnResult.channels?.sms?.configured ? "" : " (server not configured)"}.
               </p>
             ) : null}
           </div>

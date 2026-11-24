@@ -38,6 +38,7 @@ from .models import (
     PartnerCamera,
     ProximityBlast,
     ProximityBlastReceipt,
+    UserAlertPreference,
 )
 from .signals import send_to_websocket
 
@@ -1487,7 +1488,19 @@ class DevicePushTokenView(APIView):
             token=token[:512],
             defaults={"platform": platform},
         )
-        return Response({"id": obj.id, "platform": obj.platform})
+        try:
+            from .push_gateway import is_configured as push_is_configured
+
+            push_configured = push_is_configured()
+        except Exception:
+            push_configured = False
+        return Response(
+            {
+                "id": obj.id,
+                "platform": obj.platform,
+                "push_configured": push_configured,
+            }
+        )
 
 
 class DeviceLocationPingView(APIView):
@@ -1668,6 +1681,29 @@ class WarnNearbyCreateView(APIView):
         matched = _devices_in_radius(lat, lng, radius_m)
         # Never alert the champion themselves as only target noise
         matched = [(uid, p, d) for uid, p, d in matched if uid != request.user.id]
+        matched_ids = [user_id for user_id, _ping, _dist in matched]
+        users = {user.id: user for user in User.objects.filter(id__in=matched_ids)}
+        push_devices = {}
+        for device in DevicePushToken.objects.filter(user_id__in=matched_ids).only("id", "user_id", "token"):
+            push_devices.setdefault(device.user_id, []).append(device)
+        sms_preferences = {
+            preference.user_id: preference
+            for preference in UserAlertPreference.objects.filter(
+                user_id__in=matched_ids,
+                sms_alerts=True,
+                phone_verified=True,
+            ).exclude(phone__isnull=True).exclude(phone="")
+        }
+        from .sms_gateway import provider as sms_provider
+
+        sms_mode = sms_provider()
+        sms_configured = sms_mode in {"africastalking", "at", "africa", "twilio"}
+        try:
+            from .push_gateway import is_configured as push_is_configured
+
+            push_configured = push_is_configured()
+        except Exception:
+            push_configured = False
 
         blast = ProximityBlast.objects.create(
             champion=champ,
@@ -1681,8 +1717,14 @@ class WarnNearbyCreateView(APIView):
             targeted_count=len(matched),
         )
         delivered = 0
+        push_sent = 0
+        push_failed = 0
+        push_registered = sum(len(push_devices.get(user_id, [])) for user_id in matched_ids)
+        sms_sent = 0
+        sms_failed = 0
+        sms_eligible = len(sms_preferences)
         for user_id, _ping, _dist in matched:
-            user = User.objects.filter(id=user_id).first()
+            user = users.get(user_id)
             if not user:
                 continue
             ProximityBlastReceipt.objects.create(
@@ -1702,6 +1744,42 @@ class WarnNearbyCreateView(APIView):
                 },
             )
             delivered += 1
+            alert_message = f"Community warning: {template}" + (f" - {note}" if note else "")
+            alert_data = {
+                "blast_id": blast.id,
+                "disaster_id": disaster.id if disaster else None,
+                "radius_m": radius_m,
+                "siren": True,
+                "url": "/app/notifications",
+            }
+            if push_configured:
+                from .push_gateway import send_push
+
+                for device in push_devices.get(user_id, []):
+                    result = send_push(
+                        device.token,
+                        title="Community Champion warning",
+                        body=alert_message,
+                        data=alert_data,
+                    )
+                    if result.get("ok"):
+                        push_sent += 1
+                    else:
+                        push_failed += 1
+                        if result.get("invalid_token"):
+                            device.delete()
+            preference = sms_preferences.get(user_id)
+            if sms_configured and preference:
+                from .sms_gateway import send_sms
+
+                disaster_title = f" - {disaster.title}" if disaster else ""
+                sms_text = f"{template}{disaster_title}" + (f". {note}" if note else "")
+                sms_text += " Details: https://alerts.flowops.africa/app/notifications"
+                result = send_sms(preference.phone, sms_text[:640])
+                if result.get("ok"):
+                    sms_sent += 1
+                else:
+                    sms_failed += 1
 
         blast.delivered_count = delivered
         blast.status = "sent"
@@ -1716,6 +1794,21 @@ class WarnNearbyCreateView(APIView):
                 "delivered_count": blast.delivered_count,
                 "radius_m": radius_m,
                 "status": blast.status,
+                "channels": {
+                    "in_app": {"sent": delivered},
+                    "push": {
+                        "configured": push_configured,
+                        "registered_devices": push_registered,
+                        "sent": push_sent,
+                        "failed": push_failed,
+                    },
+                    "sms": {
+                        "configured": sms_configured,
+                        "eligible_users": sms_eligible,
+                        "sent": sms_sent,
+                        "failed": sms_failed,
+                    },
+                },
             },
             status=201,
         )

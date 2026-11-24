@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { toast } from "react-toastify";
 import { client } from "../api";
 import { endpoints } from "../utils/endpoints";
+import { registerForBackgroundPush } from "../utils/pushNotifications";
 import { useConnectivity } from "../context/ConnectivityContext";
 
 const AlertSettings = () => {
@@ -11,6 +12,7 @@ const AlertSettings = () => {
   const [saving, setSaving] = useState(false);
   const [otpBusy, setOtpBusy] = useState(false);
   const [sirenBusy, setSirenBusy] = useState(false);
+  const [backgroundPushReady, setBackgroundPushReady] = useState(false);
   const [code, setCode] = useState("");
   const [otpNotice, setOtpNotice] = useState(null);
   const [proximity, setProximity] = useState({
@@ -66,6 +68,13 @@ const AlertSettings = () => {
             has_location: Boolean(pingRes.value.has_location),
             updated_at: pingRes.value.updated_at || null,
           });
+          if (
+            pingRes.value.proximity_alerts_opt_in
+            && typeof Notification !== "undefined"
+            && Notification.permission === "granted"
+          ) {
+            registerForBackgroundPush().then(setBackgroundPushReady);
+          }
         }
       })
       .finally(() => active && setLoading(false));
@@ -129,7 +138,13 @@ const AlertSettings = () => {
             has_location: true,
             updated_at: data?.updated_at || null,
           });
-          toast.success("Opted in — Champions can warn your phone when you are near a hazard.");
+          const pushReady = await registerForBackgroundPush({ requestPermission: true });
+          setBackgroundPushReady(pushReady);
+          toast.success(
+            pushReady
+              ? "Nearby alerts enabled. This device is registered for background phone notifications."
+              : "Nearby alerts enabled. In-app alerts are active; background push needs notification permission and server FCM credentials."
+          );
         } catch {
           toast.error("Could not enable nearby sirens.");
         } finally {
@@ -452,7 +467,7 @@ const AlertSettings = () => {
           <div>
             <p className="text-sm font-medium text-foreground">Nearby Champion sirens</p>
             <p className="mt-1 text-sm text-muted">
-              Opt in to receive a real-time in-app alert when a Community Champion warns people near a verified hazard. Your location must be recent; Climate Wavers must be open to receive the live siren. This does not send SMS.
+              Opt in for real-time in-app alerts and allow browser notifications for background phone push. SMS is also sent when SMS alerts are enabled and your phone is verified; location must be recent.
             </p>
           </div>
           <p className="text-xs text-muted">
@@ -464,6 +479,9 @@ const AlertSettings = () => {
                 : "Not opted in"}
             {proximity.updated_at
               ? ` · last update ${new Date(proximity.updated_at).toLocaleString()}`
+              : ""}
+            {proximity.proximity_alerts_opt_in
+              ? backgroundPushReady ? " · background push ready" : " · background push not ready"
               : ""}
           </p>
           <div className="flex flex-wrap gap-2">

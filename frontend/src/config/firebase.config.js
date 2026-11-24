@@ -1,8 +1,8 @@
-import {initializeApp} from "firebase/app"
+import { getApp, getApps, initializeApp } from "firebase/app"
 import { getFirestore } from "firebase/firestore";
 
 
-const firebaseConfig = {
+export const firebaseConfig = {
     apiKey: import.meta.env.VITE_APP_FIREBASE_API_KEY,
     authDomain: import.meta.env.VITE_APP_FIREBASE_AUTH_DOMAIN,
     projectId: import.meta.env.VITE_APP_FIREBASE_PROJECT_ID,
@@ -12,9 +12,15 @@ const firebaseConfig = {
     measurementId: import.meta.env.VITE_APP_FIREBASE_MEASUREMENT_ID,
   }
 
+export function getFirebaseApp() {
+    if (!firebaseConfig.apiKey || !firebaseConfig.projectId || !firebaseConfig.appId) return null;
+    return getApps().length ? getApp() : initializeApp(firebaseConfig);
+}
+
 export async function getFirestoreDB (){
     try{
-        const app = initializeApp(firebaseConfig)
+        const app = getFirebaseApp();
+        if (!app) return null;
         return getFirestore(app)
     }catch(err){
         console.log(err)
