@@ -20,6 +20,9 @@ import UserAvatar from "./UserAvatar";
 import ClimateVerifiedBadge from "./ClimateVerifiedBadge";
 import Createcomment from "./Createcomment";
 import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "react-toastify";
+import { IoCloseOutline, IoCopyOutline, IoShareSocialOutline } from "react-icons/io5";
+import { parsePostImages } from "../utils/postMedia";
 
 const Posts = ({
   type,
@@ -41,6 +44,7 @@ const Posts = ({
   const [localPosts, setLocalPosts] = useState([]);
   const [mediaPreview, setMediaPreview] = useState(null);
   const [editingId, setEditingId] = useState(null);
+  const [sharingPost, setSharingPost] = useState(null);
 
   const refreshComments = () => {
     queryClient.invalidateQueries({ queryKey: ["post"] });
@@ -175,6 +179,42 @@ const Posts = ({
       currentPath.includes(`/post/${post.id}`)
     ) {
       setTimeout(() => navigate("/app"), 600);
+    }
+  };
+
+  const shareUrl = (post) => `${window.location.origin}/app/post/${post.id}`;
+  const shareText = (post) => String(post?.content || "").trim().slice(0, 500);
+  const openShareTarget = (target, post) => {
+    const url = shareUrl(post);
+    const text = shareText(post);
+    const shareLinks = {
+      whatsapp: `https://wa.me/?text=${encodeURIComponent(`${text}\n${url}`)}`,
+      facebook: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`,
+      x: `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`,
+    };
+    window.open(shareLinks[target], "_blank", "noopener,noreferrer,width=680,height=640");
+  };
+
+  const copyShareLink = async (post) => {
+    try {
+      await navigator.clipboard.writeText(shareUrl(post));
+      toast.success("Post link copied");
+    } catch {
+      toast.error("Could not copy the post link");
+    }
+  };
+
+  const shareFromDevice = async (post) => {
+    const url = shareUrl(post);
+    const shareData = { title: "Climate Wavers post", text: shareText(post), url };
+    try {
+      if (navigator.share) {
+        await navigator.share(shareData);
+      } else {
+        await copyShareLink(post);
+      }
+    } catch (error) {
+      if (error?.name !== "AbortError") toast.error("Could not open the share menu");
     }
   };
 
@@ -602,6 +642,16 @@ const Posts = ({
                   {post?.total_reposts || 0}
                 </span>
               </button>
+
+              <button
+                type="button"
+                className="flex items-center gap-2 px-3 py-2.5 hover:bg-primary/10 transition-colors group/btn"
+                onClick={() => setSharingPost(post)}
+                aria-label="Share post"
+              >
+                <IoShareSocialOutline size={20} className="text-muted group-hover/btn:text-primary" />
+                <span className="text-sm font-medium text-muted group-hover/btn:text-primary">Share</span>
+              </button>
               
               <button
                 className="flex items-center space-x-2 px-4 py-2.5 rounded-xl hover:bg-teal-50 transition-all duration-200 group/btn"
@@ -636,6 +686,70 @@ const Posts = ({
           type={mediaPreview.type || "image"}
           onClose={() => setMediaPreview(null)}
         />
+      ) : null}
+      {sharingPost ? (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/65 p-3 sm:p-5"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setSharingPost(null);
+          }}
+          role="presentation"
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="share-post-title"
+            className="w-full max-w-lg max-h-[92vh] overflow-y-auto border border-border bg-surface shadow-2xl"
+          >
+            <header className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-primary">Pass it on</p>
+                <h2 id="share-post-title" className="text-lg font-semibold text-foreground">Share this post</h2>
+              </div>
+              <button type="button" onClick={() => setSharingPost(null)} className="inline-flex h-10 w-10 items-center justify-center border border-border text-muted hover:text-foreground" aria-label="Close share dialog">
+                <IoCloseOutline size={22} />
+              </button>
+            </header>
+            <div className="space-y-4 p-4">
+              <article className="overflow-hidden border border-border bg-background">
+                <div className="flex items-center gap-3 p-3">
+                  <UserAvatar user={sharingPost.user} className="h-10 w-10" textClassName="text-xs" alt="" />
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-foreground">
+                      {[sharingPost?.user?.first_name, sharingPost?.user?.last_name].filter(Boolean).join(" ") || sharingPost?.user?.username || "Climate Wavers member"}
+                    </p>
+                    <p className="text-xs text-muted">Climate Wavers community post</p>
+                  </div>
+                </div>
+                {(() => {
+                  const firstImage = parsePostImages(sharingPost.image)[0];
+                  if (firstImage) {
+                    return <img src={secureMediaUrl(firstImage)} alt="Post media preview" className="max-h-72 w-full bg-surface object-contain" />;
+                  }
+                  if (sharingPost.video) {
+                    return <video src={secureMediaUrl(sharingPost.video)} controls playsInline preload="metadata" className="max-h-72 w-full bg-black" />;
+                  }
+                  return <div className="flex min-h-28 items-center justify-center bg-gradient-to-br from-primary/15 via-surface to-surface-muted px-5 py-6 text-center text-sm text-muted">Climate Wavers community update</div>;
+                })()}
+                <p className="whitespace-pre-wrap break-words p-3 text-sm leading-6 text-foreground">
+                  {shareText(sharingPost) || "A community update from Climate Wavers."}
+                </p>
+                <div className="border-t border-border px-3 py-2 text-xs text-muted">alerts.flowops.africa · Open the post to join the conversation</div>
+              </article>
+
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                <button type="button" onClick={() => shareFromDevice(sharingPost)} className="min-h-11 border border-primary bg-primary px-3 text-sm font-semibold text-primary-foreground hover:bg-primary-dark">Share…</button>
+                <button type="button" onClick={() => openShareTarget("whatsapp", sharingPost)} className="min-h-11 border border-border px-3 text-sm font-medium text-foreground hover:border-primary">WhatsApp</button>
+                <button type="button" onClick={() => openShareTarget("facebook", sharingPost)} className="min-h-11 border border-border px-3 text-sm font-medium text-foreground hover:border-primary">Facebook</button>
+                <button type="button" onClick={() => openShareTarget("x", sharingPost)} className="min-h-11 border border-border px-3 text-sm font-medium text-foreground hover:border-primary">X</button>
+              </div>
+              <button type="button" onClick={() => copyShareLink(sharingPost)} className="inline-flex min-h-11 w-full items-center justify-center gap-2 border border-border px-3 text-sm font-medium text-foreground hover:bg-surface-muted">
+                <IoCopyOutline size={17} /> Copy post link
+              </button>
+              <p className="text-xs leading-5 text-muted">The preview above shows the post media and text. External apps share a link to this post; their own preview behavior depends on the app.</p>
+            </div>
+          </section>
+        </div>
       ) : null}
     </div>
   );

@@ -13,6 +13,7 @@ import {
   IoNotifications,
   IoLogOutOutline,
   IoCreateOutline,
+  IoNewspaperOutline,
   IoPhonePortraitOutline,
   IoShieldOutline,
   IoShieldCheckmark,
@@ -157,6 +158,7 @@ const AppNav = ({ onNavigate, compact = false }) => {
       ]
     : [
         { to: "/app", label: "Home", Icon: IoHomeOutline, ActiveIcon: IoHome, end: true },
+        { to: "/app/posts", label: "Posts", Icon: IoNewspaperOutline, ActiveIcon: IoNewspaperOutline },
         { to: "/app/network", label: "Network", Icon: IoPeopleOutline, ActiveIcon: IoPeople },
         { to: "/app/groups", label: "Groups", Icon: IoPeopleCircleOutline, ActiveIcon: IoPeopleCircle },
         { to: "/app/community", label: "Community", Icon: RiAlarmWarningLine, ActiveIcon: RiAlarmWarningFill },

@@ -115,6 +115,7 @@ const PlatformAcceptInvite = lazy(() =>
 
 const AuthSharedLayout = lazy(() => import("./pages/AuthenticatedPages/SharedLayout"));
 const AuthMainfeed = lazy(() => import("./pages/AuthenticatedPages/Mainfeed"));
+const AuthPostsPage = lazy(() => import("./pages/AuthenticatedPages/Posts"));
 const AuthCommunity = lazy(() => import("./pages/AuthenticatedPages/Community"));
 const AuthNetwork = lazy(() => import("./pages/AuthenticatedPages/Network"));
 const AuthGroups = lazy(() => import("./pages/AuthenticatedPages/Groups"));
@@ -359,6 +360,7 @@ function App() {
               />
               <Route path="/app" element={<AuthSharedLayout />}>
                 <Route index element={<AuthMainfeed />} />
+                <Route path="/app/posts" element={<AuthPostsPage />} />
                 <Route path="/app/community" element={<AuthCommunity />} />
                 <Route path="/app/network" element={<AuthNetwork />} />
                 <Route path="/app/groups" element={<AuthGroups />} />
