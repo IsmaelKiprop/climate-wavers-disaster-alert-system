@@ -658,6 +658,11 @@ class ChampionVerifyQueueView(APIView):
                 "disaster_id", flat=True
             )
         )
+        confirmed_ids = set(
+            ChampionVerification.objects.filter(
+                disaster_id__in=[d.id for d in disasters], decision="confirm"
+            ).values_list("disaster_id", flat=True)
+        )
         results = []
         warn_targets = []
         nearby_incidents = []
@@ -687,7 +692,11 @@ class ChampionVerifyQueueView(APIView):
                 "severity": d.severity,
                 "status": d.status,
                 "is_verified": bool(d.is_verified),
-                "display_status": "confirmed" if d.is_verified else d.status,
+                "display_status": (
+                    "confirmed"
+                    if d.is_verified or d.id in confirmed_ids
+                    else d.status
+                ),
                 "city": d.city,
                 "region": d.region,
                 "country": d.country,

@@ -275,9 +275,10 @@ const CommunityImpactMapPage = () => {
           ) : null}
           {!loading && data.skippedInaccurate > 0 ? (
             <span className="block mt-1 text-xs text-amber-700">
-              {data.skippedInaccurate} record
-              {data.skippedInaccurate === 1 ? "" : "s"} hidden because GPS was inaccurate
-              (e.g. offshore IP location). Re-capture precise GPS on site to show them.
+              {data.skippedInaccurate} saved GPS pin
+              {data.skippedInaccurate === 1 ? "" : "s"} omitted because the coordinates
+              are outside the supported East Africa area. If this is planting proof,
+              re-publish it with the correct decimal latitude and longitude to show the tree.
             </span>
           ) : null}
           {!loading && data.errors?.length ? (

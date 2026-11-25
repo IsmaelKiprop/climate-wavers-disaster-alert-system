@@ -1,11 +1,11 @@
 """
-Null out offshore / IP-blunder GPS on Kenya (East Africa) plastic + tree records.
+Report or explicitly clear offshore / IP-blunder GPS on project and plastic records.
 
 Desktop Chrome often saves Mumbai/India coords for Eldoret field work.
 Those pins must not stay on the public impact map as if they were accurate.
 
 Usage:
-  python manage.py clear_inaccurate_gps
+  python manage.py clear_inaccurate_gps --apply
   python manage.py clear_inaccurate_gps --dry-run
 """
 
@@ -18,8 +18,6 @@ from core.models import (
     PlasticProject,
     PlasticRecovery,
     TreeProject,
-    TreeProjectDonation,
-    TreeProjectUpdate,
 )
 
 
@@ -45,9 +43,14 @@ class Command(BaseCommand):
             action="store_true",
             help="Report only; do not write",
         )
+        parser.add_argument(
+            "--apply",
+            action="store_true",
+            help="Clear invalid project/plastic coordinates (dry-run is the default)",
+        )
 
     def handle(self, *args, **options):
-        dry = bool(options.get("dry_run"))
+        dry = not bool(options.get("apply")) or bool(options.get("dry_run"))
         cleared = 0
 
         # Only nullable coordinate fields — PlasticHotspot lat/lng are required.
@@ -56,8 +59,6 @@ class Command(BaseCommand):
             (PlasticHoldingZone, ("latitude", "longitude"), True),
             (PlasticProject, ("latitude", "longitude"), True),
             (TreeProject, ("latitude", "longitude"), True),
-            (TreeProjectUpdate, ("latitude", "longitude"), True),
-            (TreeProjectDonation, ("survival_lat", "survival_lng"), True),
         )
 
         for model, fields, _nullable in targets:

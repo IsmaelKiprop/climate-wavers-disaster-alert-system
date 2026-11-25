@@ -5,11 +5,12 @@ from __future__ import annotations
 import logging
 from collections import defaultdict
 
-from django.db.models import Q
+from django.db.models import Count, Q
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from .geo import haversine_km
 from .models import (
     CommunityHazardCorroboration,
     EcoInstallCheckIn,
@@ -19,6 +20,7 @@ from .models import (
     PlasticHotspot,
     PlasticProject,
     PlasticRecovery,
+    ChampionVerification,
     TreeProject,
     TreeProjectDonation,
     TreeProjectUpdate,
@@ -526,14 +528,54 @@ class CommunityImpactMapView(APIView):
                 | Q(city__icontains=county)
                 | Q(country__icontains=county)
             )
-        for d in disaster_qs.order_by("-created_at")[:400]:
+        disasters = list(disaster_qs.order_by("-is_verified", "-created_at")[:400])
+        disaster_ids = [d.id for d in disasters]
+        champion_confirmed = set(
+            ChampionVerification.objects.filter(
+                disaster_id__in=disaster_ids, decision="confirm"
+            ).values_list("disaster_id", flat=True)
+        )
+        crowd_confirm_counts = dict(
+            CommunityHazardCorroboration.objects.filter(
+                disaster_id__in=disaster_ids, decision="confirm"
+            )
+            .values("disaster_id")
+            .annotate(total=Count("id"))
+            .values_list("disaster_id", "total")
+        )
+        disasters.sort(
+            key=lambda d: (
+                not (
+                    d.is_verified
+                    or d.id in champion_confirmed
+                    or crowd_confirm_counts.get(d.id, 0) >= 3
+                ),
+                -(d.created_at.timestamp() if d.created_at else 0),
+            )
+        )
+        seen_incidents = []
+        for d in disasters:
             try:
                 lat, lng = _f(d.latitude), _f(d.longitude)
                 if lat is None or lng is None:
                     continue
-                # Verification is tracked separately from the operational status.
-                # A report can remain `unconfirmed` after an admin confirms it.
-                status_label = "confirmed" if d.is_verified else d.status
+                duplicate = any(
+                    prior.disaster_type == d.disaster_type
+                    and (prior.country or "").strip().casefold()
+                    == (d.country or "").strip().casefold()
+                    and abs((prior.created_at - d.created_at).total_seconds()) <= 24 * 60 * 60
+                    and haversine_km(prior.latitude, prior.longitude, lat, lng) <= 10
+                    for prior in seen_incidents
+                )
+                if duplicate:
+                    continue
+                seen_incidents.append(d)
+                is_confirmed = bool(
+                    d.is_verified
+                    or d.id in champion_confirmed
+                    or crowd_confirm_counts.get(d.id, 0) >= 3
+                )
+                status_label = "confirmed" if is_confirmed else d.status
                 out.append(
                     {
                         "layer": "hazards",
@@ -547,6 +589,7 @@ class CommunityImpactMapView(APIView):
                         "meta": {
                             "status": d.status,
                             "is_verified": bool(d.is_verified),
+                            "is_confirmed": is_confirmed,
                             "verification_source": d.verification_source or "",
                             "disaster_type": d.disaster_type,
                             "severity": d.severity,
