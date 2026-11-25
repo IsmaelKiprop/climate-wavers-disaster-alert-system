@@ -113,13 +113,20 @@ const Disasters = () => {
     {
       key: "status",
       label: "Status",
-      render: (r) => (
-        <div className="flex flex-wrap gap-1">
-          <StatusBadge value={r.status} tone={statusTone(r.status)} />
-          <StatusBadge value={r.severity} tone={statusTone(r.severity)} />
-          <StatusBadge value={r.is_verified ? "verified" : "unverified"} tone={r.is_verified ? "ok" : "warn"} />
-        </div>
-      ),
+      render: (r) => {
+        const displayStatus =
+          r.is_verified && r.status === "unconfirmed" ? "confirmed" : r.status;
+        return (
+          <div className="flex flex-wrap gap-1">
+            <StatusBadge
+              value={displayStatus}
+              tone={r.is_verified ? "ok" : statusTone(r.status)}
+            />
+            <StatusBadge value={r.severity} tone={statusTone(r.severity)} />
+            <StatusBadge value={r.is_verified ? "verified" : "unverified"} tone={r.is_verified ? "ok" : "warn"} />
+          </div>
+        );
+      },
     },
     {
       key: "actions",
