@@ -3,7 +3,20 @@ import { MdArrowBack } from "react-icons/md";
 import { useEffect } from "react";
 import { useNotifications } from "../context/NotificationContext";
 import { formatTimeAgo } from "../utils/apiData";
-import { secureMediaUrl } from "../utils/factory";
+import { hasCustomAvatar, secureMediaUrl } from "../utils/factory";
+
+const SYSTEM_NOTIFICATION_TYPES = new Set([
+  "disaster",
+  "proximity_alert",
+  "platform_admin",
+  "climate_event",
+]);
+
+const isSystemNotice = (notice) =>
+  SYSTEM_NOTIFICATION_TYPES.has(String(notice?.notification_type || "").toLowerCase());
+
+const avatarFallback = (notice) =>
+  isSystemNotice(notice) ? "/waverx-avatar.svg" : "/avatar.png";
 
 const noticeUrl = (notice) => {
   if (notice?.notification_type === "climate_event") {
@@ -36,15 +49,15 @@ const noticeUrl = (notice) => {
   return "/app/notifications";
 };
 
-const actorPhoto = (notice) =>
-  secureMediaUrl(
-    notice?.actor?.profile_picture ||
-      notice?.actor?.profile_pic ||
-      notice?.actor?.profile_image ||
-      notice?.content?.user?.profile_picture ||
-      notice?.content?.follower?.profile_picture,
-    "/avatar.png"
-  );
+const actorPhoto = (notice) => {
+  const actor =
+    notice?.actor || notice?.content?.user || notice?.content?.follower || null;
+  const rawPhoto =
+    actor?.profile_picture || actor?.profile_pic || actor?.profile_image || "";
+  const fallback = avatarFallback(notice);
+  if (isSystemNotice(notice) && !hasCustomAvatar(actor)) return fallback;
+  return secureMediaUrl(rawPhoto, fallback);
+};
 
 const Notification = () => {
   const { notifications, isLoading, markAsRead, refreshNotifications } = useNotifications();
@@ -92,7 +105,8 @@ const Notification = () => {
                 className="h-11 w-11 shrink-0 object-cover"
                 style={{ borderRadius: "50%" }}
                 onError={(event) => {
-                  event.target.src = "/avatar.png";
+                  event.currentTarget.onerror = null;
+                  event.currentTarget.src = avatarFallback(notice);
                 }}
               />
               <div className="min-w-0">
