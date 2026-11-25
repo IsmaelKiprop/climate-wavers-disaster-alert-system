@@ -72,6 +72,9 @@ const ProjectCard = ({
     : null;
 
   const cover = projectCoverImage(project);
+  const plantingProofCount = Array.isArray(project.updates)
+    ? project.updates.filter((update) => update.update_type === 'planting_proof').length
+    : 0;
   const species = normalizeTreeSpecies(project.tree_species);
   const speciesTitle = formatSpeciesList(project.tree_species, {
     withRemaining: true,
@@ -122,6 +125,16 @@ const ProjectCard = ({
               ? `${String(project.description).slice(0, 100)}…`
               : '')}
         </p>
+
+        {plantingProofCount > 0 ? (
+          <button
+            type="button"
+            onClick={() => onViewDetails(project)}
+            className="mt-3 self-start text-xs font-medium text-primary hover:underline"
+          >
+            {plantingProofCount} planting proof{plantingProofCount === 1 ? '' : 's'} · View photos and location
+          </button>
+        ) : null}
 
         {species.length > 0 ? (
           <p className="mt-2 text-xs text-muted" title={speciesTitle}>

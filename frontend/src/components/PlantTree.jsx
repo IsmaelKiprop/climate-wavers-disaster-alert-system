@@ -12,6 +12,7 @@ import { endpoints } from '../utils/endpoints';
 import { getAuthToken, getUser } from '../utils/factory';
 import { useExchangeRate } from '../hooks/useExchangeRate';
 import ProjectCard from './ProjectCard';
+import PlantingProofMediaCarousel, { proofMediaFromArrays } from './PlantingProofMediaCarousel';
 import TreeAnalyticsPanel from './TreeAnalyticsPanel';
 import { client } from '../api';
 import { apiUrl } from '../config/env';
@@ -613,6 +614,11 @@ const PlantTree = () => {
           const gallery = Array.isArray(selectedProject.gallery_urls)
             ? selectedProject.gallery_urls.filter(Boolean)
             : [];
+          const plantingProofs = Array.isArray(selectedProject.updates)
+            ? selectedProject.updates
+                .filter((update) => update.update_type === 'planting_proof')
+                .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))
+            : [];
           const isVideoUrl = (url) =>
             /\.(mp4|avi|mov|wmv|flv|webm)(\?|$)/i.test(String(url || ""));
           const closeDetails = () => {
@@ -741,6 +747,55 @@ const PlantTree = () => {
                       })}
                     </div>
                   </div>
+                ) : null}
+
+                {plantingProofs.length > 0 ? (
+                  <section className="mb-6 sm:mb-8 border border-border bg-background p-4 sm:p-5">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-primary">
+                      On the ground
+                    </p>
+                    <h3 className="mt-1 text-lg font-semibold text-foreground">
+                      Planting proof
+                    </h3>
+                    <p className="mt-1 mb-4 text-sm text-muted">
+                      Photos, videos, and location shared by the project team.
+                    </p>
+                    <div className="space-y-5">
+                      {plantingProofs.map((proof) => (
+                        <article key={proof.id} className="border-t border-border pt-4 first:border-0 first:pt-0">
+                          <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
+                            <div>
+                              <h4 className="font-medium text-foreground">
+                                {proof.title || 'Trees planted'}
+                              </h4>
+                              <p className="mt-1 text-xs text-muted">
+                                {proof.created_at
+                                  ? new Date(proof.created_at).toLocaleDateString()
+                                  : 'Planting update'}
+                                {proof.location_label ? ` · ${proof.location_label}` : ''}
+                              </p>
+                            </div>
+                            {proof.latitude != null && proof.longitude != null ? (
+                              <a
+                                href={`https://www.google.com/maps?q=${proof.latitude},${proof.longitude}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-sm font-medium text-primary hover:underline"
+                              >
+                                View planting site
+                              </a>
+                            ) : null}
+                          </div>
+                          {proof.content ? (
+                            <p className="mb-3 text-sm leading-6 text-muted">{proof.content}</p>
+                          ) : null}
+                          <PlantingProofMediaCarousel
+                            items={proofMediaFromArrays(proof.images, proof.videos)}
+                          />
+                        </article>
+                      ))}
+                    </div>
+                  </section>
                 ) : null}
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-8">
