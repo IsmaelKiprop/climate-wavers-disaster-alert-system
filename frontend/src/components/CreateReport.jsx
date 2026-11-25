@@ -105,8 +105,11 @@ const CreateReport = ({ onSubmitted }) => {
     try {
       const result = await recognizeReportImage(next);
       setVision(result);
-      if (result.suggestedType) setDisasterType(result.suggestedType);
-      setVisionStatus(result.inference || "Photo analyzed.");
+      setVisionStatus(
+        result.label
+          ? `AI suggestion (may be wrong): ${result.label}. Check the disaster type above.`
+          : result.inference || "Photo analyzed. Check the disaster type above."
+      );
     } catch (err) {
       setVisionStatus(err.message || "Computer vision could not read this photo. You can still submit.");
     }

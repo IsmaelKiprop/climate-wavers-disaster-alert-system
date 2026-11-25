@@ -2,6 +2,7 @@ import cv2
 import numpy as np
 from pathlib import Path
 
+from recognition_model.config import CLASSES
 from recognition_model.imagenet_map import DISASTER_CLASSES, disaster_from_indices
 
 model_path = Path("recognition_model/models/ov_model/")
@@ -62,20 +63,10 @@ def _openvino_inference(image, quantized=False):
     normal_model, quantized_compiled = _load_openvino()
     resized_image = cv2.resize(src=image, dsize=(224, 224))
     input_image = np.expand_dims(np.transpose(resized_image, (1, 0, 2)), 0)
-    result_classes = [
-        "Earthquake",
-        "Drought",
-        "Damaged Infrastructure",
-        "Human Damage",
-        "Human",
-        "Land Slide",
-        "Non Damage Buildings and  Street",
-        "Non Damage Wildlife Forest",
-        "Sea",
-        "Urban Fire",
-        "Wild Fire",
-        "Water Disaster",
-    ]
+    # Keras' flow_from_directory emits classes in sorted folder-name order;
+    # config.CLASSES is sorted to match that output. Keep inference labels tied
+    # to the training order so Water Disaster cannot be mislabeled as Wild Fire.
+    result_classes = CLASSES
     if quantized:
         if quantized_compiled is None:
             return None
