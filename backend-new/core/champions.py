@@ -1642,10 +1642,12 @@ class WarnNearbyPreviewView(APIView):
         max_m = { "trainee": 1000, "active": 3000, "trusted": 5000 }.get(champ.tier, 1000)
         radius_m = min(radius_m, max_m)
         matched = _devices_in_radius(lat, lng, radius_m)
+        matched = [entry for entry in matched if entry[0] != request.user.id]
         return Response(
             {
                 "count": len(matched),
                 "radius_m": radius_m,
+                "max_radius_m": max_m,
                 "center": {"latitude": lat, "longitude": lng},
             }
         )
@@ -1690,9 +1692,13 @@ class WarnNearbyCreateView(APIView):
         template = (data.get("message_template") or WARN_TEMPLATES[0]).strip()[:200]
         note = (data.get("note") or "").strip()[:120]
 
-        matched = _devices_in_radius(lat, lng, radius_m)
+        nearby_opted_in = _devices_in_radius(lat, lng, radius_m)
         # Never alert the champion themselves as only target noise
-        matched = [(uid, p, d) for uid, p, d in matched if uid != request.user.id]
+        matched = [
+            (uid, ping, distance)
+            for uid, ping, distance in nearby_opted_in
+            if uid != request.user.id
+        ]
         matched_ids = [user_id for user_id, _ping, _dist in matched]
         users = {user.id: user for user in User.objects.filter(id__in=matched_ids)}
         push_devices = {}
@@ -1806,6 +1812,12 @@ class WarnNearbyCreateView(APIView):
                 "delivered_count": blast.delivered_count,
                 "radius_m": radius_m,
                 "status": blast.status,
+                "recipient_status": (
+                    None
+                    if matched
+                    else "No other opted-in user with a location shared in the last 90 minutes was found inside this radius."
+                ),
+                "nearby_opted_in_users_including_sender": len(nearby_opted_in),
                 "channels": {
                     "in_app": {"sent": delivered},
                     "push": {

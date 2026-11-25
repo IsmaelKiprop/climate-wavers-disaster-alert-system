@@ -484,7 +484,7 @@ const ChampionDesk = () => {
       setWarnResult(data);
       const channels = data?.channels || {};
       if (Number(data?.targeted_count || 0) === 0) {
-        toast.info("Warning was created, but no opted-in users with a recent location matched this radius.");
+        toast.info(data?.recipient_status || "No other opted-in users with a recent location matched this radius.");
       } else {
         const summary = `In-app ${channels.in_app?.sent ?? data?.delivered_count ?? 0}; push ${channels.push?.sent ?? 0}/${channels.push?.registered_devices ?? 0}; SMS ${channels.sms?.sent ?? 0}/${channels.sms?.eligible_users ?? 0}.`;
         if (!channels.push?.configured || !channels.sms?.configured) {
@@ -684,6 +684,7 @@ const ChampionDesk = () => {
 
   const pending = me.status === "pending";
   const active = me.status === "active";
+  const maxWarnRadius = me?.tier === "trusted" ? 5000 : me?.tier === "active" ? 3000 : 1000;
 
   return (
     <div className="min-h-screen bg-background">
@@ -1008,12 +1009,20 @@ const ChampionDesk = () => {
               <input
                 type="number"
                 min={200}
-                max={me?.tier === "trusted" ? 5000 : me?.tier === "active" ? 3000 : 1000}
+                max={maxWarnRadius}
                 step={100}
                 className="mt-1 w-full h-10 border border-border px-2"
                 value={warnRadius}
-                onChange={(e) => { setWarnRadius(Number(e.target.value) || 1000); setWarnPreview(null); setWarnResult(null); }}
+                onChange={(e) => {
+                  const value = Number(e.target.value) || 1000;
+                  setWarnRadius(Math.min(maxWarnRadius, Math.max(200, value)));
+                  setWarnPreview(null);
+                  setWarnResult(null);
+                }}
               />
+              <span className="mt-1 block text-[11px] text-muted">
+                Maximum for your tier: {maxWarnRadius.toLocaleString()} m
+              </span>
             </label>
             <label className="block text-xs text-muted">
               Message
@@ -1066,7 +1075,9 @@ const ChampionDesk = () => {
             ) : null}
             {warnResult ? (
               <p className="text-sm text-foreground" role="status">
-                Warning saved for {warnResult.targeted_count} matched users within {warnResult.radius_m} m. In-app: {warnResult.channels?.in_app?.sent ?? warnResult.delivered_count}. Background push: {warnResult.channels?.push?.sent ?? 0}/{warnResult.channels?.push?.registered_devices ?? 0} devices{warnResult.channels?.push?.configured ? "" : " (server not configured)"}. SMS: {warnResult.channels?.sms?.sent ?? 0}/{warnResult.channels?.sms?.eligible_users ?? 0} opted-in verified numbers{warnResult.channels?.sms?.configured ? "" : " (server not configured)"}.
+                {warnResult.targeted_count === 0
+                  ? warnResult.recipient_status || `No other opted-in users with a recent location matched within ${warnResult.radius_m} m.`
+                  : `Warning saved for ${warnResult.targeted_count} matched users within ${warnResult.radius_m} m. In-app: ${warnResult.channels?.in_app?.sent ?? warnResult.delivered_count}. Background push: ${warnResult.channels?.push?.sent ?? 0}/${warnResult.channels?.push?.registered_devices ?? 0} devices${warnResult.channels?.push?.configured ? "" : " (server not configured)"}. SMS: ${warnResult.channels?.sms?.sent ?? 0}/${warnResult.channels?.sms?.eligible_users ?? 0} opted-in verified numbers${warnResult.channels?.sms?.configured ? "" : " (server not configured)"}.`}
               </p>
             ) : null}
           </div>
