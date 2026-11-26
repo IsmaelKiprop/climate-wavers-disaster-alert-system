@@ -50,6 +50,10 @@ app.post("/api/v1/mail", async (req, res) => {
     else if (type === "forget_password") await controller.sendForgetPassword({ email, data })
     else if (type === "onboarding") await controller.onboardUser({ email, city: data?.city || city })
     else if (type === "custom_mail") await controller.sendCustom({ email, emails, data })
+    else if (type === "proximity_alert") {
+      const result = await controller.sendProximityAlert({ emails, data })
+      return res.json({ ok: true, email: result })
+    }
     else if (type === "disaster_alert") await controller.sendDisasterAlert(data || req.body)
     else if (type === "disaster_alert_whatsapp") {
       const result = await controller.sendDisasterAlertWhatsApp(data || req.body)

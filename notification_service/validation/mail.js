@@ -35,6 +35,19 @@ class MailValidation{
             time: Joi.string().allow("", null),
         }).unknown(true).validate(data)
     }
+    validateProximityAlertData(data){
+        return Joi.object({
+            emails: Joi.array().items(Joi.string().email()).required(),
+            data: Joi.object({
+                subject: Joi.string().required(),
+                headline: Joi.string().required(),
+                content: Joi.string().required(),
+                cta_text: Joi.string().allow("", null),
+                cta_url: Joi.string().uri(),
+                reply_hint: Joi.string().allow("", null),
+            }).required(),
+        }).validate(data)
+    }
     validateVerificationEmailData(data){
         return Joi.object({
             code: Joi.string().required(),

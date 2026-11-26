@@ -163,7 +163,10 @@ def _post_notification(payload):
                     raise RuntimeError(
                         f"notification service returned {response.status}: {body[:500]}"
                     )
-                return
+                try:
+                    return json.loads(body) if body else {}
+                except json.JSONDecodeError:
+                    return {"ok": True}
         except urllib.error.HTTPError as exc:
             body = exc.read().decode("utf-8", errors="replace")
             last_error = RuntimeError(

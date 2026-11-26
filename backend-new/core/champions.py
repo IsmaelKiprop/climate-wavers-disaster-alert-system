@@ -8,6 +8,7 @@ import secrets
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
+from django.conf import settings
 from django.db import transaction
 from django.db.models import Avg, Count, F, Q, Sum
 from django.utils import timezone
@@ -1712,10 +1713,22 @@ class WarnNearbyCreateView(APIView):
                 phone_verified=True,
             ).exclude(phone__isnull=True).exclude(phone="")
         }
-        from .sms_gateway import provider as sms_provider
+        email_opt_out_ids = set(
+            UserAlertPreference.objects.filter(
+                user_id__in=matched_ids,
+                email_alerts=False,
+            ).values_list("user_id", flat=True)
+        )
+        email_recipients = sorted(
+            {
+                user.email.strip().lower()
+                for user_id, user in users.items()
+                if user_id not in email_opt_out_ids and user.email and user.email.strip()
+            }
+        )
+        from .sms_gateway import is_configured as sms_is_configured
 
-        sms_mode = sms_provider()
-        sms_configured = sms_mode in {"africastalking", "at", "africa", "twilio"}
+        sms_configured = sms_is_configured()
         try:
             from .push_gateway import is_configured as push_is_configured
 
@@ -1741,6 +1754,44 @@ class WarnNearbyCreateView(APIView):
         sms_sent = 0
         sms_failed = 0
         sms_eligible = len(sms_preferences)
+        email_configured = bool(
+            getattr(settings, "NOTIFICATION_SERVICE_URL", "")
+            and getattr(settings, "NOTIFICATION_SECRET", "")
+        )
+        email_sent = 0
+        email_failed = 0
+        if email_recipients:
+            hazard_name = disaster.title if disaster else "a nearby hazard"
+            email_content = (
+                f"A Community Champion has sent a nearby safety warning for {hazard_name}.\n\n"
+                f"{template}"
+                + (f"\n\nNote: {note}" if note else "")
+                + f"\n\nThis warning applies to an area within {radius_m} metres. "
+                "Follow local emergency instructions."
+            )
+            try:
+                from api.tasks import _post_notification
+
+                mail_result = _post_notification(
+                    {
+                        "type": "proximity_alert",
+                        "emails": email_recipients,
+                        "data": {
+                            "subject": f"Nearby safety alert: {hazard_name}",
+                            "headline": "A hazard may be nearby",
+                            "content": email_content,
+                            "cta_text": "Open Climate Wavers",
+                            "cta_url": f"{settings.FRONTEND_URL.rstrip('/')}/app/notifications",
+                            "reply_hint": "You received this because email alerts are enabled in your alert settings.",
+                        },
+                    }
+                ) or {}
+                email_stats = mail_result.get("email") or {}
+                email_sent = int(email_stats.get("sent", 0))
+                email_failed = int(email_stats.get("failed", max(0, len(email_recipients) - email_sent)))
+            except Exception as exc:
+                email_failed = len(email_recipients)
+                logger.exception("Warn nearby email fanout failed: %s", exc)
         for user_id, _ping, _dist in matched:
             user = users.get(user_id)
             if not user:
@@ -1831,6 +1882,12 @@ class WarnNearbyCreateView(APIView):
                         "eligible_users": sms_eligible,
                         "sent": sms_sent,
                         "failed": sms_failed,
+                    },
+                    "email": {
+                        "configured": email_configured,
+                        "eligible_users": len(email_recipients),
+                        "sent": email_sent,
+                        "failed": email_failed,
                     },
                 },
             },

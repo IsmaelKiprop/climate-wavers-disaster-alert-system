@@ -83,6 +83,22 @@ class Controller{
         }
     }
 
+    async sendProximityAlert(d){
+        const emails = [...new Set((d?.emails || []).map((email) => String(email || "").trim().toLowerCase()).filter(Boolean))]
+        const data = d?.data || {}
+        if (!emails.length) return { eligible: 0, sent: 0, failed: 0 }
+        const validationErr = mailDataValidator.validateProximityAlertData({ emails, data })?.error
+        if (validationErr) throw new Error(String(validationErr.message || validationErr))
+
+        let sent = 0
+        for (let index = 0; index < emails.length; index += 10) {
+            const batch = emails.slice(index, index + 10)
+            const results = await Promise.allSettled(batch.map((email) => mailer.sendCustom(email, data)))
+            sent += results.filter((result) => result.status === "fulfilled").length
+        }
+        return { eligible: emails.length, sent, failed: emails.length - sent }
+    }
+
     async sendForgetPassword(d){
         const { email, data } = d
         if(!email) return

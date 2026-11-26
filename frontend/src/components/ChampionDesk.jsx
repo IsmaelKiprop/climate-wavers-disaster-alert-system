@@ -486,9 +486,9 @@ const ChampionDesk = () => {
       if (Number(data?.targeted_count || 0) === 0) {
         toast.info(data?.recipient_status || "No other opted-in users with a recent location matched this radius.");
       } else {
-        const summary = `In-app ${channels.in_app?.sent ?? data?.delivered_count ?? 0}; push ${channels.push?.sent ?? 0}/${channels.push?.registered_devices ?? 0}; SMS ${channels.sms?.sent ?? 0}/${channels.sms?.eligible_users ?? 0}.`;
-        if (!channels.push?.configured || !channels.sms?.configured) {
-          toast.info(`Warning sent. ${summary} Configure missing server credentials for all channels.`);
+        const summary = `In-app ${channels.in_app?.sent ?? data?.delivered_count ?? 0}; push ${channels.push?.sent ?? 0}/${channels.push?.registered_devices ?? 0}; email ${channels.email?.sent ?? 0}/${channels.email?.eligible_users ?? 0}; SMS ${channels.sms?.sent ?? 0}/${channels.sms?.eligible_users ?? 0}.`;
+        if (!channels.push?.configured || !channels.sms?.configured || !channels.email?.configured || channels.email?.failed > 0) {
+          toast.info(`Warning sent. ${summary} Some channels may need configuration or had delivery failures.`);
         } else {
           toast.success(`Nearby warning sent to ${data?.targeted_count} users. ${summary}`);
         }
@@ -1077,7 +1077,7 @@ const ChampionDesk = () => {
               <p className="text-sm text-foreground" role="status">
                 {warnResult.targeted_count === 0
                   ? warnResult.recipient_status || `No other opted-in users with a recent location matched within ${warnResult.radius_m} m.`
-                  : `Warning saved for ${warnResult.targeted_count} matched users within ${warnResult.radius_m} m. In-app: ${warnResult.channels?.in_app?.sent ?? warnResult.delivered_count}. Background push: ${warnResult.channels?.push?.sent ?? 0}/${warnResult.channels?.push?.registered_devices ?? 0} devices${warnResult.channels?.push?.configured ? "" : " (server not configured)"}. SMS: ${warnResult.channels?.sms?.sent ?? 0}/${warnResult.channels?.sms?.eligible_users ?? 0} opted-in verified numbers${warnResult.channels?.sms?.configured ? "" : " (server not configured)"}.`}
+                  : `Warning saved for ${warnResult.targeted_count} matched users within ${warnResult.radius_m} m. In-app: ${warnResult.channels?.in_app?.sent ?? warnResult.delivered_count}. Background push: ${warnResult.channels?.push?.sent ?? 0}/${warnResult.channels?.push?.registered_devices ?? 0} devices${warnResult.channels?.push?.configured ? "" : " (server not configured)"}. Email: ${warnResult.channels?.email?.sent ?? 0}/${warnResult.channels?.email?.eligible_users ?? 0} opted-in accounts${warnResult.channels?.email?.failed ? ` (${warnResult.channels.email.failed} failed)` : ""}${warnResult.channels?.email?.configured ? "" : " (server not configured)"}. SMS: ${warnResult.channels?.sms?.sent ?? 0}/${warnResult.channels?.sms?.eligible_users ?? 0} opted-in verified numbers${warnResult.channels?.sms?.configured ? "" : " (server not configured)"}.`}
               </p>
             ) : null}
           </div>

@@ -1,8 +1,9 @@
 """
-SMS delivery via Africa's Talking (preferred) or Twilio.
+SMS delivery via Mobile Sasa, Africa's Talking, or Twilio.
 
 Env:
-  SMS_PROVIDER=africastalking|twilio|log
+  SMS_PROVIDER=mobilesasa|africastalking|twilio|log
+  MOBILESASA_API_TOKEN / MOBILESASA_SENDER_ID
   AT_USERNAME / AT_API_KEY / AT_SENDER_ID
   AT_SANDBOX=true  (or AT_USERNAME=sandbox) → uses sandbox API host
   TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN / TWILIO_FROM_NUMBER
@@ -29,6 +30,25 @@ logger = logging.getLogger(__name__)
 
 def provider() -> str:
     return (os.getenv("SMS_PROVIDER") or "log").strip().lower()
+
+
+def is_configured() -> bool:
+    """Whether the selected SMS provider has the credentials it needs."""
+    mode = provider()
+    if mode in {"mobilesasa", "mobile_sasa"}:
+        return bool((os.getenv("MOBILESASA_API_TOKEN") or "").strip())
+    if mode in {"africastalking", "at", "africa"}:
+        return bool(
+            (os.getenv("AT_USERNAME") or "").strip()
+            and (os.getenv("AT_API_KEY") or "").strip()
+        )
+    if mode == "twilio":
+        return bool(
+            (os.getenv("TWILIO_ACCOUNT_SID") or "").strip()
+            and (os.getenv("TWILIO_AUTH_TOKEN") or "").strip()
+            and (os.getenv("TWILIO_FROM_NUMBER") or "").strip()
+        )
+    return False
 
 
 def normalize_e164_ke(raw: str) -> str:
@@ -59,6 +79,8 @@ def send_sms(phone: str, message: str) -> Dict[str, Any]:
     try:
         if mode in {"africastalking", "at", "africa"}:
             return _send_africastalking(to, body)
+        if mode in {"mobilesasa", "mobile_sasa"}:
+            return _send_mobilesasa(to, body)
         if mode == "twilio":
             return _send_twilio(to, body)
         logger.warning("Unknown SMS_PROVIDER=%s; logging only", mode)
@@ -154,3 +176,43 @@ def _send_twilio(to: str, body: str) -> Dict[str, Any]:
         raw = exc.read().decode("utf-8", errors="replace") if exc.fp else str(exc)
         raise RuntimeError(raw[:300]) from exc
     return {"ok": True, "provider": "twilio", "to": to, "response": json.loads(raw)}
+
+
+def _send_mobilesasa(to: str, body: str) -> Dict[str, Any]:
+    token = (os.getenv("MOBILESASA_API_TOKEN") or "").strip()
+    sender_id = (os.getenv("MOBILESASA_SENDER_ID") or "MOBILESASA").strip()
+    if not token:
+        raise RuntimeError("MOBILESASA_API_TOKEN is not configured")
+    if not sender_id:
+        raise RuntimeError("MOBILESASA_SENDER_ID is not configured")
+
+    payload = json.dumps(
+        {"senderID": sender_id, "phone": to, "message": body}
+    ).encode("utf-8")
+    req = urllib.request.Request(
+        "https://api.mobilesasa.com/v1/send/message",
+        data=payload,
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=25) as resp:
+            raw = resp.read().decode("utf-8") or "{}"
+    except urllib.error.HTTPError as exc:
+        raw = exc.read().decode("utf-8", errors="replace") if exc.fp else str(exc)
+        raise RuntimeError(raw[:400]) from exc
+
+    result = json.loads(raw) if raw.strip().startswith("{") else {"message": raw}
+    accepted = result.get("status") is True and str(result.get("responseCode")) == "0200"
+    return {
+        "ok": accepted,
+        "provider": "mobilesasa",
+        "to": to,
+        "message_id": result.get("messageId"),
+        "response_code": result.get("responseCode"),
+        "detail": None if accepted else str(result.get("message") or "Mobile Sasa rejected the SMS")[:300],
+    }
