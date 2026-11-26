@@ -92,6 +92,15 @@ const SiteFooter = ({ showNewsletter = true }) => {
               amplify them.
             </p>
 
+            <a
+              href="https://chat.whatsapp.com/Hv0M8TUtQRHHj6iqsOAxqG"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex min-h-11 items-center mt-4 px-4 py-2 bg-[#25D366] hover:bg-[#1fb95a] text-[#082b19] font-semibold text-sm transition-colors"
+            >
+              Join the Climate Wavers community on WhatsApp
+            </a>
+
             {showNewsletter ? (
               <form onSubmit={onSubscribe} className="mt-6">
                 <h4 className="text-base font-semibold text-white">Stay Updated</h4>
